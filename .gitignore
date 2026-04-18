@@ -1,2 +1,16 @@
 .idea
 .DS_Store
+
+# maven
+target/
+
+# Build files
+*.class
+*.jar
+*.war
+
+# Environment files
+.env
+
+# Logs
+*.log
