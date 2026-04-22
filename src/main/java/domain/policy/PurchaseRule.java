@@ -1,4 +1,4 @@
 package domain.policy;
 
-public class PurchaseRule {
+public abstract class PurchaseRule implements Purcase {
 }
