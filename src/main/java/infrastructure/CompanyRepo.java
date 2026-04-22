@@ -13,7 +13,10 @@ public class CompanyRepo implements ICompanyRepo {
 
     @Override
     public Company findById(Integer id) {
-        return store.get(id);
+        Company company = store.get(id);
+        if (company == null)
+            throw new IllegalArgumentException("Company not found: " + id);
+        return company;
     }
 
     @Override

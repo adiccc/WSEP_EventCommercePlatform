@@ -37,6 +37,8 @@ public class AuthService implements IAuth {
 
     @Override
     public int getUserId(String token) {
+        if (!tokenService.validateToken(token))
+            throw new SecurityException("Invalid or expired token");
         // TODO: resolve username to userId via userRepo
         String username = tokenService.extractUsername(token);
         return username.hashCode();
