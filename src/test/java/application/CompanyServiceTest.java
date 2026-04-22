@@ -7,7 +7,7 @@ import domain.event.Order;
 import domain.policy.MaxTicketsRule;
 import domain.policy.MinAgeRule;
 import domain.policy.PurchasePolicy;
-import infrastructure.CompanyRepo;
+import infrastructure.CompanyRepoImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -35,8 +35,8 @@ class CompanyServiceTest {
         ownerToken = tokenService.generateToken("owner");
         otherToken = tokenService.generateToken("other");
 
-        ICompanyRepo companyRepo = new CompanyRepo();
-        companyRepo.store(company);
+        ICompanyRepo CompanyRepoImpl = new CompanyRepoImpl();
+        CompanyRepoImpl.store(company);
 
         IAuth auth = new IAuth() {
             @Override public Response<String> login(String username, String password) {
@@ -59,7 +59,7 @@ class CompanyServiceTest {
             @Override public int getTicketsBoughtByUserForEvent(int userId, int eventId) { return 0; }
         };
 
-        service = new CompanyService(tokenService, auth, companyRepo, orderRepo);
+        service = new CompanyService(tokenService, auth, CompanyRepoImpl, orderRepo);
     }
 
     // --- Successful_PurchasePolicy_Set ---

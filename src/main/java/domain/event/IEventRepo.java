@@ -1,4 +1,13 @@
 package domain.event;
 
-public interface IEventRepo {
+import DTO.ElementPositionDTO;
+import DTO.SeatingZoneDTO;
+import DTO.StandingZoneDTO;
+import domain.IRepo;
+import domain.company.Company;
+
+import java.util.List;
+
+public interface IEventRepo  extends IRepo<Event, Integer> {
+
 }
