@@ -45,7 +45,7 @@ public class CompanyService {
             return Response.ok(true);
         } catch (Exception e) {
             logger.severe("Unexpected error in updatePurchasePolicy for companyId: " + companyId + ". Error: " + e.getMessage());
-            throw e;
+            return  Response.error("Unexpected error in updatePurchasePolicy for companyId: " + companyId);
         }
     }
 }

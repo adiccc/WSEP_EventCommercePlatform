@@ -25,8 +25,9 @@ public class AuthService implements IAuth {
             return Response.ok(token);
         } catch (Exception e) {
             logger.severe("Login failed for username: " + username + ". Error: " + e.getMessage());
-            throw e;
+            return Response.error("Login failed for username: " + username);
         }
+
     }
 
     @Override
