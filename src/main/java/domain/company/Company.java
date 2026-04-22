@@ -1,5 +1,6 @@
 package domain.company;
 
+import domain.dataType.PermissionType;
 import domain.policy.PurchasePolicy;
 import java.util.HashSet;
 import java.util.Set;
@@ -38,4 +39,9 @@ public class Company {
     public int getCompanyId() { return companyId; }
     public String getName() { return name; }
     public PurchasePolicy getPurchasePolicy() { return purchasePolicy; }
+
+    public boolean checkPermission(int userId, PermissionType permissionType) {
+        // TODO: to implement
+        return true;
+    }
 }

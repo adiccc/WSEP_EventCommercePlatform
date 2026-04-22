@@ -3,11 +3,11 @@ package domain.event;
 import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
+import domain.IRepo;
+import domain.company.Company;
 
 import java.util.List;
 
-public interface IEventRepo {
-    Event getEvent(int eventId);
-    EventMap createMap(ElementPositionDTO stage, List<ElementPositionDTO> entries, List<StandingZoneDTO> standingZone, List<SeatingZoneDTO> seatingZone);
+public interface IEventRepo  extends IRepo<Event, Integer> {
 
 }

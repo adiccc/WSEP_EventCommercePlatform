@@ -3,11 +3,17 @@ package application;
 import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
+import domain.company.Company;
 import domain.company.ICompanyRepo;
+import domain.dataType.ElementPosition;
+import domain.dataType.SeatingZone;
+import domain.dataType.StandingZone;
+import domain.dataType.Zone;
 import domain.event.Event;
 import domain.event.EventMap;
 import domain.event.IEventRepo;
 
+import java.util.ArrayList;
 import java.util.logging.*;
 
 import java.util.List;
@@ -20,11 +26,13 @@ public class EventCompanyManageService {
     private final ICompanyRepo companyRepo;
     private final IEventRepo eventRepo;
     private final Logger logger;
+    private final TokenService tokenService;
 
-    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo) {
+    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo,TokenService tokenService) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;
         this.logger = Logger.getLogger(EventCompanyManageService.class.getName());
+        this.tokenService = tokenService;
     }
 
 
@@ -32,17 +40,17 @@ public class EventCompanyManageService {
         logger.log(Level.INFO, "DefineVenueAndSeatingMap called");
 
         // check valid token
-        if(!TokenService.validateToken(token)){
+        if(!tokenService.validateToken(token)){
             return new Response<>(false, "Invalid token");
         }
-
         try {
-            Event event = eventRepo.getEvent(eventId);
+            Event event = eventRepo.findById(eventId);
             int companyId=event.getCompanyId();
             int eventCreator=event.getCreatorId();
+            Company c=this.companyRepo.findById(companyId);
 
             // check appropriate permission
-            if(userId!=eventCreator || !companyRepo.checkPremissions(companyId,userId,CreatEvent)){
+            if(userId!=eventCreator || !c.checkPermission(userId,CreatEvent)){
                 return new Response<>(false, "Permission required");
             }
 
@@ -51,10 +59,18 @@ public class EventCompanyManageService {
                 return new Response<>(false, "map element null");
             }
 
-            List<StandingZoneDTO> standingZones = standingZone == null ? List.of() : standingZone;
-            List<SeatingZoneDTO> seatingZones = seatingZone == null ? List.of() : seatingZone;
-
-            EventMap eventMap=eventRepo.createMap(stage, entries, standingZones, seatingZones);
+            List<Zone> zones = new ArrayList<>();
+            for(StandingZoneDTO standingZoneDTO : standingZone){
+                zones.add(new StandingZone(standingZoneDTO));
+            }
+            for(SeatingZoneDTO seatingZoneDTO : seatingZone){
+                zones.add(new SeatingZone(seatingZoneDTO));
+            }
+            List<ElementPosition> allEntries=new ArrayList<>();
+            for(ElementPositionDTO elementPositionDTO : entries){
+                allEntries.add(new ElementPosition(elementPositionDTO.getX(), elementPositionDTO.getY()));
+            }
+            EventMap eventMap=new EventMap(new ElementPosition(stage.getX(), stage.getY()),allEntries,zones);
             event.setMap(eventMap);
 
             // success

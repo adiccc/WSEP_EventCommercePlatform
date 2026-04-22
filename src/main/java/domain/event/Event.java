@@ -29,6 +29,10 @@ public class Event {
         this.eventMap = eventMap;
     }
 
+    public EventMap getMap() {
+        return eventMap;
+    }
+
     public int getId() {
         return id;
     }

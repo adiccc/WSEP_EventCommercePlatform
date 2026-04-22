@@ -3,6 +3,7 @@ package domain.dataType;
 import DTO.StandingZoneDTO;
 import domain.event.StandingTicket;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class StandingZone extends Zone {
@@ -12,6 +13,7 @@ public class StandingZone extends Zone {
     public StandingZone(String name, double price, int capacity, ElementPosition elementPosition) {
         super(name,price,elementPosition);
         this.capacity = capacity;
+        this.tickets = new ArrayList<>();
         for(int i=0;i<capacity;i++){
             this.tickets.add(new StandingTicket());
         }
@@ -19,6 +21,7 @@ public class StandingZone extends Zone {
     public StandingZone(StandingZoneDTO standingZoneDTO) {
         super(standingZoneDTO.getName(),standingZoneDTO.getPrice(),standingZoneDTO.getPosition());
         this.capacity = standingZoneDTO.getCapacty();
+        this.tickets = new ArrayList<StandingTicket>();
         for(int i=0;i<capacity;i++){
             this.tickets.add(new StandingTicket());
         }
