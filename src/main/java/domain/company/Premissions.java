@@ -1,4 +1,10 @@
 package domain.company;
 
-public class Premissions {
+public enum Permission {
+    MANAGE_EVENTS_INVENTORY,
+    DEFINE_VENUE_MAP,
+    MANAGE_POLICIES,
+    RESPOND_TO_INQUIRIES,
+    VIEW_PURCHASE_HISTORY,
+    GENERATE_SALES_REPORTS
 }
