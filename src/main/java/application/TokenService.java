@@ -1,58 +1,38 @@
 package application;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.security.Keys;
-
-import javax.crypto.SecretKey;
 import java.util.Date;
-import java.util.function.Function;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 public class TokenService {
 
     private final long expirationTime = 1000 * 60 * 60 * 24; // 24 hours
-    private final SecretKey key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+    private final Map<String, String> tokenToUsername = new HashMap<>();
+    private final Map<String, Date> tokenToExpiration = new HashMap<>();
 
     public String generateToken(String username) {
-        return Jwts.builder()
-                .setSubject(username)
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + expirationTime))
-                .signWith(key)
-                .compact();
+        String token = UUID.randomUUID().toString();
+        tokenToUsername.put(token, username);
+        tokenToExpiration.put(token, new Date(System.currentTimeMillis() + expirationTime));
+        return token;
     }
 
     public boolean validateToken(String token) {
-        try {
-            Jwts.parserBuilder()
-                    .setSigningKey(key)
-                    .build()
-                    .parseClaimsJws(token);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
+        if (!tokenToUsername.containsKey(token)) return false;
+        return tokenToExpiration.get(token).after(new Date());
     }
 
     public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
+        return tokenToUsername.get(token);
     }
 
     public Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
+        return tokenToExpiration.get(token);
     }
 
-    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
-        final Claims claims = extractAllClaims(token);
-        return claimsResolver.apply(claims);
-    }
-
-    private Claims extractAllClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(key)
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
+    public void invalidate(String token) {
+        tokenToUsername.remove(token);
+        tokenToExpiration.remove(token);
     }
 }
