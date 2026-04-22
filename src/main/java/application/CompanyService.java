@@ -1,5 +1,6 @@
 package application;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
@@ -17,10 +18,12 @@ public class CompanyService {
     public CompanyService(ICompanyRepo companyRepo, IUserRepo userRepo) {
         this.companyRepo = companyRepo;
         this.userRepo = userRepo;
+        private static final Logger logger = LoggerFactory.getLogger(CompanyService.class);
     }
     public Response<Company> createProductionCompany(String sessionToken, String companyId, String companyName,
                                                      String email, String phone, String bankAccount) {
         try {
+            logger.info("Attempting to create company: {} for user: {}", companyName, sessionToken);
             User user = userRepo.findById(sessionToken);
             if (user == null) {
                 return new Response<>(null, "User not found.");
@@ -53,9 +56,11 @@ public class CompanyService {
             companyRepo.save(newCompany);
             userRepo.save(user);
 
+            logger.info("Company {} created successfully", companyName); [cite: 903]
             return new Response<>(newCompany, "Production company created successfully.");
 
         } catch (Exception e) {
+            logger.error("Failed to create company {}. Error: {}", companyName, e.getMessage());
             return new Response<>(null, "System error occurred: " + e.getMessage());
         }
     }
