@@ -1,6 +1,6 @@
 package domain.company;
 
-public enum Permission {
+public enum Permissions {
     MANAGE_EVENTS_INVENTORY,
     DEFINE_VENUE_MAP,
     MANAGE_POLICIES,

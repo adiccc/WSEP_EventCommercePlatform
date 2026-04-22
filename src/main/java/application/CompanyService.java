@@ -14,11 +14,12 @@ public class CompanyService {
 
     private final ICompanyRepo companyRepo;
     private final IUserRepo userRepo;
+    private static final Logger logger;
 
     public CompanyService(ICompanyRepo companyRepo, IUserRepo userRepo) {
         this.companyRepo = companyRepo;
         this.userRepo = userRepo;
-        private static final Logger logger = LoggerFactory.getLogger(CompanyService.class);
+        logger = LoggerFactory.getLogger(CompanyService.class);
     }
     public Response<Company> createProductionCompany(String sessionToken, String companyId, String companyName,
                                                      String email, String phone, String bankAccount) {
