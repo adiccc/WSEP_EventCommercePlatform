@@ -20,16 +20,19 @@ class CompanyServiceTest {
     private static final int COMPANY_ID = 1;
     private static final int OWNER_ID = 123;
     private static final int OTHER_USER_ID = 456;
-    private static final String OWNER_TOKEN = "owner-token";
-    private static final String OTHER_TOKEN = "other-token";
-    private static final String INVALID_TOKEN = "invalid-token";
 
     private Company company;
     private CompanyService service;
+    private TokenService tokenService;
+    private String ownerToken;
+    private String otherToken;
 
     @BeforeEach
     void setUp() {
         company = new Company(COMPANY_ID, "Test Company", OWNER_ID);
+        tokenService = new TokenService();
+        ownerToken = tokenService.generateToken("owner");
+        otherToken = tokenService.generateToken("other");
 
         ICompanyRepo companyRepo = new ICompanyRepo() {
             @Override public Company findById(Integer id) {
@@ -43,13 +46,13 @@ class CompanyServiceTest {
 
         IAuth auth = new IAuth() {
             @Override public Response<String> login(String username, String password) {
-                return Response.ok(OWNER_TOKEN);
+                return Response.ok(tokenService.generateToken(username));
             }
             @Override public boolean isLoggedIn(String token) {
-                return !token.equals(INVALID_TOKEN);
+                return tokenService.validateToken(token);
             }
             @Override public int getUserId(String token) {
-                if (token.equals(OWNER_TOKEN)) return OWNER_ID;
+                if (token.equals(ownerToken)) return OWNER_ID;
                 return OTHER_USER_ID;
             }
         };
@@ -62,7 +65,7 @@ class CompanyServiceTest {
             @Override public int getTicketsBoughtByUserForEvent(int userId, int eventId) { return 0; }
         };
 
-        service = new CompanyService(auth, companyRepo, orderRepo);
+        service = new CompanyService(tokenService, auth, companyRepo, orderRepo);
     }
 
     // --- Successful_PurchasePolicy_Set ---
@@ -72,7 +75,7 @@ class CompanyServiceTest {
         PurchasePolicy policy = new PurchasePolicy();
         policy.addRule(new MaxTicketsRule(4));
 
-        Response<Boolean> response = service.updatePurchasePolicy(OWNER_TOKEN, COMPANY_ID, policy);
+        Response<Boolean> response = service.updatePurchasePolicy(ownerToken, COMPANY_ID, policy);
 
         assertFalse(response.isError());
         assertEquals(Boolean.TRUE, response.getValue());
@@ -84,13 +87,13 @@ class CompanyServiceTest {
     void GivenOwnerAndExistingPolicy_WhenUpdatePurchasePolicy_ThenPolicyReplaced() {
         PurchasePolicy oldPolicy = new PurchasePolicy();
         oldPolicy.addRule(new MaxTicketsRule(2));
-        service.updatePurchasePolicy(OWNER_TOKEN, COMPANY_ID, oldPolicy);
+        service.updatePurchasePolicy(ownerToken, COMPANY_ID, oldPolicy);
 
         PurchasePolicy newPolicy = new PurchasePolicy();
         newPolicy.addRule(new MaxTicketsRule(4));
         newPolicy.addRule(new MinAgeRule(18));
 
-        Response<Boolean> response = service.updatePurchasePolicy(OWNER_TOKEN, COMPANY_ID, newPolicy);
+        Response<Boolean> response = service.updatePurchasePolicy(ownerToken, COMPANY_ID, newPolicy);
 
         assertFalse(response.isError());
         assertEquals(newPolicy, company.getPurchasePolicy());
@@ -99,8 +102,8 @@ class CompanyServiceTest {
     // --- Unauthorized_Policy_Change ---
 
     @Test
-    void GivenNotLoggedIn_WhenUpdatePurchasePolicy_ThenError() {
-        Response<Boolean> response = service.updatePurchasePolicy(INVALID_TOKEN, COMPANY_ID, new PurchasePolicy());
+    void GivenInvalidToken_WhenUpdatePurchasePolicy_ThenError() {
+        Response<Boolean> response = service.updatePurchasePolicy("invalid-token", COMPANY_ID, new PurchasePolicy());
         assertTrue(response.isError());
     }
 
@@ -108,7 +111,7 @@ class CompanyServiceTest {
     void GivenNonOwner_WhenUpdatePurchasePolicy_ThenError() {
         PurchasePolicy policy = new PurchasePolicy();
         policy.addRule(new MaxTicketsRule(4));
-        Response<Boolean> response = service.updatePurchasePolicy(OTHER_TOKEN, COMPANY_ID, policy);
+        Response<Boolean> response = service.updatePurchasePolicy(otherToken, COMPANY_ID, policy);
         assertTrue(response.isError());
     }
 
@@ -118,7 +121,7 @@ class CompanyServiceTest {
     void GivenNegativeTicketCount_WhenUpdatePurchasePolicy_ThenError() {
         PurchasePolicy policy = new PurchasePolicy();
         policy.addRule(new MaxTicketsRule(-1));
-        Response<Boolean> response = service.updatePurchasePolicy(OWNER_TOKEN, COMPANY_ID, policy);
+        Response<Boolean> response = service.updatePurchasePolicy(ownerToken, COMPANY_ID, policy);
         assertTrue(response.isError());
     }
 
@@ -126,7 +129,7 @@ class CompanyServiceTest {
     void GivenNegativeMinAge_WhenUpdatePurchasePolicy_ThenError() {
         PurchasePolicy policy = new PurchasePolicy();
         policy.addRule(new MinAgeRule(-5));
-        Response<Boolean> response = service.updatePurchasePolicy(OWNER_TOKEN, COMPANY_ID, policy);
+        Response<Boolean> response = service.updatePurchasePolicy(ownerToken, COMPANY_ID, policy);
         assertTrue(response.isError());
     }
 
@@ -134,7 +137,7 @@ class CompanyServiceTest {
 
     @Test
     void GivenCompanyNotFound_WhenUpdatePurchasePolicy_ThenError() {
-        Response<Boolean> response = service.updatePurchasePolicy(OWNER_TOKEN, 999, new PurchasePolicy());
+        Response<Boolean> response = service.updatePurchasePolicy(ownerToken, 999, new PurchasePolicy());
         assertTrue(response.isError());
     }
 
@@ -145,7 +148,7 @@ class CompanyServiceTest {
         company.deactivate();
         PurchasePolicy policy = new PurchasePolicy();
         policy.addRule(new MaxTicketsRule(4));
-        Response<Boolean> response = service.updatePurchasePolicy(OWNER_TOKEN, COMPANY_ID, policy);
+        Response<Boolean> response = service.updatePurchasePolicy(ownerToken, COMPANY_ID, policy);
         assertTrue(response.isError());
     }
 }
