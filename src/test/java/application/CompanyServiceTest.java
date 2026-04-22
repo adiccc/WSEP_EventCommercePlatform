@@ -7,6 +7,7 @@ import domain.event.Order;
 import domain.policy.MaxTicketsRule;
 import domain.policy.MinAgeRule;
 import domain.policy.PurchasePolicy;
+import infrastructure.CompanyRepo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -34,15 +35,8 @@ class CompanyServiceTest {
         ownerToken = tokenService.generateToken("owner");
         otherToken = tokenService.generateToken("other");
 
-        ICompanyRepo companyRepo = new ICompanyRepo() {
-            @Override public Company findById(Integer id) {
-                if (id == COMPANY_ID) return company;
-                return null;
-            }
-            @Override public List<Company> getAll() { return new ArrayList<>(); }
-            @Override public void delete(Integer id) {}
-            @Override public void store(Company c) {}
-        };
+        ICompanyRepo companyRepo = new CompanyRepo();
+        companyRepo.store(company);
 
         IAuth auth = new IAuth() {
             @Override public Response<String> login(String username, String password) {
