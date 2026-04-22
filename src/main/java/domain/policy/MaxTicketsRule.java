@@ -10,8 +10,8 @@ public class MaxTicketsRule extends PurchaseRule {
     }
 
     @Override
-    public boolean isSatisfied(UserDTO user, int quantity, int eventId) {
-        return user.getTicketsBoughtForEvent(eventId) + quantity <= maxTickets;
+    public boolean isSatisfied(UserDTO user, int quantity, int ticketsBoughtForEvent) {
+        return ticketsBoughtForEvent + quantity <= maxTickets;
     }
 
     @Override

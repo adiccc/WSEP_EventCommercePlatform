@@ -10,7 +10,7 @@ public class MinAgeRule extends PurchaseRule {
     }
 
     @Override
-    public boolean isSatisfied(UserDTO user, int quantity, int eventId) {
+    public boolean isSatisfied(UserDTO user, int quantity, int ticketsBoughtForEvent) {
         return user.getAge() >= minAge;
     }
 

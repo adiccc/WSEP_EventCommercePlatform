@@ -1,4 +1,6 @@
 package domain.company;
 
-public interface ICompanyRepo {
+import domain.IRepo;
+
+public interface ICompanyRepo extends IRepo<Company, Integer> {
 }

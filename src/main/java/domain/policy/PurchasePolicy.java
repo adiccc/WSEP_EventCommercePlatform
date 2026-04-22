@@ -20,9 +20,9 @@ public class PurchasePolicy implements Purcase {
     }
 
     @Override
-    public boolean isSatisfied(UserDTO user, int quantity, int eventId) {
+    public boolean isSatisfied(UserDTO user, int quantity, int ticketsBoughtForEvent) {
         for (Purcase rule : rules) {
-            if (!rule.isSatisfied(user, quantity, eventId)) return false;
+            if (!rule.isSatisfied(user, quantity, ticketsBoughtForEvent)) return false;
         }
         return true;
     }
