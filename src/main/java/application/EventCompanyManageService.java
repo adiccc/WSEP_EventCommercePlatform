@@ -14,6 +14,7 @@ import domain.event.EventMap;
 import domain.event.EventQueue;
 import domain.event.IEventRepo;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.logging.*;
@@ -38,7 +39,7 @@ public class EventCompanyManageService {
     }
 
 
-    public Response<Boolean> DefineVenueAndSeatingMap(String token, int userId, int eventId, ElementPositionDTO stage, List<ElementPositionDTO> entries, List<StandingZoneDTO> standingZone, List<SeatingZoneDTO> seatingZone) {
+    public Response<Boolean> DefineVenueAndSeatingMap(String token, int userId, String eventId, ElementPositionDTO stage, List<ElementPositionDTO> entries, List<StandingZoneDTO> standingZone, List<SeatingZoneDTO> seatingZone) {
         logger.log(Level.INFO, "DefineVenueAndSeatingMap called");
 
         // check valid token
@@ -89,7 +90,7 @@ public class EventCompanyManageService {
 
     }
 
-    public Response<Boolean> createEvent(String token, int companyId, int creatorId, Date date, String name, Date saleStartDate, boolean hasLottery) {
+    public Response<Boolean> createEvent(String token, int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery) {
         logger.log(Level.INFO, "createEvent called");
 
         // check valid token
@@ -101,10 +102,10 @@ public class EventCompanyManageService {
             if (!c.checkPermission(creatorId, CreatEvent)) {
                 return new Response<>(false, "Permission required");
             }
-            if (date.before(new Date())) {
+            if (date.isBefore(LocalDateTime.now())) {
                 return new Response<>(false, "Event date must be in the future");
             }
-            if (saleStartDate.after(date)) {
+            if (saleStartDate.isAfter(date)) {
                 return new Response<>(false, "Sale start date must be before event date");
             }
             Event event = new Event(companyId, creatorId, date, name, saleStartDate, hasLottery);

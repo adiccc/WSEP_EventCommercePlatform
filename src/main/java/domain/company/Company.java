@@ -41,7 +41,10 @@ public class Company {
     public PurchasePolicy getPurchasePolicy() { return purchasePolicy; }
 
     public boolean checkPermission(int userId, PermissionType permissionType) {
-        // TODO: to implement
+        // TODO: to implement (just for the test before we have the real implementation)
+        if (userId == 999){
+            return false;
+        }
         return true;
     }
 }

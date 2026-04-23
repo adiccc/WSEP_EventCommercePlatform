@@ -2,23 +2,25 @@ package domain.event;
 
 import domain.policy.*;
 
-import java.util.Date;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public class Event {
+    private String id;
     private int companyId;
     private int creatorId;
     private EventMap eventMap;
     private EventQueue eventQueue;
-    private Date date;
+    private LocalDateTime date;
     private String name;
-    private Date saleStartDate;
+    private LocalDateTime saleStartDate;
     private boolean hasLottery;
     private Purcase purchasePolicy;
     private Discount discountPolicy;
 
 
-    public Event(int companyId, int creatorId, Date date, String name, Date saleStartDate, boolean hasLottery) {
+    public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery) {
         this.eventMap = null;
         this.eventQueue = null;
         this.companyId=companyId;
@@ -31,6 +33,7 @@ public class Event {
         purchasePolicy.addRule(new MaxTicketsRule(20));
         discountPolicy = new DiscountPolicy();
         discountPolicy.addDiscount(new LimitedDiscount(0.1, 5));
+        this.id = LocalDateTime.now().hashCode() + String.valueOf(creatorId);
     }
 
     public int getCompanyId() {
@@ -49,6 +52,27 @@ public class Event {
     }
 
     public boolean isAvailableForSale() {
-       return saleStartDate.before(new Date()) && eventMap != null;
+        return saleStartDate.isBefore(LocalDateTime.now()) && eventMap != null;
     }
+
+    public LocalDateTime getDate() {
+        return date;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public LocalDateTime getSaleStartDate() {
+        return saleStartDate;
+    }
+    public boolean hasLottery() {
+        return hasLottery;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+
 }

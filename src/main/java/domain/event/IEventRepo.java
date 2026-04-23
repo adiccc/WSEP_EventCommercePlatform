@@ -8,6 +8,6 @@ import domain.company.Company;
 
 import java.util.List;
 
-public interface IEventRepo  extends IRepo<Event, Integer> {
+public interface IEventRepo  extends IRepo<Event, String> {
 
 }
