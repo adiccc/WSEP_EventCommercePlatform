@@ -35,7 +35,7 @@ public class Event {
         discountPolicy = new DiscountPolicy();
         discountPolicy.addDiscount(new LimitedDiscount(0.1, 5));
         this.id = LocalDateTime.now().hashCode() + String.valueOf(creatorId);
-        active = true;
+        active = false;
     }
 
     public int getCompanyId() {

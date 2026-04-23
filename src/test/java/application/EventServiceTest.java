@@ -41,6 +41,7 @@ class EventServiceTest {
                 LocalDateTime.now().plusDays(5),
                 true
         );
+        activeEvent.setActive(true);
         eventRepo.store(activeEvent);
 
         // Inactive event (company1)
@@ -52,7 +53,6 @@ class EventServiceTest {
                 LocalDateTime.now().plusDays(5),
                 false
         );
-        inactiveEvent.setActive(false);
         eventRepo.store(inactiveEvent);
 
         // Event for company2
@@ -64,6 +64,7 @@ class EventServiceTest {
                 LocalDateTime.now().plusDays(5),
                 true
         );
+        eventCompany2.setActive(true);
         eventRepo.store(eventCompany2);
 
         service = new EventService(tokenService, eventRepo, new LotteryRepoImpl());
