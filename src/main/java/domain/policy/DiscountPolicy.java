@@ -1,4 +1,4 @@
 package domain.policy;
 
-public class DiscountPolicy {
+public class DiscountPolicy implements Discount {
 }

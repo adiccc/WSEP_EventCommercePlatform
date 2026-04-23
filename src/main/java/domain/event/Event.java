@@ -1,21 +1,36 @@
 package domain.event;
 
+import domain.policy.*;
+
+import java.util.Date;
 import java.util.List;
 
 public class Event {
-    private int id;
     private int companyId;
     private int creatorId;
     private EventMap eventMap;
     private EventQueue eventQueue;
-    private List<Ticket> tickets;
+    private Date date;
+    private String name;
+    private Date saleStartDate;
+    private boolean hasLottery;
+    private Purcase purchasePolicy;
+    private Discount discountPolicy;
 
-    public Event(int id, int companyId, int creatorId, EventMap eventMap, EventQueue eventQueue) {
-        this.eventMap = eventMap;
-        this.eventQueue = eventQueue;
+
+    public Event(int companyId, int creatorId, Date date, String name, Date saleStartDate, boolean hasLottery) {
+        this.eventMap = null;
+        this.eventQueue = null;
         this.companyId=companyId;
         this.creatorId=creatorId;
-        this.id=id;
+        this.date = date;
+        this.name = name;
+        this.saleStartDate = saleStartDate;
+        this.hasLottery = hasLottery;
+        purchasePolicy = new PurchasePolicy();
+        purchasePolicy.addRule(new MaxTicketsRule(20));
+        discountPolicy = new DiscountPolicy();
+        discountPolicy.addDiscount(new LimitedDiscount(0.1, 5));
     }
 
     public int getCompanyId() {
@@ -33,7 +48,7 @@ public class Event {
         return eventMap;
     }
 
-    public int getId() {
-        return id;
+    public boolean isAvailableForSale() {
+       return saleStartDate.before(new Date()) && eventMap != null;
     }
 }

@@ -6,7 +6,7 @@ import domain.event.IEventRepo;
 import java.util.*;
 
 public class EventRepoImpl implements IEventRepo {
-    Map<Integer,Event> events;
+    Map<Integer,Event> events; // key: eventId, value: event
 
     public EventRepoImpl() {
         events = new HashMap<>();
@@ -31,7 +31,7 @@ public class EventRepoImpl implements IEventRepo {
 
     @Override
     public void store(Event entity) {
-        events.put(entity.getId(), entity);
+        events.put(events.size(), entity);
 
     }
 }
