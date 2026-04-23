@@ -25,4 +25,8 @@ public class Lottery {
         this.registerWindow = registerWindow;
         this.expirationTime = expirationTime;
     }
+
+    public int getId() {
+        return id;
+    }
 }

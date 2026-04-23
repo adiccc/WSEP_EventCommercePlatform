@@ -18,6 +18,7 @@ public class Event {
     private boolean hasLottery;
     private Purcase purchasePolicy;
     private Discount discountPolicy;
+    private boolean active;
 
 
     public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery) {
@@ -34,6 +35,7 @@ public class Event {
         discountPolicy = new DiscountPolicy();
         discountPolicy.addDiscount(new LimitedDiscount(0.1, 5));
         this.id = LocalDateTime.now().hashCode() + String.valueOf(creatorId);
+        active = true;
     }
 
     public int getCompanyId() {
@@ -74,5 +76,11 @@ public class Event {
         return id;
     }
 
+    public void setActive(boolean active) {
+        this.active = active;
+    }
 
+    public boolean isActive() {
+        return active;
+    }
 }
