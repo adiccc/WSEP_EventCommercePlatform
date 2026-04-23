@@ -49,7 +49,7 @@ class EventCompanyManageServiceTest {
     }
 
     @Test
-    void GivenValidAreaSetupScenario_WhenDefineVenueAndSeatingMap_ThanHallIsCreatedAndAssignedToEvent() throws Exception {
+    void GivenValidAreaSetupScenario_WhenDefineVenueAndSeatingMap_ThenHallIsCreatedAndAssignedToEvent() throws Exception {
 
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
                 validToken,
@@ -67,7 +67,7 @@ class EventCompanyManageServiceTest {
     }
 
     @Test
-    void GivenUnauthorizedUserScenario_WhenDefineVenueAndSeatingMap_ThanPermissionErrorIsShown() throws Exception {
+    void GivenUnauthorizedUserScenario_WhenDefineVenueAndSeatingMap_ThenPermissionErrorIsShown() throws Exception {
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
                 validToken,
                 999,
@@ -84,7 +84,7 @@ class EventCompanyManageServiceTest {
     }
 
     @Test
-    void GivenLoggedOutUserScenario_WhenDefineVenueAndSeatingMap_ThanInvalidTokenErrorIsShown() {
+    void GivenLoggedOutUserScenario_WhenDefineVenueAndSeatingMap_ThenInvalidTokenErrorIsShown() {
 
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
                 "",
@@ -101,7 +101,7 @@ class EventCompanyManageServiceTest {
     }
 
     @Test
-    void GivenMissingEventScenario_WhenDefineVenueAndSeatingMap_ThanEventNotFoundErrorIsShown() {
+    void GivenMissingEventScenario_WhenDefineVenueAndSeatingMap_ThenEventNotFoundErrorIsShown() {
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
                 validToken,
                 creatorId,
@@ -117,7 +117,7 @@ class EventCompanyManageServiceTest {
     }
 
     @Test
-    void GivenWrongMandatoryFieldsScenario_WhenDefineVenueAndSeatingMap_ThanValidationErrorIsShown() throws Exception {
+    void GivenWrongMandatoryFieldsScenario_WhenDefineVenueAndSeatingMap_ThenValidationErrorIsShown() throws Exception {
 
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
                 validToken,
@@ -205,7 +205,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime eventDate = LocalDateTime.now().plusDays(30);
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
-        String invalidToken = ""; // Unauthenticated user or invalid token
+        String invalidToken = ""; // UnauThenticated user or invalid token
 
         // Act
         Response<Boolean> response = service.createEvent(
@@ -215,6 +215,158 @@ class EventCompanyManageServiceTest {
         // Assert: System blocks and alerts about invalid token
         assertFalse(response.getValue());
         assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenValidManagerAndFutureDate_WhenUpdateEventDate_ThenEventDateIsUpdatedSuccessfully() {
+        // Given
+        LocalDateTime originalDate = event.getDate();
+        LocalDateTime requestedDate = originalDate.plusDays(7);
+
+        // When
+        Response<Boolean> response = service.UpdateEventDate(
+                validToken,
+                creatorId,
+                event.getId(),
+                requestedDate
+        );
+
+        // Then
+        assertTrue(response.getValue());
+        assertEquals("Event updated successfully", response.getMessage());
+
+        Event updatedEvent = eventRepo.findById(event.getId());
+        assertEquals(requestedDate, updatedEvent.getDate());
+    }
+
+    @Test
+    void GivenPastEvent_WhenUpdateEventDate_ThenPastEventErrorIsReturned() {
+        // Given
+        Event pastEvent = new Event(
+                companyId,
+                creatorId,
+                LocalDateTime.now().minusDays(3),
+                "past event",
+                LocalDateTime.now().minusDays(10),
+                false
+        );
+        eventRepo.store(pastEvent);
+
+        LocalDateTime requestedDate = LocalDateTime.now().plusDays(5);
+
+        // When
+        Response<Boolean> response = service.UpdateEventDate(
+                validToken,
+                creatorId,
+                pastEvent.getId(),
+                requestedDate
+        );
+
+        // Then
+        assertFalse(response.getValue());
+        assertEquals("Event date must be in the future", response.getMessage());
+    }
+
+    @Test
+    void GivenPastRequestedDate_WhenUpdateEventDate_ThenInvalidNewDateErrorIsReturned() {
+        // Given
+        LocalDateTime originalDate = event.getDate();
+        LocalDateTime requestedDate = LocalDateTime.now().minusDays(1);
+
+        // When
+        Response<Boolean> response = service.UpdateEventDate(
+                validToken,
+                creatorId,
+                event.getId(),
+                requestedDate
+        );
+
+        // Then
+        assertFalse(response.getValue());
+        assertEquals("Event date can only be after the original date", response.getMessage());
+
+        Event updatedEvent = eventRepo.findById(event.getId());
+        assertEquals(originalDate, updatedEvent.getDate());
+    }
+
+    @Test
+    void GivenEarlierThenOriginalDate_WhenUpdateEventDate_ThenInvalidNewDateErrorIsReturned() {
+        // Given
+        LocalDateTime originalDate = event.getDate();
+        LocalDateTime requestedDate = originalDate.minusDays(1);
+
+        // When
+        Response<Boolean> response = service.UpdateEventDate(
+                validToken,
+                creatorId,
+                event.getId(),
+                requestedDate
+        );
+
+        // Then
+        assertFalse(response.getValue());
+        assertEquals("Event date can only be after the original date", response.getMessage());
+
+        Event updatedEvent = eventRepo.findById(event.getId());
+        assertEquals(originalDate, updatedEvent.getDate());
+    }
+
+    @Test
+    void GivenUnauthorizedUser_WhenUpdateEventDate_ThenPermissionErrorIsReturned() {
+        // Given
+        LocalDateTime originalDate = event.getDate();
+        LocalDateTime requestedDate = originalDate.plusDays(10);
+
+        // When
+        Response<Boolean> response = service.UpdateEventDate(
+                validToken,
+                999,
+                event.getId(),
+                requestedDate
+        );
+
+        // Then
+        assertFalse(response.getValue());
+        assertEquals("User id mismatch to the creator of the event", response.getMessage());
+
+        Event updatedEvent = eventRepo.findById(event.getId());
+        assertEquals(originalDate, updatedEvent.getDate());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenUpdateEventDate_ThenInvalidTokenErrorIsReturned() {
+        // Given
+        LocalDateTime requestedDate = event.getDate().plusDays(5);
+
+        // When
+        Response<Boolean> response = service.UpdateEventDate(
+                "",
+                creatorId,
+                event.getId(),
+                requestedDate
+        );
+
+        // Then
+        assertFalse(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenEventDoesNotExist_WhenUpdateEventDate_ThenEventNotFoundErrorIsReturned() {
+        // Given
+        LocalDateTime requestedDate = LocalDateTime.now().plusDays(10);
+
+        // When
+        Response<Boolean> response = service.UpdateEventDate(
+                validToken,
+                creatorId,
+                "non-existing-event-id",
+                requestedDate
+        );
+
+        // Then
+        assertFalse(response.getValue());
+        assertTrue(response.getMessage().startsWith("failed to create event : "));
     }
 
 }

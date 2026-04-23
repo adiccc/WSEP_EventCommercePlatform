@@ -79,6 +79,10 @@ public class Event {
     public void setActive(boolean active) {
         this.active = active;
     }
+    public void setDate(LocalDateTime date) {
+        this.date = date;
+    }
+
 
     public boolean isActive() {
         return active;
