@@ -10,13 +10,14 @@ import infrastructure.EventRepoImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
+import java.util.Date;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class EventCompanyManageServiceTest {
 
-    private final int eventId = 444;
     private final int companyId = 900;
     private final int creatorId = 123;
 
@@ -38,7 +39,7 @@ class EventCompanyManageServiceTest {
         companyRepo = new CompanyRepoImpl();
         companyRepo.store(new Company(companyId, "Test Company", creatorId));
         eventRepo = new EventRepoImpl();
-        event=new Event(eventId, companyId, creatorId, null, null);
+        event=new Event(companyId, creatorId, LocalDateTime.now().plusYears(1),"some test", LocalDateTime.now().plusYears(2), false);
         eventRepo.store(event);
         service = new EventCompanyManageService(companyRepo, eventRepo,tokenService);
         stage = new ElementPositionDTO(10, 20);
@@ -53,7 +54,7 @@ class EventCompanyManageServiceTest {
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
                 validToken,
                 creatorId,
-                eventId,
+                event.getId(),
                 stage,
                 entries,
                 standingZones,
@@ -70,7 +71,7 @@ class EventCompanyManageServiceTest {
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
                 validToken,
                 999,
-                eventId,
+                event.getId(),
                 stage,
                 entries,
                 standingZones,
@@ -88,7 +89,7 @@ class EventCompanyManageServiceTest {
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
                 "",
                 creatorId,
-                eventId,
+                event.getId(),
                 stage,
                 entries,
                 standingZones,
@@ -104,7 +105,7 @@ class EventCompanyManageServiceTest {
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
                 validToken,
                 creatorId,
-                123,
+                "non-existing-event-id",
                 stage,
                 entries,
                 standingZones,
@@ -121,7 +122,7 @@ class EventCompanyManageServiceTest {
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
                 validToken,
                 creatorId,
-                eventId,
+                event.getId(),
                 null,
                 entries,
                 standingZones,
@@ -130,6 +131,90 @@ class EventCompanyManageServiceTest {
 
         assertFalse(response.getValue());
         assertEquals("map element null", response.getMessage());
+    }
+
+    @Test
+    void GivenValidInput_WhenCreateEvent_ThenEventIsSuccessfullyStored() {
+        // Arrange: Event date in the future, sale start date in the future (but before the event)
+        LocalDateTime eventDate = LocalDateTime.now().plusDays(30);
+        LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
+
+        // Act: Standard sale (hasLottery = false)
+        Response<Boolean> response = service.createEvent(
+                validToken, companyId, creatorId, eventDate, "Standard Event", saleStartDate, false
+        );
+
+        // Assert result
+        assertTrue(response.getValue());
+        assertEquals("Event created successfully", response.getMessage());
+    }
+
+    @Test
+    void GivenLotteryOptionSelected_WhenCreateEvent_ThenEventWithLotteryIsCreated() {
+        // Arrange: Event date in the future, sale start date in the future (but before the event)
+        LocalDateTime eventDate = LocalDateTime.now().plusDays(30);
+        LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
+
+        // Act: Lottery sale (hasLottery = true)
+        Response<Boolean> response = service.createEvent(
+                validToken, companyId, creatorId, eventDate, "Lottery Event", saleStartDate, true
+        );
+
+        // Assert result
+        assertTrue(response.getValue());
+        assertEquals("Event created successfully", response.getMessage());
+    }
+
+    @Test
+    void GivenUnauthorizedUser_WhenCreateEvent_ThenPermissionErrorIsReturned() {
+        // Arrange: Setup dates and an unauthorized user ID
+        LocalDateTime eventDate = LocalDateTime.now().plusDays(30);
+        LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
+
+        int unauthorizedUserId = 999; // User with no permissions / not the company creator
+
+        // Act
+        Response<Boolean> response = service.createEvent(
+                validToken, companyId, unauthorizedUserId, eventDate, "Unauthorized Event", saleStartDate, false
+        );
+
+        // Assert: System should reject the request due to lack of permissions
+        assertFalse(response.getValue());
+        assertEquals("Permission required", response.getMessage());
+    }
+
+    @Test
+    void GivenPastEventDate_WhenCreateEvent_ThenDateValidationErrorIsReturned() {
+        // Arrange: Event date is one hour before the current time
+        LocalDateTime pastEventDate = LocalDateTime.now().minusHours(1);
+        LocalDateTime saleStartDate = pastEventDate.minusDays(1);
+
+        // Act
+        Response<Boolean> response = service.createEvent(
+                validToken, companyId, creatorId, pastEventDate, "Past Event", saleStartDate, false
+        );
+
+        // Assert: System identifies that the date is invalid
+        assertFalse(response.getValue());
+        assertEquals("Event date must be in the future", response.getMessage());
+    }
+
+    @Test
+    void GivenInvalidOrMissingToken_WhenCreateEvent_ThenInvalidTokenErrorIsReturned() {
+        // Arrange: Setup dates and an invalid token
+        LocalDateTime eventDate = LocalDateTime.now().plusDays(30);
+        LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
+
+        String invalidToken = ""; // Unauthenticated user or invalid token
+
+        // Act
+        Response<Boolean> response = service.createEvent(
+                invalidToken, companyId, creatorId, eventDate, "No Token Event", saleStartDate, false
+        );
+
+        // Assert: System blocks and alerts about invalid token
+        assertFalse(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
     }
 
 }

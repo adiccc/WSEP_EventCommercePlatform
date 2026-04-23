@@ -6,16 +6,16 @@ import domain.event.IEventRepo;
 import java.util.*;
 
 public class EventRepoImpl implements IEventRepo {
-    Map<Integer,Event> events;
+    Map<String,Event> events; // key: eventId, value: event
 
     public EventRepoImpl() {
         events = new HashMap<>();
     }
 
     @Override
-    public Event findById(Integer integer) {
-        if(events.containsKey(integer))
-            return events.get(integer);
+    public Event findById(String id) {
+        if(events.containsKey(id))
+            return events.get(id);
         throw new NoSuchElementException();
     }
 
@@ -25,8 +25,8 @@ public class EventRepoImpl implements IEventRepo {
     }
 
     @Override
-    public void delete(Integer integer) {
-        events.remove(integer);
+    public void delete(String id) {
+        events.remove(id);
     }
 
     @Override
