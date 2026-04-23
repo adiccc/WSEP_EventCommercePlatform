@@ -32,6 +32,5 @@ public class EventRepoImpl implements IEventRepo {
     @Override
     public void store(Event entity) {
         events.put(entity.getId(), entity);
-
     }
 }

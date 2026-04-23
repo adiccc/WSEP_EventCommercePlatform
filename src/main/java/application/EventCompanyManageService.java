@@ -13,7 +13,9 @@ import domain.event.Event;
 import domain.event.EventMap;
 import domain.event.EventQueue;
 import domain.event.IEventRepo;
+import domain.lottery.ILotteryRepo;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
@@ -119,5 +121,35 @@ public class EventCompanyManageService {
             logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
             return new Response<>(false, "failed to create event : " + e.getMessage());
         }
+    }
+
+    public Response<Boolean> UpdateEventDate(String token,int userId, String eventId, LocalDateTime date) {
+        logger.log(Level.INFO, "UpdateEventDate called");
+
+        // check valid token
+        if (!tokenService.validateToken(token)) {
+            return new Response<>(false, "Invalid token");
+        }
+        try {
+            Event event = eventRepo.findById(eventId);
+            if(event.getCreatorId() != userId) {
+                return new Response<>(false, "User id mismatch to the creator of the event");
+            }
+            if(date.isBefore(event.getDate())) {
+                return new Response<>(false, "Event date can only be after the original date");
+            }
+            if(event.getDate().isBefore(LocalDateTime.now())) {
+                return new Response<>(false, "Event date must be in the future");
+            }
+
+            event.setDate(date);
+            eventRepo.store(event);
+            logger.log(Level.INFO, "Event updated successfully");
+            return new Response<>(true, "Event updated successfully");
+        }catch (Exception e) {
+            logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
+            return new Response<>(false, "failed to create event : " + e.getMessage());
+        }
+
     }
 }

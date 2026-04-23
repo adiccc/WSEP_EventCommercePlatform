@@ -74,5 +74,9 @@ public class Event {
         return id;
     }
 
+    public void setDate(LocalDateTime date) {
+        this.date = date;
+    }
+
 
 }
