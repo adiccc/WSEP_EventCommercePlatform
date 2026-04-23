@@ -2,6 +2,7 @@ package infrastructure;
 
 import domain.company.Company;
 import domain.company.ICompanyRepo;
+import domain.lottery.Lottery;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -35,6 +36,11 @@ public class CompanyRepoImpl implements ICompanyRepo  {
             return companies.get(integer);
         }
         throw new IllegalArgumentException("Company with id " + integer + " not found");
+    }
+
+    @Override
+    public void update(Company entity) {
+        companies.put(entity.getCompanyId(), entity);
     }
 
 }

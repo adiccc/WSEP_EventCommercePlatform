@@ -78,7 +78,7 @@ public class EventCompanyManageService {
             EventMap eventMap = new EventMap(new ElementPosition(stage.getX(), stage.getY()), allEntries, zones);
             event.setMap(eventMap);
             event.setActive(true);
-
+            eventRepo.update(event);
             // success
             logger.log(Level.INFO, "map created and linked to event " + eventId);
             return new Response<>(true, "map saved successfully");

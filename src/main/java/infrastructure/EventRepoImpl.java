@@ -33,4 +33,9 @@ public class EventRepoImpl implements IEventRepo {
     public void store(Event entity) {
         events.put(entity.getId(), entity);
     }
+
+    @Override
+    public void update(Event entity) {
+        events.put(entity.getId(), entity);
+    }
 }
