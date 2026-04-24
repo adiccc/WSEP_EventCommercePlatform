@@ -2,10 +2,9 @@ package domain.lottery;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.time.LocalDate;
+import java.util.Collections;
 
 import java.util.List;
-import java.util.Map;
 
 public class Lottery {
     private int id;
@@ -53,6 +52,23 @@ public class Lottery {
 
     public double getExpirationTime() {
         return expirationTime;
+    }
+
+    public void drawWinners() {
+        if (registered.isEmpty()) {
+            return; // No one registered
+        }
+
+        winners.clear(); // Safety clear in case it's called twice
+
+        if (registered.size() <= capacity) {
+            winners.addAll(registered);
+        } else {
+            // Shuffle the registered list and pick the first 'capacity' users
+            List<Integer> shuffledUsers = new ArrayList<>(registered);
+            Collections.shuffle(shuffledUsers);
+            winners.addAll(shuffledUsers.subList(0, capacity));
+        }
     }
 
 }

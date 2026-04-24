@@ -1,7 +1,11 @@
 package infrastructure;
 
+<<<<<<< HEAD
 import domain.event.Event;
 import domain.event.IEventRepo;
+=======
+
+>>>>>>> 6aeeea0 (implement lottery draw and unit+acceptance tests)
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 
@@ -36,4 +40,8 @@ public class LotteryRepoImpl implements ILotteryRepo {
         lotteries.put(entity.getId(), entity);
 
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 6aeeea0 (implement lottery draw and unit+acceptance tests)
