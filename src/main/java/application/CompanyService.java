@@ -1,7 +1,6 @@
 package application;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.logging.Logger;
 import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
@@ -14,7 +13,7 @@ import domain.user.User;
 
 public class CompanyService {
 
-    private static final Logger logger = LoggerFactory.getLogger(CompanyService.class);
+    private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
 
     private final TokenService tokenService;
     private final IAuth auth;
@@ -34,7 +33,7 @@ public class CompanyService {
     public Response<Company> createProductionCompany(String sessionToken, int companyId, String companyName,
                                                      String email, String phone, String bankAccount) {
         try {
-            logger.info("Attempting to create company: {} for user: {}", companyName, sessionToken);
+            logger.info("Attempting to create company: " + companyName + " for user: " + sessionToken);
 
             User user = userRepo.findById(sessionToken);
             if (user == null) {
@@ -70,39 +69,39 @@ public class CompanyService {
                 companyRepo.save(newCompany);
                 userRepo.save(user);
 
-                logger.info("Company {} created successfully", companyName);
+                logger.info("Company " + companyName + " created successfully");
                 return new Response<>(newCompany, "Production company created successfully.");
             }
 
         } catch (Exception e) {
-            logger.error("Failed to create company {}. Error: {}", companyName, e.getMessage());
+            logger.severe("Failed to create company " + companyName + ". Error: " + e.getMessage());
             return new Response<>(null, "System error occurred: " + e.getMessage());
         }
     }
 
     public Response<Boolean> updatePurchasePolicy(String token, int companyId, PurchasePolicy policy) {
-        logger.info("Starting updatePurchasePolicy for companyId: {}", companyId);
+        logger.info("Starting updatePurchasePolicy for companyId: " + companyId);
         try {
             if (!tokenService.validateToken(token)) {
-                logger.warn("updatePurchasePolicy failed: invalid or expired token");
+                logger.warning("updatePurchasePolicy failed: invalid or expired token");
                 return Response.error("Invalid or expired token");
             }
             int userId = auth.getUserId(token);
             Company company = companyRepo.findById(companyId);
             if (company == null) {
-                logger.warn("updatePurchasePolicy failed: company not found, id: {}", companyId);
+                logger.warning("updatePurchasePolicy failed: company not found, id: " + companyId);
                 return Response.error("Company not found");
             }
             String error = company.updatePurchasePolicy(userId, policy);
             if (error != null) {
-                logger.warn("updatePurchasePolicy failed for companyId: {}. Reason: {}", companyId, error);
+                logger.warning("updatePurchasePolicy failed for companyId: " + companyId + ". Reason: " + error);
                 return Response.error(error);
             }
             companyRepo.store(company);
-            logger.info("Purchase policy updated successfully for companyId: {}", companyId);
+            logger.info("Purchase policy updated successfully for companyId: " + companyId);
             return Response.ok(true);
         } catch (Exception e) {
-            logger.error("Unexpected error in updatePurchasePolicy for companyId: {}. Error: {}", companyId, e.getMessage());
+            logger.severe("Unexpected error in updatePurchasePolicy for companyId: " + companyId + ". Error: " + e.getMessage());
             return Response.error("Unexpected error in updatePurchasePolicy for companyId: " + companyId);
         }
     }
