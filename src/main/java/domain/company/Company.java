@@ -36,6 +36,7 @@ public class Company {
     }
 
     public String getCompanyId() { return companyId; }
+    public String getCompanyName() { return companyName; }
     public boolean isActive() { return isActive; }
     public String getFounderId() { return founderId; }
 }

@@ -1,4 +1,4 @@
-package test.application;
+package domain.company;
 
 import application.CompanyService;
 import application.Response;

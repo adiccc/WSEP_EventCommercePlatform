@@ -1,4 +1,5 @@
 package domain.policy;
 
-public class DiscountPolicy {
+public abstract class DiscountPolicy {
+    // Base class for all discount policies
 }

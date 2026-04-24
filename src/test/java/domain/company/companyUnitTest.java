@@ -1,4 +1,4 @@
-package test.application;
+package domain.company;
 
 import application.CompanyService;
 import application.Response;
@@ -56,7 +56,7 @@ public class CompanyServiceTest {
     public void GivenExistingCompanyId_WhenCreateProductionCompany_ThenReturnError() {
         // Arrange
         when(userRepoMock.findById("token123")).thenReturn(mockUser);
-        when(companyRepoMock.existsById("comp555")).thenReturn(true); // מדמים שהח"פ כבר קיים!
+        when(companyRepoMock.existsById("comp555")).thenReturn(true);
 
         // Act
         Response<Company> response = companyService.createProductionCompany(

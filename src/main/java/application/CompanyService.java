@@ -1,4 +1,5 @@
 package application;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import domain.company.Company;
@@ -14,17 +15,18 @@ public class CompanyService {
 
     private final ICompanyRepo companyRepo;
     private final IUserRepo userRepo;
-    private static final Logger logger;
+    private static final Logger logger = LoggerFactory.getLogger(CompanyService.class);
 
     public CompanyService(ICompanyRepo companyRepo, IUserRepo userRepo) {
         this.companyRepo = companyRepo;
         this.userRepo = userRepo;
-        logger = LoggerFactory.getLogger(CompanyService.class);
     }
+
     public Response<Company> createProductionCompany(String sessionToken, String companyId, String companyName,
                                                      String email, String phone, String bankAccount) {
         try {
             logger.info("Attempting to create company: {} for user: {}", companyName, sessionToken);
+
             User user = userRepo.findById(sessionToken);
             if (user == null) {
                 return new Response<>(null, "User not found.");
@@ -33,32 +35,35 @@ public class CompanyService {
                 return new Response<>(null, "User must be logged in to create a company.");
             }
 
-            if (companyRepo.existsById(companyId)) {
-                return new Response<>(null, "Company ID already exists in the system.");
-            }
-            if (companyRepo.existsByName(companyName)) {
-                return new Response<>(null, "Company name is already taken.");
-            }
-
             if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
                 return new Response<>(null, "Invalid contact or bank account information.");
             }
-            ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
 
-            DefaultPurchasePolicy defaultPurchase = new DefaultPurchasePolicy();
-            DefaultDiscountPolicy defaultDiscount = new DefaultDiscountPolicy();
+            // Synchronize check-then-act on companyRepo to prevent race conditions
+            synchronized (companyRepo) {
+                if (companyRepo.existsById(companyId)) {
+                    return new Response<>(null, "Company ID already exists in the system.");
+                }
+                if (companyRepo.existsByName(companyName)) {
+                    return new Response<>(null, "Company name is already taken.");
+                }
 
-            Company newCompany = new Company(companyId, companyName, user.getUserId(),
-                    contactInfo, defaultPurchase, defaultDiscount);
+                ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
+                DefaultPurchasePolicy defaultPurchase = new DefaultPurchasePolicy();
+                DefaultDiscountPolicy defaultDiscount = new DefaultDiscountPolicy();
 
-            Founder founderRole = new Founder(companyId);
-            user.addRole(founderRole);
+                Company newCompany = new Company(companyId, companyName, user.getUserId(),
+                        contactInfo, defaultPurchase, defaultDiscount);
 
-            companyRepo.save(newCompany);
-            userRepo.save(user);
+                Founder founderRole = new Founder(companyId);
+                user.addRole(founderRole);
 
-            logger.info("Company {} created successfully", companyName); [cite: 903]
-            return new Response<>(newCompany, "Production company created successfully.");
+                companyRepo.save(newCompany);
+                userRepo.save(user);
+
+                logger.info("Company {} created successfully", companyName);
+                return new Response<>(newCompany, "Production company created successfully.");
+            }
 
         } catch (Exception e) {
             logger.error("Failed to create company {}. Error: {}", companyName, e.getMessage());

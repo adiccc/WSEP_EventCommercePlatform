@@ -1,4 +1,5 @@
 package domain.policy;
 
-public class PurchasePolicy{
+public abstract class PurchasePolicy {
+    // Base class for all purchase policies
 }
