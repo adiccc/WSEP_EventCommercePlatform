@@ -7,18 +7,17 @@ import java.util.Collections;
 import java.util.List;
 
 public class Lottery {
-    private int id;
-    private String eventId;
+    private String id; // this value is the same as the eventId, because each event can have only one
+                       // lottery
     private int capacity;
     private List<Integer> registered;
-    private List<Integer> winners; // the code of each user who won the lottery is his userId/email
+    private List<Integer> winners; // the code of each user who won the lottery is his email
     private LocalDateTime registerWindow; // the time window for users to register for the lottery
     private double expirationTime; // after this time all the users will be able to buy tickets for the event, and
                                    // the lottery will be closed
 
-    public Lottery(int id, String eventId, int capacity, LocalDateTime registerWindow, double expirationTime) {
-        this.id = id;
-        this.eventId = eventId;
+    public Lottery(String eventId, int capacity, LocalDateTime registerWindow, double expirationTime) {
+        this.id = eventId;
         this.capacity = capacity;
         this.registered = new ArrayList<>();
         this.winners = new ArrayList<>();
@@ -26,12 +25,8 @@ public class Lottery {
         this.expirationTime = expirationTime;
     }
 
-    public int getId() {
+    public String getId() {
         return id;
-    }
-
-    public String getEventId() {
-        return eventId;
     }
 
     public int getCapacity() {
@@ -58,8 +53,6 @@ public class Lottery {
         if (registered.isEmpty()) {
             return; // No one registered
         }
-
-        winners.clear(); // Safety clear in case it's called twice
 
         if (registered.size() <= capacity) {
             winners.addAll(registered);

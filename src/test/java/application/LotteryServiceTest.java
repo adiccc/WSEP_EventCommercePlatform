@@ -204,7 +204,7 @@ class LotteryServiceTest {
         // Act & Assert
         // We call the service with a fake ID. If it crashes the test fails.
         // It should just log the error internally as per our implementation.
-        assertDoesNotThrow(() -> lotteryService.drawLottery(9999),
+        assertDoesNotThrow(() -> lotteryService.drawLottery("non-existent-lottery-id"),
                 "The service should catch the exception and log it, not crash the system.");
     }
 

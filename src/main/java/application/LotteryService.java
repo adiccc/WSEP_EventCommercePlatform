@@ -27,7 +27,7 @@ public class LotteryService {
         this.eventRepo = eventRepo;
         this.logger = Logger.getLogger(LotteryService.class.getName());
         this.tokenService = tokenService;
-        this.scheduler = Executors.newScheduledThreadPool(1);
+        this.scheduler = Executors.newScheduledThreadPool(10);
     }
 
     public Response<Boolean> createLottery(String token, int userId, String eventId, int capacity, LocalDateTime registerWindow, double expirationTime) {
@@ -56,7 +56,7 @@ public class LotteryService {
             }if (expirationTime <= 0) {
                 return new Response<>(false, "Expiration time must be greater than 0");
             }
-            Lottery lottery = new Lottery(lotteryRepo.getAll().size() + 1, eventId, capacity, registerWindow, expirationTime);
+            Lottery lottery = new Lottery(eventId, capacity, registerWindow, expirationTime);
             lotteryRepo.store(lottery);
 
             //Todo: change the event to active (michal after rebase)
@@ -95,7 +95,7 @@ public class LotteryService {
 
 
     //Executes the actual lottery draw. This method is called automatically by the scheduler.
-    public void drawLottery(int lotteryId) {
+    public void drawLottery(String lotteryId) {
         logger.log(Level.INFO, "Starting draw for lottery ID: " + lotteryId);
         try {
             // Retrieve the lottery from the database

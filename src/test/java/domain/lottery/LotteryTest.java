@@ -15,7 +15,7 @@ class LotteryTest {
     @BeforeEach
     void setUp() {
         // Create a lottery with a capacity of 3
-        lottery = new Lottery(1, "event-201", capacity, LocalDateTime.now().plusDays(5), 24.0);
+        lottery = new Lottery("event-201", capacity, LocalDateTime.now().plusDays(5), 24.0);
     }
 
     @Test
