@@ -32,16 +32,15 @@ public class Auth implements IAuth {
             Member member = userRepo.findUserByEmail(username);
             if (member == null || !passwordEncoder.matches(password, member.getPassword())) {
                 logger.warning("Login failed: Invalid credentials for " + username);
-                return Response.error("Invalid email or password");
+                return new Response<>(null,"Invalid email or password");
             }
-
             String token = tokenService.generateToken(username);
             logger.info("Login successful for username: " + username);
-            return Response.ok(token);
+            return new Response<>(token, "Login successful");
 
         } catch (Exception e) {
             logger.severe("Login failed for username: " + username + ". Error: " + e.getMessage());
-            return Response.error("Login failed due to server error");
+            return new Response<>(null,"Login failed due to server error");
         }
     }
     @Override
