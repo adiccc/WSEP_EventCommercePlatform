@@ -64,7 +64,7 @@ class EventCompanyManageServiceTest {
                 new ContactInfo("test@test.com", "0500000000", "bank-1"),
                 new PurchasePolicy(), new DiscountPolicy()));
         eventRepo = new EventRepoImpl();
-        event=new Event(companyId, creatorId, LocalDateTime.now().plusYears(1),"some test", LocalDateTime.now().plusYears(2), false, GeographicalArea.NORTH, CategoryEvent.LiveMusic);
+        event=new Event(companyId, creatorId, LocalDateTime.now().plusYears(1),"some test", LocalDateTime.now().plusYears(2), false, GeographicalArea.NORTH, CategoryEvent.LIVEMUSIC);
         eventRepo.store(event);
         service = new EventCompanyManageService(companyRepo, eventRepo,auth);
         stage = new ElementPositionDTO(10, 20);

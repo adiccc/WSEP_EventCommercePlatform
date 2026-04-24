@@ -49,7 +49,7 @@ class EventServiceTest {
                 LocalDateTime.now().plusDays(5),
                 true,
                 GeographicalArea.JERUSALEM,
-                CategoryEvent.LiveMusic
+                CategoryEvent.SPORTS
         );
         Zone expensive = new StandingZone("VIP", 300.0, 50, new ElementPosition(1,1));
         Zone cheap = new StandingZone("Regular", 100.0, 23, new ElementPosition(2,2));
@@ -231,14 +231,14 @@ class EventServiceTest {
     @Test
     void GivenCategoryFilter_WhenSearchEvents_ThenOnlyMatchingCategoryReturned() {
         EventSearchFilter filter = new EventSearchFilter();
-        filter.setCategory(CategoryEvent.LiveMusic);
+        filter.setCategory(CategoryEvent.SPORTS);
 
         Response<List<Event>> response = service.searchEvents(validToken, filter);
 
         assertNotNull(response.getValue());
         assertTrue(
                 response.getValue().stream()
-                        .allMatch(e -> e.getCategoryEvent() == CategoryEvent.LiveMusic)
+                        .allMatch(e -> e.getCategoryEvent() == CategoryEvent.SPORTS)
         );
     }
 
@@ -292,7 +292,7 @@ class EventServiceTest {
     void GivenMultipleFilters_WhenSearchEvents_ThenOnlyMatchingEventsReturned() {
         EventSearchFilter filter = new EventSearchFilter();
         filter.setKeyword("active");
-        filter.setCategory(CategoryEvent.LiveMusic);
+        filter.setCategory(CategoryEvent.SPORTS);
         filter.setLocation(GeographicalArea.JERUSALEM);
         filter.setMinPrice(200.0);
 
@@ -301,7 +301,7 @@ class EventServiceTest {
         assertNotNull(response.getValue());
         assertTrue(response.getValue().stream().allMatch(e ->
                 e.getName().contains("active") &&
-                        e.getCategoryEvent() == CategoryEvent.LiveMusic &&
+                        e.getCategoryEvent() == CategoryEvent.SPORTS &&
                         e.getLocation() == GeographicalArea.JERUSALEM &&
                         e.getMap().getZones().stream().anyMatch(z -> z.getPrice() >= 200)
         ));
