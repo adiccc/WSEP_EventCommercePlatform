@@ -64,4 +64,19 @@ class EventTest {
         // Assert
         assertFalse(event.isAvailableForSale(), "Event should not be available - no map and date is in the future.");
     }
+
+    @Test
+    void GivenEvent_WhenSetActive_ThenIsActiveReturnsTrue() {
+        Event event = new Event(companyId, creatorId,
+                LocalDateTime.now().plusDays(1),
+                "Test",
+                LocalDateTime.now(),
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS);
+
+        event.setActive(true);
+
+        assertTrue(event.isActive());
+    }
 }
