@@ -48,7 +48,6 @@ class CompanyServiceTest {
             @Override public Response<String> login(String username, String password) {
                 return Response.ok(tokenService.generateToken(username));
             }
-            // הוספנו את הפונקציה הזו כי היא קיימת עכשיו בממשק IAuth
             @Override public void logout(String token) {}
 
             @Override public boolean isLoggedIn(String token) {
