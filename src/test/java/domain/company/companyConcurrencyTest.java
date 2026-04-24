@@ -6,7 +6,7 @@ import application.Response;
 import application.TokenService;
 import domain.company.Company;
 import domain.event.IOrderRepo;
-import infrastructure.ConcreteCompanyRepo;
+import infrastructure.CompanyRepoImpl;
 import infrastructure.ConcreteUserRepo;
 import domain.user.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,13 +22,13 @@ import static org.mockito.Mockito.*;
 
 class CompanyConcurrencyTest {
 
-    private ConcreteCompanyRepo companyRepo;
+    private CompanyRepoImpl companyRepo;
     private ConcreteUserRepo userRepo;
     private CompanyService companyService;
 
     @BeforeEach
     public void setUp() {
-        companyRepo = new ConcreteCompanyRepo();
+        companyRepo = new CompanyRepoImpl();
         userRepo = new ConcreteUserRepo();
 
         TokenService tokenServiceMock = mock(TokenService.class);
