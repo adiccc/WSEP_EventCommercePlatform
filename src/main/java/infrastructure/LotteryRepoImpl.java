@@ -36,9 +36,4 @@ public class LotteryRepoImpl implements ILotteryRepo {
         lotteries.put(entity.getId(), entity);
 
     }
-
-    @Override
-    public void update(Lottery entity) {
-        lotteries.put(entity.getId(), entity);
-    }
 }

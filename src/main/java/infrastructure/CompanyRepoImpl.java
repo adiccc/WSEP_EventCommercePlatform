@@ -38,9 +38,4 @@ public class CompanyRepoImpl implements ICompanyRepo  {
         throw new IllegalArgumentException("Company with id " + integer + " not found");
     }
 
-    @Override
-    public void update(Company entity) {
-        companies.put(entity.getCompanyId(), entity);
-    }
-
 }

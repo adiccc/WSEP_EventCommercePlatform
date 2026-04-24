@@ -13,12 +13,10 @@ public class EventService {
 
     private final TokenService tokenService;
     private final IEventRepo eventRepo;
-    private final ILotteryRepo lotteryRepo;
 
-    public EventService(TokenService tokenService, IEventRepo eventRepo, ILotteryRepo lotteryRepo) {
+    public EventService(TokenService tokenService, IEventRepo eventRepo) {
         this.tokenService = tokenService;
         this.eventRepo = eventRepo;
-        this.lotteryRepo = lotteryRepo;
     }
 
     public Response<Event> ViewEventDetails(String token, int companyId, String eventId) {

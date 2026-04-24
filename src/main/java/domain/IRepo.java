@@ -7,5 +7,4 @@ public interface IRepo<T, ID> {
     List<T> getAll();
     void delete(ID id);
     void store(T entity);
-    void update(T entity);
 }

@@ -67,7 +67,7 @@ class EventServiceTest {
         eventCompany2.setActive(true);
         eventRepo.store(eventCompany2);
 
-        service = new EventService(tokenService, eventRepo, new LotteryRepoImpl());
+        service = new EventService(tokenService, eventRepo);
     }
 
     @Test
