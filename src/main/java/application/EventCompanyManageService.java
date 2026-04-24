@@ -49,6 +49,10 @@ public class EventCompanyManageService {
 
         // check valid token
         int userId = auth.getUserId(token);
+        if(userId == -1) {
+            logger.severe("Invalid token");
+            return new Response<>(false, "Invalid token");
+        }
         try {
             Event event = eventRepo.findById(eventId);
             int companyId = event.getCompanyId();
@@ -99,6 +103,11 @@ public class EventCompanyManageService {
 
         // check valid token
         int creatorId = auth.getUserId(token);
+        if(creatorId == -1){
+            logger.severe("Invalid token");
+            return new Response<>(false, "Invalid token");
+        }
+
         try {
             Company c = this.companyRepo.findById(companyId);
             if (!c.checkPermission(creatorId, CreatEvent)) {
@@ -128,6 +137,10 @@ public class EventCompanyManageService {
 
         // check valid token
         int userId = auth.getUserId(token);
+        if(userId == -1){
+            logger.severe("Invalid token");
+            return new Response<>(false, "Invalid token");
+        }
         try {
             Event event = eventRepo.findById(eventId);
             if(event.getCreatorId() != userId) {

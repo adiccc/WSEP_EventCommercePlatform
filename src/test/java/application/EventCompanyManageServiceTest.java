@@ -43,8 +43,12 @@ class EventCompanyManageServiceTest {
 
     @BeforeEach
     void setUp() {
+
         tokenService = new TokenService();
         userRepo = new UserRepo();
+        passwordEncoder = new PasswordEncoderUtil();
+        auth = new Auth(tokenService,userRepo,passwordEncoder);
+
         Member member1 = new Member("test-user1", "yy","yarin", "shemer","050-4273201", LocalDate.of(2002,4,15),"Omer");
         userRepo.store(member1);
         validToken1=tokenService.generateToken("test-user1");
@@ -60,8 +64,6 @@ class EventCompanyManageServiceTest {
         eventRepo = new EventRepoImpl();
         event=new Event(companyId,creatorId, LocalDateTime.now().plusYears(1),"some test", LocalDateTime.now().plusYears(2), false);
         eventRepo.store(event);
-        passwordEncoder = new PasswordEncoderUtil();
-        auth = new Auth(tokenService,userRepo,passwordEncoder);
         service = new EventCompanyManageService(companyRepo, eventRepo,tokenService,auth);
         stage = new ElementPositionDTO(10, 20);
         entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
