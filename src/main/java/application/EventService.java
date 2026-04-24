@@ -114,8 +114,10 @@ public class EventService {
                     .toList();
 
             if (result.isEmpty()) {
+                logger.log(Level.INFO, "No matching events found");
                 return new Response<>(null, "No matching events found");
             }
+            logger.log(Level.INFO, "Events retrieved successfully");
             return new Response<>(result, "Events retrieved successfully");
 
         } catch (Exception e) {

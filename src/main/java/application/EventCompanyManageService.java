@@ -118,12 +118,14 @@ public class EventCompanyManageService {
             try {
                 categoryEvent = CategoryEvent.fromString(category);
             } catch (IllegalArgumentException e) {
+                logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
                 return new Response<>(false, "Invalid category");
             }
             GeographicalArea locationEvent;
             try {
                 locationEvent = GeographicalArea.fromString(location);
             } catch (IllegalArgumentException e) {
+                logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
                 return new Response<>(false, "Invalid category");
             }
 
