@@ -113,7 +113,6 @@ class PurchasePolicyTest {
         PurchasePolicy policy = new PurchasePolicy();
         policy.addRule(new MinAgeRule(18));
 
-        // הותאם למשתמש בן 16 (יליד 2010)
         UserDTO user16 = new UserDTO("user4@test.com", "Test", "User", "Pass123!", 1, 1, 2010, "City", "050-123-4567");
         assertFalse(policy.isSatisfied(user16, 2, 0));
     }
