@@ -1,14 +1,14 @@
 package application;
 
-import domain.company.Company;
 import domain.event.Event;
 import domain.lottery.Lottery;
-import infrastructure.CompanyRepoImpl;
-import infrastructure.EventRepoImpl;
-import infrastructure.LotteryRepoImpl;
+import domain.user.IUserRepo;
+import domain.user.Member;
+import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -17,31 +17,52 @@ import static org.junit.jupiter.api.Assertions.*;
 class LotteryServiceTest {
 
     private final int companyId = 111;
-    private final int creatorId = 789;
+    private int creatorId1;
+    private int creatorId2;
 
     private TokenService tokenService;
     private EventRepoImpl eventRepo;
     private LotteryRepoImpl lotteryRepo;
     private LotteryService lotteryService;
 
-    private String validToken;
     private LocalDateTime saleStartDate_Y;
     private Event eventWithLottery;
+
+    private String validToken;
+    private IAuth auth;
+    private IUserRepo userRepo;
+    private IPasswordEncoder passwordEncoder;
+    private String invalidToken;
+    private String notPermission;
 
     @BeforeEach
     void setUp() {
         tokenService = new TokenService();
-        validToken = tokenService.generateToken("user-789");
+        userRepo = new UserRepo();
+        passwordEncoder = new PasswordEncoderUtil();
+        auth = new Auth(tokenService,userRepo,passwordEncoder);
+
+        Member member1 = new Member("test-user1", "yy","yarin", "shemer","050-4273201", LocalDate.of(2002,4,15),"Omer");
+        userRepo.store(member1);
+        validToken=tokenService.generateToken("test-user1");
+        creatorId1= auth.getUserId(validToken);
+
+        Member member2 = new Member("test-user2", "yy","yarin", "shemer","050-4273201", LocalDate.of(2002,4,15),"Omer");
+        userRepo.store(member2);
+        notPermission = tokenService.generateToken("test-user2");
+        creatorId2 = auth.getUserId(notPermission);
+
+        invalidToken = null;
 
         eventRepo = new EventRepoImpl();
         lotteryRepo = new LotteryRepoImpl();
-        lotteryService = new LotteryService(lotteryRepo, eventRepo, tokenService);
+        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth);
 
         // Date 'Y': Sale start date is 14 days from now
         saleStartDate_Y = LocalDateTime.now().plusDays(14);
 
         // Create an event that supports lottery
-        eventWithLottery = new Event(companyId, creatorId, LocalDateTime.now().plusDays(30), "Lottery Event", saleStartDate_Y, true);
+        eventWithLottery = new Event(companyId, creatorId1, LocalDateTime.now().plusDays(30), "Lottery Event", saleStartDate_Y, true);
         eventRepo.store(eventWithLottery);
     }
 
@@ -56,7 +77,7 @@ class LotteryServiceTest {
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                validToken, creatorId, eventWithLottery.getId(), 50, lotteryDate_X, 24.0
+                validToken, eventWithLottery.getId(), 50, lotteryDate_X, 24.0
         );
 
         // Assert
@@ -69,11 +90,10 @@ class LotteryServiceTest {
     void GivenInvalidOrMissingToken_WhenCreateLottery_ThenUserNotLoggedInErrorIsReturned() {
         // Arrange
         LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
-        String invalidToken = "";
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                invalidToken, creatorId, eventWithLottery.getId(), 50, lotteryDate_X, 24.0
+                invalidToken, eventWithLottery.getId(), 50, lotteryDate_X, 24.0
         );
 
         // Assert
@@ -85,11 +105,10 @@ class LotteryServiceTest {
     void GivenUserNotCompanyOwner_WhenCreateLottery_ThenPermissionErrorIsReturned() {
         // Arrange: Use an unauthorized user ID
         LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
-        int unauthorizedUserId = 999;
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                validToken, unauthorizedUserId, eventWithLottery.getId(), 50, lotteryDate_X, 24.0
+                notPermission, eventWithLottery.getId(), 50, lotteryDate_X, 24.0
         );
 
         // Assert
@@ -104,7 +123,7 @@ class LotteryServiceTest {
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                validToken, creatorId, "non-existing-event-id", 50, lotteryDate_X, 24.0
+                validToken, "non-existing-event-id", 50, lotteryDate_X, 24.0
         );
 
         // Assert
@@ -115,13 +134,13 @@ class LotteryServiceTest {
     @Test
     void GivenEventNotSupportingLottery_WhenCreateLottery_ThenLotteryNotSupportedErrorIsReturned() {
         // Arrange: Create an event that DOES NOT support lottery
-        Event eventWithoutLottery = new Event(companyId, creatorId, LocalDateTime.now().plusDays(30), "Regular Event", saleStartDate_Y, false);
+        Event eventWithoutLottery = new Event(companyId, creatorId1, LocalDateTime.now().plusDays(30), "Regular Event", saleStartDate_Y, false);
         eventRepo.store(eventWithoutLottery);
         LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                validToken, creatorId, eventWithoutLottery.getId(), 50, lotteryDate_X, 24.0
+                validToken, eventWithoutLottery.getId(), 50, lotteryDate_X, 24.0
         );
 
         // Assert
@@ -136,7 +155,7 @@ class LotteryServiceTest {
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                validToken, creatorId, eventWithLottery.getId(), 50, pastDate_Z, 24.0
+                validToken, eventWithLottery.getId(), 50, pastDate_Z, 24.0
         );
 
         // Assert
@@ -151,7 +170,7 @@ class LotteryServiceTest {
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                validToken, creatorId, eventWithLottery.getId(), 50, lateDate_T, 24.0
+                validToken, eventWithLottery.getId(), 50, lateDate_T, 24.0
         );
 
         // Assert
@@ -163,7 +182,7 @@ class LotteryServiceTest {
     void GivenMoreRegistrationsThanCapacity_WhenDrawLotteryIsTriggered_ThenWinnersAreSelectedUpToCapacity() {
         // Arrange: Create an event and a lottery with a capacity of 2
         LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
-        lotteryService.createLottery(validToken, creatorId, eventWithLottery.getId(), 2, lotteryDate_X, 24.0);
+        lotteryService.createLottery(validToken, eventWithLottery.getId(), 2, lotteryDate_X, 24.0);
 
         // Retrieve the newly created lottery to simulate users registering
         Lottery lottery = lotteryRepo.getAll().get(0);
@@ -185,7 +204,7 @@ class LotteryServiceTest {
     void GivenFewerRegistrationsThanCapacity_WhenDrawLotteryIsTriggered_ThenAllRegisteredWin() {
         // Arrange: Create an event and a lottery with a capacity of 10
         LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
-        lotteryService.createLottery(validToken, creatorId, eventWithLottery.getId(), 10, lotteryDate_X, 24.0);
+        lotteryService.createLottery(validToken, eventWithLottery.getId(), 10, lotteryDate_X, 24.0);
 
         Lottery lottery = lotteryRepo.getAll().get(0);
         lottery.getRegistered().addAll(List.of(101, 102, 103)); // Only 3 users register

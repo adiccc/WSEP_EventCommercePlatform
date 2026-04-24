@@ -19,22 +19,24 @@ public class LotteryService {
     ILotteryRepo lotteryRepo;
     IEventRepo eventRepo;
     private final Logger logger;
-    private final TokenService tokenService;
+    private final IAuth auth;
     private final ScheduledExecutorService scheduler; // ScheduledExecutorService is used to schedule tasks to run after a given delay
 
-    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, TokenService tokenService) {
+    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth) {
         this.lotteryRepo = lotteryRepo;
         this.eventRepo = eventRepo;
         this.logger = Logger.getLogger(LotteryService.class.getName());
-        this.tokenService = tokenService;
+        this.auth = auth;
         this.scheduler = Executors.newScheduledThreadPool(10);
     }
 
-    public Response<Boolean> createLottery(String token, int userId, String eventId, int capacity, LocalDateTime registerWindow, double expirationTime) {
+    public Response<Boolean> createLottery(String token, String eventId, int capacity, LocalDateTime registerWindow, double expirationTime) {
         logger.log(Level.INFO, "createLottery called");
 
         // check valid token
-        if (!tokenService.validateToken(token)) {
+        int userId = auth.getUserId(token);
+        if(userId == -1) {
+            logger.severe("Invalid token");
             return new Response<>(false, "Invalid token");
         }
         try {
@@ -57,9 +59,8 @@ public class LotteryService {
                 return new Response<>(false, "Expiration time must be greater than 0");
             }
             Lottery lottery = new Lottery(eventId, capacity, registerWindow, expirationTime);
+            event.setActive(true);
             lotteryRepo.store(lottery);
-
-            //Todo: change the event to active (michal after rebase)
 
             // Schedule the background task to draw winners when the registration window closes
             scheduleLotteryDraw(lottery);

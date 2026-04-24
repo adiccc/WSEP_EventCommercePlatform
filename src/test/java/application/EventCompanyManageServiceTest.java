@@ -64,7 +64,7 @@ class EventCompanyManageServiceTest {
         eventRepo = new EventRepoImpl();
         event=new Event(companyId,creatorId, LocalDateTime.now().plusYears(1),"some test", LocalDateTime.now().plusYears(2), false);
         eventRepo.store(event);
-        service = new EventCompanyManageService(companyRepo, eventRepo,tokenService,auth);
+        service = new EventCompanyManageService(companyRepo, eventRepo,auth);
         stage = new ElementPositionDTO(10, 20);
         entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
         standingZones = List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1)));
