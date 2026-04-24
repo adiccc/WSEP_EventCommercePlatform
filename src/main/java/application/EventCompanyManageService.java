@@ -16,10 +16,8 @@ import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.user.Member;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.logging.*;
 
 import java.util.List;
