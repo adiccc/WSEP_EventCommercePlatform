@@ -1,5 +1,7 @@
 package domain.event;
 
+import domain.dataType.CategoryEvent;
+import domain.dataType.GeographicalArea;
 import domain.policy.*;
 
 import java.time.LocalDate;
@@ -19,9 +21,11 @@ public class Event {
     private Purcase purchasePolicy;
     private Discount discountPolicy;
     private boolean active;
+    private GeographicalArea location;
+    private CategoryEvent categoryEvent;
 
 
-    public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery) {
+    public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent categoryEvent) {
         this.eventMap = null;
         this.eventQueue = null;
         this.companyId=companyId;
@@ -36,6 +40,8 @@ public class Event {
         discountPolicy.addDiscount(new LimitedDiscount(0.1, 5));
         this.id = LocalDateTime.now().hashCode() + String.valueOf(creatorId);
         active = false;
+        this.location = location;
+        this.categoryEvent = categoryEvent;
     }
 
     public int getCompanyId() {
@@ -83,8 +89,15 @@ public class Event {
         this.date = date;
     }
 
-
     public boolean isActive() {
         return active;
+    }
+
+    public CategoryEvent getCategoryEvent() {
+        return categoryEvent;
+    }
+
+    public GeographicalArea getLocation() {
+        return location;
     }
 }
