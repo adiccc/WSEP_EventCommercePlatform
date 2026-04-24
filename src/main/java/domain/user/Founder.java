@@ -2,13 +2,13 @@ package domain.user;
 
 public class Founder extends Role {
 
-    private String companyId;
+    private int companyId;
 
-    public Founder(String companyId) {
+    public Founder(int companyId) {
         this.companyId = companyId;
     }
 
-    public String getCompanyId() {
+    public int getCompanyId() {
         return companyId;
     }
 }
