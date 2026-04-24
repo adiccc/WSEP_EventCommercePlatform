@@ -20,7 +20,7 @@ import java.util.logging.*;
 import java.util.List;
 import java.util.NoSuchElementException;
 
-import static domain.dataType.PermissionType.CreatEvent;
+import static domain.dataType.PermissionType.CREATE_EVENT;
 
 
 public class EventCompanyManageService {
@@ -53,7 +53,7 @@ public class EventCompanyManageService {
             Company c = this.companyRepo.findById(companyId);
 
             // check appropriate permission
-            if (userId != eventCreator || !c.checkPermission(userId, CreatEvent)) {
+            if (userId != eventCreator || !c.checkPermission(userId, CREATE_EVENT)) {
                 return new Response<>(false, "Permission required");
             }
 
@@ -105,7 +105,7 @@ public class EventCompanyManageService {
 
         try {
             Company c = this.companyRepo.findById(companyId);
-            if (!c.checkPermission(creatorId, CreatEvent)) {
+            if (!c.checkPermission(creatorId, CREATE_EVENT)) {
                 return new Response<>(false, "Permission required");
             }
             if (date.isBefore(LocalDateTime.now())) {
