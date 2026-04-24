@@ -4,7 +4,10 @@ import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import domain.company.Company;
+import domain.company.ContactInfo;
 import domain.event.Event;
+import domain.policy.DiscountPolicy;
+import domain.policy.PurchasePolicy;
 import infrastructure.CompanyRepoImpl;
 import infrastructure.EventRepoImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +40,9 @@ class EventCompanyManageServiceTest {
         tokenService = new TokenService();
         validToken=tokenService.generateToken("test-user");
         companyRepo = new CompanyRepoImpl();
-        companyRepo.store(new Company(companyId, "Test Company", creatorId));
+        companyRepo.store(new Company(companyId, "Test Company", creatorId,
+                new ContactInfo("test@test.com", "0500000000", "bank-1"),
+                new PurchasePolicy(), new DiscountPolicy()));
         eventRepo = new EventRepoImpl();
         event=new Event(companyId, creatorId, LocalDateTime.now().plusYears(1),"some test", LocalDateTime.now().plusYears(2), false);
         eventRepo.store(event);

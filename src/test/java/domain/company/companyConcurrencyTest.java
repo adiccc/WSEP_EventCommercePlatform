@@ -1,8 +1,11 @@
 package domain.company;
 
 import application.CompanyService;
+import application.IAuth;
 import application.Response;
+import application.TokenService;
 import domain.company.Company;
+import domain.event.IOrderRepo;
 import infrastructure.ConcreteCompanyRepo;
 import infrastructure.ConcreteUserRepo;
 import domain.user.User;
@@ -15,8 +18,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.*;
 
-public class CompanyServiceConcurrencyTest {
+class CompanyConcurrencyTest {
 
     private ConcreteCompanyRepo companyRepo;
     private ConcreteUserRepo userRepo;
@@ -26,7 +30,14 @@ public class CompanyServiceConcurrencyTest {
     public void setUp() {
         companyRepo = new ConcreteCompanyRepo();
         userRepo = new ConcreteUserRepo();
-        companyService = new CompanyService(companyRepo, userRepo);
+
+        TokenService tokenServiceMock = mock(TokenService.class);
+        IAuth authMock = mock(IAuth.class);
+        IOrderRepo orderRepoMock = mock(IOrderRepo.class);
+
+        when(authMock.getUserId(anyString())).thenReturn(1);
+
+        companyService = new CompanyService(tokenServiceMock, authMock, companyRepo, userRepo, orderRepoMock);
 
         User user = new User("admin123");
         user.setConnected(true);
@@ -49,7 +60,7 @@ public class CompanyServiceConcurrencyTest {
                     startLatch.await();
 
                     Response<Company> response = companyService.createProductionCompany(
-                            "admin123", "comp_race", "RaceCompany", "race@comp.com", "0500000000", "bank1"
+                            "admin123", 100, "RaceCompany", "race@comp.com", "0500000000", "bank1"
                     );
 
                     if (response.getValue() != null) {
@@ -66,7 +77,6 @@ public class CompanyServiceConcurrencyTest {
         }
 
         startLatch.countDown();
-
         endLatch.await();
         executorService.shutdown();
 

@@ -6,8 +6,7 @@ import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
 import domain.event.IOrderRepo;
-import domain.policy.DefaultDiscountPolicy;
-import domain.policy.DefaultPurchasePolicy;
+import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
 import domain.user.Founder;
 import domain.user.IUserRepo;
@@ -58,8 +57,8 @@ public class CompanyService {
                 }
 
                 ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
-                DefaultPurchasePolicy defaultPurchase = new DefaultPurchasePolicy();
-                DefaultDiscountPolicy defaultDiscount = new DefaultDiscountPolicy();
+                PurchasePolicy defaultPurchase = new PurchasePolicy();
+                DiscountPolicy defaultDiscount = new DiscountPolicy();
 
                 int userId = auth.getUserId(sessionToken);
                 Company newCompany = new Company(companyId, companyName, userId,
