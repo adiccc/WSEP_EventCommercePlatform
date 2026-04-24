@@ -1,4 +1,5 @@
 package domain.policy;
 
-public class Discount  {
+public interface Discount  {
+  void addDiscount(Discount discount);
 }

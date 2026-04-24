@@ -18,4 +18,16 @@ public class Response  <T>  {
     public void setMessage(String message) {
         this.message = message;
     }
+
+    public boolean isError() {
+        return message != null;
+    }
+
+    public static <T> Response<T> ok(T value) {
+        return new Response<>(value, null);
+    }
+
+    public static <T> Response<T> error(String message) {
+        return new Response<>(null, message);
+    }
 }
