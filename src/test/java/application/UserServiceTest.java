@@ -24,6 +24,7 @@ class UserServiceTest {
 
     @BeforeEach
     void setUp() {
+        realTokenService = new TokenService();
         savedMembers = new ArrayList<>();
         fakeRepo = new IUserRepo() {
             private final Map<String, Member> db = new HashMap<>();
@@ -38,10 +39,13 @@ class UserServiceTest {
             @Override public List<Member> getAll() { return null; }
             @Override public void delete(Integer userId) {}
         };
-        realTokenService = new TokenService();
         IPasswordEncoder encoderMock = new IPasswordEncoder() {
-            @Override public String encodePassword(String rawPassword) { return rawPassword + "_encrypted"; }
-            @Override public boolean matches(String rawPassword, String encodedPassword) { return false; }
+            @Override public String encodePassword(String rawPassword) {
+                return rawPassword + "_encrypted";
+            }
+            @Override public boolean matches(String rawPassword, String encodedPassword) {
+                return encodedPassword.equals(rawPassword + "_encrypted");
+            }
         };
 
         IAuth realAuth = new Auth(realTokenService, fakeRepo, encoderMock);
@@ -80,7 +84,7 @@ class UserServiceTest {
     @Test
     void GivenExistingEmail_WhenRegisterUser_ThenErrorUserExists() {
         Member existingUser = new Member("yarin@bgu.ac.il", "Pass", "Yarin", "Levi", "050-123-4567", LocalDate.of(2000, 1, 1), "City");
-        fakeRepo.store(existingUser); // שומרים אותו!
+        fakeRepo.store(existingUser);
         UserDTO dto = createValidDTO();
         Response<Boolean> response = userService.registerUser(null, dto);
 
@@ -150,5 +154,40 @@ class UserServiceTest {
         Response<Boolean> response = userService.registerUser(null, dto);
         assertTrue(response.isError());
         assertEquals("Address cannot be null", response.getMessage());
+    }
+
+    @Test
+    void GivenRegisteredUser_WhenLoginWithValidCredentials_ThenReturnToken() {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        // Act
+        Response<String> response = userService.login("yarin@bgu.ac.il", "Password123!");
+        // Assert
+        assertNotNull(response.getValue());
+        assertEquals("Login successful", response.getMessage());
+    }
+
+    @Test
+    void GivenRegisteredUser_WhenLoginWithWrongPassword_ThenReturnError() {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        // Act
+        Response<String> response = userService.login("yarin@bgu.ac.il", "WrongPass!");
+        // Assert
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertEquals("Invalid email or password", response.getMessage());
+    }
+
+    @Test
+    void GivenUnregisteredUser_WhenLogin_ThenReturnError() {
+        //we don't have any set up of registering some user
+        Response<String> response = userService.login("ghost@bgu.ac.il", "Pass123!");
+        // Assert
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertEquals("Invalid email or password", response.getMessage());
     }
 }

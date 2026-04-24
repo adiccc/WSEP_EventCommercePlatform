@@ -5,10 +5,7 @@ import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
-import domain.dataType.ElementPosition;
-import domain.dataType.SeatingZone;
-import domain.dataType.StandingZone;
-import domain.dataType.Zone;
+import domain.dataType.*;
 import domain.event.Event;
 import domain.event.EventMap;
 import domain.event.EventQueue;
@@ -16,10 +13,8 @@ import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.user.Member;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.logging.*;
 
 import java.util.List;
@@ -32,15 +27,13 @@ public class EventCompanyManageService {
     private final ICompanyRepo companyRepo;
     private final IEventRepo eventRepo;
     private final Logger logger;
-    private final TokenService tokenService;
     private final IAuth auth;
 
-    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, TokenService tokenService, IAuth auth) {
+    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;
         this.auth = auth;
         this.logger = Logger.getLogger(EventCompanyManageService.class.getName());
-        this.tokenService = tokenService;
     }
 
 
@@ -82,7 +75,9 @@ public class EventCompanyManageService {
             }
             EventMap eventMap = new EventMap(new ElementPosition(stage.getX(), stage.getY()), allEntries, zones);
             event.setMap(eventMap);
-            event.setActive(true);
+            if (!event.hasLottery()){
+                event.setActive(true);
+            }
             eventRepo.store(event);
             // success
             logger.log(Level.INFO, "map created and linked to event " + eventId);
@@ -98,7 +93,7 @@ public class EventCompanyManageService {
 
     }
 
-    public Response<Boolean> createEvent(String token, int companyId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery) {
+    public Response<Boolean> createEvent(String token, int companyId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent category) {
         logger.log(Level.INFO, "createEvent called");
 
         // check valid token
@@ -119,7 +114,17 @@ public class EventCompanyManageService {
             if (saleStartDate.isAfter(date)) {
                 return new Response<>(false, "Sale start date must be before event date");
             }
-            Event event = new Event(companyId, creatorId, date, name, saleStartDate, hasLottery);
+
+            Event event = new Event(
+                    companyId,
+                    creatorId,
+                    date,
+                    name,
+                    saleStartDate,
+                    hasLottery,
+                    location,
+                    category
+            );
             eventRepo.store(event);
             logger.log(Level.INFO, "Event created successfully");
             return new Response<>(true, "Event created successfully");

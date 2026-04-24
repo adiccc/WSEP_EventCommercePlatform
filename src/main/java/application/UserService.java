@@ -102,4 +102,14 @@ public class UserService {
             return Response.error(e.getMessage());
         }
     }
+    public Response<String> login(String email, String password) {
+        logger.info("Login attempt started for email: " + email);
+        Response<String> tokenResponse = auth.login(email, password);
+        if(tokenResponse.getValue() == null){
+            logger.warning("Login attempt failed for " + email);
+            return Response.error(tokenResponse.getMessage());
+        }
+        logger.info("Login successful for email: " + email);
+        return new Response<>(tokenResponse.getValue(), tokenResponse.getMessage());
+    }
 }

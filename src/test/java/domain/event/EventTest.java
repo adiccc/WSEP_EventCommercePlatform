@@ -1,5 +1,7 @@
 package domain.event;
 
+import domain.dataType.CategoryEvent;
+import domain.dataType.GeographicalArea;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -17,7 +19,7 @@ class EventTest {
     void GivenSaleStartedAndMapIsSet_WhenIsAvailableForSale_ThenReturnTrue() {
         // Arrange: Sale start date is in the past (1 hour ago)
         LocalDateTime pastSaleDate = LocalDateTime.now().minusHours(1);
-        Event event = new Event(companyId, creatorId, LocalDateTime.now().plusDays(10), "Test Event", pastSaleDate, false);
+        Event event = new Event(companyId, creatorId, LocalDateTime.now().plusDays(10), "Test Event", pastSaleDate, false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
 
         // Mock an existing map
         EventMap mockMap = Mockito.mock(EventMap.class);
@@ -31,7 +33,7 @@ class EventTest {
     void GivenSaleNotStartedAndMapIsSet_WhenIsAvailableForSale_ThenReturnFalse() {
         // Arrange: Sale start date is in the future (in 1 hour)
         LocalDateTime futureSaleDate = LocalDateTime.now().plusHours(1);
-        Event event = new Event(companyId, creatorId, LocalDateTime.now().plusDays(10), "Test Event", futureSaleDate, false);
+        Event event = new Event(companyId, creatorId, LocalDateTime.now().plusDays(10), "Test Event", futureSaleDate, false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
 
         // Mock an existing map
         EventMap mockMap = Mockito.mock(EventMap.class);
@@ -45,7 +47,7 @@ class EventTest {
     void GivenSaleStartedButMapIsNull_WhenIsAvailableForSale_ThenReturnFalse() {
         // Arrange: Sale start date is in the past, but no map is defined
         LocalDateTime pastSaleDate = LocalDateTime.now().minusHours(1);
-        Event event = new Event(companyId, creatorId, LocalDateTime.now().plusDays(10), "Test Event", pastSaleDate, false);
+        Event event = new Event(companyId, creatorId, LocalDateTime.now().plusDays(10), "Test Event", pastSaleDate, false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
 
         // Do not set a map (remains null as defined in the constructor)
 
@@ -57,9 +59,24 @@ class EventTest {
     void GivenSaleNotStartedAndMapIsNull_WhenIsAvailableForSale_ThenReturnFalse() {
         // Arrange: Date is in the future and there is no map
         LocalDateTime futureSaleDate = LocalDateTime.now().plusHours(1);
-        Event event = new Event(companyId, creatorId, LocalDateTime.now().plusDays(10), "Test Event", futureSaleDate, false);
+        Event event = new Event(companyId, creatorId, LocalDateTime.now().plusDays(10), "Test Event", futureSaleDate, false, GeographicalArea.NORTH, CategoryEvent.SPORTS);
 
         // Assert
         assertFalse(event.isAvailableForSale(), "Event should not be available - no map and date is in the future.");
+    }
+
+    @Test
+    void GivenEvent_WhenSetActive_ThenIsActiveReturnsTrue() {
+        Event event = new Event(companyId, creatorId,
+                LocalDateTime.now().plusDays(1),
+                "Test",
+                LocalDateTime.now(),
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS);
+
+        event.setActive(true);
+
+        assertTrue(event.isActive());
     }
 }
