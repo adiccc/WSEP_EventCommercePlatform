@@ -15,19 +15,19 @@ import java.util.stream.Collectors;
 public class EventService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
 
-    private final TokenService tokenService;
     private final IEventRepo eventRepo;
+    private final IAuth auth;
 
-    public EventService(TokenService tokenService, IEventRepo eventRepo) {
-        this.tokenService = tokenService;
+    public EventService(IAuth auth, IEventRepo eventRepo) {
         this.eventRepo = eventRepo;
+        this.auth = auth;
     }
 
     public Response<Event> ViewEventDetails(String token, int companyId, String eventId) {
         logger.log(Level.INFO, "ViewEventDetails called");
 
         // check valid token
-        if (!tokenService.validateToken(token)) {
+        if (!auth.isLoggedIn(token)) {
             return new Response<>(null, "Invalid token");
         }
         if (eventId == null || eventId.isEmpty()) {
@@ -56,7 +56,7 @@ public class EventService {
         logger.info("Search events called");
 
         // token validation
-        if (!tokenService.validateToken(token)) {
+        if (!auth.isLoggedIn(token)) {
             return new Response<>(null, "Invalid token");
         }
 

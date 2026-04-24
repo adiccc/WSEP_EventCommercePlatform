@@ -2,10 +2,17 @@ package application;
 
 import domain.dataType.*;
 import domain.event.EventMap;
+import domain.user.IUserRepo;
+import domain.user.Member;
+import infrastructure.Auth;
+import infrastructure.PasswordEncoderUtil;
+import infrastructure.UserRepo;
 import org.junit.jupiter.api.Test;
 import domain.event.Event;
 import infrastructure.EventRepoImpl;
 import org.junit.jupiter.api.BeforeEach;
+
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -16,7 +23,10 @@ class EventServiceTest {
     private final int company2 = 2;
     private final int userId = 123;
 
-    private TokenService tokenService;
+    private IAuth auth;
+    private  TokenService tokenService;
+    private IUserRepo userRepo;
+    private IPasswordEncoder passwordEncoder;
     private EventRepoImpl eventRepo;
     private EventService service;
     private EventSearchFilter filter;
@@ -28,10 +38,7 @@ class EventServiceTest {
 
     @BeforeEach
     void setUp() {
-        tokenService = new TokenService();
-        validToken = tokenService.generateToken("user");
         eventRepo = new EventRepoImpl();
-
 
         // Active event (company1)
         activeEvent = new Event(
@@ -86,7 +93,14 @@ class EventServiceTest {
         eventCompany2.setActive(true);
         eventRepo.store(eventCompany2);
 
-        service = new EventService(tokenService, eventRepo);
+        tokenService = new TokenService();
+        userRepo = new UserRepo();
+        passwordEncoder = new PasswordEncoderUtil();
+        auth = new Auth(tokenService,userRepo,passwordEncoder);
+        Member member1 = new Member("test-user1", "yy","yarin", "shemer","050-4273201", LocalDate.of(2002,4,15),"Omer");
+        userRepo.store(member1);
+        validToken=tokenService.generateToken("test-user1");
+        service = new EventService(auth, eventRepo);
     }
 
     @Test
@@ -264,7 +278,7 @@ class EventServiceTest {
     @Test
     void GivenEmptyRepository_WhenSearchEvents_ThenNoResultsReturned() {
         EventRepoImpl emptyRepo = new EventRepoImpl();
-        EventService emptyService = new EventService(tokenService, emptyRepo);
+        EventService emptyService = new EventService(auth, emptyRepo);
 
         EventSearchFilter filter = new EventSearchFilter();
         filter.setKeyword("anything");
