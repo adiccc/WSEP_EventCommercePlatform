@@ -3,10 +3,10 @@ package domain.dataType;
 public enum CategoryEvent {
     LiveMusic,
     SPORTS,
-    Theater,
+    THEATER,
     FESTIVAL,
     CONFERENCE,
-    Other;
+    OTHER;
 
     public static CategoryEvent fromString(String value) {
         return CategoryEvent.valueOf(value.toUpperCase());

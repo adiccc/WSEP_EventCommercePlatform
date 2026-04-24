@@ -1,5 +1,7 @@
 package application;
 
+import domain.dataType.CategoryEvent;
+import domain.dataType.GeographicalArea;
 import domain.event.Event;
 import domain.lottery.Lottery;
 import domain.user.IUserRepo;
@@ -62,7 +64,7 @@ class LotteryServiceTest {
         saleStartDate_Y = LocalDateTime.now().plusDays(14);
 
         // Create an event that supports lottery
-        eventWithLottery = new Event(companyId, creatorId1, LocalDateTime.now().plusDays(30), "Lottery Event", saleStartDate_Y, true);
+        eventWithLottery = new Event(companyId, creatorId1, LocalDateTime.now().plusDays(30), "Lottery Event", saleStartDate_Y, true, GeographicalArea.CENTER, CategoryEvent.FESTIVAL);
         eventRepo.store(eventWithLottery);
     }
 
@@ -134,7 +136,7 @@ class LotteryServiceTest {
     @Test
     void GivenEventNotSupportingLottery_WhenCreateLottery_ThenLotteryNotSupportedErrorIsReturned() {
         // Arrange: Create an event that DOES NOT support lottery
-        Event eventWithoutLottery = new Event(companyId, creatorId1, LocalDateTime.now().plusDays(30), "Regular Event", saleStartDate_Y, false);
+        Event eventWithoutLottery = new Event(companyId, creatorId1, LocalDateTime.now().plusDays(30), "Regular Event", saleStartDate_Y, false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL);
         eventRepo.store(eventWithoutLottery);
         LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
 
