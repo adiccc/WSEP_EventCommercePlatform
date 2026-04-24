@@ -16,10 +16,8 @@ import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.user.Member;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.logging.*;
 
 import java.util.List;
@@ -32,15 +30,13 @@ public class EventCompanyManageService {
     private final ICompanyRepo companyRepo;
     private final IEventRepo eventRepo;
     private final Logger logger;
-    private final TokenService tokenService;
     private final IAuth auth;
 
-    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, TokenService tokenService, IAuth auth) {
+    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;
         this.auth = auth;
         this.logger = Logger.getLogger(EventCompanyManageService.class.getName());
-        this.tokenService = tokenService;
     }
 
 
@@ -82,7 +78,9 @@ public class EventCompanyManageService {
             }
             EventMap eventMap = new EventMap(new ElementPosition(stage.getX(), stage.getY()), allEntries, zones);
             event.setMap(eventMap);
-            event.setActive(true);
+            if (!event.hasLottery()){
+                event.setActive(true);
+            }
             eventRepo.store(event);
             // success
             logger.log(Level.INFO, "map created and linked to event " + eventId);

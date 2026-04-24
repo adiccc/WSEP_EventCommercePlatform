@@ -1,22 +1,20 @@
 package infrastructure;
 
-import domain.event.Event;
-import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 
 import java.util.*;
 
 public class LotteryRepoImpl implements ILotteryRepo {
-    Map<Integer, Lottery> lotteries; // key: lotteryId, value: Lottery
+    Map<String, Lottery> lotteries; // key: lotteryId, value: Lottery
 
     public LotteryRepoImpl() {
         lotteries = new HashMap<>();
     }
 
     @Override
-    public Lottery findById(Integer id) {
-        if(lotteries.containsKey(id))
+    public Lottery findById(String id) {
+        if (lotteries.containsKey(id))
             return lotteries.get(id);
         throw new NoSuchElementException();
     }
@@ -27,13 +25,13 @@ public class LotteryRepoImpl implements ILotteryRepo {
     }
 
     @Override
-    public void delete(Integer id) {
+    public void delete(String id) {
         lotteries.remove(id);
     }
 
     @Override
     public void store(Lottery entity) {
         lotteries.put(entity.getId(), entity);
-
     }
+
 }
