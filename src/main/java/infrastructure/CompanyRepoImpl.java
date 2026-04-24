@@ -2,6 +2,7 @@ package infrastructure;
 
 import domain.company.Company;
 import domain.company.ICompanyRepo;
+import domain.lottery.Lottery;
 
 import java.util.ArrayList;
 import java.util.HashMap;

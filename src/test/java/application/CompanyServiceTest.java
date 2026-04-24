@@ -56,6 +56,7 @@ class CompanyServiceTest {
             @Override public List<Order> getAll() { return new ArrayList<>(); }
             @Override public void delete(Integer id) {}
             @Override public void store(Order o) {}
+
             @Override public int getTicketsBoughtByUserForEvent(int userId, int eventId) { return 0; }
         };
 
