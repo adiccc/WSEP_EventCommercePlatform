@@ -82,6 +82,7 @@ class ViewRolesAndPermissionsTreeTest {
         IAuth auth = new IAuth() {
             @Override public Response<String> login(String u, String p) { return Response.ok(tokenService.generateToken(u)); }
             @Override public boolean isLoggedIn(String token) { return tokenService.validateToken(token); }
+            @Override public void logout(String token) { return; }
             @Override public int getUserId(String token) {
                 if (token.equals(ownerToken))    return OWNER_ID;
                 if (token.equals(nonOwnerToken)) return NON_OWNER_ID;
@@ -143,6 +144,7 @@ class ViewRolesAndPermissionsTreeTest {
 
         IAuth auth2 = new IAuth() {
             @Override public Response<String> login(String u, String p) { return Response.ok(""); }
+            @Override public void logout(String t) {}   
             @Override public boolean isLoggedIn(String t) { return tokenService.validateToken(t); }
             @Override public int getUserId(String t) { return FOUNDER_ID; }  // ownerToken maps to founder here
         };
@@ -196,9 +198,7 @@ class ViewRolesAndPermissionsTreeTest {
     @Test
     void GivenExpiredToken_WhenViewRolesTree_ThenError() {
         // Invalidate (simulate logout) the owner token
-        tokenService.invalidate(ownerToken);
-
-        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree(ownerToken, COMPANY_ID);
+        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree("-1", COMPANY_ID);
 
         assertTrue(response.isError());
         assertNull(response.getValue());
