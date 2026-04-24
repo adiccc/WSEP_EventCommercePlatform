@@ -59,7 +59,7 @@ class CompanyUnitTest {
         assertNotNull(response.getValue(), "The company object should not be null on success");
         assertEquals("LiveNation", response.getValue().getCompanyName());
 
-        verify(companyRepoMock, times(1)).save(any(Company.class));
+        verify(companyRepoMock, times(1)).store(any(Company.class));
         verify(userRepoMock, times(1)).store(mockUser);
     }
 
@@ -75,7 +75,7 @@ class CompanyUnitTest {
         assertNull(response.getValue(), "Company object should be null when creation fails");
         assertTrue(response.getMessage().contains("already exists"));
 
-        verify(companyRepoMock, never()).save(any(Company.class));
+        verify(companyRepoMock, never()).store(any(Company.class));
     }
 
     @Test

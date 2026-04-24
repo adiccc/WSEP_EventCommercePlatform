@@ -4,7 +4,7 @@ import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
 import domain.company.ManagerAppointment;
-import domain.company.Permissions;
+import domain.dataType.PermissionType;
 import domain.dto.RolesPermissionsTreeDTO;
 import domain.event.IOrderRepo;
 import domain.event.Order;
@@ -69,7 +69,7 @@ class ViewRolesAndPermissionsTreeTest {
         // Add a manager with some permissions
         ManagerAppointment managerAppt = new ManagerAppointment(
                 MANAGER_ID,
-                EnumSet.of(Permissions.MANAGE_EVENTS_INVENTORY, Permissions.VIEW_PURCHASE_HISTORY)
+                EnumSet.of(PermissionType.MANAGE_EVENTS_INVENTORY, PermissionType.VIEW_PURCHASE_HISTORY)
         );
         company.getManagersPermissionsMap().put(MANAGER_ID, managerAppt);
 
@@ -127,8 +127,8 @@ class ViewRolesAndPermissionsTreeTest {
 
         // Manager entry with expected permissions
         assertTrue(tree.getManagersPermissions().containsKey(MANAGER_ID));
-        assertTrue(tree.getManagersPermissions().get(MANAGER_ID).contains(Permissions.MANAGE_EVENTS_INVENTORY));
-        assertTrue(tree.getManagersPermissions().get(MANAGER_ID).contains(Permissions.VIEW_PURCHASE_HISTORY));
+        assertTrue(tree.getManagersPermissions().get(MANAGER_ID).contains(PermissionType.MANAGE_EVENTS_INVENTORY));
+        assertTrue(tree.getManagersPermissions().get(MANAGER_ID).contains(PermissionType.VIEW_PURCHASE_HISTORY));
     }
 
     @Test

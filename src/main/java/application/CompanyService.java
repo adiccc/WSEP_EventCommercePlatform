@@ -8,7 +8,7 @@ import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
 import domain.company.ManagerAppointment;
-import domain.company.Permissions;
+import domain.dataType.PermissionType;
 import domain.dto.RolesPermissionsTreeDTO;
 import domain.event.IOrderRepo;
 import domain.policy.DiscountPolicy;
@@ -71,7 +71,7 @@ public class CompanyService {
                 Founder founderRole = new Founder(companyId);
                 user.addRole(founderRole);
 
-                companyRepo.save(newCompany);
+                companyRepo.store(newCompany);
                 userRepo.store(user);
 
                 logger.info("Company " + companyName + " created successfully");
@@ -117,7 +117,7 @@ public class CompanyService {
             }
 
             // 4. Build the roles tree
-            Map<String, Set<Permissions>> managersPermissions = new HashMap<>();
+            Map<String, Set<PermissionType>> managersPermissions = new HashMap<>();
             for (Map.Entry<String, ManagerAppointment> entry : company.getManagersPermissionsMap().entrySet()) {
                 managersPermissions.put(entry.getKey(), entry.getValue().getPermissions());
             }

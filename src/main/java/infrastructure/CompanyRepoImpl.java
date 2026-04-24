@@ -17,11 +17,6 @@ public class CompanyRepoImpl implements ICompanyRepo {
     }
 
     @Override
-    public void save(Company company) {
-        companies.put(company.getCompanyId(), company);
-    }
-
-    @Override
     public void store(Company company) {
         companies.put(company.getCompanyId(), company);
     }

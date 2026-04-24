@@ -1,6 +1,6 @@
 package domain.dto;
 
-import domain.company.Permissions;
+import domain.dataType.PermissionType;
 
 import java.util.Map;
 import java.util.Set;
@@ -13,18 +13,18 @@ import java.util.Set;
  *     └── Owners (one or more)
  *           └── Managers (each with their own permissions set)
  */
-public class RolesPermissionsTreeDTO {
+public class RolesPermissionTypeTreeDTO {
 
     private final int founderId;
     private final Set<Integer> ownerIds;
-    private final Map<String, Set<Permissions>> managersPermissions;
+    private final Map<String, Set<PermissionType>> managersPermissionType;
 
-    public RolesPermissionsTreeDTO(int founderId,
+    public RolesPermissionTypeTreeDTO(int founderId,
                                    Set<Integer> ownerIds,
-                                   Map<String, Set<Permissions>> managersPermissions) {
+                                   Map<String, Set<PermissionType>> managersPermissionType) {
         this.founderId = founderId;
         this.ownerIds = ownerIds;
-        this.managersPermissions = managersPermissions;
+        this.managersPermissionType = managersPermissionType;
     }
 
     public int getFounderId() {
@@ -35,16 +35,16 @@ public class RolesPermissionsTreeDTO {
         return ownerIds;
     }
 
-    public Map<String, Set<Permissions>> getManagersPermissions() {
-        return managersPermissions;
+    public Map<String, Set<PermissionType>> getManagersPermissionType() {
+        return managersPermissionType;
     }
 
     @Override
     public String toString() {
-        return "RolesPermissionsTreeDTO{" +
+        return "RolesPermissionTypeTreeDTO{" +
                 "founderId=" + founderId +
                 ", ownerIds=" + ownerIds +
-                ", managersPermissions=" + managersPermissions +
+                ", managersPermissionType=" + managersPermissionType +
                 '}';
     }
 }
