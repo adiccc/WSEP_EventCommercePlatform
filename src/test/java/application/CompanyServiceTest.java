@@ -42,8 +42,13 @@ class CompanyServiceTest {
         companyRepo.store(company);
 
         IAuth auth = new IAuth() {
-            @Override public Response<String> login(String username, String password) { return Response.ok(""); }
-            @Override public void logout(String token) {}
+            @Override public Response<String> login(String username, String password) {
+                return Response.ok(tokenService.generateToken(username));
+            }
+            @Override public Response<Boolean> logout(String token) {
+                return Response.ok(true);
+            }
+
             @Override public boolean isLoggedIn(String token) {
                 return OWNER_TOKEN.equals(token) || OTHER_TOKEN.equals(token);
             }

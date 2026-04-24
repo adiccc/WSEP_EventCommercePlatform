@@ -44,22 +44,28 @@ public class Auth implements IAuth {
         }
     }
     @Override
-    public void logout(String token) {
+    public Response<Boolean> logout(String token) {
         logger.info("Logout attempt");
-        if(token != null && !token.isBlank()){
+        if (token == null || token.isBlank()) {
+            return new Response<>(false, "Token is missing or empty");
+        }
+        if(tokensLoggedOut.containsKey(token)) {
+            logger.warning("Logout attempt failed: member is in the logged out tokens list") ;
+            return new Response<>(false, "Cannot log out, user is Already logged out");
+        }
             try{
-                int userId = getUserId(token);
                 Date date = tokenService.extractExpirationDate(token);
+                int userId = getUserId(token);
                 tokensLoggedOut.put(token, date);
                 cleanExpiredLoggedOutTokens();
                 logger.info("Logout successful for username: " + userId);
-
+                return new Response<>(true, "Logout successful");
             }
             catch(Exception e){
                 logger.severe("Logout failed for token: " + token + ". Error: " + e.getMessage());
+                return new Response<>(false, "Logout failed due to server error");
             }
         }
-    }
     private void cleanExpiredLoggedOutTokens() {
         Date today = new Date();
         logger.info("Clean expired logged out tokens");

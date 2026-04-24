@@ -9,6 +9,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.Date;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -116,4 +118,83 @@ class AuthTest {
         assertNull(response.getValue());
         assertEquals("Login failed due to server error", response.getMessage());
     }
+
+    @Test
+    void givenValidToken_whenLogout_thenReturnSuccess() {
+        // Arrange
+        String token = "valid.jwt.token";
+        String email = "test@example.com";
+        Member mockMember = Mockito.mock(Member.class);
+        Date futureDate = new Date(System.currentTimeMillis() + 100000);
+
+        when(mockMember.getIdentifier()).thenReturn(email);
+        when(mockMember.getUserId()).thenReturn(1);
+        when(tokenServiceMock.validateToken(token)).thenReturn(true);
+        when(userRepoMock.findUserByEmail(email)).thenReturn(mockMember);
+        when(tokenServiceMock.extractExpirationDate(token)).thenReturn(futureDate);
+        // Act
+        Response<Boolean> response = auth.logout(token);
+        // Assert
+        assertTrue(response.getValue());
+        assertEquals("Logout successful", response.getMessage());
+        assertFalse(auth.isLoggedIn(token)); //making sure that the user is actually logged out!
+        verify(tokenServiceMock, times(1)).extractExpirationDate(token); //making sure that we took the expiration date in order to insert to the HASHMAP
+    }
+    @Test
+    void givenNullOrBlankToken_whenLogout_thenReturnError() {
+        Response<Boolean> responseNull = auth.logout(null);
+        Response<Boolean> responseBlank = auth.logout("   ");
+        // Assert
+        assertFalse(responseNull.getValue());
+        assertEquals("Token is missing or empty", responseNull.getMessage());
+
+        assertFalse(responseBlank.getValue());
+        assertEquals("Token is missing or empty", responseBlank.getMessage());
+
+        verify(tokenServiceMock, never()).extractExpirationDate(anyString());
+    }
+
+    @Test
+    void givenAlreadyLoggedOutToken_whenLogout_thenReturnAlreadyLoggedOutError() {
+        // Arrange
+        String token = "valid.jwt.token";
+        String email = "test@example.com";
+        Member mockMember = Mockito.mock(Member.class);
+        Date futureDate = new Date(System.currentTimeMillis() + 100000);
+
+        when(mockMember.getIdentifier()).thenReturn(email);
+        when(mockMember.getUserId()).thenReturn(1);
+
+        when(tokenServiceMock.validateToken(token)).thenReturn(true);
+        when(tokenServiceMock.extractUsername(token)).thenReturn(email);
+        when(userRepoMock.findUserByEmail(email)).thenReturn(mockMember);
+        when(tokenServiceMock.extractExpirationDate(token)).thenReturn(futureDate);
+
+        // Act
+        auth.logout(token);
+        Response<Boolean> secondLogoutResponse = auth.logout(token);
+
+        // Assert
+        assertFalse(secondLogoutResponse.getValue());
+        assertEquals("Cannot log out, user is Already logged out", secondLogoutResponse.getMessage());
+        verify(tokenServiceMock, times(1)).extractExpirationDate(token);
+    }
+    @Test
+    void givenTokenServiceException_whenLogout_thenReturnServerError() {
+        // Arrange
+        String token = "corrupted.jwt.token";
+        String email = "test@example.com";
+        Member mockMember = new Member(email, "encrypted", "Test", "User", "050", null, "Address");
+
+        when(tokenServiceMock.validateToken(token)).thenReturn(true);
+        when(tokenServiceMock.extractUsername(token)).thenReturn(email);
+        when(userRepoMock.findUserByEmail(email)).thenReturn(mockMember);
+        when(tokenServiceMock.extractExpirationDate(token)).thenThrow(new RuntimeException("Malformed JWT string"));
+        // Act
+        Response<Boolean> response = auth.logout(token);
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Logout failed due to server error", response.getMessage());
+    }
+
 }
