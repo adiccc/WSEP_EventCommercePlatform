@@ -100,18 +100,20 @@ public class EventService {
                         return e.getLocation() == filter.getLocation();
                     })
 
-                    // Search by price range (min and max price) - we will use the minimum price of the event's map for filtering
+                    // Search by price range (min and max price)
                     .filter(e -> {
                         if (filter.getMinPrice() == null && filter.getMaxPrice() == null)
                             return true;
-                        double minEventPrice = getMinPrice(e);
-                        if (filter.getMinPrice() != null && minEventPrice < filter.getMinPrice())
-                            return false;
-                        if (filter.getMaxPrice() != null && minEventPrice > filter.getMaxPrice())
-                            return false;
-                        return true;
-                    })
-                    .toList();
+
+                        return e.getMap().getZones().stream().anyMatch(z -> {
+                            double price = z.getPrice();
+                            if (filter.getMinPrice() != null && price < filter.getMinPrice())
+                                return false;
+                            if (filter.getMaxPrice() != null && price > filter.getMaxPrice())
+                                return false;
+                            return true;
+                        });
+                    }).toList();
 
             if (result.isEmpty()) {
                 logger.log(Level.INFO, "No matching events found");

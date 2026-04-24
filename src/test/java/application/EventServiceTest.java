@@ -211,23 +211,22 @@ class EventServiceTest {
         assertEquals("No matching events found", response.getMessage());
     }
 
-//        @Test
-//    void GivenPriceFilter_WhenSearchEvents_ThenFilterWorksCorrectly() {
-//
-//        EventSearchFilter filter = new EventSearchFilter();
-//        filter.setMinPrice(150.0);
-//
-//        Response<List<Event>> response = service.searchEvents(validToken, filter);
-//
-//        assertNotNull(response.getValue());
-//        assertTrue(response.getValue().stream()
-//                .allMatch(e -> {
-//                    double minPrice = e.getMap().getZones().stream()
-//                            .mapToDouble(Zone::getPrice)
-//                            .min().orElse(0);
-//                    return minPrice >= 150.0;
-//                }));
-//    }
+        @Test
+    void GivenPriceFilter_WhenSearchEvents_ThenFilterWorksCorrectly() {
+
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setMinPrice(150.0);
+
+        Response<List<Event>> response = service.searchEvents(validToken, filter);
+
+        assertNotNull(response.getValue());
+            assertTrue(response.getValue().stream()
+                    .allMatch(e ->
+                            e.getMap().getZones().stream()
+                                    .anyMatch(z -> z.getPrice() >= 150.0)
+                    )
+            );
+    }
 
     @Test
     void GivenCategoryFilter_WhenSearchEvents_ThenOnlyMatchingCategoryReturned() {
@@ -269,7 +268,7 @@ class EventServiceTest {
     void GivenInvalidToken_WhenSearchEvents_ThenInvalidTokenErrorReturned() {
         EventSearchFilter filter = new EventSearchFilter();
 
-        Response<List<Event>> response = service.searchEvents("", filter);
+        Response<List<Event>> response = service.searchEvents("mnhvfd", filter);
 
         assertNull(response.getValue());
         assertEquals("Invalid token", response.getMessage());
@@ -288,4 +287,92 @@ class EventServiceTest {
         assertNull(response.getValue());
         assertEquals("No matching events found", response.getMessage());
     }
+
+    @Test
+    void GivenMultipleFilters_WhenSearchEvents_ThenOnlyMatchingEventsReturned() {
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setKeyword("active");
+        filter.setCategory(CategoryEvent.LiveMusic);
+        filter.setLocation(GeographicalArea.JERUSALEM);
+        filter.setMinPrice(200.0);
+
+        Response<List<Event>> response = service.searchEvents(validToken, filter);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue().stream().allMatch(e ->
+                e.getName().contains("active") &&
+                        e.getCategoryEvent() == CategoryEvent.LiveMusic &&
+                        e.getLocation() == GeographicalArea.JERUSALEM &&
+                        e.getMap().getZones().stream().anyMatch(z -> z.getPrice() >= 200)
+        ));
+    }
+
+    @Test
+    void GivenInactiveOrPastEvents_WhenSearchEvents_ThenTheyAreFilteredOut() {
+        Event pastActive = new Event(
+                company1,
+                1,
+                LocalDateTime.now().minusDays(1),
+                "past active",
+                LocalDateTime.now().minusDays(2),
+                true,
+                GeographicalArea.CENTER,
+                CategoryEvent.CONFERENCE
+        );
+
+        Event futureInactive = new Event(
+                company1,
+                2,
+                LocalDateTime.now().plusDays(5),
+                "future inactive",
+                LocalDateTime.now().plusDays(1),
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.CONFERENCE
+        );
+
+        eventRepo.store(pastActive);
+        eventRepo.store(futureInactive);
+
+        EventSearchFilter filter = new EventSearchFilter();
+
+        Response<List<Event>> response = service.searchEvents(validToken, filter);
+
+        assertTrue(response.getValue().stream()
+                .noneMatch(e -> e.getName().equals("past active")
+                        || e.getName().equals("future inactive")));
+    }
+
+    @Test
+    void GivenPriceExactlyOnBoundary_WhenSearchEvents_ThenEventIncluded() {
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setMinPrice(300.0); // VIP
+
+        Response<List<Event>> response = service.searchEvents(validToken, filter);
+
+        assertNotNull(response.getValue());
+    }
+
+    @Test
+    void GivenUpperCaseKeyword_WhenSearchEvents_ThenStillMatches() {
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setKeyword("TIVE");
+
+        Response<List<Event>> response = service.searchEvents(validToken, filter);
+
+        assertNotNull(response.getValue());
+    }
+
+    @Test
+    void GivenInvalidDateRange_WhenSearchEvents_ThenNoResultsReturned() {
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setStartDate(LocalDateTime.now().plusDays(10));
+        filter.setEndDate(LocalDateTime.now().plusDays(5));
+
+        Response<List<Event>> response = service.searchEvents(validToken, filter);
+
+        assertNull(response.getValue());
+    }
+
+
 }
