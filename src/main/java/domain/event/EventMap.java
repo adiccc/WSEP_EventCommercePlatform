@@ -15,4 +15,8 @@ public class EventMap {
         this.stage = stage;
         this.entries = entries;
     }
+
+    public List<Zone> getZones() {
+        return zones;
+    }
 }

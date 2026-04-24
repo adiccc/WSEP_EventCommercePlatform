@@ -5,10 +5,7 @@ import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
-import domain.dataType.ElementPosition;
-import domain.dataType.SeatingZone;
-import domain.dataType.StandingZone;
-import domain.dataType.Zone;
+import domain.dataType.*;
 import domain.event.Event;
 import domain.event.EventMap;
 import domain.event.EventQueue;
@@ -96,7 +93,7 @@ public class EventCompanyManageService {
 
     }
 
-    public Response<Boolean> createEvent(String token, int companyId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery) {
+    public Response<Boolean> createEvent(String token, int companyId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent category) {
         logger.log(Level.INFO, "createEvent called");
 
         // check valid token
@@ -117,7 +114,17 @@ public class EventCompanyManageService {
             if (saleStartDate.isAfter(date)) {
                 return new Response<>(false, "Sale start date must be before event date");
             }
-            Event event = new Event(companyId, creatorId, date, name, saleStartDate, hasLottery);
+
+            Event event = new Event(
+                    companyId,
+                    creatorId,
+                    date,
+                    name,
+                    saleStartDate,
+                    hasLottery,
+                    location,
+                    category
+            );
             eventRepo.store(event);
             logger.log(Level.INFO, "Event created successfully");
             return new Response<>(true, "Event created successfully");
