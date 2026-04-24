@@ -1,38 +1,53 @@
+
 package application;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
+
+import javax.crypto.SecretKey;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.function.Function;
 
 public class TokenService {
 
     private final long expirationTime = 1000 * 60 * 60 * 24; // 24 hours
-    private final Map<String, String> tokenToUsername = new HashMap<>();
-    private final Map<String, Date> tokenToExpiration = new HashMap<>();
+
+    private final SecretKey key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
 
     public String generateToken(String username) {
-        String token = UUID.randomUUID().toString();
-        tokenToUsername.put(token, username);
-        tokenToExpiration.put(token, new Date(System.currentTimeMillis() + expirationTime));
-        return token;
+        return Jwts.builder()
+                .setSubject(username)
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + expirationTime))
+                .signWith(key)
+                .compact();
     }
 
     public boolean validateToken(String token) {
-        if (!tokenToUsername.containsKey(token)) return false;
-        return tokenToExpiration.get(token).after(new Date());
+        try {
+            Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     public String extractUsername(String token) {
-        return tokenToUsername.get(token);
+        return extractClaim(token, Claims::getSubject);
     }
 
-    public Date extractExpiration(String token) {
-        return tokenToExpiration.get(token);
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+        return claimsResolver.apply(claims);
     }
 
-    public void invalidate(String token) {
-        tokenToUsername.remove(token);
-        tokenToExpiration.remove(token);
+    public Date extractExpirationDate(String token) {
+        return extractClaim(token, Claims::getExpiration);
     }
 }
