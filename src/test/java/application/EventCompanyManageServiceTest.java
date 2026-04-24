@@ -161,7 +161,7 @@ class EventCompanyManageServiceTest {
 
         // Act: Standard sale (hasLottery = false)
         Response<Boolean> response = service.createEvent(
-                validToken1, companyId, eventDate, "Standard Event", saleStartDate, false, "Center", "Sports"
+                validToken1, companyId, eventDate, "Standard Event", saleStartDate, false, GeographicalArea.CENTER, CategoryEvent.THEATER
         );
 
         // Assert result
@@ -178,7 +178,7 @@ class EventCompanyManageServiceTest {
 
         // Act: Lottery sale (hasLottery = true)
         Response<Boolean> response = service.createEvent(
-                validToken1, companyId, eventDate, "Lottery Event", saleStartDate, true, "Center", "sports"
+                validToken1, companyId, eventDate, "Lottery Event", saleStartDate, true, GeographicalArea.CENTER, CategoryEvent.THEATER
         );
 
         // Assert result
@@ -195,7 +195,7 @@ class EventCompanyManageServiceTest {
 
         // Act
         Response<Boolean> response = service.createEvent(
-                invalidToken2, companyId, eventDate, "Unauthorized Event", saleStartDate, false, "Center", "Sport"
+                invalidToken2, companyId, eventDate, "Unauthorized Event", saleStartDate, false, GeographicalArea.CENTER, CategoryEvent.THEATER
 );
 
         // Assert: System should reject the request due to lack of permissions
@@ -211,7 +211,7 @@ class EventCompanyManageServiceTest {
 
         // Act
         Response<Boolean> response = service.createEvent(
-                validToken1, companyId, pastEventDate, "Past Event", saleStartDate, false, "Center", "Conference"
+                validToken1, companyId, pastEventDate, "Past Event", saleStartDate, false, GeographicalArea.CENTER, CategoryEvent.THEATER
 );
 
         // Assert: System identifies that the date is invalid
@@ -227,7 +227,7 @@ class EventCompanyManageServiceTest {
 
         // Act
         Response<Boolean> response = service.createEvent(
-                null, companyId, eventDate, "No Token Event", saleStartDate, false, "Center", "Conference"
+                null, companyId, eventDate, "No Token Event", saleStartDate, false, GeographicalArea.CENTER, CategoryEvent.THEATER
 );
 
         // Assert: System blocks and alerts about invalid token

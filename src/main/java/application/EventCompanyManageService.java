@@ -93,7 +93,7 @@ public class EventCompanyManageService {
 
     }
 
-    public Response<Boolean> createEvent(String token, int companyId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, String location, String category) {
+    public Response<Boolean> createEvent(String token, int companyId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent category) {
         logger.log(Level.INFO, "createEvent called");
 
         // check valid token
@@ -114,20 +114,6 @@ public class EventCompanyManageService {
             if (saleStartDate.isAfter(date)) {
                 return new Response<>(false, "Sale start date must be before event date");
             }
-            CategoryEvent categoryEvent;
-            try {
-                categoryEvent = CategoryEvent.fromString(category);
-            } catch (IllegalArgumentException e) {
-                logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
-                return new Response<>(false, "Invalid category");
-            }
-            GeographicalArea locationEvent;
-            try {
-                locationEvent = GeographicalArea.fromString(location);
-            } catch (IllegalArgumentException e) {
-                logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
-                return new Response<>(false, "Invalid category");
-            }
 
             Event event = new Event(
                     companyId,
@@ -136,8 +122,8 @@ public class EventCompanyManageService {
                     name,
                     saleStartDate,
                     hasLottery,
-                    locationEvent,
-                    categoryEvent
+                    location,
+                    category
             );
             eventRepo.store(event);
             logger.log(Level.INFO, "Event created successfully");

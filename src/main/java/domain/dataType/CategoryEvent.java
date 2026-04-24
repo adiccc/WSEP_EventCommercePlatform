@@ -6,9 +6,5 @@ public enum CategoryEvent {
     THEATER,
     FESTIVAL,
     CONFERENCE,
-    OTHER;
-
-    public static CategoryEvent fromString(String value) {
-        return CategoryEvent.valueOf(value.toUpperCase());
-    }
+    OTHER,
 }
