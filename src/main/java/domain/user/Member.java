@@ -1,17 +1,34 @@
 package domain.user;
 
-public class Member extends User {
+import java.time.LocalDate;
+import java.util.Date;
 
-    private String password;
-    private String email;
+public class Member extends User{
+    protected Integer userId;
+    protected String password; //encrypted password
+    protected String firstName;
+    protected String lastName;
+    protected String phoneNumber;
+    protected LocalDate dateOfBirth;
+    protected String address;
 
-    public Member(String email, String password) {
-        super(email); // use email as userId for member identity
-        this.email = email;
+    public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address) {
+        super(email);
         this.password = password;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.phoneNumber = phoneNumber;
+        this.dateOfBirth = dateOfBirth;
+        this.address = address;
+    }
+    public Integer getUserId() {
+        return userId;
+    }
+    public void setUserId(Integer userId) {
+        this.userId = userId;
+    }
+    public String getPassword() {
+        return password;
     }
 
-    public String getEmail() {
-        return email;
-    }
 }

@@ -4,14 +4,15 @@ import application.CompanyService;
 import application.IAuth;
 import application.Response;
 import application.TokenService;
-import domain.company.Company;
 import domain.event.IOrderRepo;
-import infrastructure.ConcreteCompanyRepo;
-import infrastructure.ConcreteUserRepo;
+import domain.user.Member;
 import domain.user.User;
+import infrastructure.CompanyRepoImpl;
+import infrastructure.UserRepo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,14 +23,14 @@ import static org.mockito.Mockito.*;
 
 class CompanyConcurrencyTest {
 
-    private ConcreteCompanyRepo companyRepo;
-    private ConcreteUserRepo userRepo;
+    private CompanyRepoImpl companyRepo;
+    private UserRepo userRepo;
     private CompanyService companyService;
 
     @BeforeEach
     public void setUp() {
-        companyRepo = new ConcreteCompanyRepo();
-        userRepo = new ConcreteUserRepo();
+        companyRepo = new CompanyRepoImpl();
+        userRepo = new UserRepo();
 
         TokenService tokenServiceMock = mock(TokenService.class);
         IAuth authMock = mock(IAuth.class);
@@ -39,9 +40,9 @@ class CompanyConcurrencyTest {
 
         companyService = new CompanyService(tokenServiceMock, authMock, companyRepo, userRepo, orderRepoMock);
 
-        User user = new User("admin123");
-        user.setConnected(true);
-        userRepo.save(user);
+        Member member = new Member("admin123","aa","aa","ff","050-422-4567", LocalDate.of(2022,12,3),"aa");
+        member.setConnected(true);
+        userRepo.store(member);
     }
 
     @Test

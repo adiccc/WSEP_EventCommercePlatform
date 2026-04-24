@@ -48,6 +48,8 @@ class CompanyServiceTest {
             @Override public Response<String> login(String username, String password) {
                 return Response.ok(tokenService.generateToken(username));
             }
+            @Override public void logout(String token) {}
+
             @Override public boolean isLoggedIn(String token) {
                 return tokenService.validateToken(token);
             }

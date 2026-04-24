@@ -9,6 +9,7 @@ import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
 import domain.user.Founder;
 import domain.user.IUserRepo;
+import domain.user.Member;
 import domain.user.User;
 
 public class CompanyService {
@@ -34,8 +35,8 @@ public class CompanyService {
                                                      String email, String phone, String bankAccount) {
         try {
             logger.info("Attempting to create company: " + companyName + " for user: " + sessionToken);
-
-            User user = userRepo.findById(sessionToken);
+            int userId = auth.getUserId(sessionToken);
+            Member user = userRepo.findById(userId);
             if (user == null) {
                 return new Response<>(null, "User not found.");
             }
@@ -58,8 +59,6 @@ public class CompanyService {
                 ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
                 PurchasePolicy defaultPurchase = new PurchasePolicy();
                 DiscountPolicy defaultDiscount = new DiscountPolicy();
-
-                int userId = auth.getUserId(sessionToken);
                 Company newCompany = new Company(companyId, companyName, userId,
                         contactInfo, defaultPurchase, defaultDiscount);
 
@@ -67,7 +66,7 @@ public class CompanyService {
                 user.addRole(founderRole);
 
                 companyRepo.save(newCompany);
-                userRepo.save(user);
+                userRepo.store(user);
 
                 logger.info("Company " + companyName + " created successfully");
                 return new Response<>(newCompany, "Production company created successfully.");
@@ -82,10 +81,6 @@ public class CompanyService {
     public Response<Boolean> updatePurchasePolicy(String token, int companyId, PurchasePolicy policy) {
         logger.info("Starting updatePurchasePolicy for companyId: " + companyId);
         try {
-            if (!tokenService.validateToken(token)) {
-                logger.warning("updatePurchasePolicy failed: invalid or expired token");
-                return Response.error("Invalid or expired token");
-            }
             int userId = auth.getUserId(token);
             Company company = companyRepo.findById(companyId);
             if (company == null) {
