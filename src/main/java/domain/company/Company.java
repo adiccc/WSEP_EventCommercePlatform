@@ -53,7 +53,7 @@ public class Company {
 
     public boolean checkPermission(int userId, PermissionType permissionType) {
         // TODO: to implement (just for the test before we have the real implementation)
-        if (userId == 999) {
+        if (userId > 1) {
             return false;
         }
         return true;
