@@ -1,10 +1,10 @@
 package domain.dataType;
 
 public enum GeographicalArea {
-    Center,
-    Jerusalem,
-    North,
-    South;
+    CENTER,
+    JERUSALEM,
+    NORTH,
+    SOUTH,;
 
     public static GeographicalArea fromString(String value) {
         return GeographicalArea.valueOf(value.toUpperCase());

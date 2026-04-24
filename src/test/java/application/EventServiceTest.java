@@ -1,5 +1,7 @@
 package application;
 
+import domain.dataType.CategoryEvent;
+import domain.dataType.GeographicalArea;
 import infrastructure.LotteryRepoImpl;
 import org.junit.jupiter.api.Test;
 import domain.company.Company;
@@ -39,7 +41,9 @@ class EventServiceTest {
                 LocalDateTime.now().plusDays(10),
                 "active event",
                 LocalDateTime.now().plusDays(5),
-                true
+                true,
+                GeographicalArea.JERUSALEM,
+                CategoryEvent.LiveMusic
         );
         activeEvent.setActive(true);
         eventRepo.store(activeEvent);
@@ -51,7 +55,9 @@ class EventServiceTest {
                 LocalDateTime.now().plusDays(10),
                 "inactive event",
                 LocalDateTime.now().plusDays(5),
-                false
+                false,
+                GeographicalArea.SOUTH,
+                CategoryEvent.CONFERENCE
         );
         eventRepo.store(inactiveEvent);
 
@@ -62,7 +68,9 @@ class EventServiceTest {
                 LocalDateTime.now().plusDays(10),
                 "other company event",
                 LocalDateTime.now().plusDays(5),
-                true
+                true,
+                GeographicalArea.NORTH,
+                CategoryEvent.FESTIVAL
         );
         eventCompany2.setActive(true);
         eventRepo.store(eventCompany2);

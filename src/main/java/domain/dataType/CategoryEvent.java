@@ -1,11 +1,11 @@
 package domain.dataType;
 
 public enum CategoryEvent {
-    Live,
-    Sport,
+    LiveMusic,
+    SPORTS,
     Theater,
-    Festival,
-    Conference,
+    FESTIVAL,
+    CONFERENCE,
     Other;
 
     public static CategoryEvent fromString(String value) {

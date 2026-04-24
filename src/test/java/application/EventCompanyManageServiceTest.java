@@ -5,6 +5,8 @@ import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import domain.company.Company;
 import domain.company.ContactInfo;
+import domain.dataType.CategoryEvent;
+import domain.dataType.GeographicalArea;
 import domain.event.Event;
 import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
@@ -62,7 +64,7 @@ class EventCompanyManageServiceTest {
                 new ContactInfo("test@test.com", "0500000000", "bank-1"),
                 new PurchasePolicy(), new DiscountPolicy()));
         eventRepo = new EventRepoImpl();
-        event=new Event(companyId,creatorId, LocalDateTime.now().plusYears(1),"some test", LocalDateTime.now().plusYears(2), false);
+        event=new Event(companyId, creatorId, LocalDateTime.now().plusYears(1),"some test", LocalDateTime.now().plusYears(2), false, GeographicalArea.NORTH, CategoryEvent.LiveMusic);
         eventRepo.store(event);
         service = new EventCompanyManageService(companyRepo, eventRepo,auth);
         stage = new ElementPositionDTO(10, 20);
@@ -159,10 +161,11 @@ class EventCompanyManageServiceTest {
 
         // Act: Standard sale (hasLottery = false)
         Response<Boolean> response = service.createEvent(
-                validToken1, companyId, eventDate, "Standard Event", saleStartDate, false
+                validToken1, companyId, eventDate, "Standard Event", saleStartDate, false, "Center", "Sports"
         );
 
         // Assert result
+        System.out.println(response.getMessage());
         assertTrue(response.getValue());
         assertEquals("Event created successfully", response.getMessage());
     }
@@ -175,10 +178,11 @@ class EventCompanyManageServiceTest {
 
         // Act: Lottery sale (hasLottery = true)
         Response<Boolean> response = service.createEvent(
-                validToken1, companyId, eventDate, "Lottery Event", saleStartDate, true
+                validToken1, companyId, eventDate, "Lottery Event", saleStartDate, true, "Center", "sports"
         );
 
         // Assert result
+        System.out.println(response.getMessage());
         assertTrue(response.getValue());
         assertEquals("Event created successfully", response.getMessage());
     }
@@ -191,8 +195,8 @@ class EventCompanyManageServiceTest {
 
         // Act
         Response<Boolean> response = service.createEvent(
-                invalidToken2, companyId, eventDate, "Unauthorized Event", saleStartDate, false
-        );
+                invalidToken2, companyId, eventDate, "Unauthorized Event", saleStartDate, false, "Center", "Sport"
+);
 
         // Assert: System should reject the request due to lack of permissions
         assertFalse(response.getValue());
@@ -207,8 +211,8 @@ class EventCompanyManageServiceTest {
 
         // Act
         Response<Boolean> response = service.createEvent(
-                validToken1, companyId, pastEventDate, "Past Event", saleStartDate, false
-        );
+                validToken1, companyId, pastEventDate, "Past Event", saleStartDate, false, "Center", "Conference"
+);
 
         // Assert: System identifies that the date is invalid
         assertFalse(response.getValue());
@@ -223,8 +227,8 @@ class EventCompanyManageServiceTest {
 
         // Act
         Response<Boolean> response = service.createEvent(
-                null, companyId, eventDate, "No Token Event", saleStartDate, false
-        );
+                null, companyId, eventDate, "No Token Event", saleStartDate, false, "Center", "Conference"
+);
 
         // Assert: System blocks and alerts about invalid token
         assertFalse(response.getValue());
@@ -262,7 +266,9 @@ class EventCompanyManageServiceTest {
                 LocalDateTime.now().minusDays(3),
                 "past event",
                 LocalDateTime.now().minusDays(10),
-                false
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.CONFERENCE
         );
         eventRepo.store(pastEvent);
 
