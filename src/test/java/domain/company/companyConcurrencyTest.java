@@ -3,7 +3,6 @@ package domain.company;
 import application.CompanyService;
 import application.IAuth;
 import application.Response;
-import application.TokenService;
 import domain.event.IOrderRepo;
 import domain.user.Member;
 import domain.user.User;
@@ -32,13 +31,13 @@ class CompanyConcurrencyTest {
         companyRepo = new CompanyRepoImpl();
         userRepo = new UserRepo();
 
-        TokenService tokenServiceMock = mock(TokenService.class);
         IAuth authMock = mock(IAuth.class);
         IOrderRepo orderRepoMock = mock(IOrderRepo.class);
 
         when(authMock.getUserId(anyString())).thenReturn(1);
+        when(authMock.isLoggedIn(anyString())).thenReturn(true);
 
-        companyService = new CompanyService(tokenServiceMock, authMock, companyRepo, userRepo, orderRepoMock);
+        companyService = new CompanyService(authMock, companyRepo, userRepo, orderRepoMock);
 
         Member member = new Member("admin123","aa","aa","ff","050-422-4567", LocalDate.of(2022,12,3),"aa");
         member.setConnected(true);

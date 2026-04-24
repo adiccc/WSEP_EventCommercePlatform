@@ -22,15 +22,13 @@ public class CompanyService {
 
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
 
-    private final TokenService tokenService;
     private final IAuth auth;
     private final ICompanyRepo companyRepo;
     private final IUserRepo userRepo;
     private final IOrderRepo orderRepo;
 
-    public CompanyService(TokenService tokenService, IAuth auth, ICompanyRepo companyRepo,
+    public CompanyService(IAuth auth, ICompanyRepo companyRepo,
                           IUserRepo userRepo, IOrderRepo orderRepo) {
-        this.tokenService = tokenService;
         this.auth = auth;
         this.companyRepo = companyRepo;
         this.userRepo = userRepo;
@@ -96,7 +94,7 @@ public class CompanyService {
         logger.info("viewRolesAndPermissionsTree called for companyId: " + companyId);
         try {
             // 1. Validate token (covers "user not logged in")
-            if (!tokenService.validateToken(token)) {
+            if (!auth.isLoggedIn(token)) {
                 logger.warning("viewRolesAndPermissionsTree failed: invalid or expired token");
                 return Response.error("Invalid or expired token");
             }

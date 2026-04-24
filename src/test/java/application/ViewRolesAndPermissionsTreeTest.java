@@ -47,12 +47,37 @@ class ViewRolesAndPermissionsTreeTest {
     private static final int NON_OWNER_ID = 456;
     private static final String MANAGER_ID = "mgr-1";
 
+    private static final String OWNER_TOKEN     = "owner-token";
+    private static final String NON_OWNER_TOKEN = "non-owner-token";
+    private static final String INVALID_TOKEN   = "invalid-or-expired-token";
+
     private CompanyService service;
-    private TokenService tokenService;
     private Company company;
 
-    private String ownerToken;
-    private String nonOwnerToken;
+    private IAuth buildAuth() {
+        return new IAuth() {
+            @Override public Response<String> login(String u, String p) { return Response.ok(""); }
+            @Override public void logout(String token) {}
+            @Override public boolean isLoggedIn(String token) {
+                return OWNER_TOKEN.equals(token) || NON_OWNER_TOKEN.equals(token);
+            }
+            @Override public int getUserId(String token) {
+                if (OWNER_TOKEN.equals(token))     return OWNER_ID;
+                if (NON_OWNER_TOKEN.equals(token)) return NON_OWNER_ID;
+                return -1;
+            }
+        };
+    }
+
+    private IOrderRepo emptyOrderRepo() {
+        return new IOrderRepo() {
+            @Override public Order findById(Integer id) { return null; }
+            @Override public List<Order> getAll() { return new ArrayList<>(); }
+            @Override public void delete(Integer id) {}
+            @Override public void store(Order o) {}
+            @Override public int getTicketsBoughtByUserForEvent(int userId, int eventId) { return 0; }
+        };
+    }
 
     @BeforeEach
     void setUp() {
@@ -73,46 +98,17 @@ class ViewRolesAndPermissionsTreeTest {
         );
         company.getManagersPermissionsMap().put(MANAGER_ID, managerAppt);
 
-        // Token service
-        tokenService = new TokenService();
-        ownerToken    = tokenService.generateToken("owner");
-        nonOwnerToken = tokenService.generateToken("nonOwner");
-
-        // Auth stub: maps tokens to user IDs
-        IAuth auth = new IAuth() {
-            @Override public Response<String> login(String u, String p) { return Response.ok(tokenService.generateToken(u)); }
-            @Override public boolean isLoggedIn(String token) { return tokenService.validateToken(token); }
-            @Override public void logout(String token) { return; }
-            @Override public int getUserId(String token) {
-                if (token.equals(ownerToken))    return OWNER_ID;
-                if (token.equals(nonOwnerToken)) return NON_OWNER_ID;
-                return -1;
-            }
-        };
-
-        // Company repo with the pre-built company
         ICompanyRepo companyRepo = new CompanyRepoImpl();
         companyRepo.store(company);
 
-        // Minimal order/user repos (not used by this use-case)
-        IOrderRepo orderRepo = new IOrderRepo() {
-            @Override public Order findById(Integer id) { return null; }
-            @Override public List<Order> getAll() { return new ArrayList<>(); }
-            @Override public void delete(Integer id) {}
-            @Override public void store(Order o) {}
-            @Override public int getTicketsBoughtByUserForEvent(int userId, int eventId) { return 0; }
-        };
-
-        IUserRepo userRepo = mock(IUserRepo.class);
-
-        service = new CompanyService(tokenService, auth, companyRepo, userRepo, orderRepo);
+        service = new CompanyService(buildAuth(), companyRepo, mock(IUserRepo.class), emptyOrderRepo());
     }
 
     // ── Successful_View ────────────────────────────────────────────────────────
 
     @Test
     void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenReturnsFullTree() {
-        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree(ownerToken, COMPANY_ID);
+        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID);
 
         assertFalse(response.isError(), "Expected success but got: " + response.getMessage());
         RolesPermissionsTreeDTO tree = response.getValue();
@@ -133,7 +129,6 @@ class ViewRolesAndPermissionsTreeTest {
 
     @Test
     void GivenCompanyWithNoManagers_WhenViewRolesTree_ThenManagersMapIsEmpty() {
-        // Create a fresh company with no managers
         Company freshCompany = new Company(
                 2, "Fresh Co", FOUNDER_ID,
                 new ContactInfo("a@b.com", "050", "bank"),
@@ -144,21 +139,14 @@ class ViewRolesAndPermissionsTreeTest {
 
         IAuth auth2 = new IAuth() {
             @Override public Response<String> login(String u, String p) { return Response.ok(""); }
-            @Override public void logout(String t) {}   
-            @Override public boolean isLoggedIn(String t) { return tokenService.validateToken(t); }
-            @Override public int getUserId(String t) { return FOUNDER_ID; }  // ownerToken maps to founder here
+            @Override public void logout(String t) {}
+            @Override public boolean isLoggedIn(String t) { return OWNER_TOKEN.equals(t); }
+            @Override public int getUserId(String t) { return FOUNDER_ID; }
         };
 
-        CompanyService svc2 = new CompanyService(tokenService, auth2, repo2, mock(IUserRepo.class),
-                new IOrderRepo() {
-                    @Override public Order findById(Integer id) { return null; }
-                    @Override public List<Order> getAll() { return new ArrayList<>(); }
-                    @Override public void delete(Integer id) {}
-                    @Override public void store(Order o) {}
-                    @Override public int getTicketsBoughtByUserForEvent(int userId, int eventId) { return 0; }
-                });
+        CompanyService svc2 = new CompanyService(auth2, repo2, mock(IUserRepo.class), emptyOrderRepo());
 
-        Response<RolesPermissionsTreeDTO> response = svc2.viewRolesAndPermissionsTree(ownerToken, 2);
+        Response<RolesPermissionsTreeDTO> response = svc2.viewRolesAndPermissionsTree(OWNER_TOKEN, 2);
 
         assertFalse(response.isError());
         assertTrue(response.getValue().getManagersPermissions().isEmpty());
@@ -168,7 +156,7 @@ class ViewRolesAndPermissionsTreeTest {
 
     @Test
     void GivenNonOwner_WhenViewRolesTree_ThenError() {
-        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree(nonOwnerToken, COMPANY_ID);
+        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree(NON_OWNER_TOKEN, COMPANY_ID);
 
         assertTrue(response.isError());
         assertNull(response.getValue());
@@ -178,8 +166,7 @@ class ViewRolesAndPermissionsTreeTest {
 
     @Test
     void GivenUnknownCompanyId_WhenViewRolesTree_ThenError() {
-        int nonExistentCompanyId = 999;
-        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree(ownerToken, nonExistentCompanyId);
+        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree(OWNER_TOKEN, 999);
 
         assertTrue(response.isError());
         assertNull(response.getValue());
@@ -189,7 +176,7 @@ class ViewRolesAndPermissionsTreeTest {
 
     @Test
     void GivenInvalidToken_WhenViewRolesTree_ThenError() {
-        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree("invalid-or-expired-token", COMPANY_ID);
+        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree(INVALID_TOKEN, COMPANY_ID);
 
         assertTrue(response.isError());
         assertNull(response.getValue());
@@ -197,7 +184,6 @@ class ViewRolesAndPermissionsTreeTest {
 
     @Test
     void GivenExpiredToken_WhenViewRolesTree_ThenError() {
-        // Invalidate (simulate logout) the owner token
         Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree("-1", COMPANY_ID);
 
         assertTrue(response.isError());

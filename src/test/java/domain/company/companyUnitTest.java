@@ -3,7 +3,6 @@ package domain.company;
 import application.CompanyService;
 import application.IAuth;
 import application.Response;
-import application.TokenService;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.event.IOrderRepo;
@@ -23,7 +22,6 @@ class CompanyUnitTest {
     private ICompanyRepo companyRepoMock;
     private IUserRepo userRepoMock;
     private IAuth authMock;
-    private TokenService tokenServiceMock;
     private IOrderRepo orderRepoMock;
     private CompanyService companyService;
     private Member mockUser;
@@ -35,10 +33,9 @@ class CompanyUnitTest {
         companyRepoMock = mock(ICompanyRepo.class);
         userRepoMock = mock(IUserRepo.class);
         authMock = mock(IAuth.class);
-        tokenServiceMock = mock(TokenService.class);
         orderRepoMock = mock(IOrderRepo.class);
 
-        companyService = new CompanyService(tokenServiceMock, authMock, companyRepoMock, userRepoMock, orderRepoMock);
+        companyService = new CompanyService(authMock, companyRepoMock, userRepoMock, orderRepoMock);
 
         mockUser = new Member("user123","aa", "aa","bb","050-432-6677", LocalDate.of(2001,5,12),"ee");
         mockUser.setConnected(true);
