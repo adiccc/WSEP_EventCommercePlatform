@@ -1,7 +1,7 @@
 package domain.dataType;
 
 public enum CategoryEvent {
-    LiveMusic,
+    LIVEMUSIC,
     SPORTS,
     THEATER,
     FESTIVAL,
