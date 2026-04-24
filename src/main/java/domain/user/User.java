@@ -5,12 +5,12 @@ import java.util.List;
 
 public class User {
 
-    private String userId;
+    private String identifier;
     private boolean connected;
     private List<Role> roles;
 
-    public User(String userId) {
-        this.userId = userId;
+    public User(String identifier) {
+        this.identifier = identifier;
         this.connected = false;
         this.roles = new ArrayList<>();
     }
@@ -19,8 +19,8 @@ public class User {
         this.roles = new ArrayList<>();
     }
 
-    public String getUserId() {
-        return userId;
+    public String getIdentifier() {
+        return identifier;
     }
 
     public boolean isConnected() {

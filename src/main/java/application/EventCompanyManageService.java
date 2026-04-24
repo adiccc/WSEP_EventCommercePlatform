@@ -14,6 +14,7 @@ import domain.event.EventMap;
 import domain.event.EventQueue;
 import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
+import domain.user.Member;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -32,20 +33,24 @@ public class EventCompanyManageService {
     private final IEventRepo eventRepo;
     private final Logger logger;
     private final TokenService tokenService;
+    private final IAuth auth;
 
-    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, TokenService tokenService) {
+    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, TokenService tokenService, IAuth auth) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;
+        this.auth = auth;
         this.logger = Logger.getLogger(EventCompanyManageService.class.getName());
         this.tokenService = tokenService;
     }
 
 
-    public Response<Boolean> DefineVenueAndSeatingMap(String token, int userId, String eventId, ElementPositionDTO stage, List<ElementPositionDTO> entries, List<StandingZoneDTO> standingZone, List<SeatingZoneDTO> seatingZone) {
+    public Response<Boolean> DefineVenueAndSeatingMap(String token,String eventId, ElementPositionDTO stage, List<ElementPositionDTO> entries, List<StandingZoneDTO> standingZone, List<SeatingZoneDTO> seatingZone) {
         logger.log(Level.INFO, "DefineVenueAndSeatingMap called");
 
         // check valid token
-        if (!tokenService.validateToken(token)) {
+        int userId = auth.getUserId(token);
+        if(userId == -1) {
+            logger.severe("Invalid token");
             return new Response<>(false, "Invalid token");
         }
         try {
@@ -93,13 +98,16 @@ public class EventCompanyManageService {
 
     }
 
-    public Response<Boolean> createEvent(String token, int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery) {
+    public Response<Boolean> createEvent(String token, int companyId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery) {
         logger.log(Level.INFO, "createEvent called");
 
         // check valid token
-        if (!tokenService.validateToken(token)) {
+        int creatorId = auth.getUserId(token);
+        if(creatorId == -1){
+            logger.severe("Invalid token");
             return new Response<>(false, "Invalid token");
         }
+
         try {
             Company c = this.companyRepo.findById(companyId);
             if (!c.checkPermission(creatorId, CreatEvent)) {
@@ -124,11 +132,13 @@ public class EventCompanyManageService {
         }
     }
 
-    public Response<Boolean> UpdateEventDate(String token,int userId, String eventId, LocalDateTime date) {
+    public Response<Boolean> UpdateEventDate(String token, String eventId, LocalDateTime date) {
         logger.log(Level.INFO, "UpdateEventDate called");
 
         // check valid token
-        if (!tokenService.validateToken(token)) {
+        int userId = auth.getUserId(token);
+        if(userId == -1){
+            logger.severe("Invalid token");
             return new Response<>(false, "Invalid token");
         }
         try {

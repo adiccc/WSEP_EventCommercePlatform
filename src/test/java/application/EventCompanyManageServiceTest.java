@@ -8,11 +8,14 @@ import domain.company.ContactInfo;
 import domain.event.Event;
 import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
-import infrastructure.CompanyRepoImpl;
-import infrastructure.EventRepoImpl;
+import domain.user.IUserRepo;
+import domain.user.Member;
+import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
@@ -22,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.*;
 class EventCompanyManageServiceTest {
 
     private final int companyId = 900;
-    private final int creatorId = 123;
 
     private TokenService tokenService;
     private CompanyRepoImpl companyRepo;
@@ -33,20 +35,36 @@ class EventCompanyManageServiceTest {
     private List<SeatingZoneDTO> seatingZones;
     private EventCompanyManageService service;
     private Event event;
-    private String validToken;
+    private String validToken1;
+    private IAuth auth;
+    private IUserRepo userRepo;
+    private IPasswordEncoder passwordEncoder;
+    private String invalidToken2;
 
     @BeforeEach
     void setUp() {
+
         tokenService = new TokenService();
-        validToken=tokenService.generateToken("test-user");
+        userRepo = new UserRepo();
+        passwordEncoder = new PasswordEncoderUtil();
+        auth = new Auth(tokenService,userRepo,passwordEncoder);
+
+        Member member1 = new Member("test-user1", "yy","yarin", "shemer","050-4273201", LocalDate.of(2002,4,15),"Omer");
+        userRepo.store(member1);
+        validToken1=tokenService.generateToken("test-user1");
+        Member member2 = new Member("test-user2", "yy","yarin", "shemer","050-4273201", LocalDate.of(2002,4,15),"Omer");
+        userRepo.store(member2);
+        invalidToken2 = tokenService.generateToken("test-user2");
+
         companyRepo = new CompanyRepoImpl();
+        int creatorId = auth.getUserId(validToken1);
         companyRepo.store(new Company(companyId, "Test Company", creatorId,
                 new ContactInfo("test@test.com", "0500000000", "bank-1"),
                 new PurchasePolicy(), new DiscountPolicy()));
         eventRepo = new EventRepoImpl();
-        event=new Event(companyId, creatorId, LocalDateTime.now().plusYears(1),"some test", LocalDateTime.now().plusYears(2), false);
+        event=new Event(companyId,creatorId, LocalDateTime.now().plusYears(1),"some test", LocalDateTime.now().plusYears(2), false);
         eventRepo.store(event);
-        service = new EventCompanyManageService(companyRepo, eventRepo,tokenService);
+        service = new EventCompanyManageService(companyRepo, eventRepo,tokenService,auth);
         stage = new ElementPositionDTO(10, 20);
         entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
         standingZones = List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1)));
@@ -57,8 +75,7 @@ class EventCompanyManageServiceTest {
     void GivenValidAreaSetupScenario_WhenDefineVenueAndSeatingMap_ThenHallIsCreatedAndAssignedToEvent() throws Exception {
 
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
-                validToken,
-                creatorId,
+                validToken1,
                 event.getId(),
                 stage,
                 entries,
@@ -74,8 +91,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenUnauthorizedUserScenario_WhenDefineVenueAndSeatingMap_ThenPermissionErrorIsShown() throws Exception {
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
-                validToken,
-                999,
+                invalidToken2,
                 event.getId(),
                 stage,
                 entries,
@@ -92,8 +108,7 @@ class EventCompanyManageServiceTest {
     void GivenLoggedOutUserScenario_WhenDefineVenueAndSeatingMap_ThenInvalidTokenErrorIsShown() {
 
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
-                "",
-                creatorId,
+                null,
                 event.getId(),
                 stage,
                 entries,
@@ -108,8 +123,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenMissingEventScenario_WhenDefineVenueAndSeatingMap_ThenEventNotFoundErrorIsShown() {
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
-                validToken,
-                creatorId,
+                validToken1,
                 "non-existing-event-id",
                 stage,
                 entries,
@@ -125,8 +139,7 @@ class EventCompanyManageServiceTest {
     void GivenWrongMandatoryFieldsScenario_WhenDefineVenueAndSeatingMap_ThenValidationErrorIsShown() throws Exception {
 
         Response<Boolean> response = service.DefineVenueAndSeatingMap(
-                validToken,
-                creatorId,
+                validToken1,
                 event.getId(),
                 null,
                 entries,
@@ -146,7 +159,7 @@ class EventCompanyManageServiceTest {
 
         // Act: Standard sale (hasLottery = false)
         Response<Boolean> response = service.createEvent(
-                validToken, companyId, creatorId, eventDate, "Standard Event", saleStartDate, false
+                validToken1, companyId, eventDate, "Standard Event", saleStartDate, false
         );
 
         // Assert result
@@ -162,7 +175,7 @@ class EventCompanyManageServiceTest {
 
         // Act: Lottery sale (hasLottery = true)
         Response<Boolean> response = service.createEvent(
-                validToken, companyId, creatorId, eventDate, "Lottery Event", saleStartDate, true
+                validToken1, companyId, eventDate, "Lottery Event", saleStartDate, true
         );
 
         // Assert result
@@ -176,11 +189,9 @@ class EventCompanyManageServiceTest {
         LocalDateTime eventDate = LocalDateTime.now().plusDays(30);
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
-        int unauthorizedUserId = 999; // User with no permissions / not the company creator
-
         // Act
         Response<Boolean> response = service.createEvent(
-                validToken, companyId, unauthorizedUserId, eventDate, "Unauthorized Event", saleStartDate, false
+                invalidToken2, companyId, eventDate, "Unauthorized Event", saleStartDate, false
         );
 
         // Assert: System should reject the request due to lack of permissions
@@ -196,7 +207,7 @@ class EventCompanyManageServiceTest {
 
         // Act
         Response<Boolean> response = service.createEvent(
-                validToken, companyId, creatorId, pastEventDate, "Past Event", saleStartDate, false
+                validToken1, companyId, pastEventDate, "Past Event", saleStartDate, false
         );
 
         // Assert: System identifies that the date is invalid
@@ -210,11 +221,9 @@ class EventCompanyManageServiceTest {
         LocalDateTime eventDate = LocalDateTime.now().plusDays(30);
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
-        String invalidToken = ""; // UnauThenticated user or invalid token
-
         // Act
         Response<Boolean> response = service.createEvent(
-                invalidToken, companyId, creatorId, eventDate, "No Token Event", saleStartDate, false
+                null, companyId, eventDate, "No Token Event", saleStartDate, false
         );
 
         // Assert: System blocks and alerts about invalid token
@@ -230,8 +239,7 @@ class EventCompanyManageServiceTest {
 
         // When
         Response<Boolean> response = service.UpdateEventDate(
-                validToken,
-                creatorId,
+                validToken1,
                 event.getId(),
                 requestedDate
         );
@@ -247,6 +255,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenPastEvent_WhenUpdateEventDate_ThenPastEventErrorIsReturned() {
         // Given
+        int creatorId = auth.getUserId(validToken1);
         Event pastEvent = new Event(
                 companyId,
                 creatorId,
@@ -261,8 +270,7 @@ class EventCompanyManageServiceTest {
 
         // When
         Response<Boolean> response = service.UpdateEventDate(
-                validToken,
-                creatorId,
+                validToken1,
                 pastEvent.getId(),
                 requestedDate
         );
@@ -280,8 +288,7 @@ class EventCompanyManageServiceTest {
 
         // When
         Response<Boolean> response = service.UpdateEventDate(
-                validToken,
-                creatorId,
+                validToken1,
                 event.getId(),
                 requestedDate
         );
@@ -302,8 +309,7 @@ class EventCompanyManageServiceTest {
 
         // When
         Response<Boolean> response = service.UpdateEventDate(
-                validToken,
-                creatorId,
+                validToken1,
                 event.getId(),
                 requestedDate
         );
@@ -324,8 +330,7 @@ class EventCompanyManageServiceTest {
 
         // When
         Response<Boolean> response = service.UpdateEventDate(
-                validToken,
-                999,
+                invalidToken2,
                 event.getId(),
                 requestedDate
         );
@@ -345,8 +350,7 @@ class EventCompanyManageServiceTest {
 
         // When
         Response<Boolean> response = service.UpdateEventDate(
-                "",
-                creatorId,
+                null,
                 event.getId(),
                 requestedDate
         );
@@ -363,8 +367,7 @@ class EventCompanyManageServiceTest {
 
         // When
         Response<Boolean> response = service.UpdateEventDate(
-                validToken,
-                creatorId,
+                validToken1,
                 "non-existing-event-id",
                 requestedDate
         );
