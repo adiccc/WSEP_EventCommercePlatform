@@ -1,8 +1,13 @@
 package domain.company;
 
-import domain.dataType.PermissionType;
+import java.util.List;
 
-import domain.IRepo;
-
-public interface ICompanyRepo extends IRepo<Company, Integer> {
+public interface ICompanyRepo {
+    void save(Company company);
+    void store(Company company);
+    void delete(int companyId);
+    Company findById(int companyId);
+    List<Company> getAll();
+    boolean existsById(int companyId);
+    boolean existsByName(String companyName);
 }

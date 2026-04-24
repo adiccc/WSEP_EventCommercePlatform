@@ -1,8 +1,11 @@
 package application;
 
 import domain.company.Company;
+import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
 import domain.event.IOrderRepo;
+import domain.policy.DiscountPolicy;
+import domain.user.IUserRepo;
 import domain.event.Order;
 import domain.policy.MaxTicketsRule;
 import domain.policy.MinAgeRule;
@@ -15,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class CompanyServiceTest {
 
@@ -30,7 +34,9 @@ class CompanyServiceTest {
 
     @BeforeEach
     void setUp() {
-        company = new Company(COMPANY_ID, "Test Company", OWNER_ID);
+        company = new Company(COMPANY_ID, "Test Company", OWNER_ID,
+                new ContactInfo("test@test.com", "0500000000", "bank-1"),
+                new PurchasePolicy(), new DiscountPolicy());
         tokenService = new TokenService();
         ownerToken = tokenService.generateToken("owner");
         otherToken = tokenService.generateToken("other");
@@ -60,7 +66,8 @@ class CompanyServiceTest {
             @Override public int getTicketsBoughtByUserForEvent(int userId, int eventId) { return 0; }
         };
 
-        service = new CompanyService(tokenService, auth, CompanyRepoImpl, orderRepo);
+        IUserRepo userRepo = mock(IUserRepo.class);
+        service = new CompanyService(tokenService, auth, CompanyRepoImpl, userRepo, orderRepo);
     }
 
     // --- Successful_PurchasePolicy_Set ---
