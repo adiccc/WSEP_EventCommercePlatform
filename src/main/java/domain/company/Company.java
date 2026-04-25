@@ -38,7 +38,7 @@ public class Company {
         this.discountPolicy = new DiscountPolicy();
     }
 
-    public String updatePurchasePolicy(int userId, PurchasePolicy newPolicy) {
+    public void updatePurchasePolicy(int userId, PurchasePolicy newPolicy) {
         if (!isActive)
             throw new IllegalStateException("Company is not active");
         if (!ownerIds.contains(userId))

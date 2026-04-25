@@ -2,7 +2,7 @@ package domain.policy;
 
 import java.time.LocalDate;
 
-public class VisualDiscount implements Discount {
+public class VisualDiscount extends DiscountElement {
     private double percentage;
     private LocalDate endDate;
 

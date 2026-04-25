@@ -139,7 +139,7 @@ public class CompanyService {
     public Response<Boolean> updatePurchasePolicy(String token, int companyId, PurchasePolicy policy) {
         logger.info("Starting updatePurchasePolicy for companyId: " + companyId);
         try {
-            int userId = auth.getUserId(token);
+            int userId = auth.getUserId(token).getValue();
             Company company = companyRepo.findById(companyId);
             company.updatePurchasePolicy(userId, policy);
             companyRepo.store(company);

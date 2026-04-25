@@ -2,7 +2,7 @@ package domain.policy;
 
 import java.time.LocalDate;
 
-public class CodeCoupun implements Discount {
+public class CodeCoupun extends DiscountElement {
     private String code;
     private double percentage;
     private LocalDate endDate;

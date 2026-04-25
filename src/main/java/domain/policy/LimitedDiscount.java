@@ -1,6 +1,6 @@
 package domain.policy;
 
-public class LimitedDiscount implements Discount {
+public class LimitedDiscount extends DiscountElement {
     private double percentage;
     private int minQuantity;
 

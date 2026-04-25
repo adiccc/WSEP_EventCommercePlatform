@@ -4,24 +4,24 @@ import domain.dto.UserDTO;
 import java.util.ArrayList;
 import java.util.List;
 
-public class PurchasePolicy implements Purcase {
-    private List<Purcase> rules;
+public class PurchasePolicy implements Purchase {
+    private List<Purchase> rules;
 
     public PurchasePolicy() {
         this.rules = new ArrayList<>();
     }
 
-    public void addRule(Purcase rule) {
+    public void addRule(Purchase rule) {
         rules.add(rule);
     }
 
-    public void removeRule(Purcase rule) {
+    public void removeRule(Purchase rule) {
         rules.remove(rule);
     }
 
     @Override
     public boolean isSatisfied(UserDTO user, int quantity, int ticketsBoughtForEvent) {
-        for (Purcase rule : rules) {
+        for (Purchase rule : rules) {
             if (!rule.isSatisfied(user, quantity, ticketsBoughtForEvent)) return false;
         }
         return true;
@@ -29,7 +29,7 @@ public class PurchasePolicy implements Purcase {
 
     @Override
     public boolean isValid() {
-        for (Purcase rule : rules) {
+        for (Purchase rule : rules) {
             if (!rule.isValid()) return false;
         }
         return true;
@@ -46,7 +46,7 @@ public class PurchasePolicy implements Purcase {
         return sb.toString();
     }
 
-    public List<Purcase> getRules() {
+    public List<Purchase> getRules() {
         return new ArrayList<>(rules);
     }
 }
