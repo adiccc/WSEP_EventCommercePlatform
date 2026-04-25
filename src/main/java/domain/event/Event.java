@@ -29,7 +29,6 @@ public class Event {
 
     public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent categoryEvent) {
         this.eventMap = null;
-        this.eventQueue = null;
         this.companyId=companyId;
         this.creatorId=creatorId;
         this.date = date;
@@ -44,6 +43,7 @@ public class Event {
         active = false;
         this.location = location;
         this.categoryEvent = categoryEvent;
+        this.eventQueue = new EventQueue();
         this.orders = new ArrayList<>();
     }
 
@@ -106,5 +106,9 @@ public class Event {
 
     public GeographicalArea getLocation() {
         return location;
+    }
+
+    public EventQueue getEventQueue() {
+        return eventQueue;
     }
 }

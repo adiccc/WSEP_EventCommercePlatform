@@ -4,11 +4,12 @@ import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
 import domain.event.Event;
 import domain.event.EventMap;
+import domain.event.EventQueue;
 import domain.event.IEventRepo;
-import domain.event.IOrderRepo;
 import domain.lottery.ILotteryRepo;
+import domain.lottery.Lottery;
 
-import java.util.Map;
+import java.time.LocalDateTime;
 import java.util.NoSuchElementException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -40,20 +41,42 @@ public class ActiveOrderService {
         }
         try {
             Event e = this.eventRepo.findById(eventId);
+
             if (e.getCompanyId() != companyId) {
                 return new Response<>(null, "The selected event does not belong to the company");
             }
             if (!e.isActive()) {
                 return new Response<>(null, "The selected event is not active");
             }
-
-            //add hash map to event and its active order
-            while(activeOrderRepo.getAll().stream()
-                    .filter(order -> order.getEventId().equals(eventId)).count() >= capacity) {
-                //TODO: add to queue
+            if (e.getSaleStartDate().isAfter(java.time.LocalDateTime.now())) {
+                return new Response<>(null, "The sale for this event has not started yet");
             }
+
+            long activeOrdersCount = activeOrderRepo.getAll().stream()
+                    .filter(order -> order.getEventId().equals(eventId))
+                    .count();
+
+            if (activeOrdersCount >= capacity) {
+                EventQueue queue = e.getEventQueue();
+
+                if (!queue.contains(token)) {
+                    queue.enqueue(token);
+                    return new Response<>(null, "Event is full, user added to waiting queue");
+                }
+
+                if (!queue.isFirst(token)) {
+                    return new Response<>(null, "User is still waiting in queue");
+                }
+            }
+
             if (e.hasLottery()){
-                //TODO: enter lottery code
+                Lottery l = lotteryRepo.findById(eventId);
+                int code = auth.getUserId(token); // the code of each user who registered to the lottery is his ID because there ara no notifications in the system
+                LocalDateTime lotteryEndTime  = e.getSaleStartDate().plusHours(l.getExpirationTime());
+                if (!l.getWinners().contains(code)) {
+                    if (LocalDateTime.now().isBefore(lotteryEndTime))
+                        return new Response<>(null, "User is not a lottery winner  and lottery registration is still open");
+                }
             }
             logger.log(Level.INFO, "Event map retrieved successfully");
             return new Response<>(e.getMap(), "Event map retrieved successfully");

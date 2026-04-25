@@ -11,12 +11,12 @@ public class Lottery {
                        // lottery
     private int capacity;
     private List<Integer> registered;
-    private List<Integer> winners; // the code of each user who won the lottery is his email
+    private List<Integer> winners; // the code of each user who won the lottery is his ID because there ara no notifications in the system
     private LocalDateTime registerWindow; // the time window for users to register for the lottery
-    private double expirationTime; // after this time all the users will be able to buy tickets for the event, and
+    private long expirationTime; // after this time all the users will be able to buy tickets for the event, and
                                    // the lottery will be closed
 
-    public Lottery(String eventId, int capacity, LocalDateTime registerWindow, double expirationTime) {
+    public Lottery(String eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
         this.id = eventId;
         this.capacity = capacity;
         this.registered = new ArrayList<>();
@@ -45,7 +45,7 @@ public class Lottery {
         return registerWindow;
     }
 
-    public double getExpirationTime() {
+    public long getExpirationTime() {
         return expirationTime;
     }
 
