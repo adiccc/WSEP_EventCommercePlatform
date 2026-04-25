@@ -8,8 +8,11 @@ public class Order {
     private int eventId;
     private List<Integer> tickets;
 
-    public Order() {
-        //TODO
+    public Order(int orderId, int userId, int eventId, List<Integer> tickets) {
+        this.orderId = orderId;
+        this.userId = userId;
+        this.eventId = eventId;
+        this.tickets = tickets;
     }
 
 }

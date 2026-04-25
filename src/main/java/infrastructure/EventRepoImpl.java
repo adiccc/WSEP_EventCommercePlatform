@@ -4,6 +4,7 @@ import domain.event.Event;
 import domain.event.IEventRepo;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class EventRepoImpl implements IEventRepo {
     Map<String,Event> events; // key: eventId, value: event
@@ -32,5 +33,10 @@ public class EventRepoImpl implements IEventRepo {
     @Override
     public void store(Event entity) {
         events.put(entity.getId(), entity);
+    }
+
+    @Override
+    public List<Event> findByCompany(int companyId) {
+        return events.values().stream().filter(e->e.getCompanyId()==companyId).collect(Collectors.toList());
     }
 }
