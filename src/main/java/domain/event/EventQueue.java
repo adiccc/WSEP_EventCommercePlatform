@@ -23,7 +23,7 @@ public class EventQueue {
     }
 
     public boolean isFirst(String token) {
-        return !waitingUsers.isEmpty() && waitingUsers.peek() == token;
+        return !waitingUsers.isEmpty() && waitingUsers.peek().equals(token);
     }
 
     public boolean contains(String token) {
