@@ -60,6 +60,7 @@ public class LotteryService {
             }
             Lottery lottery = new Lottery(eventId, capacity, registerWindow, expirationTime);
             event.setActive(true);
+            eventRepo.store(event);
             lotteryRepo.store(lottery);
 
             // Schedule the background task to draw winners when the registration window closes

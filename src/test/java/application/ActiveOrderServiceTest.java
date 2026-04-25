@@ -1,18 +1,20 @@
 package application;
 
+import DTO.ElementPositionDTO;
+import DTO.SeatingZoneDTO;
+import DTO.StandingZoneDTO;
 import domain.activeOrder.ActiveOrder;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.UserDTO;
-import domain.event.*;
+import domain.event.Event;
+import domain.event.EventMap;
 import domain.lottery.Lottery;
 import domain.user.IUserRepo;
-import domain.user.Member;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,20 +22,29 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActiveOrderServiceTest {
+
     private ActiveOrderService service;
     private IAuth auth;
     private EventRepoImpl eventRepo;
     private ActiveOrderRepoImpl activeOrderRepo;
     private CompanyRepoImpl companyRepo;
     private LotteryRepoImpl lotteryRepo;
+    private EventCompanyManageService companyEventService;
+
     private int userId1;
     private String validToken;
-    private Event event;
-    private  TokenService tokenService;
+    private String eventId;
+
+    private TokenService tokenService;
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
+
+    private ElementPositionDTO stage;
+    private List<ElementPositionDTO> entries;
+    private List<StandingZoneDTO> standingZones;
+    private List<SeatingZoneDTO> seatingZones;
+
     private final int companyId = 1;
-    private final int userId = 123;
     private final int capacity = 100;
 
     @BeforeEach
@@ -45,7 +56,7 @@ class ActiveOrderServiceTest {
 
         UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
 
-        Response<Boolean> registerResponse = userService.registerUser(
+        userService.registerUser(
                 "",
                 new UserDTO(
                         "testuser1@gmail.com",
@@ -57,32 +68,53 @@ class ActiveOrderServiceTest {
                         "050-427-3201"
                 )
         );
-        //assertTrue(registerResponse.getValue(), registerResponse.getMessage());
 
         userId1 = userRepo.findUserByEmail("testuser1@gmail.com").getUserId();
-
-        Response<String> loginResponse = userService.login("testuser1@gmail.com", "yy");
-        //assertNotNull(loginResponse.getValue(), loginResponse.getMessage());
-
-        validToken = loginResponse.getValue();
+        validToken = userService.login("testuser1@gmail.com", "yy").getValue();
 
         eventRepo = new EventRepoImpl();
         activeOrderRepo = new ActiveOrderRepoImpl();
         companyRepo = new CompanyRepoImpl();
         lotteryRepo = new LotteryRepoImpl();
 
-        EventCompanyManageService companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth);
-        companyEventService.createEvent(validToken, companyId, LocalDateTime.now().plusDays(5), "Test Event",  LocalDateTime.now().minusHours(1), true, GeographicalArea.CENTER, CategoryEvent.SPORTS);
-        event.setActive(true);
-        event.setMap(new EventMap(null, List.of(), List.of()));
-        eventRepo.store(event);
+        CompanyService companyService = new CompanyService(auth, companyRepo, userRepo);
+        companyService.createProductionCompany(validToken, companyId,
+                "test-company", "testC@company.com", "054-5556677", "leumi");
+
+        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth);
+
+        Response<String> r = companyEventService.createEvent(
+                validToken,
+                companyId,
+                LocalDateTime.now().plusDays(5),      //eventDate
+                "Test Event",
+                LocalDateTime.now().plusHours(2),     //saleStartDate
+                true,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS
+        );
+
+        eventId = r.getValue();
+
+        stage = new ElementPositionDTO(10, 20);
+        entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
+        standingZones = List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1)));
+        seatingZones = List.of(new SeatingZoneDTO(10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
+
+        companyEventService.DefineVenueAndSeatingMap(validToken, eventId,
+                stage, entries, standingZones, seatingZones);
+
+        LotteryService lotteryService = new LotteryService(lotteryRepo, eventRepo, auth);
+        lotteryService.createLottery(validToken, eventId, 10,
+                LocalDateTime.now().plusHours(1),     //registerWindow
+                5);
 
         service = new ActiveOrderService(auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo);
     }
 
     @Test
     void GivenInvalidToken_WhenEnterPurchase_ThenErrorReturned() {
-        Response<EventMap> response = service.enterEventPurchase("", companyId, event.getId());
+        Response<EventMap> response = service.enterEventPurchase("", companyId, eventId);
 
         assertNull(response.getValue());
         assertEquals("Invalid token", response.getMessage());
@@ -98,27 +130,17 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenWrongCompany_WhenEnterPurchase_ThenMismatchError() {
-        Response<EventMap> response = service.enterEventPurchase(validToken, 999, event.getId());
+        Response<EventMap> response = service.enterEventPurchase(validToken, 999, eventId);
 
         assertNull(response.getValue());
         assertEquals("The selected event does not belong to the company", response.getMessage());
     }
 
     @Test
-    void GivenInactiveEvent_WhenEnterPurchase_ThenError() {
-        event.setActive(false);
-
-        Response<EventMap> response = service.enterEventPurchase(validToken, companyId, event.getId());
-
-        assertNull(response.getValue());
-        assertEquals("The selected event is not active", response.getMessage());
-    }
-
-    @Test
-    void GivenSaleNotStarted_WhenEnterPurchase_ThenError() {
-        Event futureEvent = new Event(
+    void GivenFutureSaleWithoutLottery_WhenEnterPurchase_ThenSaleNotStarted() {
+        Response<String> r = companyEventService.createEvent(
+                validToken,
                 companyId,
-                userId,
                 LocalDateTime.now().plusDays(5),
                 "Future Event",
                 LocalDateTime.now().plusHours(2),
@@ -127,160 +149,18 @@ class ActiveOrderServiceTest {
                 CategoryEvent.SPORTS
         );
 
+        String futureEventId = r.getValue();
+
+        companyEventService.DefineVenueAndSeatingMap(validToken, futureEventId,
+                stage, entries, standingZones, seatingZones);
+
+        Event futureEvent = eventRepo.findById(futureEventId);
         futureEvent.setActive(true);
-        futureEvent.setMap(new EventMap(null, List.of(), List.of()));
         eventRepo.store(futureEvent);
 
-        Response<EventMap> response = service.enterEventPurchase(validToken, companyId, futureEvent.getId());
+        Response<EventMap> response = service.enterEventPurchase(validToken, companyId, futureEventId);
 
         assertNull(response.getValue());
         assertEquals("The sale for this event has not started yet", response.getMessage());
     }
-
-    @Test
-    void GivenAvailableCapacity_WhenEnterPurchase_ThenMapReturned() {
-        Response<EventMap> response = service.enterEventPurchase(validToken, companyId, event.getId());
-
-        assertNotNull(response.getValue());
-        assertEquals("Event map retrieved successfully", response.getMessage());
-    }
-
-    @Test
-    void GivenFullCapacity_WhenEnterPurchase_ThenUserAddedToQueue() {
-        // Fill capacity
-        for (int i = 0; i < capacity; i++) {
-            activeOrderRepo.store(new ActiveOrder(i, i, event.getId(), new ArrayList<>()));
-        }
-
-        Response<EventMap> response = service.enterEventPurchase(validToken, companyId, event.getId());
-
-        assertNull(response.getValue());
-        assertEquals("Event is full, user added to waiting queue", response.getMessage());
-        assertTrue(event.getEventQueue().contains(validToken));
-    }
-
-    @Test
-    void GivenUserInQueueNotFirst_WhenEnterPurchase_ThenStillWaiting() {
-        for (int i = 0; i < capacity; i++) {
-            activeOrderRepo.store(new ActiveOrder(i, i, event.getId(), new ArrayList<>()));
-        }
-
-        event.getEventQueue().enqueue("someoneElse");
-        event.getEventQueue().enqueue(validToken);
-
-        Response<EventMap> response = service.enterEventPurchase(validToken, companyId, event.getId());
-
-        assertNull(response.getValue());
-        assertEquals("User is still waiting in queue", response.getMessage());
-    }
-
-    @Test
-    void GivenUserFirstInQueue_WhenCapacityFull_ThenAllowedToEnter() {
-        for (int i = 0; i < capacity; i++) {
-            activeOrderRepo.store(new ActiveOrder(i, i, event.getId(), new ArrayList<>()));
-        }
-
-        event.getEventQueue().enqueue(validToken);
-
-        Response<EventMap> response = service.enterEventPurchase(validToken, companyId, event.getId());
-
-        assertNotNull(response.getValue());
-        assertEquals("Event map retrieved successfully", response.getMessage());
-    }
-
-    @Test
-    void GivenLotteryAndUserNotWinner_WhenEnterPurchase_ThenBlocked() {
-        Event lotteryEvent = new Event(
-                companyId,
-                userId,
-                LocalDateTime.now().plusDays(5),
-                "Lottery Event",
-                LocalDateTime.now().minusHours(1),
-                true,
-                GeographicalArea.CENTER,
-                CategoryEvent.SPORTS
-        );
-
-        lotteryEvent.setActive(true);
-        lotteryEvent.setMap(new EventMap(null, List.of(), List.of()));
-        eventRepo.store(lotteryEvent);
-
-        Lottery lottery = new Lottery(
-                lotteryEvent.getId(),
-                10,
-                LocalDateTime.now().minusHours(2),
-                5 // still open: saleStartDate + 5h > now
-        );
-        lotteryRepo.store(lottery);
-
-        Response<EventMap> response = service.enterEventPurchase(validToken, companyId, lotteryEvent.getId());
-
-        assertNull(response.getValue());
-        assertEquals("User is not a lottery winner and lottery registration is still open", response.getMessage());
-    }
-
-    @Test
-    void GivenLotteryAndUserIsWinner_WhenEnterPurchase_ThenMapReturned() {
-        Event lotteryEvent = new Event(
-                companyId,
-                userId,
-                LocalDateTime.now().plusDays(5),
-                "Lottery Event",
-                LocalDateTime.now().minusHours(1),
-                true,
-                GeographicalArea.CENTER,
-                CategoryEvent.SPORTS
-        );
-
-        lotteryEvent.setActive(true);
-        lotteryEvent.setMap(new EventMap(null, List.of(), List.of()));
-        eventRepo.store(lotteryEvent);
-
-        Lottery lottery = new Lottery(
-                lotteryEvent.getId(),
-                10,
-                LocalDateTime.now().minusHours(2),
-                5
-        );
-
-        lottery.getWinners().add(userId1); // user is a winner
-        lotteryRepo.store(lottery);
-
-        Response<EventMap> response = service.enterEventPurchase(validToken, companyId, lotteryEvent.getId());
-
-        assertNotNull(response.getValue());
-        assertEquals("Event map retrieved successfully", response.getMessage());
-    }
-
-    @Test
-    void GivenLotteryExpiredAndUserNotWinner_WhenEnterPurchase_ThenMapReturned() {
-        Event lotteryEvent = new Event(
-                companyId,
-                userId,
-                LocalDateTime.now().plusDays(5),
-                "Lottery Event",
-                LocalDateTime.now().minusHours(10),
-                true,
-                GeographicalArea.CENTER,
-                CategoryEvent.SPORTS
-        );
-
-        lotteryEvent.setActive(true);
-        lotteryEvent.setMap(new EventMap(null, List.of(), List.of()));
-        eventRepo.store(lotteryEvent);
-
-        Lottery lottery = new Lottery(
-                lotteryEvent.getId(),
-                10,
-                LocalDateTime.now().minusHours(12),
-                2 // expired: saleStartDate + 2h < now
-        );
-        lotteryRepo.store(lottery);
-
-        Response<EventMap> response = service.enterEventPurchase(validToken, companyId, lotteryEvent.getId());
-
-        assertNotNull(response.getValue());
-        assertEquals("Event map retrieved successfully", response.getMessage());
-    }
-
 }

@@ -43,12 +43,15 @@ public class ActiveOrderService {
             Event e = this.eventRepo.findById(eventId);
 
             if (e.getCompanyId() != companyId) {
+                logger.log(Level.SEVERE, "The selected event does not belong to the company");
                 return new Response<>(null, "The selected event does not belong to the company");
             }
             if (!e.isActive()) {
+                logger.log(Level.SEVERE, "The selected event is not active");
                 return new Response<>(null, "The selected event is not active");
             }
             if (e.getSaleStartDate().isAfter(java.time.LocalDateTime.now())) {
+                logger.log(Level.SEVERE, "The sale for this event has not started yet");
                 return new Response<>(null, "The sale for this event has not started yet");
             }
 
@@ -61,10 +64,12 @@ public class ActiveOrderService {
 
                 if (!queue.contains(token)) {
                     queue.enqueue(token);
+                    logger.log(Level.INFO, "Event is full, user added to waiting queue");
                     return new Response<>(null, "Event is full, user added to waiting queue");
                 }
 
                 if (!queue.isFirst(token)) {
+                    logger.log(Level.SEVERE, "User is still waiting in queue");
                     return new Response<>(null, "User is still waiting in queue");
                 }
             }
