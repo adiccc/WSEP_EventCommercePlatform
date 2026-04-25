@@ -35,15 +35,14 @@ class ActiveOrderServiceIntegrationTest {
 
     private final int companyId = 1;
     private final int userId = 123;
+    private final int capacity = 100;
 
     @BeforeEach
     void setUp() {
 
         auth = mock(IAuth.class);
 
-        TokenService tokenService = new TokenService(); // לא חובה אבל נשאיר אם צריך
         IUserRepo userRepo = new UserRepo();
-        IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
 
         validToken = "valid-token";
 
@@ -52,7 +51,6 @@ class ActiveOrderServiceIntegrationTest {
 
         userRepo.store(member);
 
-        // חשוב: שליטה בהתנהגות ה-auth
         when(auth.isLoggedIn(validToken)).thenReturn(true);
         when(auth.getUserId(validToken)).thenReturn(member.getUserId());
 
@@ -147,7 +145,7 @@ class ActiveOrderServiceIntegrationTest {
     @Test
     void GivenFullCapacity_WhenEnterPurchase_ThenUserAddedToQueue() {
         // Fill capacity
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < capacity; i++) {
             activeOrderRepo.store(new ActiveOrder(i, i, event.getId(), new ArrayList<>()));
         }
 
@@ -160,7 +158,7 @@ class ActiveOrderServiceIntegrationTest {
 
     @Test
     void GivenUserInQueueNotFirst_WhenEnterPurchase_ThenStillWaiting() {
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < capacity; i++) {
             activeOrderRepo.store(new ActiveOrder(i, i, event.getId(), new ArrayList<>()));
         }
 
@@ -175,7 +173,7 @@ class ActiveOrderServiceIntegrationTest {
 
     @Test
     void GivenUserFirstInQueue_WhenCapacityFull_ThenAllowedToEnter() {
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < capacity; i++) {
             activeOrderRepo.store(new ActiveOrder(i, i, event.getId(), new ArrayList<>()));
         }
 
