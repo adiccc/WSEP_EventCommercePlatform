@@ -57,7 +57,9 @@ class ViewRolesAndPermissionsTreeTest {
     private IAuth buildAuth() {
         return new IAuth() {
             @Override public Response<String> login(String u, String p) { return Response.ok(""); }
-            @Override public void logout(String token) {}
+            @Override public Response<Boolean> logout(String token) {
+                return Response.ok(false);
+            }
             @Override public boolean isLoggedIn(String token) {
                 return OWNER_TOKEN.equals(token) || NON_OWNER_TOKEN.equals(token);
             }
@@ -139,7 +141,9 @@ class ViewRolesAndPermissionsTreeTest {
 
         IAuth auth2 = new IAuth() {
             @Override public Response<String> login(String u, String p) { return Response.ok(""); }
-            @Override public void logout(String t) {}
+            @Override public Response<Boolean> logout(String t) {
+                return Response.ok(false);
+            }
             @Override public boolean isLoggedIn(String t) { return OWNER_TOKEN.equals(t); }
             @Override public int getUserId(String t) { return FOUNDER_ID; }
         };

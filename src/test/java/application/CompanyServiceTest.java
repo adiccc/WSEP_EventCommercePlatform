@@ -43,7 +43,7 @@ class CompanyServiceTest {
 
         IAuth auth = new IAuth() {
             @Override public Response<String> login(String username, String password) {
-                return Response.ok(tokenService.generateToken(username));
+                return Response.ok("generated-token");
             }
             @Override public Response<Boolean> logout(String token) {
                 return Response.ok(true);
