@@ -66,4 +66,6 @@ public class Company {
     public ContactInfo getContactInfo() { return contactInfo; }
     public PurchasePolicy getPurchasePolicy() { return purchasePolicy; }
     public DiscountPolicy getDiscountPolicy() { return discountPolicy; }
+    public Set<Integer> getOwnerIds() { return ownerIds; }
+    public Map<String, ManagerAppointment> getManagersPermissionsMap() { return managersPermissionsMap; }
 }
