@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.NoSuchElementException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -47,7 +48,7 @@ class CompanyUnitTest {
     @Test
     public void GivenValidInputs_WhenCreateProductionCompany_ThenReturnSuccessAndCreateCompany() {
         when(userRepoMock.findById(1)).thenReturn(mockUser);
-        when(companyRepoMock.existsById(555)).thenReturn(false);
+        when(companyRepoMock.findById(555)).thenThrow(NoSuchElementException.class);
         when(companyRepoMock.existsByName("LiveNation")).thenReturn(false);
 
         Response<Company> response = companyService.createProductionCompany(
@@ -64,7 +65,7 @@ class CompanyUnitTest {
     @Test
     public void GivenExistingCompanyId_WhenCreateProductionCompany_ThenReturnError() {
         when(userRepoMock.findById(1)).thenReturn(mockUser);
-        when(companyRepoMock.existsById(555)).thenReturn(true);
+        when(companyRepoMock.findById(555)).thenReturn(mock(Company.class));
 
         Response<Company> response = companyService.createProductionCompany(
                 "token123", 555, "LiveNation", "admin@livenation.com", "0501234567", "bank-123"

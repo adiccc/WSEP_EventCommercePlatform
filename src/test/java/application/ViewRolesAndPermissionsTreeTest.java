@@ -45,7 +45,7 @@ class ViewRolesAndPermissionsTreeTest {
     private static final int FOUNDER_ID   = 100;   // also an owner
     private static final int OWNER_ID     = 123;
     private static final int NON_OWNER_ID = 456;
-    private static final String MANAGER_ID = "mgr-1";
+    private static final int MANAGER_ID = 789;
 
     private static final String OWNER_TOKEN     = "owner-token";
     private static final String NON_OWNER_TOKEN = "non-owner-token";

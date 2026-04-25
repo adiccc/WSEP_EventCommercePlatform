@@ -20,7 +20,7 @@ public class Company {
 
     private int founderId;
     private Set<Integer> ownerIds;
-    private Map<String, ManagerAppointment> managersPermissionsMap;
+    private Map<Integer, ManagerAppointment> managersPermissionsMap;
 
     public Company(int companyId, String companyName, int founderId, ContactInfo contactInfo,
                    PurchasePolicy defaultPurchase, DiscountPolicy defaultDiscount) {
@@ -79,7 +79,7 @@ public class Company {
     public PurchasePolicy getPurchasePolicy() { return purchasePolicy; }
     public DiscountPolicy getDiscountPolicy() { return discountPolicy; }
     public Set<Integer> getOwnerIds() { return ownerIds; }
-    public Map<String, ManagerAppointment> getManagersPermissionsMap() { return managersPermissionsMap; }
+    public Map<Integer, ManagerAppointment> getManagersPermissionsMap() { return managersPermissionsMap; }
 
     public void addDiscount(int userId, Discount policy) {
         if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!isOwner(userId)) {
