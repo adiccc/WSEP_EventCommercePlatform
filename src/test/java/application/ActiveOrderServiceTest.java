@@ -31,7 +31,9 @@ class ActiveOrderServiceTest {
     private String validToken;
     private Event event;
     private Member member;
-
+    private  TokenService tokenService;
+    private IUserRepo userRepo;
+    private IPasswordEncoder passwordEncoder;
     private final int companyId = 1;
     private final int userId = 123;
     private final int capacity = 100;
@@ -39,19 +41,15 @@ class ActiveOrderServiceTest {
     @BeforeEach
     void setUp() {
 
-        auth = mock(IAuth.class);
-
-        IUserRepo userRepo = new UserRepo();
-
-        validToken = "valid-token";
-
-        member = new Member("email", "pass", "test", "user", "phone",
-                LocalDate.now(), "address");
+        tokenService = new TokenService();
+        userRepo = new UserRepo();
+        passwordEncoder = new PasswordEncoderUtil();
+        auth = new Auth(tokenService,userRepo,passwordEncoder);
+        member = new Member("test-user1", "yy","yarin", "shemer","050-4273201", LocalDate.of(2002,4,15),"Omer");
+        userRepo.store(member);
+        validToken=tokenService.generateToken("test-user1");
 
         userRepo.store(member);
-
-        when(auth.isLoggedIn(validToken)).thenReturn(true);
-        when(auth.getUserId(validToken)).thenReturn(member.getUserId());
 
         eventRepo = new EventRepoImpl();
         activeOrderRepo = new ActiveOrderRepoImpl();

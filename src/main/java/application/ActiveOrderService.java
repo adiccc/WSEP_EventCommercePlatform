@@ -36,7 +36,7 @@ public class ActiveOrderService {
         logger.log(Level.INFO, "enterEventPurchase called");
 
         // check valid token
-        if (!auth.isLoggedIn(token)) {
+        if (!auth.isLoggedIn(token).getValue()) {
             return new Response<>(null, "Invalid token");
         }
         try {
@@ -71,7 +71,7 @@ public class ActiveOrderService {
 
             if (e.hasLottery()){
                 Lottery l = lotteryRepo.findById(eventId);
-                int code = auth.getUserId(token); // the code of each user who registered to the lottery is his ID because there ara no notifications in the system
+                int code = auth.getUserId(token).getValue(); // the code of each user who registered to the lottery is his ID because there ara no notifications in the system
                 LocalDateTime lotteryEndTime  = e.getSaleStartDate().plusHours(l.getExpirationTime());
                 if (!l.getWinners().contains(code)) {
                     if (LocalDateTime.now().isBefore(lotteryEndTime))
