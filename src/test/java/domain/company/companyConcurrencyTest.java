@@ -34,8 +34,8 @@ class CompanyConcurrencyTest {
         IAuth authMock = mock(IAuth.class);
         IOrderRepo orderRepoMock = mock(IOrderRepo.class);
 
-        when(authMock.getUserId(anyString())).thenReturn(1);
-        when(authMock.isLoggedIn(anyString())).thenReturn(true);
+        when(authMock.getUserId(anyString())).thenReturn(new Response<>(1,""));
+        when(authMock.isLoggedIn(anyString())).thenReturn(Response.ok(true));
 
         companyService = new CompanyService(authMock, companyRepo, userRepo, orderRepoMock);
 

@@ -47,12 +47,12 @@ class LotteryServiceTest {
         Member member1 = new Member("test-user1", "yy","yarin", "shemer","050-4273201", LocalDate.of(2002,4,15),"Omer");
         userRepo.store(member1);
         validToken=tokenService.generateToken("test-user1");
-        creatorId1= auth.getUserId(validToken);
+        creatorId1= auth.getUserId(validToken).getValue();
 
         Member member2 = new Member("test-user2", "yy","yarin", "shemer","050-4273201", LocalDate.of(2002,4,15),"Omer");
         userRepo.store(member2);
         notPermission = tokenService.generateToken("test-user2");
-        creatorId2 = auth.getUserId(notPermission);
+        creatorId2 = auth.getUserId(notPermission).getValue();
 
         invalidToken = null;
 

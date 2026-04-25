@@ -49,12 +49,15 @@ class CompanyServiceTest {
                 return Response.ok(true);
             }
 
-            @Override public boolean isLoggedIn(String token) {
-                return OWNER_TOKEN.equals(token) || OTHER_TOKEN.equals(token);
+            @Override public Response<Boolean> isLoggedIn(String token) {
+                if(OWNER_TOKEN.equals(token) || OTHER_TOKEN.equals(token)) {
+                    return new Response<>(true, "");
+                }
+                else return new Response<>(false,"");
             }
-            @Override public int getUserId(String token) {
-                if (OWNER_TOKEN.equals(token)) return OWNER_ID;
-                return OTHER_USER_ID;
+            @Override public Response<Integer> getUserId(String token) {
+                if (OWNER_TOKEN.equals(token)) return new Response<>(OWNER_ID, "");
+                return new Response<>(OTHER_USER_ID, "");
             }
         };
 

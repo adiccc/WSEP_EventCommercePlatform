@@ -39,7 +39,7 @@ public class CompanyService {
                                                      String email, String phone, String bankAccount) {
         try {
             logger.info("Attempting to create company: " + companyName + " for user: " + sessionToken);
-            int userId = auth.getUserId(sessionToken);
+            int userId = auth.getUserId(sessionToken).getValue();
             Member user = userRepo.findById(userId);
             if (user == null) {
                 return new Response<>(null, "User not found.");
@@ -94,12 +94,12 @@ public class CompanyService {
         logger.info("viewRolesAndPermissionsTree called for companyId: " + companyId);
         try {
             // 1. Validate token (covers "user not logged in")
-            if (!auth.isLoggedIn(token)) {
+            if (!auth.isLoggedIn(token).isError()) {
                 logger.warning("viewRolesAndPermissionsTree failed: invalid or expired token");
                 return Response.error("Invalid or expired token");
             }
 
-            int userId = auth.getUserId(token);
+            int userId = auth.getUserId(token).getValue();
 
             // 2. Company must exist
             Company company = companyRepo.findById(companyId);
@@ -138,7 +138,7 @@ public class CompanyService {
     public Response<Boolean> updatePurchasePolicy(String token, int companyId, PurchasePolicy policy) {
         logger.info("Starting updatePurchasePolicy for companyId: " + companyId);
         try {
-            int userId = auth.getUserId(token);
+            int userId = auth.getUserId(token).getValue();
             Company company = companyRepo.findById(companyId);
             if (company == null) {
                 logger.warning("updatePurchasePolicy failed: company not found, id: " + companyId);

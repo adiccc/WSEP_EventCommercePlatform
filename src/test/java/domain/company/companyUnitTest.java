@@ -40,7 +40,7 @@ class CompanyUnitTest {
         mockUser = new Member("user123","aa", "aa","bb","050-432-6677", LocalDate.of(2001,5,12),"ee");
         mockUser.setConnected(true);
 
-        when(authMock.getUserId(anyString())).thenReturn(1);
+        when(authMock.getUserId(anyString())).thenReturn(new Response<>(1,""));
     }
 
     @Test

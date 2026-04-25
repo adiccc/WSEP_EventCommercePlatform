@@ -137,7 +137,7 @@ class AuthTest {
         // Assert
         assertTrue(response.getValue());
         assertEquals("Logout successful", response.getMessage());
-        assertFalse(auth.isLoggedIn(token)); //making sure that the user is actually logged out!
+        assertFalse(auth.isLoggedIn(token).getValue()); //making sure that the user is actually logged out!
         verify(tokenServiceMock, times(1)).extractExpirationDate(token); //making sure that we took the expiration date in order to insert to the HASHMAP
     }
     @Test

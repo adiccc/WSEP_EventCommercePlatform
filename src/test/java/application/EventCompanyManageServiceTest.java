@@ -59,7 +59,7 @@ class EventCompanyManageServiceTest {
         invalidToken2 = tokenService.generateToken("test-user2");
 
         companyRepo = new CompanyRepoImpl();
-        int creatorId = auth.getUserId(validToken1);
+        int creatorId = auth.getUserId(validToken1).getValue();
         companyRepo.store(new Company(companyId, "Test Company", creatorId,
                 new ContactInfo("test@test.com", "0500000000", "bank-1"),
                 new PurchasePolicy(), new DiscountPolicy()));
@@ -259,7 +259,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenPastEvent_WhenUpdateEventDate_ThenPastEventErrorIsReturned() {
         // Given
-        int creatorId = auth.getUserId(validToken1);
+        int creatorId = auth.getUserId(validToken1).getValue();
         Event pastEvent = new Event(
                 companyId,
                 creatorId,

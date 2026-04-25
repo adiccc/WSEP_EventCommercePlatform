@@ -32,7 +32,7 @@ public class UserService {
     public Response<Boolean> registerUser(String activeIdentifier, UserDTO dto) {
         logger.info("Registration attempt started for email: " + dto.getEmail());
         try{
-            if (auth.isLoggedIn(activeIdentifier)) {
+            if (auth.isLoggedIn(activeIdentifier).getValue()) {
                 logger.warning("Registration failed: Active logged-in user attempted to register (Token: " + activeIdentifier + ")");
                 return Response.error("Can't register to the system at member state, must be a guest.");
             }

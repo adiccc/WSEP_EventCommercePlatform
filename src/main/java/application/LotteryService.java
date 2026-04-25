@@ -34,7 +34,7 @@ public class LotteryService {
         logger.log(Level.INFO, "createLottery called");
 
         // check valid token
-        int userId = auth.getUserId(token);
+        int userId = auth.getUserId(token).getValue();
         if(userId == -1) {
             logger.severe("Invalid token");
             return new Response<>(false, "Invalid token");
