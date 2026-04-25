@@ -7,10 +7,13 @@ import domain.event.IOrderRepo;
 import domain.policy.DiscountPolicy;
 import domain.user.IUserRepo;
 import domain.event.Order;
+import domain.policy.CodeCoupun;
 import domain.policy.MaxTicketsRule;
 import domain.policy.MinAgeRule;
 import domain.policy.PurchasePolicy;
+import domain.policy.VisualDiscount;
 import infrastructure.CompanyRepoImpl;
+import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -31,9 +34,6 @@ class CompanyServiceTest {
     private static final String OTHER_TOKEN = "other-token";
 
     private CompanyService service;
-    private TokenService tokenService;
-    private String ownerToken;
-    private String otherToken;
 
     @BeforeEach
     void setUp() {
@@ -157,6 +157,106 @@ class CompanyServiceTest {
         PurchasePolicy policy = new PurchasePolicy();
         policy.addRule(new MaxTicketsRule(4));
         Response<Boolean> response = service.updatePurchasePolicy(OWNER_TOKEN, COMPANY_ID, policy);
+        assertTrue(response.isError());
+    }
+
+    // ===================== updateDiscountPolicy =====================
+
+    // --- Successful_Discount_Update ---
+
+    @Test
+    void GivenOwnerAndValidDiscountPolicy_WhenUpdateDiscountPolicy_ThenSuccess() {
+        DiscountPolicy policy = new DiscountPolicy();
+        policy.addDiscount(new VisualDiscount(10, LocalDate.now().plusDays(1)));
+
+        Response<Boolean> response = service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, policy);
+
+        assertFalse(response.isError());
+        assertEquals(Boolean.TRUE, response.getValue());
+    }
+
+    @Test
+    void GivenOwnerUpdatesExistingPolicy_WhenUpdateDiscountPolicy_ThenPolicyReplaced() {
+        DiscountPolicy oldPolicy = new DiscountPolicy();
+        oldPolicy.addDiscount(new VisualDiscount(5, LocalDate.now().plusDays(1)));
+        service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, oldPolicy);
+
+        DiscountPolicy newPolicy = new DiscountPolicy();
+        newPolicy.addDiscount(new VisualDiscount(20, LocalDate.now().plusDays(1)));
+        service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, newPolicy);
+
+        assertFalse(service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, newPolicy).isError());
+        assertEquals(newPolicy, company.getDiscountPolicy());
+    }
+
+    // --- Company_Not_Found ---
+
+    @Test
+    void GivenCompanyNotFound_WhenUpdateDiscountPolicy_ThenError() {
+        DiscountPolicy policy = new DiscountPolicy();
+        policy.addDiscount(new VisualDiscount(10, LocalDate.now().plusDays(1)));
+
+        Response<Boolean> response = service.updateDiscountPolicy(OWNER_TOKEN, 999, policy);
+
+        assertTrue(response.isError());
+    }
+
+    // --- Unauthorized_Discount_Change ---
+
+    @Test
+    void GivenNonOwner_WhenUpdateDiscountPolicy_ThenError() {
+        DiscountPolicy policy = new DiscountPolicy();
+        policy.addDiscount(new VisualDiscount(10, LocalDate.now().plusDays(1)));
+
+        Response<Boolean> response = service.updateDiscountPolicy(OTHER_TOKEN, COMPANY_ID, policy);
+
+        assertTrue(response.isError());
+    }
+
+    // --- Logged_Out_User_Access ---
+
+    @Test
+    void GivenInvalidToken_WhenUpdateDiscountPolicy_ThenError() {
+        DiscountPolicy policy = new DiscountPolicy();
+        policy.addDiscount(new VisualDiscount(10, LocalDate.now().plusDays(1)));
+
+        Response<Boolean> response = service.updateDiscountPolicy("invalid-token", COMPANY_ID, policy);
+
+        assertTrue(response.isError());
+    }
+
+    // --- Invalid_Discount_Data ---
+
+    @Test
+    void GivenNegativePercentage_WhenUpdateDiscountPolicy_ThenError() {
+        DiscountPolicy policy = new DiscountPolicy();
+        policy.addDiscount(new VisualDiscount(-10, LocalDate.now().plusDays(1)));
+
+        Response<Boolean> response = service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, policy);
+
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenEmptyCouponCode_WhenUpdateDiscountPolicy_ThenError() {
+        DiscountPolicy policy = new DiscountPolicy();
+        policy.addDiscount(new CodeCoupun("", 10, LocalDate.now().plusDays(1)));
+
+        Response<Boolean> response = service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, policy);
+
+        assertTrue(response.isError());
+    }
+
+    // --- Company_Inactive ---
+
+    @Test
+    void GivenInactiveCompany_WhenUpdateDiscountPolicy_ThenError() {
+        company.deactivate();
+        DiscountPolicy policy = new DiscountPolicy();
+        policy.addDiscount(new VisualDiscount(10, LocalDate.now().plusDays(1)));
+
+        Response<Boolean> response = service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, policy);
+
         assertTrue(response.isError());
     }
 }
