@@ -3,6 +3,7 @@ package application;
 import domain.activeOrder.ActiveOrder;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
+import domain.dto.UserDTO;
 import domain.event.*;
 import domain.lottery.Lottery;
 import domain.user.IUserRepo;
@@ -17,8 +18,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class ActiveOrderServiceTest {
     private ActiveOrderService service;
@@ -27,10 +26,9 @@ class ActiveOrderServiceTest {
     private ActiveOrderRepoImpl activeOrderRepo;
     private CompanyRepoImpl companyRepo;
     private LotteryRepoImpl lotteryRepo;
-
+    private int userId1;
     private String validToken;
     private Event event;
-    private Member member;
     private  TokenService tokenService;
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
@@ -40,21 +38,40 @@ class ActiveOrderServiceTest {
 
     @BeforeEach
     void setUp() {
-
         tokenService = new TokenService();
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
-        auth = new Auth(tokenService,userRepo,passwordEncoder);
-        member = new Member("test-user1", "yy","yarin", "shemer","050-4273201", LocalDate.of(2002,4,15),"Omer");
-        userRepo.store(member);
-        validToken=tokenService.generateToken("test-user1");
+        auth = new Auth(tokenService, userRepo, passwordEncoder);
 
-        userRepo.store(member);
+        UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
+
+        Response<Boolean> registerResponse = userService.registerUser(
+                "",
+                new UserDTO(
+                        "testuser1@gmail.com",
+                        "yarin",
+                        "shemer",
+                        "yy",
+                        15, 4, 2002,
+                        "Omer",
+                        "050-427-3201"
+                )
+        );
+        assertTrue(registerResponse.getValue(), registerResponse.getMessage());
+
+        userId1 = userRepo.findUserByEmail("testuser1@gmail.com").getUserId();
+
+        Response<String> loginResponse = userService.login("testuser1@gmail.com", "yy");
+        assertNotNull(loginResponse.getValue(), loginResponse.getMessage());
+
+        validToken = loginResponse.getValue();
 
         eventRepo = new EventRepoImpl();
         activeOrderRepo = new ActiveOrderRepoImpl();
         companyRepo = new CompanyRepoImpl();
         lotteryRepo = new LotteryRepoImpl();
+
+        EventCompanyManageService companyService = new EventCompanyManageService(companyRepo, eventRepo, auth);
 
         event = new Event(
                 companyId,
@@ -237,7 +254,7 @@ class ActiveOrderServiceTest {
                 5
         );
 
-        lottery.getWinners().add(member.getUserId());
+        lottery.getWinners().add(userId1); // user is a winner
         lotteryRepo.store(lottery);
 
         Response<EventMap> response = service.enterEventPurchase(validToken, companyId, lotteryEvent.getId());

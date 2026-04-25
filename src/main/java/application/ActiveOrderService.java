@@ -22,7 +22,7 @@ public class ActiveOrderService {
     private final ICompanyRepo companyRepo;
     private final ILotteryRepo lotteryRepo;
     private final IAuth auth;
-    private final int capacity = 100; // here? רף שהוגדר בזמן יצירת המערכת
+    private final int capacity = 100;
 
     public ActiveOrderService(IAuth auth, IActiveOrderRepo activeOrderRepo, IEventRepo eventRepo, ICompanyRepo companyRepo, ILotteryRepo lotteryRepo) {
         this.eventRepo = eventRepo;
