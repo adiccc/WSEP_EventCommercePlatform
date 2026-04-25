@@ -44,11 +44,15 @@ public class CompanyService {
             if (user == null) {
                 return new Response<>(null, "User not found.");
             }
-            if (!user.isConnected()) {
+//            if (!user.isConnected()) {
+//                return new Response<>(null, "User must be logged in to create a company.");
+//            }
+            if (!auth.isLoggedIn(sessionToken).getValue()) {
                 return new Response<>(null, "User must be logged in to create a company.");
             }
 
-            if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
+
+                if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
                 return new Response<>(null, "Invalid contact or bank account information.");
             }
 

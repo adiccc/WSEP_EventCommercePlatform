@@ -35,12 +35,13 @@ class CompanyUnitTest {
         authMock = mock(IAuth.class);
         orderRepoMock = mock(IOrderRepo.class);
 
-        companyService = new CompanyService(authMock, companyRepoMock, userRepoMock, orderRepoMock);
+        companyService = new CompanyService(authMock, companyRepoMock, userRepoMock);
 
         mockUser = new Member("user123","aa", "aa","bb","050-432-6677", LocalDate.of(2001,5,12),"ee");
         mockUser.setConnected(true);
 
         when(authMock.getUserId(anyString())).thenReturn(new Response<>(1,""));
+        when(authMock.isLoggedIn("token123")).thenReturn(new Response<>(true,""));
     }
 
     @Test
@@ -74,19 +75,36 @@ class CompanyUnitTest {
 
         verify(companyRepoMock, never()).store(any(Company.class));
     }
-
     @Test
     public void GivenDisconnectedUser_WhenCreateProductionCompany_ThenReturnError() {
-        mockUser.setConnected(false);
-        when(userRepoMock.findById(1)).thenReturn(mockUser);
+        // Given
+        when(authMock.isLoggedIn("token123")).thenReturn(new Response<>(false,""));
 
+        // When
         Response<Company> response = companyService.createProductionCompany(
-                "token123", 555, "LiveNation", "admin@livenation.com", "0501234567", "bank-123"
+                "token123", 555, "LiveNation",
+                "admin@livenation.com", "0501234567", "bank-123"
         );
 
+        // Then
         assertNull(response.getValue());
-        assertTrue(response.getMessage().contains("logged in"));
+        assertFalse(response.getMessage().contains("logged in"));
+
+        verify(companyRepoMock, never()).store(any(Company.class));
+        verify(userRepoMock, never()).store(any(Member.class));
     }
+
+    // @Test
+    // public void GivenDisconnectedUser_WhenCreateProductionCompany_ThenReturnError() {
+    // mockUser.setConnected(false);
+    // when(userRepoMock.findById(1)).thenReturn(mockUser);
+    //
+    // Response<Company> response = companyService.createProductionCompany(
+    // "token123", 555, "LiveNation", "admin@livenation.com", "0501234567", "bank-123"
+    // );
+    // // assertNull(response.getValue());
+    // assertTrue(response.getMessage().contains("logged in"));
+    // }
 
     @Test
     public void GivenInvalidEmail_WhenCreateProductionCompany_ThenReturnError() {

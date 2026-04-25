@@ -70,7 +70,7 @@ class CompanyServiceTest {
         };
 
         IUserRepo userRepo = mock(IUserRepo.class);
-        service = new CompanyService(auth, companyRepo, userRepo, orderRepo);
+        service = new CompanyService(auth, companyRepo, userRepo);
     }
 
     // --- Successful_PurchasePolicy_Set ---

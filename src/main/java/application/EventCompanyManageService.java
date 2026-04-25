@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 import static domain.dataType.PermissionType.CREATE_EVENT;
-import static domain.dataType.PermissionType.CreatEvent;
 import static domain.dataType.PermissionType.ViewOrdersHistory;
 
 
@@ -102,8 +101,7 @@ public class EventCompanyManageService {
 
     }
 
-    public Response<Boolean> createEvent(String token, int companyId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent category) {
-    public Response<String> createEvent(String token, int companyId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery) {
+    public Response<String> createEvent(String token, int companyId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent category) {
         logger.log(Level.INFO, "createEvent called");
 
         // check valid token
@@ -181,7 +179,7 @@ public class EventCompanyManageService {
 
     public Response<List<Order>> getOrdersByCompany(String token, int companyId) {
         logger.log(Level.INFO, "getOrdersByCompany called");
-        int userId = auth.getUserId(token);
+        int userId = auth.getUserId(token).getValue();
         if(userId == -1){
             logger.severe("Invalid token");
             return new Response<>(null, "Invalid token");
