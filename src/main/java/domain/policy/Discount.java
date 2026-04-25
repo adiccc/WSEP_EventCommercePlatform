@@ -1,5 +1,9 @@
 package domain.policy;
 
 public interface Discount  {
-  void addDiscount(Discount discount);
+    double apply(double originalPrice, int quantity, String couponCode);
+    boolean isValid();
+    String describe();
+    void addDiscount(Discount discount);
+    boolean discountExists(Discount newdiscount);
 }

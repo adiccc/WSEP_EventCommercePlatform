@@ -4,8 +4,8 @@ import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.policy.*;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,8 +19,8 @@ public class Event {
     private String name;
     private LocalDateTime saleStartDate;
     private boolean hasLottery;
-    private Purcase purchasePolicy;
-    private Discount discountPolicy;
+    private Purchase purchasePolicy;
+    private DiscountPolicy discountPolicy;
     private boolean active;
     private GeographicalArea location;
     private CategoryEvent categoryEvent;

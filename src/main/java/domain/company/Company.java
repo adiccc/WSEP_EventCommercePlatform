@@ -1,6 +1,7 @@
 package domain.company;
 
 import domain.dataType.PermissionType;
+import domain.policy.Discount;
 import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
 import java.util.HashMap;
@@ -34,17 +35,28 @@ public class Company {
         this.ownerIds = new HashSet<>();
         this.ownerIds.add(founderId);
         this.managersPermissionsMap = new HashMap<>();
+        this.purchasePolicy = new PurchasePolicy();
+        this.discountPolicy = new DiscountPolicy();
     }
 
-    public String updatePurchasePolicy(int userId, PurchasePolicy newPolicy) {
+    public void updatePurchasePolicy(int userId, PurchasePolicy newPolicy) {
         if (!isActive)
-            return "Company is not active";
+            throw new IllegalStateException("Company is not active");
         if (!ownerIds.contains(userId))
-            return "User does not have permission to update purchase policy";
+            throw new SecurityException("User does not have permission to update purchase policy");
         if (!newPolicy.isValid())
-            return "Invalid policy data";
+            throw new IllegalArgumentException("Invalid policy data");
         this.purchasePolicy = newPolicy;
-        return null;
+    }
+
+    public void updateDiscountPolicy(int userId, DiscountPolicy newPolicy) {
+        if (!isActive)
+            throw new IllegalStateException("Company is not active");
+        if (!ownerIds.contains(userId))
+            throw new SecurityException("User does not have permission to update discount policy");
+        if (!newPolicy.isValid())
+            throw new IllegalArgumentException("Invalid discount policy data");
+        this.discountPolicy = newPolicy;
     }
 
     public void deactivate() { this.isActive = false; }
@@ -68,4 +80,18 @@ public class Company {
     public DiscountPolicy getDiscountPolicy() { return discountPolicy; }
     public Set<Integer> getOwnerIds() { return ownerIds; }
     public Map<String, ManagerAppointment> getManagersPermissionsMap() { return managersPermissionsMap; }
+
+    public void addDiscount(int userId, Discount policy) {
+        if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!isOwner(userId)) {
+            throw new SecurityException("User does not have permission to add discount policy");
+        }
+        discountPolicy.addDiscount(policy);
+    }
+    
+    public void removeDiscount(int userId, Discount policy) {
+        if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!isOwner(userId)) {
+            throw new SecurityException("User does not have permission to remove discount policy");
+        }
+        discountPolicy.removeDiscount(policy);
+    }
 }

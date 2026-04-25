@@ -1,8 +1,8 @@
 package domain.policy;
 
-public abstract class PurchaseRule implements Purcase {
+public abstract class PurchaseRule implements Purchase {
     @Override
-    public void addRule(Purcase rule) {
+    public void addRule(Purchase rule) {
         throw new UnsupportedOperationException("Cannot add rule to a leaf rule");
     }
 }

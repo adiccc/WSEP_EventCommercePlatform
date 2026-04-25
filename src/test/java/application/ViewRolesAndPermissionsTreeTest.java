@@ -62,7 +62,7 @@ class ViewRolesAndPermissionsTreeTest {
             }
             @Override public Response<Boolean> isLoggedIn(String token) {
                 if(OWNER_TOKEN.equals(token) || NON_OWNER_TOKEN.equals(token)){
-                    return new Response<>(true, "");
+                    return new Response<>(true, null);
                 }
                 else return new Response<>(false,"") ;
             }
@@ -149,7 +149,7 @@ class ViewRolesAndPermissionsTreeTest {
             }
             @Override public Response<Boolean> isLoggedIn(String t) {
                 if(OWNER_TOKEN.equals(t)){
-                    return new Response<>(true,"");
+                    return new Response<>(true,null);
                 }
                 else return new Response<>(false,"");
             }
