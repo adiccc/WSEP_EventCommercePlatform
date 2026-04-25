@@ -122,17 +122,19 @@ class DiscountPolicyTest {
     void GivenTwoVisualDiscounts_WhenApply_ThenBothAppliedSequentially() {
         DiscountPolicy policy = new DiscountPolicy();
         policy.addDiscount(new VisualDiscount(10, FUTURE)); // 100 -> 90
-        policy.addDiscount(new VisualDiscount(10, FUTURE)); // 90 -> 81
-        assertEquals(81.0, policy.apply(100.0, 1, null), 0.001);
+        policy.addDiscount(new VisualDiscount(11, FUTURE)); // 90 -> 81
+        assertEquals(80.1, policy.apply(100.0, 1, null), 0.001);
     }
 
     @Test
     void GivenDiscountRemoved_WhenApply_ThenRemovedDiscountIgnored() {
         DiscountPolicy policy = new DiscountPolicy();
         VisualDiscount d = new VisualDiscount(10, FUTURE);
+        VisualDiscount d2 = new VisualDiscount(11, FUTURE);
         policy.addDiscount(d);
+        policy.addDiscount(d2);
         policy.removeDiscount(d);
-        assertEquals(100.0, policy.apply(100.0, 1, null), 0.001);
+        assertEquals(89, policy.apply(100.0, 1, null), 0.001);
     }
 
     @Test

@@ -5,4 +5,5 @@ public interface Discount  {
     boolean isValid();
     String describe();
     void addDiscount(Discount discount);
+    boolean discountExists(Discount newdiscount);
 }

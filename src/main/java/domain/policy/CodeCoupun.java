@@ -32,6 +32,18 @@ public class CodeCoupun extends DiscountElement {
         return percentage + "% discount with coupon code, valid until " + endDate;
     }
 
+    public boolean discountExists(Discount newdiscount) {
+        return equals(newdiscount);
+    }
+
+    public boolean equals(Object discount) {
+        if(discount instanceof CodeCoupun){
+            if(code.equals(((CodeCoupun)discount).code))
+                return true;
+        }
+        return false;
+    }
+
     public String getCode() { return code; }
     public double getPercentage() { return percentage; }
     public LocalDate getEndDate() { return endDate; }

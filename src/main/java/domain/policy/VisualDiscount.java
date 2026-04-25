@@ -28,6 +28,18 @@ public class VisualDiscount extends DiscountElement {
         return percentage + "% discount until " + endDate;
     }
 
+    public boolean discountExists(Discount newDiscount) {
+        return equals(newDiscount);
+    }
+
+    public boolean equals(Object discount) {
+        if (discount instanceof VisualDiscount) {
+            VisualDiscount other = (VisualDiscount) discount;
+            return this.percentage == other.percentage &&
+                    this.endDate.equals(other.endDate);
+        }
+        return false;
+    }
     public double getPercentage() { return percentage; }
     public LocalDate getEndDate() { return endDate; }
 }

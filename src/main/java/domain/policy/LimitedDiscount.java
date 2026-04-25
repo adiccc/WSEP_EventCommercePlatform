@@ -28,6 +28,18 @@ public class LimitedDiscount extends DiscountElement {
         return "Buy " + minQuantity + " get the next " + percentage + "% off";
     }
 
+    public boolean discountExists(Discount newdiscount) {
+        return equals(newdiscount);
+    }
+
+    public boolean equals(Object discount) {
+        if (discount instanceof LimitedDiscount) {
+            LimitedDiscount other = (LimitedDiscount) discount;
+            return other.percentage == percentage && other.minQuantity == minQuantity;
+        }
+        return false;
+    }
+
     public double getPercentage() { return percentage; }
     public int getMinQuantity() { return minQuantity; }
 }

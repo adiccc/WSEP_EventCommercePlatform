@@ -1,6 +1,7 @@
 package domain.company;
 
 import domain.dataType.PermissionType;
+import domain.policy.Discount;
 import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
 import java.util.HashMap;
@@ -79,4 +80,18 @@ public class Company {
     public DiscountPolicy getDiscountPolicy() { return discountPolicy; }
     public Set<Integer> getOwnerIds() { return ownerIds; }
     public Map<String, ManagerAppointment> getManagersPermissionsMap() { return managersPermissionsMap; }
+
+    public void addDiscount(int userId, Discount policy) {
+        if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!isOwner(userId)) {
+            throw new SecurityException("User does not have permission to add discount policy");
+        }
+        discountPolicy.addDiscount(policy);
+    }
+    
+    public void removeDiscount(int userId, Discount policy) {
+        if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!isOwner(userId)) {
+            throw new SecurityException("User does not have permission to remove discount policy");
+        }
+        discountPolicy.removeDiscount(policy);
+    }
 }

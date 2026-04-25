@@ -54,7 +54,7 @@ class CompanyServiceTest {
 
             @Override public Response<Boolean> isLoggedIn(String token) {
                 if(OWNER_TOKEN.equals(token) || OTHER_TOKEN.equals(token)) {
-                    return new Response<>(true, "");
+                    return new Response<>(true, null);
                 }
                 else return new Response<>(false,"");
             }
@@ -160,102 +160,164 @@ class CompanyServiceTest {
         assertTrue(response.isError());
     }
 
-    // ===================== updateDiscountPolicy =====================
+    // ===================== Discount functions =====================
 
-    // --- Successful_Discount_Update ---
+// --- Successful_Add_Discount ---
 
     @Test
-    void GivenOwnerAndValidDiscountPolicy_WhenUpdateDiscountPolicy_ThenSuccess() {
-        DiscountPolicy policy = new DiscountPolicy();
-        policy.addDiscount(new VisualDiscount(10, LocalDate.now().plusDays(1)));
+    void GivenOwnerAndValidDiscount_WhenAddDiscountToCompany_ThenSuccess() {
+        VisualDiscount discount = new VisualDiscount(20, LocalDate.now().plusDays(1));
 
-        Response<Boolean> response = service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, policy);
+        Response<Boolean> response = service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discount);
 
         assertFalse(response.isError());
         assertEquals(Boolean.TRUE, response.getValue());
     }
 
+// --- Successful_Remove_Discount ---
+
     @Test
-    void GivenOwnerUpdatesExistingPolicy_WhenUpdateDiscountPolicy_ThenPolicyReplaced() {
-        DiscountPolicy oldPolicy = new DiscountPolicy();
-        oldPolicy.addDiscount(new VisualDiscount(5, LocalDate.now().plusDays(1)));
-        service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, oldPolicy);
+    void GivenExistingDiscount_WhenRemoveDiscountFromCompany_ThenSuccess() {
+        VisualDiscount discount = new VisualDiscount(10, LocalDate.now().plusDays(1));
 
-        DiscountPolicy newPolicy = new DiscountPolicy();
-        newPolicy.addDiscount(new VisualDiscount(20, LocalDate.now().plusDays(1)));
-        service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, newPolicy);
+        service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discount);
+        service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, new VisualDiscount(80, LocalDate.now().plusDays(1)));
 
-        assertFalse(service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, newPolicy).isError());
-        assertEquals(newPolicy, company.getDiscountPolicy());
+        Response<Boolean> removeResponse = service.removeDiscountFromCompany(OWNER_TOKEN, COMPANY_ID, discount);
+
+        assertFalse(removeResponse.isError());
+        assertEquals(Boolean.TRUE, removeResponse.getValue());
     }
 
-    // --- Company_Not_Found ---
+// --- Company_Not_Found ---
 
     @Test
-    void GivenCompanyNotFound_WhenUpdateDiscountPolicy_ThenError() {
-        DiscountPolicy policy = new DiscountPolicy();
-        policy.addDiscount(new VisualDiscount(10, LocalDate.now().plusDays(1)));
+    void GivenCompanyNotFound_WhenAddDiscountToCompany_ThenError() {
+        VisualDiscount discount = new VisualDiscount(10, LocalDate.now().plusDays(1));
 
-        Response<Boolean> response = service.updateDiscountPolicy(OWNER_TOKEN, 999, policy);
-
-        assertTrue(response.isError());
-    }
-
-    // --- Unauthorized_Discount_Change ---
-
-    @Test
-    void GivenNonOwner_WhenUpdateDiscountPolicy_ThenError() {
-        DiscountPolicy policy = new DiscountPolicy();
-        policy.addDiscount(new VisualDiscount(10, LocalDate.now().plusDays(1)));
-
-        Response<Boolean> response = service.updateDiscountPolicy(OTHER_TOKEN, COMPANY_ID, policy);
-
-        assertTrue(response.isError());
-    }
-
-    // --- Logged_Out_User_Access ---
-
-    @Test
-    void GivenInvalidToken_WhenUpdateDiscountPolicy_ThenError() {
-        DiscountPolicy policy = new DiscountPolicy();
-        policy.addDiscount(new VisualDiscount(10, LocalDate.now().plusDays(1)));
-
-        Response<Boolean> response = service.updateDiscountPolicy("invalid-token", COMPANY_ID, policy);
-
-        assertTrue(response.isError());
-    }
-
-    // --- Invalid_Discount_Data ---
-
-    @Test
-    void GivenNegativePercentage_WhenUpdateDiscountPolicy_ThenError() {
-        DiscountPolicy policy = new DiscountPolicy();
-        policy.addDiscount(new VisualDiscount(-10, LocalDate.now().plusDays(1)));
-
-        Response<Boolean> response = service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, policy);
+        Response<Boolean> response = service.addDiscountToCompany(OWNER_TOKEN, 999, discount);
 
         assertTrue(response.isError());
     }
 
     @Test
-    void GivenEmptyCouponCode_WhenUpdateDiscountPolicy_ThenError() {
-        DiscountPolicy policy = new DiscountPolicy();
-        policy.addDiscount(new CodeCoupun("", 10, LocalDate.now().plusDays(1)));
+    void GivenCompanyNotFound_WhenRemoveDiscountFromCompany_ThenError() {
+        VisualDiscount discount = new VisualDiscount(10, LocalDate.now().plusDays(1));
 
-        Response<Boolean> response = service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, policy);
+        Response<Boolean> response = service.removeDiscountFromCompany(OWNER_TOKEN, 999, discount);
 
         assertTrue(response.isError());
     }
 
-    // --- Company_Inactive ---
+// --- Unauthorized_Discount_Change ---
 
     @Test
-    void GivenInactiveCompany_WhenUpdateDiscountPolicy_ThenError() {
+    void GivenNonOwner_WhenAddDiscountToCompany_ThenError() {
+        VisualDiscount discount = new VisualDiscount(10, LocalDate.now().plusDays(1));
+
+        Response<Boolean> response = service.addDiscountToCompany(OTHER_TOKEN, COMPANY_ID, discount);
+
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNonOwner_WhenRemoveDiscountFromCompany_ThenError() {
+        VisualDiscount discount = new VisualDiscount(10, LocalDate.now().plusDays(1));
+        service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discount);
+
+        Response<Boolean> response = service.removeDiscountFromCompany(OTHER_TOKEN, COMPANY_ID, discount);
+
+        assertTrue(response.isError());
+    }
+
+// --- Logged_Out_User_Access ---
+
+    @Test
+    void GivenInvalidToken_WhenAddDiscountToCompany_ThenError() {
+        VisualDiscount discount = new VisualDiscount(10, LocalDate.now().plusDays(1));
+
+        Response<Boolean> response = service.addDiscountToCompany("invalid-token", COMPANY_ID, discount);
+
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenRemoveDiscountFromCompany_ThenError() {
+        VisualDiscount discount = new VisualDiscount(10, LocalDate.now().plusDays(1));
+
+        Response<Boolean> response = service.removeDiscountFromCompany("invalid-token", COMPANY_ID, discount);
+
+        assertTrue(response.isError());
+    }
+
+// --- Invalid_Discount_Data ---
+
+    @Test
+    void GivenNegativePercentage_WhenAddDiscountToCompany_ThenError() {
+        VisualDiscount discount = new VisualDiscount(-10, LocalDate.now().plusDays(1));
+
+        Response<Boolean> response = service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discount);
+
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenEmptyCouponCode_WhenAddDiscountToCompany_ThenError() {
+        CodeCoupun discount = new CodeCoupun("", 10, LocalDate.now().plusDays(1));
+
+        Response<Boolean> response = service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discount);
+
+        assertTrue(response.isError());
+    }
+
+// --- Company_Inactive ---
+
+    @Test
+    void GivenInactiveCompany_WhenAddDiscountToCompany_ThenError() {
         company.deactivate();
-        DiscountPolicy policy = new DiscountPolicy();
-        policy.addDiscount(new VisualDiscount(10, LocalDate.now().plusDays(1)));
+        VisualDiscount discount = new VisualDiscount(10, LocalDate.now().plusDays(1));
 
-        Response<Boolean> response = service.updateDiscountPolicy(OWNER_TOKEN, COMPANY_ID, policy);
+        Response<Boolean> response = service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discount);
+
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInactiveCompany_WhenRemoveDiscountFromCompany_ThenError() {
+        VisualDiscount discount = new VisualDiscount(10, LocalDate.now().plusDays(1));
+        service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discount);
+
+        company.deactivate();
+
+        Response<Boolean> response = service.removeDiscountFromCompany(OWNER_TOKEN, COMPANY_ID, discount);
+
+        assertTrue(response.isError());
+    }
+
+// --- Duplicate Discount ---
+
+    @Test
+    void GivenDuplicateDiscount_WhenAddDiscountToCompany_ThenError() {
+        LocalDate endDate = LocalDate.now().plusDays(1);
+
+        VisualDiscount firstDiscount = new VisualDiscount(15, endDate);
+        VisualDiscount duplicateDiscount = new VisualDiscount(15, endDate);
+
+        Response<Boolean> firstResponse = service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, firstDiscount);
+        assertFalse(firstResponse.isError());
+
+        Response<Boolean> secondResponse = service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, duplicateDiscount);
+
+        assertTrue(secondResponse.isError());
+    }
+
+// --- Remove Non Existing Discount ---
+
+    @Test
+    void GivenDiscountDoesNotExist_WhenRemoveDiscountFromCompany_ThenError() {
+        VisualDiscount discount = new VisualDiscount(10, LocalDate.now().plusDays(1));
+
+        Response<Boolean> response = service.removeDiscountFromCompany(OWNER_TOKEN, COMPANY_ID, discount);
 
         assertTrue(response.isError());
     }

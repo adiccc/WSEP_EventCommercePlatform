@@ -11,11 +11,38 @@ public class DiscountPolicy implements Discount {
     }
 
     public void addDiscount(Discount discount) {
+        if(discountExists(discount))
+            throw new RuntimeException("Discount already exists");
         discounts.add(discount);
     }
 
     public void removeDiscount(Discount discount) {
-        discounts.remove(discount);
+        for(Discount dis : discounts){
+            if (discount.equals(dis)) {
+                if(discounts.size()==1)
+                    throw new RuntimeException("can't remove discount, there must be at least one discount");
+                discounts.remove(dis);
+                return;
+            }
+        }
+        throw new RuntimeException("Discount not found");
+    }
+
+    public boolean equals(Object discount) {
+        if(discount instanceof DiscountPolicy){
+            DiscountPolicy discountPolicy = (DiscountPolicy) discount;
+            for (Discount dis : discountPolicy.getDiscounts()) {
+                boolean equals = false;
+                for (Discount disother : this.getDiscounts()) {
+                    if(dis.equals(disother))
+                        equals = true;
+                }
+                if(!equals)
+                    return false;
+            }
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -46,6 +73,12 @@ public class DiscountPolicy implements Discount {
         return sb.toString();
     }
 
+    public boolean discountExists(Discount newdiscount) {
+        for (Discount discount : discounts) {
+            if (discount.discountExists(newdiscount)) return true;
+        }
+        return false;
+    }
     public List<Discount> getDiscounts() {
         return new ArrayList<>(discounts);
     }
