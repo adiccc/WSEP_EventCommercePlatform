@@ -75,7 +75,7 @@ public class ActiveOrderService {
                 LocalDateTime lotteryEndTime  = e.getSaleStartDate().plusHours(l.getExpirationTime());
                 if (!l.getWinners().contains(code)) {
                     if (LocalDateTime.now().isBefore(lotteryEndTime))
-                        return new Response<>(null, "User is not a lottery winner  and lottery registration is still open");
+                        return new Response<>(null, "User is not a lottery winner and lottery registration is still open");
                 }
             }
             logger.log(Level.INFO, "Event map retrieved successfully");

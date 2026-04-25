@@ -20,8 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class ActiveOrderServiceIntegrationTest {
-
+class ActiveOrderServiceTest {
     private ActiveOrderService service;
     private IAuth auth;
     private EventRepoImpl eventRepo;
@@ -213,7 +212,7 @@ class ActiveOrderServiceIntegrationTest {
         Response<EventMap> response = service.enterEventPurchase(validToken, companyId, lotteryEvent.getId());
 
         assertNull(response.getValue());
-        assertEquals("User is not a lottery winner  and lottery registration is still open", response.getMessage());
+        assertEquals("User is not a lottery winner and lottery registration is still open", response.getMessage());
     }
 
     @Test
