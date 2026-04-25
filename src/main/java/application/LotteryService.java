@@ -60,7 +60,6 @@ public class LotteryService {
             }
             Lottery lottery = new Lottery(eventId, capacity, registerWindow, expirationTime);
             event.setActive(true);
-            eventRepo.store(event);
             lotteryRepo.store(lottery);
             eventRepo.store(event);
 
