@@ -6,6 +6,8 @@ import DTO.StandingZoneDTO;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.*;
+import domain.dto.CompanyDetailsDTO;
+import domain.dto.EventDTO;
 import domain.event.Event;
 import domain.event.EventMap;
 import domain.event.EventQueue;
@@ -289,6 +291,55 @@ public class EventCompanyManageService {
         } catch (Exception e) {
             logger.log(Level.SEVERE, "failed getOrdersByCompany : " + e.getMessage());
             return new Response<>(null, "failed getOrdersByCompany : " + e.getMessage());
+        }
+    }
+    public Response<CompanyDetailsDTO> getCompanyDetails(String token, int companyId) {
+        logger.log(Level.INFO, "retrieving company details for company: " + companyId);
+        try {
+            Company company=companyRepo.findById(companyId);
+            if (company == null) {
+                logger.log(Level.SEVERE, "company not found");
+                return new Response<>(null, "company not found");
+            }
+            int userId = auth.getUserId(token).getValue();
+            boolean isMember = userId != -1;
+            boolean isUserPermitted = company.isActive() || (isMember && (company.isOwner(userId) || company.checkPermission(userId,PermissionType.VIEW_CLOSED_COMPANIES)));
+            if (!isUserPermitted) {
+                logger.log(Level.SEVERE, "User is not permitted to view closed companies");
+                return new Response<>(null, "User is not permitted to view closed companies");
+            }
+            List<EventDTO> futureEvents= eventRepo.findByCompany(companyId).stream()
+                    .filter(Event::isActive)
+                    .filter(e->e.getDate().isAfter(LocalDateTime.now()))
+                    .map(e-> new EventDTO(
+                            e.getId(),
+                            e.getName(),
+                            e.getDate(),
+                            e.getSaleStartDate(),
+                            e.getCategoryEvent(),
+                            e.getLocation(),
+                            e.getCreatorId()
+                    )).toList();
+            CompanyDetailsDTO companyDetailsDTO=new CompanyDetailsDTO(
+                    companyId,
+                    company.getCompanyName(),
+                    company.isActive(),
+                    company.getContactInfo().getEmail(),
+                    company.getContactInfo().getPhone(),
+                    company.getPurchasePolicy().describe(),
+                    company.getDiscountPolicy().describe(),
+                    company.getFounderId(),
+                    futureEvents);
+            if(futureEvents.isEmpty()){
+                logger.log(Level.INFO, "No future events found for company " + companyId);
+                return new Response<>(companyDetailsDTO, "No future events found for company " + companyId);
+            }
+            logger.log(Level.INFO, "Company details found: " + companyDetailsDTO);
+            return new Response<>(companyDetailsDTO, "Company details found");
+        }
+        catch(Exception e){
+            logger.log(Level.SEVERE, "failed getCompanyDetails : " + e.getMessage());
+            return new Response<>(null, "failed getCompanyDetails : " + e.getMessage());
         }
     }
 }

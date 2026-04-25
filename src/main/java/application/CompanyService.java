@@ -274,18 +274,44 @@ public class CompanyService {
             return Response.error("Unexpected error: " + e.getMessage());
         }
     }
-    public Response<List<CompanyDTO>> getAvailableCompanies(String token) { //TODO taking care og guest part, additional input : String guestUuid
-        logger.info("getAvailableCompanies called for token: " + token);
+    public Response<List<CompanyDTO>> getAvailableCompanies(String token) { //TODO taking care of guest part, additional input : String guestUuid
+        logger.info("getAvailableCompanies called");
         try{
             List<Company> allCompanies = companyRepo.getAll();
             if(allCompanies == null || allCompanies.isEmpty()){
                 logger.warning("No companies in the system");
                 return new Response<>(null, "No companies in the system");
             }
-            List<CompanyDTO> fillteredCompanies = new ArrayList<CompanyDTO>();
-            
-
+            List<CompanyDTO> filteredCompanies = new ArrayList<CompanyDTO>();
+            if(token!=null && !token.isEmpty()){
+                if(!auth.isLoggedIn(token).getValue()){
+                    return new Response<>(null, "Invalid or expired token");
+                }
+            }
+            //it's a member or a guest
+            int userId = auth.getUserId(token).getValue(); //for guest returns -1
+            boolean isMember = userId != -1;
+            for(Company company : allCompanies){
+               // isUserPermitted means or the company is active
+                // if the company isn't active only members who are owners and have the right permitting can access
+                boolean isUserPermitted = company.isActive() || (isMember && (company.isOwner(userId) || company.checkPermission(userId,PermissionType.VIEW_CLOSED_COMPANIES)));
+                if(isUserPermitted){
+                    filteredCompanies.add(new CompanyDTO(
+                            company.getCompanyId(),
+                            company.getCompanyName(),
+                            company.isActive()));
+                }
+            }
+            if(filteredCompanies.isEmpty()){
+                logger.warning("No companies in the system");
+                return new Response<>(null, "No companies in the system");
+            }
+            logger.info("Successfully retrieved available companies");
+            return new Response<>(filteredCompanies, "Companies retrieved successfully");
         }
-
+        catch (SecurityException e) {
+            logger.warning("getAvailableCompanies unauthorized: " + e.getMessage());
+            return new Response<>(null, "Invalid or expired token");
+        }
     }
 }

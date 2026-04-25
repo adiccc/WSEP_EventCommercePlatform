@@ -15,5 +15,15 @@ public class CompanyDetailsDTO {
     private int founderId;
     List<EventDTO> futureEvents;
     
-    public CompanyDetailsDTO() {}
+    public CompanyDetailsDTO(int companyId, String companyName, boolean isActive, String email, String phone, String purchasePolicy, String discountPolicy, int founderId, List<EventDTO> futureEvents) {
+        this.companyId = companyId;
+        this.companyName = companyName;
+        this.isActive = isActive;
+        this.email = email;
+        this.phone = phone;
+        this.purchasePolicy = purchasePolicy;
+        this.discountPolicy = discountPolicy;
+        this.founderId = founderId;
+        this.futureEvents = futureEvents;
+    }
 }
