@@ -1,5 +1,8 @@
 package domain.activeOrder;
 
-public interface IActiveOrderRepo {
+import domain.IRepo;
+import domain.event.Event;
+
+public interface IActiveOrderRepo extends IRepo<ActiveOrder, Integer> {
 
 }

@@ -433,8 +433,8 @@ class EventCompanyManageServiceTest {
                 standingZones,
                 seatingZones
         );
-        Order order1 = new Order(0, 1, 1, new ArrayList<>() );
-        Order order2 = new Order(1, 1, 1, new ArrayList<>());
+        Order order1 = new Order(0, 1, "1", new ArrayList<>() );
+        Order order2 = new Order(1, 1, "1", new ArrayList<>());
         Event event=eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
         event.getOrders().add(order1);
         event.getOrders().add(order2);

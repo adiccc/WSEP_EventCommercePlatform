@@ -30,7 +30,7 @@ public class LotteryService {
         this.scheduler = Executors.newScheduledThreadPool(10);
     }
 
-    public Response<Boolean> createLottery(String token, String eventId, int capacity, LocalDateTime registerWindow, double expirationTime) {
+    public Response<Boolean> createLottery(String token, String eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
         logger.log(Level.INFO, "createLottery called");
 
         // check valid token
@@ -60,6 +60,7 @@ public class LotteryService {
             }
             Lottery lottery = new Lottery(eventId, capacity, registerWindow, expirationTime);
             event.setActive(true);
+            eventRepo.store(event);
             lotteryRepo.store(lottery);
 
             // Schedule the background task to draw winners when the registration window closes

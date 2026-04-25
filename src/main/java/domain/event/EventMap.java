@@ -19,4 +19,13 @@ public class EventMap {
     public List<Zone> getZones() {
         return zones;
     }
+
+    public ElementPosition getStage() {
+        return stage;
+    }
+
+    public List<ElementPosition> getEntries() {
+        return entries;
+    }
+
 }

@@ -129,12 +129,4 @@ public class EventService {
 
     }
 
-    // Helper method to get the minimum price of an event's map for price filtering
-    private double getMinPrice(Event event) {
-        return event.getMap().getZones().stream()
-                .mapToDouble(Zone::getPrice)
-                .min()
-                .orElse(Double.MAX_VALUE);
-    }
-
 }
