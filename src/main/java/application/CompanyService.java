@@ -1,8 +1,6 @@
 package application;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.logging.Logger;
 import java.util.Map;
 import java.util.Set;
@@ -11,6 +9,7 @@ import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
 import domain.company.ManagerAppointment;
 import domain.dataType.PermissionType;
+import domain.dto.CompanyDTO;
 import domain.dto.RolesPermissionsTreeDTO;
 import domain.event.IOrderRepo;
 import domain.policy.Discount;
@@ -274,5 +273,19 @@ public class CompanyService {
             logger.severe("Unexpected error in removeDiscountFromCompany: " + e.getMessage());
             return Response.error("Unexpected error: " + e.getMessage());
         }
+    }
+    public Response<List<CompanyDTO>> getAvailableCompanies(String token) { //TODO taking care og guest part, additional input : String guestUuid
+        logger.info("getAvailableCompanies called for token: " + token);
+        try{
+            List<Company> allCompanies = companyRepo.getAll();
+            if(allCompanies == null || allCompanies.isEmpty()){
+                logger.warning("No companies in the system");
+                return new Response<>(null, "No companies in the system");
+            }
+            List<CompanyDTO> fillteredCompanies = new ArrayList<CompanyDTO>();
+            
+
+        }
+
     }
 }

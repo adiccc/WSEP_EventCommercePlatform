@@ -59,6 +59,7 @@ public class Auth implements IAuth {
                 tokensLoggedOut.put(token, date);
                 cleanExpiredLoggedOutTokens();
                 logger.info("Logout successful for username: " + userId);
+                //TODO after successful logout need to notify webQueue to insert
                 return new Response<>(true, "Logout successful");
             }
             catch(Exception e){
