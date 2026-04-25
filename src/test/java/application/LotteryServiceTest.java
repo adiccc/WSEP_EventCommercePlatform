@@ -130,7 +130,7 @@ class LotteryServiceTest {
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                validToken, eventId, 50, lotteryDate_X, 24.0
+                validToken, eventId, 50, lotteryDate_X, (long) 24.0
         );
 
         // Assert
@@ -146,7 +146,7 @@ class LotteryServiceTest {
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                invalidToken, eventId, 50, lotteryDate_X, 24.0
+                invalidToken, eventId, 50, lotteryDate_X, (long) 24.0
         );
 
         // Assert
@@ -161,7 +161,7 @@ class LotteryServiceTest {
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                notPermission, eventId, 50, lotteryDate_X, 24.0
+                notPermission, eventId, 50, lotteryDate_X, (long) 24.0
         );
 
         // Assert
@@ -176,7 +176,7 @@ class LotteryServiceTest {
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                validToken, "non-existing-event-id", 50, lotteryDate_X, 24.0
+                validToken, "non-existing-event-id", 50, lotteryDate_X, (long) 24.0
         );
 
         // Assert
@@ -192,7 +192,7 @@ class LotteryServiceTest {
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                validToken, eventId, 50, lotteryDate_X, 24.0
+                validToken, eventId, 50, lotteryDate_X, (long) 24.0
         );
 
         // Assert
@@ -207,7 +207,7 @@ class LotteryServiceTest {
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                validToken, eventId, 50, pastDate_Z, 24.0
+                validToken, eventId, 50, pastDate_Z, (long) 24.0
         );
 
         // Assert
@@ -222,7 +222,7 @@ class LotteryServiceTest {
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                validToken, eventId, 50, lateDate_T, 24.0
+                validToken, eventId, 50, lateDate_T, (long) 24.0
         );
 
         // Assert
@@ -234,7 +234,7 @@ class LotteryServiceTest {
     void GivenMoreRegistrationsThanCapacity_WhenDrawLotteryIsTriggered_ThenWinnersAreSelectedUpToCapacity() {
         // Arrange: Create an event and a lottery with a capacity of 2
         LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
-        lotteryService.createLottery(validToken, eventId, 2, lotteryDate_X, 24.0);
+        lotteryService.createLottery(validToken, eventId, 2, lotteryDate_X, (long) 24.0);
 
         // TODO: use service function to registerate users to the lottery
         // Retrieve the newly created lottery to simulate users registering
@@ -257,7 +257,7 @@ class LotteryServiceTest {
     void GivenFewerRegistrationsThanCapacity_WhenDrawLotteryIsTriggered_ThenAllRegisteredWin() {
         // Arrange: Create an event and a lottery with a capacity of 10
         LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
-        lotteryService.createLottery(validToken, eventId, 10, lotteryDate_X, 24.0);
+        lotteryService.createLottery(validToken, eventId, 10, lotteryDate_X, (long) 24.0);
 
         // TODO: use service function to registerate users to the lottery
         Lottery lottery = lotteryRepo.getAll().get(0);
