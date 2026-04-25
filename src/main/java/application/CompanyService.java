@@ -2,10 +2,9 @@ package application;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.logging.Logger;
-import java.util.Map;
-import java.util.Set;
 import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
@@ -45,21 +44,20 @@ public class CompanyService {
             if (user == null) {
                 return new Response<>(null, "User not found.");
             }
-//            if (!user.isConnected()) {
-//                return new Response<>(null, "User must be logged in to create a company.");
-//            }
             if (!auth.isLoggedIn(sessionToken).getValue()) {
                 return new Response<>(null, "User must be logged in to create a company.");
             }
 
-
-                if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
+            if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
                 return new Response<>(null, "Invalid contact or bank account information.");
             }
 
             synchronized (companyRepo) {
-                if (companyRepo.existsById(companyId)) {
+                try {
+                    companyRepo.findById(companyId);
                     return new Response<>(null, "Company ID already exists in the system.");
+                } catch (java.util.NoSuchElementException ignored) {
+                    // good — company does not exist yet, proceed
                 }
                 if (companyRepo.existsByName(companyName)) {
                     return new Response<>(null, "Company name is already taken.");
@@ -120,8 +118,8 @@ public class CompanyService {
             }
 
             // 4. Build the roles tree
-            Map<String, Set<PermissionType>> managersPermissions = new HashMap<>();
-            for (Map.Entry<String, ManagerAppointment> entry : company.getManagersPermissionsMap().entrySet()) {
+            Map<Integer, Set<PermissionType>> managersPermissions = new HashMap<>();
+            for (Map.Entry<Integer, ManagerAppointment> entry : company.getManagersPermissionsMap().entrySet()) {
                 managersPermissions.put(entry.getKey(), entry.getValue().getPermissions());
             }
 

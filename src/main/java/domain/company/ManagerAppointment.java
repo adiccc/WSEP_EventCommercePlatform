@@ -7,20 +7,20 @@ import java.util.Set;
 
 public class ManagerAppointment {
 
-    private String managerId;
+    private int managerId;
     private Set<PermissionType> permissions;
 
-    public ManagerAppointment(String managerId) {
+    public ManagerAppointment(int managerId) {
         this.managerId = managerId;
         this.permissions = EnumSet.noneOf(PermissionType.class);
     }
 
-    public ManagerAppointment(String managerId, Set<PermissionType> permissions) {
+    public ManagerAppointment(int managerId, Set<PermissionType> permissions) {
         this.managerId = managerId;
         this.permissions = permissions;
     }
 
-    public String getManagerId() { return managerId; }
+    public int getManagerId() { return managerId; }
 
     public Set<PermissionType> getPermissions() { return permissions; }
 

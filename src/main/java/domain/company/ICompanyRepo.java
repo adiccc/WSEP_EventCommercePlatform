@@ -7,6 +7,5 @@ public interface ICompanyRepo {
     void delete(int companyId);
     Company findById(int companyId);
     List<Company> getAll();
-    boolean existsById(int companyId);
     boolean existsByName(String companyName);
 }

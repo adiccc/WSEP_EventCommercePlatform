@@ -37,11 +37,6 @@ public class CompanyRepoImpl implements ICompanyRepo {
     }
 
     @Override
-    public boolean existsById(int companyId) {
-        return companies.containsKey(companyId);
-    }
-
-    @Override
     public boolean existsByName(String companyName) {
         return companies.values().stream().anyMatch(c -> c.getCompanyName().equals(companyName));
     }
