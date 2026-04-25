@@ -1,6 +1,10 @@
-package domain.policy;
+package domain.integrationTest.policy;
 
 import domain.dto.UserDTO;
+import domain.policy.MaxTicketsRule;
+import domain.policy.MinAgeRule;
+import domain.policy.PurchasePolicy;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +23,7 @@ class PurchasePolicyTest {
 
     @Test
     void GivenQuantityWithinLimit_WhenIsSatisfied_ThenReturnTrue() {
-        assertTrue(new MaxTicketsRule(4).isSatisfied(user, 3, 0));
+        Assertions.assertTrue(new MaxTicketsRule(4).isSatisfied(user, 3, 0));
     }
 
     @Test
@@ -61,7 +65,7 @@ class PurchasePolicyTest {
 
     @Test
     void GivenUserMeetsMinAge_WhenIsSatisfied_ThenReturnTrue() {
-        assertTrue(new MinAgeRule(18).isSatisfied(user, 1, 0));
+        Assertions.assertTrue(new MinAgeRule(18).isSatisfied(user, 1, 0));
     }
 
     @Test
@@ -90,7 +94,7 @@ class PurchasePolicyTest {
 
     @Test
     void GivenEmptyPolicy_WhenIsSatisfied_ThenReturnTrue() {
-        assertTrue(new PurchasePolicy().isSatisfied(user, 10, 0));
+        Assertions.assertTrue(new PurchasePolicy().isSatisfied(user, 10, 0));
     }
 
     @Test

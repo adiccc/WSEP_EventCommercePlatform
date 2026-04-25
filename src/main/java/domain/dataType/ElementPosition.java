@@ -19,5 +19,4 @@ public class ElementPosition {
     public void setY(double y) {
         this.y = y;
     }
-
 }

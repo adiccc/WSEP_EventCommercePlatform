@@ -37,7 +37,7 @@ class CompanyConcurrencyTest {
         when(authMock.getUserId(anyString())).thenReturn(new Response<>(1,""));
         when(authMock.isLoggedIn(anyString())).thenReturn(Response.ok(true));
 
-        companyService = new CompanyService(authMock, companyRepo, userRepo, orderRepoMock);
+        companyService = new CompanyService(authMock, companyRepo, userRepo);
 
         Member member = new Member("admin123","aa","aa","ff","050-422-4567", LocalDate.of(2022,12,3),"aa");
         member.setConnected(true);

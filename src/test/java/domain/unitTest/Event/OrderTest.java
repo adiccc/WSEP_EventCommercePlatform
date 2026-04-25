@@ -1,4 +1,4 @@
-package domain.event;
+package domain.unitTest.Event;
 
 import org.junit.jupiter.api.Test;
 

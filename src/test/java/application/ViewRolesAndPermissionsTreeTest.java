@@ -106,7 +106,7 @@ class ViewRolesAndPermissionsTreeTest {
         ICompanyRepo companyRepo = new CompanyRepoImpl();
         companyRepo.store(company);
 
-        service = new CompanyService(buildAuth(), companyRepo, mock(IUserRepo.class), emptyOrderRepo());
+        service = new CompanyService(buildAuth(), companyRepo, mock(IUserRepo.class));
     }
 
     // ── Successful_View ────────────────────────────────────────────────────────
@@ -158,7 +158,7 @@ class ViewRolesAndPermissionsTreeTest {
             }
         };
 
-        CompanyService svc2 = new CompanyService(auth2, repo2, mock(IUserRepo.class), emptyOrderRepo());
+        CompanyService svc2 = new CompanyService(auth2, repo2, mock(IUserRepo.class));
 
         Response<RolesPermissionsTreeDTO> response = svc2.viewRolesAndPermissionsTree(OWNER_TOKEN, 2);
 

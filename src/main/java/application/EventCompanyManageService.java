@@ -10,8 +10,15 @@ import domain.event.Event;
 import domain.event.EventMap;
 import domain.event.EventQueue;
 import domain.event.IEventRepo;
+import domain.dataType.ElementPosition;
+import domain.dataType.SeatingZone;
+import domain.dataType.StandingZone;
+import domain.dataType.Zone;
+import domain.event.*;
 import domain.lottery.ILotteryRepo;
 import domain.user.Member;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -21,6 +28,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 import static domain.dataType.PermissionType.CREATE_EVENT;
+import static domain.dataType.PermissionType.ViewOrdersHistory;
 
 
 public class EventCompanyManageService {
@@ -93,26 +101,26 @@ public class EventCompanyManageService {
 
     }
 
-    public Response<Boolean> createEvent(String token, int companyId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent category) {
+    public Response<String> createEvent(String token, int companyId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent category) {
         logger.log(Level.INFO, "createEvent called");
 
         // check valid token
         int creatorId = auth.getUserId(token).getValue();
         if(creatorId == -1){
             logger.severe("Invalid token");
-            return new Response<>(false, "Invalid token");
+            return new Response<>(null, "Invalid token");
         }
 
         try {
             Company c = this.companyRepo.findById(companyId);
             if (!c.checkPermission(creatorId, CREATE_EVENT)) {
-                return new Response<>(false, "Permission required");
+                return new Response<>(null, "Permission required");
             }
             if (date.isBefore(LocalDateTime.now())) {
-                return new Response<>(false, "Event date must be in the future");
+                return new Response<>(null, "Event date must be in the future");
             }
             if (saleStartDate.isAfter(date)) {
-                return new Response<>(false, "Sale start date must be before event date");
+                return new Response<>(null, "Sale start date must be before event date");
             }
 
             Event event = new Event(
@@ -127,13 +135,13 @@ public class EventCompanyManageService {
             );
             eventRepo.store(event);
             logger.log(Level.INFO, "Event created successfully");
-            return new Response<>(true, "Event created successfully");
+            return new Response<>(event.getId(), "Event created successfully");
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "company not found: " + e.getMessage());
-            return new Response<>(false, "Company not found");
+            return new Response<>(null, "Company not found");
         } catch (Exception e) {
             logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
-            return new Response<>(false, "failed to create event : " + e.getMessage());
+            return new Response<>(null, "failed to create event : " + e.getMessage());
         }
     }
 
@@ -167,5 +175,45 @@ public class EventCompanyManageService {
             return new Response<>(false, "failed to create event : " + e.getMessage());
         }
 
+    }
+
+    public Response<List<Order>> getOrdersByCompany(String token, int companyId) {
+        logger.log(Level.INFO, "getOrdersByCompany called");
+        int userId = auth.getUserId(token).getValue();
+        if(userId == -1){
+            logger.severe("Invalid token");
+            return new Response<>(null, "Invalid token");
+        }
+        try{
+            // validate that the company exist
+            Company company=companyRepo.findById(companyId);
+
+            // validate relevant permissions
+            if(!company.checkPermission(userId,ViewOrdersHistory)){
+                logger.log(Level.SEVERE, "Permission required");
+                return new Response<>(null, "Permission required");
+            }
+
+            List<Order> orders=new ArrayList<>();
+            List<Event> events=eventRepo.findByCompany(companyId);
+            for(Event e:events){
+                orders.addAll(e.getOrders());
+            }
+
+            // in case there is no orders for the company
+            if(orders.size()==0){
+                logger.log(Level.SEVERE, "No orders found for company " + companyId);
+                return new Response<>(null, "No orders found for company " + companyId);
+            }
+            logger.log(Level.INFO, "Orders found: " + orders.size());
+            return new Response<>(orders,"orders found");
+
+        }catch(NoSuchElementException e){
+            logger.log(Level.SEVERE, "company not found: " + e.getMessage());
+            return new Response<>(null, "company not found");
+        }catch(Exception e){
+            logger.log(Level.SEVERE, "failed getOrdersByCompany : " + e.getMessage());
+            return new Response<>(null, "failed getOrdersByCompany : " + e.getMessage());
+        }
     }
 }

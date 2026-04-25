@@ -1,12 +1,17 @@
-package domain.event;
+package domain.integrationTest.event;
 
 import domain.dataType.CategoryEvent;
+import domain.dataType.ElementPosition;
 import domain.dataType.GeographicalArea;
+import domain.dataType.SeatingZone;
+import domain.event.Event;
+import domain.event.EventMap;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -14,6 +19,15 @@ class EventTest {
 
     private final int companyId = 900;
     private final int creatorId = 123;
+    private EventMap map;
+    @BeforeEach
+    void setUp() {
+        ElementPosition stage = new ElementPosition(10, 20);
+        ElementPosition entry = new ElementPosition(5, 5);
+        ElementPosition posZone = new ElementPosition(15, 15);
+        SeatingZone vipZone = new SeatingZone("VIP", 100, 50,50, posZone);
+        map = new EventMap(stage, List.of(entry), List.of(vipZone));
+    }
 
     @Test
     void GivenSaleStartedAndMapIsSet_WhenIsAvailableForSale_ThenReturnTrue() {
@@ -21,9 +35,7 @@ class EventTest {
         LocalDateTime pastSaleDate = LocalDateTime.now().minusHours(1);
         Event event = new Event(companyId, creatorId, LocalDateTime.now().plusDays(10), "Test Event", pastSaleDate, false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
 
-        // Mock an existing map
-        EventMap mockMap = Mockito.mock(EventMap.class);
-        event.setMap(mockMap);
+        event.setMap(map);
 
         // Assert
         assertTrue(event.isAvailableForSale(), "Event should be available for sale since the map exists and the sale date has passed.");
@@ -35,9 +47,7 @@ class EventTest {
         LocalDateTime futureSaleDate = LocalDateTime.now().plusHours(1);
         Event event = new Event(companyId, creatorId, LocalDateTime.now().plusDays(10), "Test Event", futureSaleDate, false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
 
-        // Mock an existing map
-        EventMap mockMap = Mockito.mock(EventMap.class);
-        event.setMap(mockMap);
+        event.setMap(map);
 
         // Assert
         assertFalse(event.isAvailableForSale(), "Event should not be available since the sale start date has not yet arrived.");
@@ -79,4 +89,6 @@ class EventTest {
 
         assertTrue(event.isActive());
     }
+
+
 }

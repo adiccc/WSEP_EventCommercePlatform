@@ -1,5 +1,6 @@
-package domain.lottery;
+package domain.integrationTest.lottery;
 
+import domain.lottery.Lottery;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
