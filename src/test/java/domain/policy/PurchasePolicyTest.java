@@ -12,7 +12,7 @@ class PurchasePolicyTest {
 
     @BeforeEach
     void setUp() {
-        user = new UserDTO(123, 25);
+        user = new UserDTO("user1@test.com", "Test", "User", "Pass123!", 1, 1, 2001, "City", "050-123-4567");
     }
 
     // --- MaxTicketsRule ---
@@ -66,12 +66,14 @@ class PurchasePolicyTest {
 
     @Test
     void GivenUserAgeEqualsMinAge_WhenIsSatisfied_ThenReturnTrue() {
-        assertTrue(new MinAgeRule(18).isSatisfied(new UserDTO(456, 18), 1, 0));
+        UserDTO user18 = new UserDTO("user2@test.com", "Test", "User", "Pass123!", 1, 1, 2008, "City", "050-123-4567");
+        assertTrue(new MinAgeRule(18).isSatisfied(user18, 1, 0));
     }
 
     @Test
     void GivenUserBelowMinAge_WhenIsSatisfied_ThenReturnFalse() {
-        assertFalse(new MinAgeRule(18).isSatisfied(new UserDTO(456, 16), 1, 0));
+        UserDTO user16 = new UserDTO("user3@test.com", "Test", "User", "Pass123!", 1, 1, 2010, "City", "050-123-4567");
+        assertFalse(new MinAgeRule(18).isSatisfied(user16, 1, 0));
     }
 
     @Test
@@ -110,7 +112,9 @@ class PurchasePolicyTest {
     void GivenUserBelowMinAgeInPolicy_WhenIsSatisfied_ThenReturnFalse() {
         PurchasePolicy policy = new PurchasePolicy();
         policy.addRule(new MinAgeRule(18));
-        assertFalse(policy.isSatisfied(new UserDTO(456, 16), 2, 0));
+
+        UserDTO user16 = new UserDTO("user4@test.com", "Test", "User", "Pass123!", 1, 1, 2010, "City", "050-123-4567");
+        assertFalse(policy.isSatisfied(user16, 2, 0));
     }
 
     @Test
@@ -136,6 +140,7 @@ class PurchasePolicyTest {
         policy.addRule(new MaxTicketsRule(4));
         policy.addRule(ageRule);
         policy.removeRule(ageRule);
-        assertTrue(policy.isSatisfied(new UserDTO(456, 16), 2, 0));
+        UserDTO user16 = new UserDTO("user5@test.com", "Test", "User", "Pass123!", 1, 1, 2010, "City", "050-123-4567");
+        assertTrue(policy.isSatisfied(user16, 2, 0));
     }
 }

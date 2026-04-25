@@ -1,30 +1,45 @@
 package domain.company;
 
+import domain.dataType.PermissionType;
 import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 public class Company {
     private int companyId;
-    private String name;
-    private boolean active;
-    private Set<Integer> ownerIds;
+    private String companyName;
+    private boolean isActive;
+
+    private ContactInfo contactInfo;
     private PurchasePolicy purchasePolicy;
     private DiscountPolicy discountPolicy;
 
-    public Company(int companyId, String name, int founderId) {
+    private int founderId;
+    private Set<Integer> ownerIds;
+    private Map<String, ManagerAppointment> managersPermissionsMap;
+
+    public Company(int companyId, String companyName, int founderId, ContactInfo contactInfo,
+                   PurchasePolicy defaultPurchase, DiscountPolicy defaultDiscount) {
         this.companyId = companyId;
-        this.name = name;
-        this.active = true;
+        this.companyName = companyName;
+        this.founderId = founderId;
+        this.contactInfo = contactInfo;
+
+        this.purchasePolicy = defaultPurchase;
+        this.discountPolicy = defaultDiscount;
+        this.isActive = true;
         this.ownerIds = new HashSet<>();
         this.ownerIds.add(founderId);
+        this.managersPermissionsMap = new HashMap<>();
         this.purchasePolicy = new PurchasePolicy();
         this.discountPolicy = new DiscountPolicy();
     }
 
-    public void updatePurchasePolicy(int userId, PurchasePolicy newPolicy) {
-        if (!active)
+    public String updatePurchasePolicy(int userId, PurchasePolicy newPolicy) {
+        if (!isActive)
             throw new IllegalStateException("Company is not active");
         if (!ownerIds.contains(userId))
             throw new SecurityException("User does not have permission to update purchase policy");
@@ -34,7 +49,7 @@ public class Company {
     }
 
     public void updateDiscountPolicy(int userId, DiscountPolicy newPolicy) {
-        if (!active)
+        if (!isActive)
             throw new IllegalStateException("Company is not active");
         if (!ownerIds.contains(userId))
             throw new SecurityException("User does not have permission to update discount policy");
@@ -43,12 +58,25 @@ public class Company {
         this.discountPolicy = newPolicy;
     }
 
-    public void deactivate() { this.active = false; }
+    public void deactivate() { this.isActive = false; }
 
     public boolean isOwner(int userId) { return ownerIds.contains(userId); }
-    public boolean isActive() { return active; }
+
+    public boolean checkPermission(int userId, PermissionType permissionType) {
+        // TODO: to implement (just for the test before we have the real implementation)
+        if (userId > 1) {
+            return false;
+        }
+        return true;
+    }
+
     public int getCompanyId() { return companyId; }
-    public String getName() { return name; }
+    public String getCompanyName() { return companyName; }
+    public boolean isActive() { return isActive; }
+    public int getFounderId() { return founderId; }
+    public ContactInfo getContactInfo() { return contactInfo; }
     public PurchasePolicy getPurchasePolicy() { return purchasePolicy; }
     public DiscountPolicy getDiscountPolicy() { return discountPolicy; }
+    public Set<Integer> getOwnerIds() { return ownerIds; }
+    public Map<String, ManagerAppointment> getManagersPermissionsMap() { return managersPermissionsMap; }
 }

@@ -1,6 +1,6 @@
 package domain.policy;
 
-public interface Discount {
+public interface Discount  {
     double apply(double originalPrice, int quantity, String couponCode);
     boolean isValid();
     String describe();

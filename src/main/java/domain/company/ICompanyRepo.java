@@ -1,6 +1,12 @@
 package domain.company;
 
-import domain.IRepo;
+import java.util.List;
 
-public interface ICompanyRepo extends IRepo<Company, Integer> {
+public interface ICompanyRepo {
+    void store(Company company);
+    void delete(int companyId);
+    Company findById(int companyId);
+    List<Company> getAll();
+    boolean existsById(int companyId);
+    boolean existsByName(String companyName);
 }
