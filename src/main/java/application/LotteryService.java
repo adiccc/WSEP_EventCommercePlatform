@@ -62,10 +62,10 @@ public class LotteryService {
             event.setActive(true);
             eventRepo.store(event);
             lotteryRepo.store(lottery);
+            eventRepo.store(event);
 
             // Schedule the background task to draw winners when the registration window closes
             scheduleLotteryDraw(lottery);
-
 
             logger.log(Level.INFO, "Lottery created successfully");
             return new Response<>(true, "Lottery created successfully");
