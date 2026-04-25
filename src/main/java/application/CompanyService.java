@@ -4,6 +4,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Logger;
+import java.util.Map;
+import java.util.Set;
 import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
@@ -25,14 +27,12 @@ public class CompanyService {
     private final IAuth auth;
     private final ICompanyRepo companyRepo;
     private final IUserRepo userRepo;
-    private final IOrderRepo orderRepo;
 
-    public CompanyService(IAuth auth, ICompanyRepo companyRepo,
-                          IUserRepo userRepo, IOrderRepo orderRepo) {
+    public CompanyService( IAuth auth, ICompanyRepo companyRepo,
+                          IUserRepo userRepo) {
         this.auth = auth;
         this.companyRepo = companyRepo;
         this.userRepo = userRepo;
-        this.orderRepo = orderRepo;
     }
 
     public Response<Company> createProductionCompany(String sessionToken, int companyId, String companyName,
@@ -44,11 +44,15 @@ public class CompanyService {
             if (user == null) {
                 return new Response<>(null, "User not found.");
             }
-            if (!user.isConnected()) {
+//            if (!user.isConnected()) {
+//                return new Response<>(null, "User must be logged in to create a company.");
+//            }
+            if (!auth.isLoggedIn(sessionToken).getValue()) {
                 return new Response<>(null, "User must be logged in to create a company.");
             }
 
-            if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
+
+                if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
                 return new Response<>(null, "Invalid contact or bank account information.");
             }
 

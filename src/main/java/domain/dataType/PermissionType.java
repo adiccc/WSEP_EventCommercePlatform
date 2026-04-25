@@ -6,5 +6,6 @@ public enum PermissionType {
     RESPOND_TO_INQUIRIES,
     VIEW_PURCHASE_HISTORY,
     GENERATE_SALES_REPORTS,
-    CREATE_EVENT
+    CREATE_EVENT,
+    ViewOrdersHistory
 }

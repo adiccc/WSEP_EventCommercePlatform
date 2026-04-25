@@ -6,6 +6,7 @@ import domain.policy.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 public class Event {
@@ -23,6 +24,7 @@ public class Event {
     private boolean active;
     private GeographicalArea location;
     private CategoryEvent categoryEvent;
+    private List<Order> orders;
 
 
     public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent categoryEvent) {
@@ -42,6 +44,11 @@ public class Event {
         active = false;
         this.location = location;
         this.categoryEvent = categoryEvent;
+        this.orders = new ArrayList<>();
+    }
+
+    public List<Order> getOrders() {
+        return orders;
     }
 
     public int getCompanyId() {

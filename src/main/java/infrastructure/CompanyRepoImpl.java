@@ -4,10 +4,7 @@ import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.lottery.Lottery;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class CompanyRepoImpl implements ICompanyRepo {
     private Map<Integer, Company> companies;
@@ -31,7 +28,7 @@ public class CompanyRepoImpl implements ICompanyRepo {
         if (companies.containsKey(companyId)) {
             return companies.get(companyId);
         }
-        throw new IllegalArgumentException("Company with id " + companyId + " not found");
+        throw new NoSuchElementException("Company with id " + companyId + " not found");
     }
 
     @Override
