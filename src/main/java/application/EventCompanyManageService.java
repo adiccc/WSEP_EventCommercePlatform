@@ -41,7 +41,7 @@ public class EventCompanyManageService {
         logger.log(Level.INFO, "DefineVenueAndSeatingMap called");
 
         // check valid token
-        int userId = auth.getUserId(token);
+        int userId = auth.getUserId(token).getValue();
         if(userId == -1) {
             logger.severe("Invalid token");
             return new Response<>(false, "Invalid token");
@@ -97,7 +97,7 @@ public class EventCompanyManageService {
         logger.log(Level.INFO, "createEvent called");
 
         // check valid token
-        int creatorId = auth.getUserId(token);
+        int creatorId = auth.getUserId(token).getValue();
         if(creatorId == -1){
             logger.severe("Invalid token");
             return new Response<>(false, "Invalid token");
@@ -141,7 +141,7 @@ public class EventCompanyManageService {
         logger.log(Level.INFO, "UpdateEventDate called");
 
         // check valid token
-        int userId = auth.getUserId(token);
+        int userId = auth.getUserId(token).getValue();
         if(userId == -1){
             logger.severe("Invalid token");
             return new Response<>(false, "Invalid token");

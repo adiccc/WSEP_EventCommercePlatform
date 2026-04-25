@@ -57,14 +57,19 @@ class ViewRolesAndPermissionsTreeTest {
     private IAuth buildAuth() {
         return new IAuth() {
             @Override public Response<String> login(String u, String p) { return Response.ok(""); }
-            @Override public void logout(String token) {}
-            @Override public boolean isLoggedIn(String token) {
-                return OWNER_TOKEN.equals(token) || NON_OWNER_TOKEN.equals(token);
+            @Override public Response<Boolean> logout(String token) {
+                return Response.ok(false);
             }
-            @Override public int getUserId(String token) {
-                if (OWNER_TOKEN.equals(token))     return OWNER_ID;
-                if (NON_OWNER_TOKEN.equals(token)) return NON_OWNER_ID;
-                return -1;
+            @Override public Response<Boolean> isLoggedIn(String token) {
+                if(OWNER_TOKEN.equals(token) || NON_OWNER_TOKEN.equals(token)){
+                    return new Response<>(true, "");
+                }
+                else return new Response<>(false,"") ;
+            }
+            @Override public Response<Integer> getUserId(String token) {
+                if (OWNER_TOKEN.equals(token))     return new Response<>(OWNER_ID, "");
+                if (NON_OWNER_TOKEN.equals(token)) return new Response<>(NON_OWNER_ID,"");
+                return new Response<>(-1, "");
             }
         };
     }
@@ -139,9 +144,18 @@ class ViewRolesAndPermissionsTreeTest {
 
         IAuth auth2 = new IAuth() {
             @Override public Response<String> login(String u, String p) { return Response.ok(""); }
-            @Override public void logout(String t) {}
-            @Override public boolean isLoggedIn(String t) { return OWNER_TOKEN.equals(t); }
-            @Override public int getUserId(String t) { return FOUNDER_ID; }
+            @Override public Response<Boolean> logout(String t) {
+                return Response.ok(false);
+            }
+            @Override public Response<Boolean> isLoggedIn(String t) {
+                if(OWNER_TOKEN.equals(t)){
+                    return new Response<>(true,"");
+                }
+                else return new Response<>(false,"");
+            }
+            @Override public Response<Integer> getUserId(String t) {
+                return new Response<>(FOUNDER_ID, "");
+            }
         };
 
         CompanyService svc2 = new CompanyService(auth2, repo2, mock(IUserRepo.class), emptyOrderRepo());

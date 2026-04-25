@@ -44,22 +44,28 @@ public class Auth implements IAuth {
         }
     }
     @Override
-    public void logout(String token) {
+    public Response<Boolean> logout(String token) {
         logger.info("Logout attempt");
-        if(token != null && !token.isBlank()){
+        if (token == null || token.isBlank()) {
+            return new Response<>(false, "Token is missing or empty");
+        }
+        if(tokensLoggedOut.containsKey(token)) {
+            logger.warning("Logout attempt failed: member is in the logged out tokens list") ;
+            return new Response<>(false, "Cannot log out, user is Already logged out");
+        }
             try{
-                int userId = getUserId(token);
                 Date date = tokenService.extractExpirationDate(token);
+                int userId = getUserId(token).getValue();
                 tokensLoggedOut.put(token, date);
                 cleanExpiredLoggedOutTokens();
                 logger.info("Logout successful for username: " + userId);
-
+                return new Response<>(true, "Logout successful");
             }
             catch(Exception e){
                 logger.severe("Logout failed for token: " + token + ". Error: " + e.getMessage());
+                return new Response<>(false, "Logout failed due to server error");
             }
         }
-    }
     private void cleanExpiredLoggedOutTokens() {
         Date today = new Date();
         logger.info("Clean expired logged out tokens");
@@ -72,30 +78,52 @@ public class Auth implements IAuth {
     }
 
     @Override
-    public boolean isLoggedIn(String token) {
+    public Response<Boolean> isLoggedIn(String token) {
         if(token == null){
             logger.warning("Token is null");
-            return false;
+            return new Response<>(false, "Token is null");
         }
-        return !tokensLoggedOut.containsKey(token) && tokenService.validateToken(token);
+        try {
+
+            if (!tokensLoggedOut.containsKey(token) && tokenService.validateToken(token)) {
+                logger.info("Member is logged in");
+                return new Response<>(true, "Member is logged in");
+            } else {
+                logger.warning("Member is logged out");
+                return new Response<>(false, "Member is logged out");
+            }
+        }
+        catch (Exception e){
+            logger.severe("Member is not logged in due to server error");
+            return new Response<>(false, "Member is not logged in due to server error");
+        }
     }
 
     @Override
-    public int getUserId(String token) {
-        if(!isLoggedIn(token)){
+    public Response<Integer> getUserId(String token) {
+        if (!isLoggedIn(token).getValue()) {
             logger.warning("User with token " + token + " is not logged in");
-            return -1;
+            return new Response<>(-1, "User with token " + token + " is not logged in");
         }
-        String username = tokenService.extractUsername(token);
-        if(username == null){
-            logger.warning("User with token " + token + " is not found");
-            return -1;
+        try {
+            String username = tokenService.extractUsername(token);
+            if (username == null) {
+                logger.warning("User with token " + token + " is not found");
+                return new Response<>(-1, "User with token " + token + " is not found");
+            }
+            Member member = userRepo.findUserByEmail(username);
+            if (member != null) {
+                logger.info("Retrieved member " + member.getIdentifier() + " from token " + token);
+                return new Response<>(member.getUserId(), "Retrieved member from token " + token);
+            }
+            else {
+                logger.warning("Member with token " + token + " is not found");
+                return new Response<>(-1, "Member with token " + token + " is not found");
+            }
+
+        } catch (Exception e) {
+            logger.severe("User with token " + token + " is not found");
+            return new Response<>(-1, "User with token " + token + " is not found");
         }
-        Member member = userRepo.findUserByEmail(username);
-        if(member != null){
-            logger.info("Retrieved member " + member.getIdentifier() + " from token " + token);
-            return member.getUserId();
-        }
-        return -1;
     }
 }

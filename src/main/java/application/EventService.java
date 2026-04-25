@@ -27,7 +27,7 @@ public class EventService {
         logger.log(Level.INFO, "ViewEventDetails called");
 
         // check valid token
-        if (!auth.isLoggedIn(token)) {
+        if (!auth.isLoggedIn(token).getValue()) {
             return new Response<>(null, "Invalid token");
         }
         if (eventId == null || eventId.isEmpty()) {
@@ -56,7 +56,7 @@ public class EventService {
         logger.info("Search events called");
 
         // token validation
-        if (!auth.isLoggedIn(token)) {
+        if (!auth.isLoggedIn(token).getValue()) {
             return new Response<>(null, "Invalid token");
         }
 

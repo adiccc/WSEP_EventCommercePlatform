@@ -42,14 +42,22 @@ class CompanyServiceTest {
         companyRepo.store(company);
 
         IAuth auth = new IAuth() {
-            @Override public Response<String> login(String username, String password) { return Response.ok(""); }
-            @Override public void logout(String token) {}
-            @Override public boolean isLoggedIn(String token) {
-                return OWNER_TOKEN.equals(token) || OTHER_TOKEN.equals(token);
+            @Override public Response<String> login(String username, String password) {
+                return Response.ok("generated-token");
             }
-            @Override public int getUserId(String token) {
-                if (OWNER_TOKEN.equals(token)) return OWNER_ID;
-                return OTHER_USER_ID;
+            @Override public Response<Boolean> logout(String token) {
+                return Response.ok(true);
+            }
+
+            @Override public Response<Boolean> isLoggedIn(String token) {
+                if(OWNER_TOKEN.equals(token) || OTHER_TOKEN.equals(token)) {
+                    return new Response<>(true, "");
+                }
+                else return new Response<>(false,"");
+            }
+            @Override public Response<Integer> getUserId(String token) {
+                if (OWNER_TOKEN.equals(token)) return new Response<>(OWNER_ID, "");
+                return new Response<>(OTHER_USER_ID, "");
             }
         };
 

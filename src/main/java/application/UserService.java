@@ -32,7 +32,7 @@ public class UserService {
     public Response<Boolean> registerUser(String activeIdentifier, UserDTO dto) {
         logger.info("Registration attempt started for email: " + dto.getEmail());
         try{
-            if (auth.isLoggedIn(activeIdentifier)) {
+            if (auth.isLoggedIn(activeIdentifier).getValue()) {
                 logger.warning("Registration failed: Active logged-in user attempted to register (Token: " + activeIdentifier + ")");
                 return Response.error("Can't register to the system at member state, must be a guest.");
             }
@@ -111,5 +111,25 @@ public class UserService {
         }
         logger.info("Login successful for email: " + email);
         return new Response<>(tokenResponse.getValue(), tokenResponse.getMessage());
+    }
+    public Response<Boolean> logout(String token){
+        logger.info("Logout attempt started for token: " + token);
+        if(token == null || token.isBlank()) {
+            logger.warning("Logout attempt failed: guest cannot log out");
+            return new Response<>(false, "User is in guest state");
+        }
+        try {
+            Response<Boolean> response = auth.logout(token);
+            if(!response.getValue()){
+                logger.warning("Logout attempt failed for " + token);
+                return new Response<>(false, "Logout failed");
+            }
+            logger.info("Logout successful for token: " + token);
+            return response;
+            }
+        catch (Exception e){
+            logger.severe("Logout failed due to unexpected server error for token: " + token);
+            return Response.error(e.getMessage());
+        }
     }
 }

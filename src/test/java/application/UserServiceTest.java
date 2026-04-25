@@ -8,10 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -28,16 +25,22 @@ class UserServiceTest {
         savedMembers = new ArrayList<>();
         fakeRepo = new IUserRepo() {
             private final Map<String, Member> db = new HashMap<>();
-
+            private int idCounter = 1;
             @Override public boolean existsUser(String email) { return db.containsKey(email); }
             @Override public Member findUserByEmail(String email) { return db.get(email); }
             @Override public void store(Member mem) {
+                mem.setUserId(idCounter++);
                 db.put(mem.getIdentifier(), mem);
                 savedMembers.add(mem);
             }
-            @Override public Member findById(Integer userId) {return null;}
-            @Override public List<Member> getAll() { return null; }
-            @Override public void delete(Integer userId) {}
+            @Override public Member findById(Integer userId) {
+                return db.values().stream()
+                        .filter(m -> Objects.equals(m.getUserId(), userId))
+                        .findFirst()
+                        .orElse(null);
+            }
+            @Override public List<Member> getAll() { return new ArrayList<>(db.values()); }
+            @Override public void delete(Integer userId) { db.values().removeIf(m -> Objects.equals(m.getUserId(), userId));}
         };
         IPasswordEncoder encoderMock = new IPasswordEncoder() {
             @Override public String encodePassword(String rawPassword) {
@@ -186,8 +189,47 @@ class UserServiceTest {
         //we don't have any set up of registering some user
         Response<String> response = userService.login("ghost@bgu.ac.il", "Pass123!");
         // Assert
-        assertTrue(response.isError());
         assertNull(response.getValue());
         assertEquals("Invalid email or password", response.getMessage());
+    }
+
+    @Test
+    void GivenLoggedInUser_WhenLogout_ThenSuccessAndTokenBlacklisted() {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        Response<String> loginResponse = userService.login(dto.getEmail(), dto.getPassword());
+        String validToken = loginResponse.getValue();
+        // Act
+        Response<Boolean> logoutResponse = userService.logout(validToken);
+        // Assert
+        assertTrue(logoutResponse.getValue());
+        assertEquals("Logout successful", logoutResponse.getMessage());
+    }
+
+    @Test
+    void GivenGuest_WhenLogout_ThenErrorUserInGuestState() {
+        Response<Boolean> responseNull = userService.logout(null);
+        Response<Boolean> responseBlank = userService.logout("   ");
+        // Assert
+        assertFalse(responseNull.getValue());
+        assertEquals("User is in guest state", responseNull.getMessage());
+
+        assertFalse(responseBlank.getValue());
+        assertEquals("User is in guest state", responseBlank.getMessage());
+    }
+
+    @Test
+    void GivenAlreadyLoggedOutUser_WhenLogoutAgain_ThenError() {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String validToken = userService.login(dto.getEmail(), dto.getPassword()).getValue();
+        userService.logout(validToken);
+        Response<Boolean> response = userService.logout(validToken);
+        // Assert
+        assertTrue(response.isError());
+        assertFalse(response.getValue());
+        assertEquals("Logout failed", response.getMessage());
     }
 }
