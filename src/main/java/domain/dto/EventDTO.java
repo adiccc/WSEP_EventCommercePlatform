@@ -29,4 +29,8 @@ public class EventDTO {
         this.categoryEvent = categoryEvent;
         this.creatorId = creatorId;
     }
+
+    public String getEventID() {
+        return eventID;
+    }
 }

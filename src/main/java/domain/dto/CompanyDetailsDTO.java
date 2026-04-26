@@ -3,6 +3,7 @@ package domain.dto;
 import domain.company.Company;
 
 import java.util.List;
+import java.util.Map;
 
 public class CompanyDetailsDTO {
     private int companyId;
@@ -25,5 +26,13 @@ public class CompanyDetailsDTO {
         this.discountPolicy = discountPolicy;
         this.founderId = founderId;
         this.futureEvents = futureEvents;
+    }
+
+    public int getCompanyId() {
+        return companyId;
+    }
+
+    public List<EventDTO> getFutureEvents() {
+        return futureEvents;
     }
 }
