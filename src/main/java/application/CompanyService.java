@@ -2,10 +2,8 @@ package application;
 
 import java.util.*;
 import java.util.logging.Logger;
-import domain.company.Company;
-import domain.company.ContactInfo;
-import domain.company.ICompanyRepo;
-import domain.company.ManagerAppointment;
+
+import domain.company.*;
 import domain.dataType.PermissionType;
 import domain.dto.CompanyDTO;
 import domain.dto.RolesPermissionsTreeDTO;
@@ -42,20 +40,21 @@ public class CompanyService {
             if (user == null) {
                 return new Response<>(null, "User not found.");
             }
+//            if (!user.isConnected()) {
+//                return new Response<>(null, "User must be logged in to create a company.");
+//            }
             if (!auth.isLoggedIn(sessionToken).getValue()) {
                 return new Response<>(null, "User must be logged in to create a company.");
             }
 
-            if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
+
+                if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
                 return new Response<>(null, "Invalid contact or bank account information.");
             }
 
             synchronized (companyRepo) {
-                try {
-                    companyRepo.findById(companyId);
+                if (companyRepo.findById(companyId) != null) {
                     return new Response<>(null, "Company ID already exists in the system.");
-                } catch (java.util.NoSuchElementException ignored) {
-                    // good — company does not exist yet, proceed
                 }
                 if (companyRepo.existsByName(companyName)) {
                     return new Response<>(null, "Company name is already taken.");
@@ -64,8 +63,9 @@ public class CompanyService {
                 ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
                 PurchasePolicy defaultPurchase = new PurchasePolicy();
                 DiscountPolicy defaultDiscount = new DiscountPolicy();
-                Company newCompany = new Company(companyId, companyName, userId,
-                        contactInfo, defaultPurchase, defaultDiscount);
+                Permissions companyPermission = new Permissions(userId);
+                Company newCompany = new Company(companyId, companyName,
+                        contactInfo, defaultPurchase, defaultDiscount,companyPermission);
 
                 Founder founderRole = new Founder(companyId);
                 user.addRole(founderRole);
@@ -110,23 +110,20 @@ public class CompanyService {
             }
 
             // 3. Requesting user must be an owner
-            if (!company.isOwner(userId)) {
+            if (!company.getCompanyPermission().isOwner(userId)) {
                 logger.warning("viewRolesAndPermissionsTree failed: user " + userId + " is not an owner of company " + companyId);
                 return Response.error("User does not have permission to view roles and permissions");
             }
 
-            // 4. Build the roles tree
             Map<Integer, Set<PermissionType>> managersPermissions = new HashMap<>();
-            for (Map.Entry<Integer, ManagerAppointment> entry : company.getManagersPermissionsMap().entrySet()) {
-                managersPermissions.put(entry.getKey(), entry.getValue().getPermissions());
+            for (Map.Entry<Integer, domain.dto.HierarchyDTO> entry : company.getCompanyPermission().getCompanyTree().entrySet()) {
+                managersPermissions.put(entry.getKey(), entry.getValue().getAllPermissions());
             }
-
             RolesPermissionsTreeDTO tree = new RolesPermissionsTreeDTO(
-                    company.getFounderId(),
-                    company.getOwnerIds(),
+                    company.getCompanyPermission().getFounderId(),
+                    company.getCompanyPermission().getOwnerIds(),
                     managersPermissions
             );
-
             logger.info("viewRolesAndPermissionsTree succeeded for companyId: " + companyId);
             return Response.ok(tree);
 
@@ -291,8 +288,7 @@ public class CompanyService {
             for(Company company : allCompanies){
                // isUserPermitted means or the company is active
                 // if the company isn't active only members who are owners and have the right permitting can access
-                //TODO when check permission is implemented change just for a call to that function
-                boolean isUserPermitted = company.isActive() || (isMember && (company.isOwner(userId) || company.checkPermission(userId,PermissionType.VIEW_CLOSED_COMPANIES)));
+                boolean isUserPermitted = company.isActive() || (isMember && (company.getCompanyPermission().checkPermission(userId,PermissionType.VIEW_CLOSED_COMPANIES)));
                 if(isUserPermitted){
                     filteredCompanies.add(new CompanyDTO(
                             company.getCompanyId(),
@@ -319,7 +315,7 @@ public class CompanyService {
             logger.warning("deactivateCompany failed: invalid or expired token");
             return  new Response<>(false, "Invalid or expired token, deactivate failed");
         }
-        if(!companyRepo.findById(companyId).isActive()){
+        if(!companyRepo.existsById(companyId)){
             logger.warning("deactivateCompany failed: company not found, id: " + companyId);
             return  new Response<>(false, "Company not found");
         }

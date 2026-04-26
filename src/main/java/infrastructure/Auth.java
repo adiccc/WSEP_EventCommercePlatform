@@ -9,6 +9,7 @@ import domain.user.Member;
 
 import java.util.Date;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
@@ -18,11 +19,17 @@ public class Auth implements IAuth {
     private final IUserRepo userRepo;
     private final IPasswordEncoder passwordEncoder;
     private final Map<String, Date> tokensLoggedOut = new ConcurrentHashMap<>();
+    private final Set<String> adminEmails;
 
-    public Auth(TokenService tokenService, IUserRepo userRepo, IPasswordEncoder passwordEncoder) {
+    public Auth(TokenService tokenService, IUserRepo userRepo, IPasswordEncoder passwordEncoder, Set<String> adminEmails) {
         this.tokenService = tokenService;
         this.userRepo = userRepo;
         this.passwordEncoder = passwordEncoder;
+        this.adminEmails = adminEmails;
+    }
+
+    public Auth(TokenService tokenService, IUserRepo userRepo, IPasswordEncoder passwordEncoder) {
+        this(tokenService, userRepo, passwordEncoder, Set.of());
     }
 
     @Override
@@ -67,6 +74,22 @@ public class Auth implements IAuth {
                 return new Response<>(false, "Logout failed due to server error");
             }
         }
+    @Override
+    public Response<Boolean> isAdmin(String token) {
+        if (!isLoggedIn(token).getValue()) {
+            logger.warning("isAdmin check failed: token is not logged in");
+            return new Response<>(false, "User is not logged in");
+        }
+        try {
+            String email = tokenService.extractUsername(token);
+            boolean admin = email != null && adminEmails.contains(email);
+            return new Response<>(admin, admin ? "User is admin" : "User is not admin");
+        } catch (Exception e) {
+            logger.severe("isAdmin check failed due to server error: " + e.getMessage());
+            return new Response<>(false, "Server error during admin check");
+        }
+    }
+
     private void cleanExpiredLoggedOutTokens() {
         Date today = new Date();
         logger.info("Clean expired logged out tokens");

@@ -71,6 +71,7 @@ class ViewRolesAndPermissionsTreeTest {
                 if (NON_OWNER_TOKEN.equals(token)) return new Response<>(NON_OWNER_ID,"");
                 return new Response<>(-1, "");
             }
+            @Override public Response<Boolean> isAdmin(String token) { return new Response<>(false, ""); }
         };
     }
 
@@ -156,6 +157,7 @@ class ViewRolesAndPermissionsTreeTest {
             @Override public Response<Integer> getUserId(String t) {
                 return new Response<>(FOUNDER_ID, "");
             }
+            @Override public Response<Boolean> isAdmin(String t) { return new Response<>(false, ""); }
         };
 
         CompanyService svc2 = new CompanyService(auth2, repo2, mock(IUserRepo.class));
