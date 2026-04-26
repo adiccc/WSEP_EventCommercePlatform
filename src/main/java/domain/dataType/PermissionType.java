@@ -7,7 +7,7 @@ public enum PermissionType {
     VIEW_PURCHASE_HISTORY,
     GENERATE_SALES_REPORTS,
     CREATE_EVENT,
-    ViewOrdersHistory,
+    VIEW_ORDERS_HISTORY,
     VIEW_CLOSED_COMPANIES
 
 }

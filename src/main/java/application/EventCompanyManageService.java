@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 import static domain.dataType.PermissionType.CREATE_EVENT;
-import static domain.dataType.PermissionType.ViewOrdersHistory;
+import static domain.dataType.PermissionType.VIEW_ORDERS_HISTORY;
 
 public class EventCompanyManageService {
     private final ICompanyRepo companyRepo;
@@ -266,7 +266,7 @@ public class EventCompanyManageService {
             Company company = companyRepo.findById(companyId);
 
             // validate relevant permissions
-            if (!company.checkPermission(userId, ViewOrdersHistory)) {
+            if (!company.checkPermission(userId, VIEW_ORDERS_HISTORY)) {
                 logger.log(Level.SEVERE, "Permission required");
                 return new Response<>(null, "Permission required");
             }
@@ -303,6 +303,7 @@ public class EventCompanyManageService {
             }
             int userId = auth.getUserId(token).getValue();
             boolean isMember = userId != -1;
+            //TODO when check permission is implemented change just for a call to that function
             boolean isUserPermitted = company.isActive() || (isMember && (company.isOwner(userId) || company.checkPermission(userId,PermissionType.VIEW_CLOSED_COMPANIES)));
             if (!isUserPermitted) {
                 logger.log(Level.SEVERE, "User is not permitted to view closed companies");
