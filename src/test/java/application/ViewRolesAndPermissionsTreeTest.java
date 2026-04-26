@@ -93,12 +93,12 @@ class ViewRolesAndPermissionsTreeTest {
                 new PurchasePolicy(), new DiscountPolicy()
         );
 
-        // Add an extra owner (OWNER_ID)
-        company.getOwnerIds().add(OWNER_ID);
+        // Add an extra owner (OWNER_ID), appointed by the founder
+        company.addOwner(OWNER_ID, FOUNDER_ID);
 
-        // Add a manager with some permissions
+        // Add a manager with some permissions, appointed by OWNER_ID
         ManagerAppointment managerAppt = new ManagerAppointment(
-                MANAGER_ID,
+                MANAGER_ID, OWNER_ID,
                 EnumSet.of(PermissionType.MANAGE_EVENTS_INVENTORY, PermissionType.VIEW_PURCHASE_HISTORY)
         );
         company.getManagersPermissionsMap().put(MANAGER_ID, managerAppt);

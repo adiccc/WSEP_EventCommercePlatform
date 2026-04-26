@@ -1,4 +1,5 @@
 package application;
+import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
 import domain.event.IOrderRepo;
@@ -6,7 +7,6 @@ import domain.user.Member;
 import domain.user.IUserRepo;
 import application.IAuth;
 import domain.user.User;
-import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.DateTimeException;
 import java.time.LocalDate;
@@ -22,12 +22,15 @@ public class UserService {
     private final IAuth auth;
     private final IPasswordEncoder passwordEncoder;
     private final IUserRepo userRepo;
+    private final ICompanyRepo companyRepo;
 
-    public UserService(TokenService tokenService, IAuth auth, IUserRepo userRepo, IPasswordEncoder passwordEncoder) {
+    public UserService(TokenService tokenService, IAuth auth, IUserRepo userRepo,
+                       IPasswordEncoder passwordEncoder, ICompanyRepo companyRepo) {
         this.tokenService = tokenService;
         this.auth = auth;
         this.userRepo = userRepo;
         this.passwordEncoder = passwordEncoder;
+        this.companyRepo = companyRepo;
     }
     public Response<Boolean> registerUser(String activeIdentifier, UserDTO dto) {
         logger.info("Registration attempt started for email: " + dto.getEmail());
@@ -130,6 +133,78 @@ public class UserService {
         catch (Exception e){
             logger.severe("Logout failed due to unexpected server error for token: " + token);
             return Response.error(e.getMessage());
+        }
+    }
+
+    /**
+     * System admin removes a member from the platform.
+     *
+     * Effects:
+     *  - Member account is deactivated (isActive = false)
+     *  - If the user is a founder of a company → that company is deactivated
+     *  - If the user is an owner (non-founder) → removed from the company, their appointees cascade to founder
+     *  - If the user is a manager → removed from the company
+     *
+     * TODO: add a proper admin-role check once the Admin concept is implemented.
+     */
+    public Response<Boolean> removeUser(String adminToken, int userIdToRemove) {
+        logger.info("Admin removeUser attempt for userId: " + userIdToRemove);
+        try {
+            // 1. Requester must be logged in (admin check — TODO: verify admin role)
+            if (!auth.isLoggedIn(adminToken).getValue()) {
+                logger.warning("removeUser failed: requester is not logged in");
+                return Response.error("Must be logged in to perform this action");
+            }
+
+            // 2. Find the member
+            Member member = userRepo.findById(userIdToRemove);
+            if (member == null) {
+                logger.warning("removeUser failed: userId " + userIdToRemove + " not found");
+                return Response.error("User not found");
+            }
+            if (!member.isActive()) {
+                logger.warning("removeUser: userId " + userIdToRemove + " is already inactive");
+                return Response.error("User is already removed");
+            }
+
+            // 3. Deactivate the account
+            member.deactivate();
+
+            // 4. Clean up all company roles
+            for (Company company : companyRepo.getAll()) {
+                boolean companyChanged = false;
+
+                if (company.isFounder(userIdToRemove)) {
+                    // Founder removed → deactivate the whole company
+                    company.deactivate();
+                    companyChanged = true;
+
+                } else if (company.isOwner(userIdToRemove)) {
+                    // Owner removed → cascade their appointees to the founder
+                    company.forceRemoveOwner(userIdToRemove);
+                    companyChanged = true;
+                }
+
+                if (company.getManagersPermissionsMap().containsKey(userIdToRemove)) {
+                    // Manager removed → simply remove from the map
+                    company.getManagersPermissionsMap().remove(userIdToRemove);
+                    companyChanged = true;
+                }
+
+                if (companyChanged) {
+                    companyRepo.store(company);
+                }
+            }
+
+            // 5. Persist the deactivated member
+            userRepo.store(member);
+
+            logger.info("removeUser succeeded for userId: " + userIdToRemove);
+            return Response.ok(true);
+
+        } catch (Exception e) {
+            logger.severe("removeUser failed for userId: " + userIdToRemove + ". Error: " + e.getMessage());
+            return Response.error("Unexpected error: " + e.getMessage());
         }
     }
 }

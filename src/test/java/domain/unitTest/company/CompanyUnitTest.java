@@ -45,7 +45,7 @@ class CompanyUnitTest {
     @Test
     public void GivenValidInputs_WhenCreateProductionCompany_ThenReturnSuccessAndCreateCompany() {
         when(userRepoMock.findById(1)).thenReturn(mockUser);
-        when(companyRepoMock.findById(555)).thenThrow(NoSuchElementException.class);
+        when(companyRepoMock.findById(555)).thenThrow(new NoSuchElementException());
         when(companyRepoMock.existsByName("LiveNation")).thenReturn(false);
 
         Response<Company> response = companyService.createProductionCompany(

@@ -11,6 +11,7 @@ public class Member extends User{
     protected String phoneNumber;
     protected LocalDate dateOfBirth;
     protected String address;
+    protected boolean isActive = true;  // false when account is suspended/removed by admin
 
     public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address) {
         super(email);
@@ -30,5 +31,8 @@ public class Member extends User{
     public String getPassword() {
         return password;
     }
+
+    public boolean isActive() { return isActive; }
+    public void deactivate() { this.isActive = false; }
 
 }
