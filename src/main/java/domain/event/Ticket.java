@@ -5,7 +5,7 @@ import domain.dataType.TicketStatus;
 import static domain.dataType.TicketStatus.AVAILABLE;
 
 public abstract class Ticket {
-    private int ticketId;
+    private final int ticketId;
     private TicketStatus status;
 
     public Ticket(int ticketId) {
