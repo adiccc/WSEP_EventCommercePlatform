@@ -16,6 +16,9 @@ public class Lottery {
     private long expirationTime; // after this time all the users will be able to buy tickets for the event, and
                                    // the lottery will be closed
 
+    // Field for optimistic locking
+    private long version;
+
     public Lottery(String eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
         this.id = eventId;
         this.capacity = capacity;
@@ -23,6 +26,19 @@ public class Lottery {
         this.winners = new ArrayList<>();
         this.registerWindow = registerWindow;
         this.expirationTime = expirationTime;
+        this.version = 1; // Initial version
+    }
+
+    // Copy Constructor - essential for returning detached copies from the Repo
+    public Lottery(Lottery other) {
+        this.id = other.id;
+        this.capacity = other.capacity;
+        this.registerWindow = other.registerWindow;
+        this.expirationTime = other.expirationTime;
+        this.version = other.version;
+        // Deep copy of lists to ensure memory isolation
+        this.registered = new ArrayList<>(other.registered);
+        this.winners = new ArrayList<>(other.winners);
     }
 
     public String getId() {
@@ -62,6 +78,13 @@ public class Lottery {
             Collections.shuffle(shuffledUsers);
             winners.addAll(shuffledUsers.subList(0, capacity));
         }
+    }
+
+    public long getVersion() {
+        return version;
+    }
+    public void setVersion(long version) {
+        this.version = version;
     }
 
 }
