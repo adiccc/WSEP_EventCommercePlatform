@@ -4,10 +4,7 @@ import domain.dataType.PermissionType;
 import domain.dto.HierarchyDTO;
 
 import java.awt.event.HierarchyBoundsAdapter;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 public class Permissions {
     private int founderId;//founder of the comapany
@@ -39,5 +36,9 @@ public class Permissions {
             return companyTree.get(userId).getAllPermissions().contains(type);
         }
         return false;
+    }
+
+    public HashMap<Integer, HierarchyDTO> getCompanyTree() {
+        return companyTree;
     }
 }

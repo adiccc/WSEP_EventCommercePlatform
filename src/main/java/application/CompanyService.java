@@ -118,11 +118,10 @@ public class CompanyService {
             }
 
             // 4. Build the roles tree
-            Map<String, Set<PermissionType>> managersPermissions = new HashMap<>();
-            for (Map.Entry<String, ManagerAppointment> entry : company.getManagersPermissionsMap().entrySet()) {
-                managersPermissions.put(entry.getKey(), entry.getValue().getPermissions());
+            Map<Integer, Set<PermissionType>> managersPermissions = new HashMap<>();
+            for (Map.Entry<Integer, domain.dto.HierarchyDTO> entry : company.getCompanyPermission().getCompanyTree().entrySet()) {
+                managersPermissions.put(entry.getKey(), entry.getValue().getAllPermissions());
             }
-
             RolesPermissionsTreeDTO tree = new RolesPermissionsTreeDTO(
                     company.getCompanyPermission().getFounderId(),
                     company.getCompanyPermission().getOwnerIds(),
