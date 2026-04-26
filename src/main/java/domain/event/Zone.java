@@ -1,6 +1,7 @@
-package domain.dataType;
+package domain.event;
 
 import DTO.ElementPositionDTO;
+import domain.dataType.ElementPosition;
 
 public abstract class Zone {
     private final String name;

@@ -3,8 +3,8 @@ package domain.event;
 public class SeatingTicket extends Ticket {
     private int row;
     private int col;
-    public SeatingTicket(int row, int col) {
-        super();
+    public SeatingTicket(int ticketId,int row, int col) {
+        super(ticketId);
         this.row = row;
         this.col = col;
     }

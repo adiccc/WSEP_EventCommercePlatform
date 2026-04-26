@@ -116,7 +116,7 @@ public class ActiveOrderService {
                 logger.log(Level.SEVERE, "Quantity must be greater than 0");
                 return new Response<>(null, "Quantity must be greater than 0");
             }
-            if (e.quantityExceedsPolicy(-1,quantity)) {
+            if (e.quantityExceedsPolicy(auth.getUserId(token).getValue(),quantity)) {
                 logger.log(Level.SEVERE, "Quantity exceeds event policy");
                 return new Response<>(null, "Quantity exceeds event policy");
             }

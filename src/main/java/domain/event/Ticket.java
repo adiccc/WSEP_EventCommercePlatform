@@ -16,4 +16,12 @@ public abstract class Ticket {
     public int getTicketId() {
         return ticketId;
     }
+
+    public boolean setStatus(TicketStatus newStatus) {
+        if (this.status == AVAILABLE) {
+            this.status = newStatus;
+            return true;
+        }
+        return false; //cannot change status if it's not available
+    }
 }

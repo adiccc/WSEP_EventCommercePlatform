@@ -2,6 +2,8 @@ package application;
 
 import domain.dataType.*;
 import domain.event.EventMap;
+import domain.event.StandingZone;
+import domain.event.Zone;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import infrastructure.Auth;

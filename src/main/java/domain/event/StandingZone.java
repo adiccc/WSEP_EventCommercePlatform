@@ -1,7 +1,8 @@
-package domain.dataType;
+package domain.event;
 
 import DTO.StandingZoneDTO;
-import domain.event.StandingTicket;
+import domain.dataType.ElementPosition;
+import domain.dataType.TicketStatus;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,7 +15,7 @@ public class StandingZone extends Zone {
     private final ConcurrentLinkedQueue<StandingTicket> availableTickets = new ConcurrentLinkedQueue<>();
     private AtomicInteger ticketIdGenerator=new AtomicInteger(1);
     private final ConcurrentHashMap<Integer, List<StandingTicket>> occupiedTickets = new ConcurrentHashMap<>();//userid and tickets
-    private int avaliable;
+    private int available;
 
 
     public StandingZone(String name, double price, int capacity, ElementPosition elementPosition) {
@@ -23,7 +24,7 @@ public class StandingZone extends Zone {
         for(int i=0;i<capacity;i++){
             this.availableTickets.add(new StandingTicket(ticketIdGenerator.getAndIncrement()));
         }
-        avaliable=capacity;
+        available=capacity;
     }
     public StandingZone(StandingZone zone){
         super(zone.getName(),zone.getPrice(),zone.getElementPosition());
@@ -39,14 +40,18 @@ public class StandingZone extends Zone {
         for(int i=0;i<capacity;i++){
             this.availableTickets.add(new StandingTicket(ticketIdGenerator.getAndIncrement()));
         }
-        avaliable=capacity;
+        available=capacity;
     }
     public int getCapacity() {
         return capacity;
     }
 
+    public int getAvaliable() {
+        return available;
+    }
+
     public List<Integer> bookTickets(int userid,int quantity) {
-        if (quantity > avaliable) {
+        if (quantity > available) {
             throw new IllegalArgumentException("Not enough tickets available in this zone.");
         }
         List<Integer> bookedTicketIds = new ArrayList<>();
@@ -57,9 +62,25 @@ public class StandingZone extends Zone {
             }
             int ticketId = ticket.getTicketId();
             occupiedTickets.computeIfAbsent(userid, k -> new ArrayList<>()).add(ticket);
+            ticket.setStatus(TicketStatus.LOCKED);
             bookedTicketIds.add(ticketId);
         }
-        avaliable -= quantity; //decrease the capacity by the number of booked tickets
+        available -= quantity; //decrease the capacity by the number of booked tickets
         return bookedTicketIds;
+    }
+
+    public boolean userContainTickets(int userid){
+        return occupiedTickets.containsKey(userid);
+    }
+
+    public boolean userContainTicket(int userid,int ticketId){
+        if(occupiedTickets.containsKey(userid)){
+            for(StandingTicket t: occupiedTickets.get(userid)){
+                if(t.getTicketId()==ticketId){
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

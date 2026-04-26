@@ -3,13 +3,12 @@ package application;
 import domain.dataType.EventSearchFilter;
 import domain.event.Event;
 import domain.event.IEventRepo;
-import domain.dataType.Zone;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 
 public class EventService {
