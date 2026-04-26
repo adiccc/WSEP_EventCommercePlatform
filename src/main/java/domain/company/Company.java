@@ -155,7 +155,8 @@ public class Company {
                 .filter(m -> m.getAppointedBy() == removedOwnerId)
                 .forEach(m -> m.setAppointedBy(founderId));
     }
-
+    public Set<Integer> getOwnerIds() { return ownerIds; }
+    public Map<Integer, ManagerAppointment> getManagersPermissionsMap() { return managersPermissionsMap; }
     public void addDiscount(int userId, Discount policy) {
         if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!isOwner(userId)) {
             throw new SecurityException("User does not have permission to add discount policy");
