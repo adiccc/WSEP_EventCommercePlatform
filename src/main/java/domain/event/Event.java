@@ -28,6 +28,7 @@ public class Event {
     private long version;
 
 
+
     public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent categoryEvent) {
         this.eventMap = null;
         this.companyId=companyId;
@@ -155,5 +156,14 @@ public class Event {
 
     public EventQueue getEventQueue() {
         return eventQueue;
+    }
+
+    public boolean quantityExceedsPolicy(int userId, int quantity) {
+        return false;
+        //todo
+    }
+
+    public List<Integer> bookStandingTickets(int userid,String zone,int quantity) {
+        return eventMap.bookStandingTickets(userid,zone,quantity);
     }
 }

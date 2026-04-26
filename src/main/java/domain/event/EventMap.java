@@ -1,9 +1,8 @@
 package domain.event;
-import DTO.StandingZoneDTO;
 import domain.dataType.ElementPosition;
-import domain.dataType.SeatingZone;
-import domain.dataType.StandingZone;
-import domain.dataType.Zone;
+import domain.event.Zone;
+import domain.event.StandingZone;
+
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,7 +32,6 @@ public class EventMap {
         }
         this.stage=new ElementPosition(eventMap.getStage());
     }
-
     public List<Zone> getZones() {
         return zones;
     }
@@ -44,6 +42,22 @@ public class EventMap {
 
     public List<ElementPosition> getEntries() {
         return entries;
+    }
+
+    public List<Integer> bookStandingTickets(int userid,String zone, int quantity) {
+        //find the zone
+        for (Zone z : zones) {
+            if (z.getName().equals(zone) && z instanceof StandingZone) {
+                //check if there are enough tickets available
+                if (((StandingZone) z).getCapacity() >= quantity) {
+                    //book the tickets and return their IDs
+                    return ((StandingZone) z).bookTickets(userid,quantity);
+                } else {
+                    throw new IllegalArgumentException("Not enough tickets available in this zone.");
+                }
+            }
+        }
+        throw new IllegalArgumentException("Zone not found.");
     }
 
 }

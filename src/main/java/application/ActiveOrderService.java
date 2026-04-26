@@ -1,5 +1,6 @@
 package application;
 
+import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
 import domain.event.Event;
@@ -10,19 +11,24 @@ import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class ActiveOrderService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
-
+    private final AtomicInteger idGenerator = new AtomicInteger(1);
     private final IEventRepo eventRepo;
     private final IActiveOrderRepo activeOrderRepo;
     private final ICompanyRepo companyRepo;
     private final ILotteryRepo lotteryRepo;
     private final IAuth auth;
     private final int capacity = 100;
+    private int orderExpireMinutes = 15;
+
 
     public ActiveOrderService(IAuth auth, IActiveOrderRepo activeOrderRepo, IEventRepo eventRepo, ICompanyRepo companyRepo, ILotteryRepo lotteryRepo) {
         this.eventRepo = eventRepo;
@@ -95,5 +101,37 @@ public class ActiveOrderService {
                 return new Response<>(null, "Failed to enter event purchase  : " + e.getMessage());
             }
         });
+    }
+
+    public Response<Integer> guestSelectTicketsQuantity(String token,int eventId, String zone,int quantity) {
+        logger.log(Level.INFO, "guestSelectTicketsQuantity called");
+
+        // check valid token - for guest the same ?
+        if (!auth.isLoggedIn(token).getValue()) {
+            return new Response<>(null, "Invalid token");
+        }
+        try {
+            Event e = this.eventRepo.findById(String.valueOf(eventId));
+            if (quantity <= 0) {
+                logger.log(Level.SEVERE, "Quantity must be greater than 0");
+                return new Response<>(null, "Quantity must be greater than 0");
+            }
+            if (e.quantityExceedsPolicy(-1,quantity)) {
+                logger.log(Level.SEVERE, "Quantity exceeds event policy");
+                return new Response<>(null, "Quantity exceeds event policy");
+            }
+            int orderId = idGenerator.getAndIncrement();
+            List<Integer> tickets = e.bookStandingTickets(auth.getUserId(token).getValue(),zone,quantity); // check here quantity and policy
+            ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(token).getValue(), String.valueOf(eventId), tickets,orderExpireMinutes);
+            activeOrderRepo.store(newActiveOrder);
+            logger.log(Level.INFO, "Tickets quantity selected successfully");
+            return new Response<>(newActiveOrder.getId(), "Tickets quantity selected successfully");
+        } catch (NoSuchElementException e) {
+            logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
+            return new Response<>(null, "Event not found");
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Failed to select tickets quantity : " + e.getMessage());
+            return new Response<>(null, "Failed to select tickets quantity : " + e.getMessage());
+        }
     }
 }
