@@ -60,13 +60,13 @@ public class Company {
 
   //  public boolean isOwner(int userId) { return ownerIds.contains(userId); }
 
-    public boolean checkPermission(int userId, PermissionType permissionType) {
-        // TODO: to implement (just for the test before we have the real implementation)
-        if (userId > 1) {
-            return false;
-        }
-        return true;
-    }
+//    public boolean checkPermission(int userId, PermissionType permissionType) {
+//        // TODO: to implement (just for the test before we have the real implementation)
+//        if (userId > 1) {
+//            return false;
+//        }
+//        return true;
+//    }
 
     public int getCompanyId() { return companyId; }
     public String getCompanyName() { return companyName; }
@@ -74,17 +74,17 @@ public class Company {
     public ContactInfo getContactInfo() { return contactInfo; }
     public PurchasePolicy getPurchasePolicy() { return purchasePolicy; }
     public DiscountPolicy getDiscountPolicy() { return discountPolicy; }
-    //public Map<String, ManagerAppointment> getManagersPermissionsMap() { return managersPermissionsMap; }
+    public Permissions getCompanyPermission() { return companyPermission; }
 
     public void addDiscount(int userId, Discount policy) {
-        if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!companyPermission.isOwner(userId)) {
+        if (!companyPermission.checkPermission(userId,PermissionType.MANAGE_POLICIES)) { //check inside the function if it's owner
             throw new SecurityException("User does not have permission to add discount policy");
         }
         discountPolicy.addDiscount(policy);
     }
     
     public void removeDiscount(int userId, Discount policy) {
-        if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!companyPermission.isOwner(userId)) {
+        if (!companyPermission.checkPermission(userId,PermissionType.MANAGE_POLICIES)) {
             throw new SecurityException("User does not have permission to remove discount policy");
         }
         discountPolicy.removeDiscount(policy);

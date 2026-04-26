@@ -4,10 +4,8 @@ import java.util.*;
 import java.util.logging.Logger;
 import java.util.Map;
 import java.util.Set;
-import domain.company.Company;
-import domain.company.ContactInfo;
-import domain.company.ICompanyRepo;
-import domain.company.ManagerAppointment;
+
+import domain.company.*;
 import domain.dataType.PermissionType;
 import domain.dto.CompanyDTO;
 import domain.dto.RolesPermissionsTreeDTO;
@@ -67,8 +65,9 @@ public class CompanyService {
                 ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
                 PurchasePolicy defaultPurchase = new PurchasePolicy();
                 DiscountPolicy defaultDiscount = new DiscountPolicy();
-                Company newCompany = new Company(companyId, companyName, userId,
-                        contactInfo, defaultPurchase, defaultDiscount);
+                Permissions companyPermission = new Permissions(userId);
+                Company newCompany = new Company(companyId, companyName,
+                        contactInfo, defaultPurchase, defaultDiscount,companyPermission);
 
                 Founder founderRole = new Founder(companyId);
                 user.addRole(founderRole);
@@ -113,7 +112,7 @@ public class CompanyService {
             }
 
             // 3. Requesting user must be an owner
-            if (!company.isOwner(userId)) {
+            if (!company.getCompanyPermission().isOwner(userId)) {
                 logger.warning("viewRolesAndPermissionsTree failed: user " + userId + " is not an owner of company " + companyId);
                 return Response.error("User does not have permission to view roles and permissions");
             }
@@ -125,8 +124,8 @@ public class CompanyService {
             }
 
             RolesPermissionsTreeDTO tree = new RolesPermissionsTreeDTO(
-                    company.getFounderId(),
-                    company.getOwnerIds(),
+                    company.getCompanyPermission().getFounderId(),
+                    company.getCompanyPermission().getOwnerIds(),
                     managersPermissions
             );
 
@@ -294,8 +293,7 @@ public class CompanyService {
             for(Company company : allCompanies){
                // isUserPermitted means or the company is active
                 // if the company isn't active only members who are owners and have the right permitting can access
-                //TODO when check permission is implemented change just for a call to that function
-                boolean isUserPermitted = company.isActive() || (isMember && (company.isOwner(userId) || company.checkPermission(userId,PermissionType.VIEW_CLOSED_COMPANIES)));
+                boolean isUserPermitted = company.isActive() || (isMember && (company.getCompanyPermission().checkPermission(userId,PermissionType.VIEW_CLOSED_COMPANIES)));
                 if(isUserPermitted){
                     filteredCompanies.add(new CompanyDTO(
                             company.getCompanyId(),

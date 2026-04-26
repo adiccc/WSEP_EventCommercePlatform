@@ -34,7 +34,7 @@ public class Permissions {
         return ownerIds.contains(ownerId);
     }
     public boolean checkPermission(int userId, PermissionType type) {
-        if (isOwner(userId)) return true;
+        if (isOwner(userId)) return true; //owner has allPermissions in the company
         if (companyTree.containsKey(userId)) {
             return companyTree.get(userId).getAllPermissions().contains(type);
         }
