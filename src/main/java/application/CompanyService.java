@@ -314,4 +314,33 @@ public class CompanyService {
             return new Response<>(null, "Invalid or expired token");
         }
     }
+
+    public Response<Boolean> deactivateCompany(String ownerToken, int companyId) {
+        logger.info("deactivateCompany called");
+        if(!auth.isLoggedIn(ownerToken).getValue()){
+            logger.warning("deactivateCompany failed: invalid or expired token");
+            return  new Response<>(false, "Invalid or expired token, deactivate failed");
+        }
+        if(!companyRepo.existsById(companyId)){
+            logger.warning("deactivateCompany failed: company not found, id: " + companyId);
+            return  new Response<>(false, "Company not found");
+        }
+        try{
+            Company company = companyRepo.findById(companyId);
+            if(company.isActive()) {
+                company.deactivate();
+                companyRepo.store(company);
+                logger.info("deactivateCompany succeeded for companyId: " + companyId);
+                return new Response<>(true, "Company deactivated successfully");
+            }
+            else{
+                logger.warning("deactivateCompany failed: company is already deactivated, id: " + companyId);
+                return  new Response<>(false, "Company is already deactivated");
+            }
+        }
+        catch (Exception e) {
+            logger.severe("Unexpected error in deactivateCompany: " + e.getMessage());
+            return  new Response<>(false, "Unexpected error: " + e.getMessage());
+        }
+    }
 }

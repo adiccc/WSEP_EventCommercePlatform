@@ -24,5 +24,9 @@ public class CompanyDTO {
     public boolean isActive() {
         return isActive;
     }
+
+    public String companyName() {
+        return companyName;
+    }
 }
 
