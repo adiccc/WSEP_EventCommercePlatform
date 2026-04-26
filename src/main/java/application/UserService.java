@@ -1,17 +1,13 @@
 package application;
-import domain.company.ICompanyRepo;
+
+import DTO.QueueEntryResultDTO;
 import domain.dto.UserDTO;
-import domain.event.IOrderRepo;
 import domain.user.Member;
 import domain.user.IUserRepo;
-import application.IAuth;
-import domain.user.User;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import domain.webQueue.WebQueue;
 
 import java.time.DateTimeException;
 import java.time.LocalDate;
-import java.util.Date;
-import java.util.Locale;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -29,6 +25,37 @@ public class UserService {
         this.userRepo = userRepo;
         this.passwordEncoder = passwordEncoder;
     }
+
+    // first call when a user opens the application
+    // if admitted: uuid serves as the guest sessionId
+    // if waiting: uuid is the queue token to poll with
+    public Response<QueueEntryResultDTO> enter() {
+        logger.info("New user entering the system");
+        QueueEntryResultDTO result = WebQueue.getInstance().tryEnter(uuid -> onUserAdmitted(uuid));
+        if (result.isAdmitted()) {
+            logger.info("User admitted immediately with sessionId: " + result.getToken());
+        } else {
+            logger.info("User placed in queue at position: " + result.getPosition());
+        }
+        return Response.ok(result);
+    }
+
+    // client polls this while waiting in the queue
+    public Response<QueueEntryResultDTO> getQueueStatus(String uuid) {
+        logger.info("Queue status requested for token: " + uuid);
+        QueueEntryResultDTO result = WebQueue.getInstance().getStatus(uuid);
+        if (result.isAdmitted()) {
+            logger.info("User with token " + uuid + " is now admitted");
+        }
+        return Response.ok(result);
+    }
+
+    // fired by WebQueue when a waiting user is admitted — uuid becomes their guest sessionId
+    //triger for moving to login page //::TO DO!
+    private void onUserAdmitted(String uuid) {
+        logger.info("User admitted from queue with sessionId: " + uuid);
+    }
+
     public Response<Boolean> registerUser(String activeIdentifier, UserDTO dto) {
         logger.info("Registration attempt started for email: " + dto.getEmail());
         try{
@@ -42,7 +69,6 @@ public class UserService {
                 return Response.error("User " + email + " already exists");
             }
             LocalDate birthDate = null;
-            //validate parameters
             try {
                  birthDate = LocalDate.of(dto.getYear(),dto.getMonth(),dto.getDay());
             } catch (DateTimeException e) {
@@ -83,7 +109,6 @@ public class UserService {
                 logger.warning("Registration failed for " + email + ": Invalid phone format");
                 return Response.error("Invalid phone format");
             }
-            //after passing all validation tests we will encrypt the password
             String encryptedPassword = passwordEncoder.encodePassword(dto.getPassword());
             Member member = new Member(
                     email,
@@ -102,6 +127,7 @@ public class UserService {
             return Response.error(e.getMessage());
         }
     }
+
     public Response<String> login(String email, String password) {
         logger.info("Login attempt started for email: " + email);
         Response<String> tokenResponse = auth.login(email, password);
@@ -112,6 +138,7 @@ public class UserService {
         logger.info("Login successful for email: " + email);
         return new Response<>(tokenResponse.getValue(), tokenResponse.getMessage());
     }
+
     public Response<Boolean> logout(String token){
         logger.info("Logout attempt started for token: " + token);
         if(token == null || token.isBlank()) {
@@ -124,9 +151,10 @@ public class UserService {
                 logger.warning("Logout attempt failed for " + token);
                 return new Response<>(false, "Logout failed");
             }
+            WebQueue.getInstance().notifyUserLeft();
             logger.info("Logout successful for token: " + token);
             return response;
-            }
+        }
         catch (Exception e){
             logger.severe("Logout failed due to unexpected server error for token: " + token);
             return Response.error(e.getMessage());
