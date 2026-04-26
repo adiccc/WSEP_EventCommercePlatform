@@ -502,6 +502,154 @@ class EventCompanyManageServiceTest {
         assertEquals("No orders found for company " + companyId, response.getMessage());
     }
 
+    @Test
+    void GivenValidInputs_WhenAddZonesToEventMap_ThenZonesAreAddedSuccessfully() {
+        // define a map for the event so it becomes active
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        // Create new zones to add
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+        List<SeatingZoneDTO> newSeatingZones = List.of(new SeatingZoneDTO(5, 10, "VIP", 500.0, new ElementPositionDTO(10, 10)));
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
+                validToken1,
+                eventId,
+                newStandingZones,
+                newSeatingZones
+        );
+
+        // Assert
+        assertTrue(response.getValue());
+        assertEquals("Zones added to event map successfully", response.getMessage());
+
+        // Verify the zones were actually added
+        Event updatedEvent = eventService.ViewEventDetails(validToken1, companyId, eventId).getValue();
+        int totalZones = updatedEvent.getMap().getZones().size();
+        assertEquals(4, totalZones); // 2 original + 2 new
+    }
+
+    @Test
+    void GivenUnauthorizedUser_WhenAddZonesToEventMap_ThenPermissionErrorIsReturned() {
+        // Arrange: Define the map with the authorized user
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+
+        // Act: Try to add zones with an unauthorized user (validToken2)
+        Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
+                validToken2,
+                eventId,
+                newStandingZones,
+                null
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Permission required", response.getMessage());
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenAddZonesToEventMap_ThenInvalidTokenErrorIsReturned() {
+        // Arrange: Define a valid map using an authorized user
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        // Prepare the new zones we want to add
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+
+        // Act: Attempt to add the new zones to the existing map without being logged in (using invalidToken)
+        Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
+                invalidToken,
+                eventId,
+                newStandingZones,
+                null
+        );
+
+        // Assert: The system must identify the lack of a valid token and block the action immediately
+        assertFalse(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingEvent_WhenAddZonesToEventMap_ThenEventNotFoundErrorIsReturned() {
+        // Arrange
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
+                validToken1,
+                "non-existing-event-id",
+                newStandingZones,
+                null
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Event not found", response.getMessage());
+    }
+
+    @Test
+    void GivenNoZonesProvided_WhenAddZonesToEventMap_ThenValidationErrorIsReturned() {
+        // Arrange: Define the map first
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        // Act: Pass null for both lists
+        Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
+                validToken1,
+                eventId,
+                null,
+                null
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("No zones provided to add", response.getMessage());
+    }
+
+    @Test
+    void GivenEventWithoutMap_WhenAddZonesToEventMap_ThenNoMapDefinedErrorIsReturned() {
+        // Arrange: Use the event from setUp() that doesn't have a map yet
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
+                validToken1,
+                eventId,
+                newStandingZones,
+                null
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Event map not defined yet", response.getMessage());
+    }
+
+    @Test
+    void GivenInactiveEvent_WhenAddZonesToEventMap_ThenEventNotActiveErrorIsReturned() {
+        // Arrange: Create a Lottery Event. A lottery event does not become active immediately when a map is defined.
+        String lotteryEventId = eventCompanyManageService.createEvent(
+                validToken1, companyId, LocalDateTime.now().plusDays(10), "Lottery Event",
+                LocalDateTime.now().plusDays(5), true, GeographicalArea.CENTER, CategoryEvent.FESTIVAL
+        ).getValue();
+
+        // Define map for the lottery event
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, lotteryEventId, stage, entries, standingZones, seatingZones);
+
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
+                validToken1,
+                lotteryEventId,
+                newStandingZones,
+                null
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Event is not active yet, cannot add zones", response.getMessage());
+    }
+
 
 
 }
