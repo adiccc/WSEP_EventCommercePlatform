@@ -18,31 +18,28 @@ public class Company {
     private PurchasePolicy purchasePolicy;
     private DiscountPolicy discountPolicy;
 
-    private int founderId;
-    private Set<Integer> ownerIds;
-    private Map<String, ManagerAppointment> managersPermissionsMap;
+   // private Map<String, ManagerAppointment> managersPermissionsMap;
+    private Permissions companyPermission;
 
-    public Company(int companyId, String companyName, int founderId, ContactInfo contactInfo,
-                   PurchasePolicy defaultPurchase, DiscountPolicy defaultDiscount) {
+    public Company(int companyId, String companyName, ContactInfo contactInfo,
+                   PurchasePolicy defaultPurchase, DiscountPolicy defaultDiscount,Permissions companyPermission) {
         this.companyId = companyId;
         this.companyName = companyName;
-        this.founderId = founderId;
         this.contactInfo = contactInfo;
 
         this.purchasePolicy = defaultPurchase;
         this.discountPolicy = defaultDiscount;
         this.isActive = true;
-        this.ownerIds = new HashSet<>();
-        this.ownerIds.add(founderId);
-        this.managersPermissionsMap = new HashMap<>();
+        //this.managersPermissionsMap = new HashMap<>();
         this.purchasePolicy = new PurchasePolicy();
         this.discountPolicy = new DiscountPolicy();
+        this.companyPermission = companyPermission;
     }
 
     public void updatePurchasePolicy(int userId, PurchasePolicy newPolicy) {
         if (!isActive)
             throw new IllegalStateException("Company is not active");
-        if (!ownerIds.contains(userId))
+        if (!companyPermission.isOwner(userId))
             throw new SecurityException("User does not have permission to update purchase policy");
         if (!newPolicy.isValid())
             throw new IllegalArgumentException("Invalid policy data");
@@ -52,7 +49,7 @@ public class Company {
     public void updateDiscountPolicy(int userId, DiscountPolicy newPolicy) {
         if (!isActive)
             throw new IllegalStateException("Company is not active");
-        if (!ownerIds.contains(userId))
+        if (!companyPermission.isOwner(userId))
             throw new SecurityException("User does not have permission to update discount policy");
         if (!newPolicy.isValid())
             throw new IllegalArgumentException("Invalid discount policy data");
@@ -61,7 +58,7 @@ public class Company {
 
     public void deactivate() { this.isActive = false; }
 
-    public boolean isOwner(int userId) { return ownerIds.contains(userId); }
+  //  public boolean isOwner(int userId) { return ownerIds.contains(userId); }
 
     public boolean checkPermission(int userId, PermissionType permissionType) {
         // TODO: to implement (just for the test before we have the real implementation)
@@ -74,22 +71,20 @@ public class Company {
     public int getCompanyId() { return companyId; }
     public String getCompanyName() { return companyName; }
     public boolean isActive() { return isActive; }
-    public int getFounderId() { return founderId; }
     public ContactInfo getContactInfo() { return contactInfo; }
     public PurchasePolicy getPurchasePolicy() { return purchasePolicy; }
     public DiscountPolicy getDiscountPolicy() { return discountPolicy; }
-    public Set<Integer> getOwnerIds() { return ownerIds; }
-    public Map<String, ManagerAppointment> getManagersPermissionsMap() { return managersPermissionsMap; }
+    //public Map<String, ManagerAppointment> getManagersPermissionsMap() { return managersPermissionsMap; }
 
     public void addDiscount(int userId, Discount policy) {
-        if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!isOwner(userId)) {
+        if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!companyPermission.isOwner(userId)) {
             throw new SecurityException("User does not have permission to add discount policy");
         }
         discountPolicy.addDiscount(policy);
     }
     
     public void removeDiscount(int userId, Discount policy) {
-        if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!isOwner(userId)) {
+        if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!companyPermission.isOwner(userId)) {
             throw new SecurityException("User does not have permission to remove discount policy");
         }
         discountPolicy.removeDiscount(policy);
