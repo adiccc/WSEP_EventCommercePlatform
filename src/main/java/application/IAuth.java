@@ -5,4 +5,5 @@ public interface IAuth {
     Response<Boolean> logout(String token);
     Response<Boolean> isLoggedIn(String token);
     Response<Integer> getUserId(String token);
+    Response<Boolean> isAdmin(String token);
 }

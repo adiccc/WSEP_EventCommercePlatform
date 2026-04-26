@@ -62,6 +62,7 @@ class CompanyServiceTest {
                 if (OWNER_TOKEN.equals(token)) return new Response<>(OWNER_ID, "");
                 return new Response<>(OTHER_USER_ID, "");
             }
+            @Override public Response<Boolean> isAdmin(String token) { return new Response<>(false, ""); }
         };
 
         IOrderRepo orderRepo = new IOrderRepo() {
