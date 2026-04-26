@@ -20,6 +20,9 @@ public class HierarchyDTO {
     public int getMyManager() {
         return myManager;
     }
+    public void setMyManager(int myManager) {
+        this.myManager = myManager;
+    }
     public List<Integer> getMyAppointees() {
         return myAppointees;
     }

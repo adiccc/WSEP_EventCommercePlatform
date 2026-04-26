@@ -1,10 +1,10 @@
 package domain.company;
 
 import domain.dataType.PermissionType;
+import domain.dto.HierarchyDTO;
 import domain.policy.Discount;
 import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -62,7 +62,9 @@ public class Company {
 
 
     public Set<Integer> getOwnerIds() { return companyPermission.getOwnerIds(); }
-    public Map<Integer, ManagerAppointment> getManagersPermissionsMap() { return managersPermissionsMap; }
+    public int getFounderId() { return companyPermission.getFounderId(); }
+    public boolean isOwner(int userId) { return companyPermission.isOwner(userId); }
+    public Map<Integer, HierarchyDTO> getManagersPermissionsMap() { return companyPermission.getCompanyTree(); }
     public void addDiscount(int userId, Discount policy) {
         if (!companyPermission.checkPermission(userId,PermissionType.MANAGE_POLICIES)) { //check inside the function if it's owner
             throw new SecurityException("User does not have permission to add discount policy");
