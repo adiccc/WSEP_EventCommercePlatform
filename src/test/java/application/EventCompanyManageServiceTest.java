@@ -7,6 +7,7 @@ import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
+import domain.dto.CompanyDetailsDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
@@ -650,6 +651,84 @@ class EventCompanyManageServiceTest {
         assertEquals("Event is not active yet, cannot add zones", response.getMessage());
     }
 
+    @Test
+    void GivenGuest_WhenViewActiveCompanyWithEvents_ThenReturnCompanyAndEvents() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
 
+        // Act
+        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(invalidToken, companyId);
 
+        // Assert
+        assertNotNull(response.getValue());
+        assertEquals("Company details found", response.getMessage());
+        assertEquals(companyId, response.getValue().getCompanyId());
+        assertEquals(1, response.getValue().getFutureEvents().size());
+        assertEquals(eventId, response.getValue().getFutureEvents().get(0).getEventID());
+    }
+
+    @Test
+    void GivenMember_WhenViewActiveCompanyWithEvents_ThenReturnCompanyAndEvents() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        // Act
+        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(validToken2, companyId);
+
+        // Assert
+        assertNotNull(response.getValue());
+        assertEquals("Company details found", response.getMessage());
+        assertEquals(1, response.getValue().getFutureEvents().size());
+    }
+
+    @Test
+    void GivenGuest_WhenViewClosedCompany_ThenErrorNotPermitted() {
+        // Arrange
+        int closedCompanyId = 901;
+        companyService.createProductionCompany(validToken1, closedCompanyId, "Closed Co", "a@b.com", "050-1234567", "bank");
+        companyService.deactivateCompany(validToken1, closedCompanyId);
+
+        // Act
+        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(invalidToken, closedCompanyId);
+
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("User is not permitted to view closed companies", response.getMessage());
+    }
+
+    @Test
+    void GivenOwner_WhenViewClosedCompany_ThenReturnCompanyDetails() {
+        // Arrange
+        int closedCompanyId = 902;
+        companyService.createProductionCompany(validToken1, closedCompanyId, "Closed Co", "a@b.com", "050-1234567", "bank");
+        companyService.deactivateCompany(validToken1, closedCompanyId);
+
+        // Act
+        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(validToken1, closedCompanyId);
+
+        // Assert
+        assertNotNull(response.getValue());
+        assertEquals(closedCompanyId, response.getValue().getCompanyId());
+    }
+
+    @Test
+    void GivenCompanyWithNoActiveEvents_WhenGetCompanyDetails_ThenReturnCompanyAndMessage() {
+
+        // Act
+        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(validToken2, companyId);
+
+        // Assert
+        assertNotNull(response.getValue());
+        assertEquals("No future events found for company " + companyId, response.getMessage());
+        assertTrue(response.getValue().getFutureEvents().isEmpty());
+    }
+
+    @Test
+    void GivenInvalidCompanyId_WhenGetCompanyDetails_ThenErrorNotFound() {
+        // Act
+        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(validToken1, 9999);
+
+        // Assert
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("failed getCompanyDetails"));    }
 }

@@ -1,8 +1,6 @@
 package application;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.logging.Logger;
 import java.util.Map;
 import java.util.Set;
@@ -11,6 +9,7 @@ import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
 import domain.company.ManagerAppointment;
 import domain.dataType.PermissionType;
+import domain.dto.CompanyDTO;
 import domain.dto.RolesPermissionsTreeDTO;
 import domain.event.IOrderRepo;
 import domain.policy.Discount;
@@ -273,6 +272,76 @@ public class CompanyService {
         } catch (Exception e) {
             logger.severe("Unexpected error in removeDiscountFromCompany: " + e.getMessage());
             return Response.error("Unexpected error: " + e.getMessage());
+        }
+    }
+    public Response<List<CompanyDTO>> getAvailableCompanies(String token) { //TODO taking care of guest part, additional input : String guestUuid
+        logger.info("getAvailableCompanies called");
+        try{
+            List<Company> allCompanies = companyRepo.getAll();
+            if(allCompanies == null || allCompanies.isEmpty()){
+                logger.warning("No companies in the system");
+                return new Response<>(null, "No companies in the system");
+            }
+            List<CompanyDTO> filteredCompanies = new ArrayList<CompanyDTO>();
+            if(token!=null && !token.isEmpty()){
+                if(!auth.isLoggedIn(token).getValue()){
+                    return new Response<>(null, "Invalid or expired token");
+                }
+            }
+            //it's a member or a guest
+            int userId = auth.getUserId(token).getValue(); //for guest returns -1
+            boolean isMember = userId != -1;
+            for(Company company : allCompanies){
+               // isUserPermitted means or the company is active
+                // if the company isn't active only members who are owners and have the right permitting can access
+                //TODO when check permission is implemented change just for a call to that function
+                boolean isUserPermitted = company.isActive() || (isMember && (company.isOwner(userId) || company.checkPermission(userId,PermissionType.VIEW_CLOSED_COMPANIES)));
+                if(isUserPermitted){
+                    filteredCompanies.add(new CompanyDTO(
+                            company.getCompanyId(),
+                            company.getCompanyName(),
+                            company.isActive()));
+                }
+            }
+            if(filteredCompanies.isEmpty()){
+                logger.warning("No companies in the system");
+                return new Response<>(null, "No companies in the system");
+            }
+            logger.info("Successfully retrieved available companies");
+            return new Response<>(filteredCompanies, "Companies retrieved successfully");
+        }
+        catch (SecurityException e) {
+            logger.warning("getAvailableCompanies unauthorized: " + e.getMessage());
+            return new Response<>(null, "Invalid or expired token");
+        }
+    }
+
+    public Response<Boolean> deactivateCompany(String ownerToken, int companyId) {
+        logger.info("deactivateCompany called");
+        if(!auth.isLoggedIn(ownerToken).getValue()){
+            logger.warning("deactivateCompany failed: invalid or expired token");
+            return  new Response<>(false, "Invalid or expired token, deactivate failed");
+        }
+        if(!companyRepo.existsById(companyId)){
+            logger.warning("deactivateCompany failed: company not found, id: " + companyId);
+            return  new Response<>(false, "Company not found");
+        }
+        try{
+            Company company = companyRepo.findById(companyId);
+            if(company.isActive()) {
+                company.deactivate();
+                companyRepo.store(company);
+                logger.info("deactivateCompany succeeded for companyId: " + companyId);
+                return new Response<>(true, "Company deactivated successfully");
+            }
+            else{
+                logger.warning("deactivateCompany failed: company is already deactivated, id: " + companyId);
+                return  new Response<>(false, "Company is already deactivated");
+            }
+        }
+        catch (Exception e) {
+            logger.severe("Unexpected error in deactivateCompany: " + e.getMessage());
+            return  new Response<>(false, "Unexpected error: " + e.getMessage());
         }
     }
 }

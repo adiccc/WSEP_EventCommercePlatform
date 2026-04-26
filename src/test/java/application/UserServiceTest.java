@@ -4,6 +4,8 @@ import domain.dto.UserDTO;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import infrastructure.Auth;
+import infrastructure.PasswordEncoderUtil;
+import infrastructure.UserRepo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -16,45 +18,19 @@ class UserServiceTest {
 
     private UserService userService;
     private TokenService realTokenService;
-    private IUserRepo fakeRepo;
-    private List<Member> savedMembers;
+    private IUserRepo userRepo;
+    private IPasswordEncoder passwordEncoder;
+    private IAuth auth;
 
     @BeforeEach
     void setUp() {
         realTokenService = new TokenService();
-        savedMembers = new ArrayList<>();
-        fakeRepo = new IUserRepo() {
-            private final Map<String, Member> db = new HashMap<>();
-            private int idCounter = 1;
-            @Override public boolean existsUser(String email) { return db.containsKey(email); }
-            @Override public Member findUserByEmail(String email) { return db.get(email); }
-            @Override public void store(Member mem) {
-                mem.setUserId(idCounter++);
-                db.put(mem.getIdentifier(), mem);
-                savedMembers.add(mem);
-            }
-            @Override public Member findById(Integer userId) {
-                return db.values().stream()
-                        .filter(m -> Objects.equals(m.getUserId(), userId))
-                        .findFirst()
-                        .orElse(null);
-            }
-            @Override public List<Member> getAll() { return new ArrayList<>(db.values()); }
-            @Override public void delete(Integer userId) { db.values().removeIf(m -> Objects.equals(m.getUserId(), userId));}
-        };
-        IPasswordEncoder encoderMock = new IPasswordEncoder() {
-            @Override public String encodePassword(String rawPassword) {
-                return rawPassword + "_encrypted";
-            }
-            @Override public boolean matches(String rawPassword, String encodedPassword) {
-                return encodedPassword.equals(rawPassword + "_encrypted");
-            }
-        };
+        userRepo = new UserRepo();
+        passwordEncoder = new PasswordEncoderUtil();
+        auth = new Auth(realTokenService, userRepo, passwordEncoder);
 
-        IAuth realAuth = new Auth(realTokenService, fakeRepo, encoderMock);
-        userService = new UserService(realTokenService, realAuth, fakeRepo, encoderMock);
+        userService = new UserService(realTokenService, auth, userRepo, passwordEncoder);
     }
-
     private UserDTO createValidDTO() {
         return new UserDTO(
                 "yarin@bgu.ac.il", "Yarin", "Levi", "Password123!",
@@ -69,31 +45,39 @@ class UserServiceTest {
 
         assertFalse(response.isError());
         assertTrue(response.getValue());
-        assertEquals(1, savedMembers.size());
-        assertEquals("yarin@bgu.ac.il", savedMembers.get(0).getIdentifier());
-        assertEquals("Password123!_encrypted", savedMembers.get(0).getPassword());
+        Member savedUser = userRepo.findUserByEmail("yarin@bgu.ac.il");
+        assertNotNull(savedUser);
+        assertEquals("yarin@bgu.ac.il", savedUser.getIdentifier());
+        assertTrue(passwordEncoder.matches("Password123!", savedUser.getPassword()));
     }
     @Test
     void GivenValidJwtToken_WhenRegisterUser_ThenErrorMustBeGuest() {
-        Member activeMember = new Member("active_user@bgu.ac.il", "Pass", "Active", "User", "050-123-4567", LocalDate.of(2000, 1, 1), "City");
-        fakeRepo.store(activeMember);
-        String realJwtToken = realTokenService.generateToken(activeMember.getIdentifier());
+        //Arrange
+        UserDTO activeUserDTO = new UserDTO("active_user@bgu.ac.il", "Active", "User", "Pass123!", 1, 1, 2000, "City", "050-123-4567");
+        userService.registerUser(null, activeUserDTO);
+        String realJwtToken = userService.login("active_user@bgu.ac.il", "Pass123!").getValue();
+
+        // Act
         UserDTO dto = createValidDTO();
         Response<Boolean> response = userService.registerUser(realJwtToken, dto);
+
+        // Assert
         assertTrue(response.isError());
         assertTrue(response.getMessage().contains("must be a guest"));
-        assertEquals(1, savedMembers.size());
+        assertNull(userRepo.findUserByEmail("yarin@bgu.ac.il"));
     }
     @Test
     void GivenExistingEmail_WhenRegisterUser_ThenErrorUserExists() {
-        Member existingUser = new Member("yarin@bgu.ac.il", "Pass", "Yarin", "Levi", "050-123-4567", LocalDate.of(2000, 1, 1), "City");
-        fakeRepo.store(existingUser);
-        UserDTO dto = createValidDTO();
-        Response<Boolean> response = userService.registerUser(null, dto);
+        // Arrange
+        UserDTO existingUser = createValidDTO();
+        userService.registerUser(null, existingUser);
 
+        // Act
+        Response<Boolean> response = userService.registerUser(null, existingUser);
+
+        // Assert
         assertTrue(response.isError());
         assertTrue(response.getMessage().contains("already exists"));
-        assertEquals(1, savedMembers.size());
     }
 
     @Test

@@ -31,7 +31,10 @@ public class UserRepo implements IUserRepo {
     }
     @Override
     public Member findUserByEmail(String email){
-        return usersPerId.get(emailById.get(email));
+        if(emailById.containsKey(email)) {
+            return usersPerId.get(emailById.get(email));
+        }
+        return null;
     }
 
     @Override

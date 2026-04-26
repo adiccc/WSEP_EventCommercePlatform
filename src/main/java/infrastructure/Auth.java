@@ -59,6 +59,7 @@ public class Auth implements IAuth {
                 tokensLoggedOut.put(token, date);
                 cleanExpiredLoggedOutTokens();
                 logger.info("Logout successful for username: " + userId);
+                //TODO after successful logout need to notify webQueue to insert
                 return new Response<>(true, "Logout successful");
             }
             catch(Exception e){
@@ -102,28 +103,29 @@ public class Auth implements IAuth {
     @Override
     public Response<Integer> getUserId(String token) {
         if (!isLoggedIn(token).getValue()) {
-            logger.warning("User with token " + token + " is not logged in");
-            return new Response<>(-1, "User with token " + token + " is not logged in");
+            logger.warning("User with token is not logged in");
+            return new Response<>(-1, "User with token is not logged in");
         }
         try {
             String username = tokenService.extractUsername(token);
             if (username == null) {
-                logger.warning("User with token " + token + " is not found");
-                return new Response<>(-1, "User with token " + token + " is not found");
+                logger.warning("User with token is not found");
+                return new Response<>(-1, "User with token is not found");
             }
+
             Member member = userRepo.findUserByEmail(username);
             if (member != null) {
-                logger.info("Retrieved member " + member.getIdentifier() + " from token " + token);
-                return new Response<>(member.getUserId(), "Retrieved member from token " + token);
+                logger.info("Retrieved member " + member.getIdentifier());
+                return new Response<>(member.getUserId(), "Retrieved member");
             }
             else {
-                logger.warning("Member with token " + token + " is not found");
-                return new Response<>(-1, "Member with token " + token + " is not found");
+                logger.warning("Member is not found");
+                return new Response<>(-1, "Member is not found");
             }
 
         } catch (Exception e) {
-            logger.severe("User with token " + token + " is not found");
-            return new Response<>(-1, "User with token " + token + " is not found");
+            logger.severe("User is not found");
+            return new Response<>(-1, "User is not found");
         }
     }
 }
