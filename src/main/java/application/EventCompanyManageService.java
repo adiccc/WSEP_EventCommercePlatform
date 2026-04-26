@@ -117,15 +117,15 @@ public class EventCompanyManageService {
             Company c = this.companyRepo.findById(companyId);
             if (!c.checkPermission(creatorId, CREATE_EVENT)) {
                 logger.severe("User does not have permission to create event for this company");
-                return new Response<>(false, "Permission required");
+                return new Response<>(null, "Permission required");
             }
             if (date.isBefore(LocalDateTime.now())) {
                 logger.severe("Event date must be in the future");
-                return new Response<>(false, "Event date must be in the future");
+                return new Response<>(null, "Event date must be in the future");
             }
             if (saleStartDate.isAfter(date)) {
                 logger.severe("Sale start date must be before event date");
-                return new Response<>(false, "Sale start date must be before event date");
+                return new Response<>(null, "Sale start date must be before event date");
             }
 
             Event event = new Event(
