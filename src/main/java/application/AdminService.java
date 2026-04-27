@@ -3,10 +3,12 @@ package application;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.company.Permissions;
+import domain.dto.HierarchyDTO;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import domain.webQueue.WebQueue;
 
+import java.util.Map;
 import java.util.logging.Logger;
 
 public class AdminService {
@@ -103,15 +105,26 @@ public class AdminService {
                     // Founder removed → deactivate the whole company
                     company.deactivate();
                     changed = true;
-                } else if (perms.isOwner(userIdToRemove)) {
-                    // Owner removed → cascade their manager appointees to founder
-                    perms.removeOwnerAndCascade(userIdToRemove);
-                    changed = true;
-                }
 
-                if (perms.getCompanyTree().containsKey(userIdToRemove)) {
-                    // Manager removed → cascade their sub-managers to founder
-                    perms.removeManagerAndCascade(userIdToRemove);
+                } else if (perms.isOwner(userIdToRemove)) {
+                    // Owner removed → reassign any managers they appointed to the founder
+                    perms.removeOwner(userIdToRemove);
+                    for (HierarchyDTO dto : perms.getCompanyTree().values()) {
+                        if (dto.getMyManager() == userIdToRemove)
+                            dto.setMyManager(perms.getFounderId());
+                    }
+                    changed = true;
+
+                } else if (perms.getCompanyTree().containsKey(userIdToRemove)) {
+                    // Manager removed → clean up appointer's list + reassign sub-managers to founder
+                    HierarchyDTO removed = perms.getCompanyTree().remove(userIdToRemove);
+                    HierarchyDTO appointer = perms.getCompanyTree().get(removed.getMyManager());
+                    if (appointer != null)
+                        appointer.getMyAppointees().remove(Integer.valueOf(userIdToRemove));
+                    for (int subId : removed.getMyAppointees()) {
+                        HierarchyDTO sub = perms.getCompanyTree().get(subId);
+                        if (sub != null) sub.setMyManager(perms.getFounderId());
+                    }
                     changed = true;
                 }
 

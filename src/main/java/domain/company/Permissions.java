@@ -3,7 +3,6 @@ package domain.company;
 import domain.dataType.PermissionType;
 import domain.dto.HierarchyDTO;
 
-import java.awt.event.HierarchyBoundsAdapter;
 import java.util.*;
 
 public class Permissions {
@@ -40,5 +39,9 @@ public class Permissions {
 
     public HashMap<Integer, HierarchyDTO> getCompanyTree() {
         return companyTree;
+    }
+
+    public void removeOwner(int ownerId) {
+        ownerIds.remove(ownerId);
     }
 }

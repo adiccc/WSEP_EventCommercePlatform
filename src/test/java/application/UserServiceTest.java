@@ -1,13 +1,11 @@
 package application;
 
-import domain.company.ICompanyRepo;
 import DTO.QueueEntryResultDTO;
 import domain.dto.UserDTO;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import domain.webQueue.WebQueue;
 import infrastructure.Auth;
-import infrastructure.CompanyRepoImpl;
 import infrastructure.PasswordEncoderUtil;
 import infrastructure.UserRepo;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +33,7 @@ class UserServiceTest {
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
         auth = new Auth(realTokenService, userRepo, passwordEncoder, Set.of());
-        userService = new UserService(realTokenService, auth, userRepo, passwordEncoder, companyRepo);
+        userService = new UserService(realTokenService, auth, userRepo, passwordEncoder);
     }
 
     private UserDTO createValidDTO() {
