@@ -315,12 +315,12 @@ public class CompanyService {
             logger.warning("deactivateCompany failed: invalid or expired token");
             return  new Response<>(false, "Invalid or expired token, deactivate failed");
         }
-        if(!companyRepo.existsById(companyId)){
-            logger.warning("deactivateCompany failed: company not found, id: " + companyId);
-            return  new Response<>(false, "Company not found");
-        }
         try{
             Company company = companyRepo.findById(companyId);
+            if(company == null){
+                logger.warning("deactivateCompany failed: company not found, id: " + companyId);
+                return  new Response<>(false, "Company not found");
+            }
             if(company.isActive()) {
                 company.deactivate();
                 companyRepo.store(company);

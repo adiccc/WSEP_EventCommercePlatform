@@ -3,8 +3,9 @@ package application;
 import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
-import domain.company.ManagerAppointment;
+import domain.company.Permissions;
 import domain.dataType.PermissionType;
+import domain.dto.HierarchyDTO;
 import domain.dto.RolesPermissionsTreeDTO;
 import domain.event.IOrderRepo;
 import domain.event.Order;
@@ -89,20 +90,21 @@ class ViewRolesAndPermissionsTreeTest {
     void setUp() {
         // Build the company with a founder, one extra owner, and one manager
         company = new Company(
-                COMPANY_ID, "Test Company", FOUNDER_ID,
+                COMPANY_ID, "Test Company",
                 new ContactInfo("test@test.com", "0500000000", "bank-1"),
-                new PurchasePolicy(), new DiscountPolicy()
+                new PurchasePolicy(), new DiscountPolicy(),
+                new Permissions(FOUNDER_ID)
         );
 
         // Add an extra owner (OWNER_ID), appointed by the founder
-        company.addOwner(OWNER_ID, FOUNDER_ID);
+        company.getCompanyPermission().addOwner(OWNER_ID);
 
         // Add a manager with some permissions, appointed by OWNER_ID
-        ManagerAppointment managerAppt = new ManagerAppointment(
-                MANAGER_ID, OWNER_ID,
+        HierarchyDTO managerDTO = new HierarchyDTO(
+                OWNER_ID, new ArrayList<>(),
                 EnumSet.of(PermissionType.MANAGE_EVENTS_INVENTORY, PermissionType.VIEW_PURCHASE_HISTORY)
         );
-        company.getManagersPermissionsMap().put(MANAGER_ID, managerAppt);
+        company.getManagersPermissionsMap().put(MANAGER_ID, managerDTO);
 
         ICompanyRepo companyRepo = new CompanyRepoImpl();
         companyRepo.store(company);
@@ -136,9 +138,10 @@ class ViewRolesAndPermissionsTreeTest {
     @Test
     void GivenCompanyWithNoManagers_WhenViewRolesTree_ThenManagersMapIsEmpty() {
         Company freshCompany = new Company(
-                2, "Fresh Co", FOUNDER_ID,
+                2, "Fresh Co",
                 new ContactInfo("a@b.com", "050", "bank"),
-                new PurchasePolicy(), new DiscountPolicy()
+                new PurchasePolicy(), new DiscountPolicy(),
+                new Permissions(FOUNDER_ID)
         );
         ICompanyRepo repo2 = new CompanyRepoImpl();
         repo2.store(freshCompany);
