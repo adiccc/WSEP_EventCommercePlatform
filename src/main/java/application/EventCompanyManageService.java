@@ -368,8 +368,7 @@ public class EventCompanyManageService {
                 }
                 int userId = auth.getUserId(token).getValue();
                 boolean isMember = userId != -1;
-                //TODO when check permission is implemented change just for a call to that function
-                boolean isUserPermitted = company.isActive() || (isMember && (company.isOwner(userId) || company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES)));
+                boolean isUserPermitted = company.isActive() || (isMember || company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES));
                 if (!isUserPermitted) {
                     logger.log(Level.SEVERE, "User is not permitted to view closed companies");
                     return new Response<>(null, "User is not permitted to view closed companies");
@@ -409,6 +408,7 @@ public class EventCompanyManageService {
     }
 
     public Response<SalesReportDTO> generateSalesReports(int companyId, String token){
+        return RetryHelper.executeWithRetry(() -> {
         logger.log(Level.INFO, "generateSalesReports called");
         try {
             Company company = companyRepo.findById(companyId);
@@ -457,6 +457,7 @@ public class EventCompanyManageService {
             logger.log(Level.SEVERE, "failed generate sales report : " + e.getMessage());
             return new Response<>(null, "failed generate sales report : " + e.getMessage());
         }
+        });
     }
 
     public Response<Boolean> processRefund(String token, String eventId, int orderId) {

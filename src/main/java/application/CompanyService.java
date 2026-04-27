@@ -310,7 +310,6 @@ public class CompanyService {
                 for (Company company : allCompanies) {
                     // isUserPermitted means or the company is active
                     // if the company isn't active only members who are owners and have the right permitting can access
-                    //TODO when check permission is implemented change just for a call to that function
                     boolean isUserPermitted = company.isActive() || (isMember && (company.getCompanyPermission().isOwner(userId) || company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES)));
                     if (isUserPermitted) {
                         filteredCompanies.add(new CompanyDTO(

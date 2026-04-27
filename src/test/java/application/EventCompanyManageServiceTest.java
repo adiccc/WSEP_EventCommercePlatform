@@ -749,6 +749,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenOwnerWithSalesData_WhenGenerateSalesReports_ThenReturnReportWithData() {
         // Arrange
+        //TODO: make sure that when order is completed change the change to use only repo's and services!!!!
         String event = eventCompanyManageService.createEvent(validToken1,companyId,eventDate,"event1",eventDate.minusDays(1), false,GeographicalArea.NORTH,CategoryEvent.SPORTS).getValue();
         List<Integer> purchasedTickets = new ArrayList<>();
         purchasedTickets.add(101);
