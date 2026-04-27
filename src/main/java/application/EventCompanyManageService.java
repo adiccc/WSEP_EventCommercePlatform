@@ -391,7 +391,6 @@ public class EventCompanyManageService {
                         company.getContactInfo().getPhone(),
                         company.getPurchasePolicy().describe(),
                         company.getDiscountPolicy().describe(),
-                        company.getFounderId(),
                         futureEvents);
                 if (futureEvents.isEmpty()) {
                     logger.log(Level.INFO, "No future events found for company " + companyId);
