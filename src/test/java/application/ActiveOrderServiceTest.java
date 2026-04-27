@@ -21,6 +21,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import org.mockito.Mockito;
+
 class ActiveOrderServiceTest {
 
     private ActiveOrderService service;
@@ -30,6 +32,7 @@ class ActiveOrderServiceTest {
     private CompanyRepoImpl companyRepo;
     private LotteryRepoImpl lotteryRepo;
     private EventCompanyManageService companyEventService;
+    private IPaymentSystem paymentSystem;
 
     private int userId1;
     private String validToken;
@@ -77,11 +80,13 @@ class ActiveOrderServiceTest {
         companyRepo = new CompanyRepoImpl();
         lotteryRepo = new LotteryRepoImpl();
 
+        paymentSystem = Mockito.mock(IPaymentSystem.class);
+
         CompanyService companyService = new CompanyService(auth, companyRepo, userRepo);
         companyService.createProductionCompany(validToken, companyId,
                 "test-company", "testC@company.com", "054-5556677", "leumi");
 
-        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth);
+        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
 
         Response<String> r = companyEventService.createEvent(
                 validToken,

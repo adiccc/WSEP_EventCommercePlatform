@@ -32,17 +32,20 @@ import java.util.NoSuchElementException;
 import static domain.dataType.PermissionType.CREATE_EVENT;
 import static domain.dataType.PermissionType.VIEW_ORDERS_HISTORY;
 
+// TODO: update all EventCompanyManageService initializations to pass IPaymentSystem
 public class EventCompanyManageService {
     private final ICompanyRepo companyRepo;
     private final IEventRepo eventRepo;
     private final Logger logger;
     private final IAuth auth;
+    private final IPaymentSystem paymentSystem;
 
-    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth) {
+    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;
         this.auth = auth;
         this.logger = Logger.getLogger(EventCompanyManageService.class.getName());
+        this.paymentSystem = paymentSystem;
     }
 
     public Response<Boolean> DefineVenueAndSeatingMap(String token, String eventId, ElementPositionDTO stage,
@@ -360,4 +363,56 @@ public class EventCompanyManageService {
             }
         });
     }
+    public Response<Boolean> processRefund(String token, String eventId, int orderId) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "processRefund called");
+
+            int userId = auth.getUserId(token).getValue();
+            if (userId == -1) {
+                logger.severe("Invalid token");
+                return new Response<>(false, "Invalid token");
+            }
+
+            try {
+                Event event = eventRepo.findById(eventId);
+                Order order = event.findOrderById(orderId);
+
+                if (order == null) {
+                    logger.log(Level.SEVERE, "Order not found for refund");
+                    return new Response<>(false, "No matching order found for refund");
+                }
+
+                if (!order.canBeRefunded()) {
+                    logger.log(Level.SEVERE, "Order cannot be refunded");
+                    return new Response<>(false, "Order cannot be refunded");
+                }
+
+                boolean refundApproved = paymentSystem.refund(
+                        order.getPaymentConfirmationId(),
+                        order.getTotalSum()
+                );
+
+                if (refundApproved) {
+                    order.markRefunded();
+                    eventRepo.store(event);
+                    logger.log(Level.INFO, "Refund completed successfully");
+                    return new Response<>(true, "Refund completed successfully");
+                }
+
+                order.markRefundRequired();
+                eventRepo.store(event);
+
+                logger.log(Level.SEVERE, "Refund rejected by external payment service");
+                return new Response<>(false, "Refund rejected by external payment service");
+
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
+                return new Response<>(false, "Event not found");
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
+                return new Response<>(false, "Failed to process refund: " + e.getMessage());
+            }
+        });
+    }
+
 }
