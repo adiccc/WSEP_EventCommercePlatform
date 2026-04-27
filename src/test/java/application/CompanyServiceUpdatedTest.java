@@ -1,13 +1,11 @@
 package application;
 
-import domain.company.Company;
-import domain.company.ContactInfo;
+import DTO.DiscountDTO;
+import DTO.PurchaseRuleDTO;
 import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
-import domain.policy.*;
-import domain.user.IUserRepo;
-import domain.dataType.PermissionType;
 import domain.dto.CompanyDTO;
+import domain.user.IUserRepo;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,19 +21,17 @@ class CompanyServiceUpdatedTest {
     private int OWNER_ID;
     private int OTHER_USER_ID;
 
-    private Company company;
     private String OWNER_TOKEN;
     private String OTHER_TOKEN;
 
     private CompanyService service;
     private UserService userService;
     private ICompanyRepo companyRepo;
-    private IUserRepo userRepo;
     private IAuth auth;
 
     @BeforeEach
     void setUp() {
-        userRepo = new UserRepo();
+        IUserRepo userRepo = new UserRepo();
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         TokenService tokenService = new TokenService();
         auth = new Auth(tokenService, userRepo, passwordEncoder);
@@ -117,5 +113,218 @@ class CompanyServiceUpdatedTest {
 
         assertNotNull(response.getValue());
         assertEquals(2, response.getValue().size());
+    }
+
+    // ===================== Purchase Rule functions =====================
+
+    @Test
+    void GivenOwnerAndValidRule_WhenAddRuleToCompany_ThenSuccess() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4);
+        Response<Boolean> response = service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID, ruleDTO);
+        assertFalse(response.isError());
+        assertEquals(Boolean.TRUE, response.getValue());
+    }
+
+    @Test
+    void GivenOwnerAddsMultipleRules_WhenAddRuleToCompany_ThenAllSucceed() {
+        Response<Boolean> first = service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID,
+                new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4));
+        Response<Boolean> second = service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID,
+                new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18));
+        assertFalse(first.isError());
+        assertFalse(second.isError());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenAddRuleToCompany_ThenError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4);
+        Response<Boolean> response = service.addRuleToCompany("invalid-token", COMPANY_ID, ruleDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNonOwner_WhenAddRuleToCompany_ThenError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4);
+        Response<Boolean> response = service.addRuleToCompany(OTHER_TOKEN, COMPANY_ID, ruleDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNegativeTicketCount_WhenAddRuleToCompany_ThenError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, -1);
+        Response<Boolean> response = service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID, ruleDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNegativeMinAge_WhenAddRuleToCompany_ThenError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, -5);
+        Response<Boolean> response = service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID, ruleDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenCompanyNotFound_WhenAddRuleToCompany_ThenError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4);
+        Response<Boolean> response = service.addRuleToCompany(OWNER_TOKEN, 999, ruleDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInactiveCompany_WhenAddRuleToCompany_ThenError() {
+        service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4);
+        Response<Boolean> response = service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID, ruleDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenOwnerAndExistingRule_WhenRemoveRuleFromCompany_ThenSuccess() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4);
+        service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID, ruleDTO);
+        Response<Boolean> response = service.removeRuleFromCompany(OWNER_TOKEN, COMPANY_ID, ruleDTO);
+        assertFalse(response.isError());
+        assertEquals(Boolean.TRUE, response.getValue());
+    }
+
+    @Test
+    void GivenRuleNotFound_WhenRemoveRuleFromCompany_ThenError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4);
+        Response<Boolean> response = service.removeRuleFromCompany(OWNER_TOKEN, COMPANY_ID, ruleDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenRemoveRuleFromCompany_ThenError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4);
+        Response<Boolean> response = service.removeRuleFromCompany("invalid-token", COMPANY_ID, ruleDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNonOwner_WhenRemoveRuleFromCompany_ThenError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4);
+        service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID, ruleDTO);
+        Response<Boolean> response = service.removeRuleFromCompany(OTHER_TOKEN, COMPANY_ID, ruleDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenCompanyNotFound_WhenRemoveRuleFromCompany_ThenError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4);
+        Response<Boolean> response = service.removeRuleFromCompany(OWNER_TOKEN, 999, ruleDTO);
+        assertTrue(response.isError());
+    }
+
+    // ===================== Discount functions =====================
+
+    @Test
+    void GivenOwnerAndValidDiscount_WhenAddDiscountToCompany_ThenSuccess() {
+        DiscountDTO discountDTO = new DiscountDTO(20.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discountDTO);
+        assertFalse(response.isError());
+        assertEquals(Boolean.TRUE, response.getValue());
+    }
+
+    @Test
+    void GivenExistingDiscount_WhenRemoveDiscountFromCompany_ThenSuccess() {
+        LocalDate endDate = LocalDate.now().plusDays(1);
+        service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, new DiscountDTO(10.0, endDate));
+        service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, new DiscountDTO(80.0, endDate));
+
+        Response<Boolean> removeResponse = service.removeDiscountFromCompany(OWNER_TOKEN, COMPANY_ID, new DiscountDTO(10.0, endDate));
+        assertFalse(removeResponse.isError());
+        assertEquals(Boolean.TRUE, removeResponse.getValue());
+    }
+
+    @Test
+    void GivenCompanyNotFound_WhenAddDiscountToCompany_ThenError() {
+        DiscountDTO discountDTO = new DiscountDTO(10.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = service.addDiscountToCompany(OWNER_TOKEN, 999, discountDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenCompanyNotFound_WhenRemoveDiscountFromCompany_ThenError() {
+        DiscountDTO discountDTO = new DiscountDTO(10.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = service.removeDiscountFromCompany(OWNER_TOKEN, 999, discountDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNonOwner_WhenAddDiscountToCompany_ThenError() {
+        DiscountDTO discountDTO = new DiscountDTO(10.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = service.addDiscountToCompany(OTHER_TOKEN, COMPANY_ID, discountDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNonOwner_WhenRemoveDiscountFromCompany_ThenError() {
+        DiscountDTO discountDTO = new DiscountDTO(10.0, LocalDate.now().plusDays(1));
+        service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discountDTO);
+        Response<Boolean> response = service.removeDiscountFromCompany(OTHER_TOKEN, COMPANY_ID, discountDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenAddDiscountToCompany_ThenError() {
+        DiscountDTO discountDTO = new DiscountDTO(10.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = service.addDiscountToCompany("invalid-token", COMPANY_ID, discountDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenRemoveDiscountFromCompany_ThenError() {
+        DiscountDTO discountDTO = new DiscountDTO(10.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = service.removeDiscountFromCompany("invalid-token", COMPANY_ID, discountDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNegativePercentage_WhenAddDiscountToCompany_ThenError() {
+        DiscountDTO discountDTO = new DiscountDTO(-10.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discountDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenEmptyCouponCode_WhenAddDiscountToCompany_ThenError() {
+        DiscountDTO discountDTO = new DiscountDTO("", 10.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discountDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInactiveCompany_WhenAddDiscountToCompany_ThenError() {
+        service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+        DiscountDTO discountDTO = new DiscountDTO(10.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discountDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInactiveCompany_WhenRemoveDiscountFromCompany_ThenError() {
+        LocalDate endDate = LocalDate.now().plusDays(1);
+        service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, new DiscountDTO(10.0, endDate));
+        service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, new DiscountDTO(20.0, endDate));
+        service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+
+        Response<Boolean> response = service.removeDiscountFromCompany(OWNER_TOKEN, COMPANY_ID, new DiscountDTO(10.0, endDate));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenDuplicateDiscount_WhenAddDiscountToCompany_ThenError() {
+        LocalDate endDate = LocalDate.now().plusDays(1);
+        service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, new DiscountDTO(15.0, endDate));
+        Response<Boolean> response = service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, new DiscountDTO(15.0, endDate));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenDiscountDoesNotExist_WhenRemoveDiscountFromCompany_ThenError() {
+        DiscountDTO discountDTO = new DiscountDTO(10.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = service.removeDiscountFromCompany(OWNER_TOKEN, COMPANY_ID, discountDTO);
+        assertTrue(response.isError());
     }
 }

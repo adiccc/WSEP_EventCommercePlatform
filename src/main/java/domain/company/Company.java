@@ -1,9 +1,17 @@
 package domain.company;
 
+import DTO.DiscountDTO;
+import DTO.PurchaseRuleDTO;
 import domain.dataType.PermissionType;
+import domain.policy.CodeCoupun;
 import domain.policy.Discount;
 import domain.policy.DiscountPolicy;
+import domain.policy.LimitedDiscount;
+import domain.policy.MaxTicketsRule;
+import domain.policy.MinAgeRule;
+import domain.policy.Purchase;
 import domain.policy.PurchasePolicy;
+import domain.policy.VisualDiscount;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -74,16 +82,7 @@ public class Company {
             throw new IllegalArgumentException("Invalid policy data");
         this.purchasePolicy = newPolicy;
     }
-
-    public void updateDiscountPolicy(int userId, DiscountPolicy newPolicy) {
-        if (!isActive)
-            throw new IllegalStateException("Company is not active");
-        if (!ownerIds.contains(userId))
-            throw new SecurityException("User does not have permission to update discount policy");
-        if (!newPolicy.isValid())
-            throw new IllegalArgumentException("Invalid discount policy data");
-        this.discountPolicy = newPolicy;
-    }
+    
 
     public void deactivate() { this.isActive = false; }
 
@@ -107,17 +106,46 @@ public class Company {
     public Set<Integer> getOwnerIds() { return ownerIds; }
     public Map<String, ManagerAppointment> getManagersPermissionsMap() { return managersPermissionsMap; }
 
-    public void addDiscount(int userId, Discount policy) {
-        if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!isOwner(userId)) {
-            throw new SecurityException("User does not have permission to add discount policy");
-        }
-        discountPolicy.addDiscount(policy);
+    public void addRule(int userId, PurchaseRuleDTO dto) {
+        if (!checkPermission(userId, PermissionType.MANAGE_POLICIES) && !isOwner(userId))
+            throw new SecurityException("User does not have permission to add purchase rule");
+        if (!isActive)
+            throw new IllegalStateException("Company is not active");
+        purchasePolicy.addRule(toRule(dto));
     }
-    
-    public void removeDiscount(int userId, Discount policy) {
-        if (!checkPermission(userId,PermissionType.MANAGE_POLICIES)&&!isOwner(userId)) {
-            throw new SecurityException("User does not have permission to remove discount policy");
-        }
-        discountPolicy.removeDiscount(policy);
+
+    public void removeRule(int userId, PurchaseRuleDTO dto) {
+        if (!checkPermission(userId, PermissionType.MANAGE_POLICIES) && !isOwner(userId))
+            throw new SecurityException("User does not have permission to remove purchase rule");
+        if (!isActive)
+            throw new IllegalStateException("Company is not active");
+        purchasePolicy.removeRule(toRule(dto));
+    }
+
+    public void addDiscount(int userId, DiscountDTO dto) {
+        if (!checkPermission(userId, PermissionType.MANAGE_POLICIES) && !isOwner(userId))
+            throw new SecurityException("User does not have permission to add discount");
+        discountPolicy.addDiscount(toDiscount(dto));
+    }
+
+    public void removeDiscount(int userId, DiscountDTO dto) {
+        if (!checkPermission(userId, PermissionType.MANAGE_POLICIES) && !isOwner(userId))
+            throw new SecurityException("User does not have permission to remove discount");
+        discountPolicy.removeDiscount(toDiscount(dto));
+    }
+
+    private Purchase toRule(PurchaseRuleDTO dto) {
+        return switch (dto.getType()) {
+            case MIN_AGE -> new MinAgeRule(dto.getMinAge());
+            case MAX_TICKETS -> new MaxTicketsRule(dto.getMaxTickets());
+        };
+    }
+
+    private Discount toDiscount(DiscountDTO dto) {
+        return switch (dto.getType()) {
+            case VISUAL -> new VisualDiscount(dto.getPercentage(), dto.getEndDate());
+            case CODE_COUPON -> new CodeCoupun(dto.getCode(), dto.getPercentage(), dto.getEndDate());
+            case LIMITED -> new LimitedDiscount(dto.getPercentage(), dto.getMinQuantity());
+        };
     }
 }

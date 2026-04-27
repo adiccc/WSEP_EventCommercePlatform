@@ -138,11 +138,10 @@ class DiscountPolicyTest {
     }
 
     @Test
-    void GivenOneInvalidDiscount_WhenIsValid_ThenReturnFalse() {
+    void GivenInvalidDiscount_WhenAddDiscount_ThenThrowsIllegalArgument() {
         DiscountPolicy policy = new DiscountPolicy();
         policy.addDiscount(new VisualDiscount(10, FUTURE));
-        policy.addDiscount(new VisualDiscount(-5, FUTURE));
-        assertFalse(policy.isValid());
+        assertThrows(IllegalArgumentException.class, () -> policy.addDiscount(new VisualDiscount(-5, FUTURE)));
     }
 
     @Test

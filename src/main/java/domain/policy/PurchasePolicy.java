@@ -24,11 +24,28 @@ public class PurchasePolicy implements Purchase {
     }
 
     public void addRule(Purchase rule) {
+        if (!rule.isValid())
+            throw new IllegalArgumentException("Invalid rule data");
+        if (ruleExists(rule))
+            throw new RuntimeException("Rule already exists");
         rules.add(rule);
     }
 
     public void removeRule(Purchase rule) {
-        rules.remove(rule);
+        for (Purchase r : rules) {
+            if (rule.equals(r)) {
+                rules.remove(r);
+                return;
+            }
+        }
+        throw new RuntimeException("Rule not found");
+    }
+
+    public boolean ruleExists(Purchase newRule) {
+        for (Purchase rule : rules) {
+            if (rule.ruleExists(newRule)) return true;
+        }
+        return false;
     }
 
     @Override

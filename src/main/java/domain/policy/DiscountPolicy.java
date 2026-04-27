@@ -23,6 +23,8 @@ public class DiscountPolicy implements Discount {
         }
     }
     public void addDiscount(Discount discount) {
+        if (!discount.isValid())
+            throw new IllegalArgumentException("Invalid discount data");
         if(discountExists(discount))
             throw new RuntimeException("Discount already exists");
         discounts.add(discount);
