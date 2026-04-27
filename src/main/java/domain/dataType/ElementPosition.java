@@ -7,6 +7,10 @@ public class ElementPosition {
         this.x = x;
         this.y = y;
     }
+    public ElementPosition(ElementPosition elementPosition) {
+        this.x = elementPosition.x;
+        this.y = elementPosition.y;
+    }
     public double getX() {
         return x;
     }

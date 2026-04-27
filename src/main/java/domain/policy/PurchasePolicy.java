@@ -10,6 +10,18 @@ public class PurchasePolicy implements Purchase {
     public PurchasePolicy() {
         this.rules = new ArrayList<>();
     }
+    public PurchasePolicy(PurchasePolicy purchasePolicy) {
+        this.rules=new ArrayList<>();
+        for (Purchase purchase : purchasePolicy.getRules()) {
+            if(purchase instanceof PurchasePolicy) {
+                this.rules.add(new PurchasePolicy((PurchasePolicy) purchase));
+            } if(purchase instanceof MinAgeRule) {
+                this.rules.add(new MinAgeRule((MinAgeRule)purchase));
+            } if(purchase instanceof MaxTicketsRule){
+                this.rules.add(new MaxTicketsRule((MaxTicketsRule)purchase));
+            }
+        }
+    }
 
     public void addRule(Purchase rule) {
         rules.add(rule);

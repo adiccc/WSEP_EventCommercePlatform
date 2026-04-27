@@ -18,6 +18,14 @@ public class StandingZone extends Zone {
             this.tickets.add(new StandingTicket());
         }
     }
+    public StandingZone(StandingZone zone){
+        super(zone.getName(),zone.getPrice(),zone.getElementPosition());
+        this.capacity = zone.capacity;
+        this.tickets=new ArrayList<>();
+        for(StandingTicket st:tickets){
+            this.tickets.add(new StandingTicket(st));
+        }
+    }
     public StandingZone(StandingZoneDTO standingZoneDTO) {
         super(standingZoneDTO.getName(),standingZoneDTO.getPrice(),standingZoneDTO.getPosition());
         this.capacity = standingZoneDTO.getCapacty();

@@ -16,6 +16,21 @@ public class Permissions {
         addOwner(founderId);
         companyTree = new HashMap<>();
     }
+
+    /** Deep-copy constructor used by Company's copy constructor */
+    public Permissions(Permissions other) {
+        this.founderId = other.founderId;
+        this.ownerIds = new HashSet<>(other.ownerIds);
+        this.companyTree = new HashMap<>();
+        for (Map.Entry<Integer, HierarchyDTO> entry : other.companyTree.entrySet()) {
+            HierarchyDTO orig = entry.getValue();
+            this.companyTree.put(entry.getKey(), new HierarchyDTO(
+                    orig.getMyManager(),
+                    new ArrayList<>(orig.getMyAppointees()),
+                    new HashSet<>(orig.getAllPermissions())
+            ));
+        }
+    }
     public int getFounderId() {
         return founderId;
     }

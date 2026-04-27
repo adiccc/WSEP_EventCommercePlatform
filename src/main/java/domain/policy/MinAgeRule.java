@@ -8,6 +8,9 @@ public class MinAgeRule extends PurchaseRule {
     public MinAgeRule(int minAge) {
         this.minAge = minAge;
     }
+    public MinAgeRule(MinAgeRule rule) {
+        this.minAge = rule.minAge;
+    }
 
     @Override
     public boolean isSatisfied(UserDTO user, int quantity, int ticketsBoughtForEvent) {

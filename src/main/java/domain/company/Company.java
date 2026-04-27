@@ -16,20 +16,35 @@ public class Company {
     private PurchasePolicy purchasePolicy;
     private DiscountPolicy discountPolicy;
     private Permissions companyPermission;
+    private long version;
 
     public Company(int companyId, String companyName, ContactInfo contactInfo,
-                   PurchasePolicy defaultPurchase, DiscountPolicy defaultDiscount,Permissions companyPermission) {
+                   PurchasePolicy defaultPurchase, DiscountPolicy defaultDiscount,
+                   Permissions companyPermission) {
         this.companyId = companyId;
         this.companyName = companyName;
         this.contactInfo = contactInfo;
-
         this.purchasePolicy = defaultPurchase;
         this.discountPolicy = defaultDiscount;
-        this.isActive = true;
-        this.purchasePolicy = new PurchasePolicy();
-        this.discountPolicy = new DiscountPolicy();
         this.companyPermission = companyPermission;
+        this.isActive = true;
+        this.version = 0;
     }
+
+    /** Deep-copy constructor — used by the repo for defensive copying */
+    public Company(Company company) {
+        this.companyId = company.companyId;
+        this.companyName = company.companyName;
+        this.contactInfo = new ContactInfo(company.contactInfo);
+        this.purchasePolicy = new PurchasePolicy(company.purchasePolicy);
+        this.discountPolicy = new DiscountPolicy(company.discountPolicy);
+        this.isActive = company.isActive;
+        this.companyPermission = new Permissions(company.companyPermission);
+        this.version = company.version;
+    }
+
+    public long getVersion() { return version; }
+    public void setVersion(long version) { this.version = version; }
 
     public void updatePurchasePolicy(int userId, PurchasePolicy newPolicy) {
         if (!isActive)
@@ -51,7 +66,23 @@ public class Company {
         this.discountPolicy = newPolicy;
     }
 
+    public void addDiscount(int userId, Discount discount) {
+        if (!companyPermission.checkPermission(userId, PermissionType.MANAGE_POLICIES)) {
+            throw new SecurityException("User does not have permission to add discount policy");
+        }
+        discountPolicy.addDiscount(discount);
+    }
+
+    public void removeDiscount(int userId, Discount discount) {
+        if (!companyPermission.checkPermission(userId, PermissionType.MANAGE_POLICIES)) {
+            throw new SecurityException("User does not have permission to remove discount policy");
+        }
+        discountPolicy.removeDiscount(discount);
+    }
+
     public void deactivate() { this.isActive = false; }
+
+    // --- Getters ---
     public int getCompanyId() { return companyId; }
     public String getCompanyName() { return companyName; }
     public boolean isActive() { return isActive; }
@@ -60,22 +91,14 @@ public class Company {
     public DiscountPolicy getDiscountPolicy() { return discountPolicy; }
     public Permissions getCompanyPermission() { return companyPermission; }
 
-
-    public Set<Integer> getOwnerIds() { return companyPermission.getOwnerIds(); }
+    // --- Convenience delegates to Permissions ---
     public int getFounderId() { return companyPermission.getFounderId(); }
+    public Set<Integer> getOwnerIds() { return companyPermission.getOwnerIds(); }
     public boolean isOwner(int userId) { return companyPermission.isOwner(userId); }
-    public Map<Integer, HierarchyDTO> getManagersPermissionsMap() { return companyPermission.getCompanyTree(); }
-    public void addDiscount(int userId, Discount policy) {
-        if (!companyPermission.checkPermission(userId,PermissionType.MANAGE_POLICIES)) { //check inside the function if it's owner
-            throw new SecurityException("User does not have permission to add discount policy");
-        }
-        discountPolicy.addDiscount(policy);
+    public boolean checkPermission(int userId, PermissionType permission) {
+        return companyPermission.checkPermission(userId, permission);
     }
-    
-    public void removeDiscount(int userId, Discount policy) {
-        if (!companyPermission.checkPermission(userId,PermissionType.MANAGE_POLICIES)) {
-            throw new SecurityException("User does not have permission to remove discount policy");
-        }
-        discountPolicy.removeDiscount(policy);
+    public Map<Integer, HierarchyDTO> getManagersPermissionsMap() {
+        return companyPermission.getCompanyTree();
     }
 }

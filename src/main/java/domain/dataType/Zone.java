@@ -18,6 +18,13 @@ public abstract class Zone {
         this.elementPosition = new ElementPosition(elementPosition.getX(),elementPosition.getY());
     }
 
+    public String getName() {
+        return name;
+    }
+    public ElementPosition getElementPosition() {
+        return new ElementPosition(elementPosition);
+    }
+
     public double getPrice() {
         return price;
     }

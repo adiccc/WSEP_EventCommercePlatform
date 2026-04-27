@@ -12,6 +12,11 @@ public class CodeCoupun extends DiscountElement {
         this.percentage = percentage;
         this.endDate = endDate;
     }
+    public CodeCoupun(CodeCoupun codeCoupun) {
+        this.code = codeCoupun.code;
+        this.percentage = codeCoupun.percentage;
+        this.endDate = codeCoupun.endDate;
+    }
 
     @Override
     public double apply(double originalPrice, int quantity, String couponCode) {

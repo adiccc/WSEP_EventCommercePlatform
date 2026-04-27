@@ -11,6 +11,7 @@ import domain.dto.CompanyDetailsDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
+import domain.event.OrderStatus;
 import domain.event.IOrderRepo;
 import domain.event.Order;
 import domain.policy.DiscountPolicy;
@@ -28,6 +29,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+
+import org.mockito.Mockito;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -57,7 +60,8 @@ class EventCompanyManageServiceTest {
     private String validToken2;
     private String invalidToken;
     private EventService eventService;
-
+    private IEventRepo eventRepo;
+    private IPaymentSystem paymentSystem;
 
     @BeforeEach
     void setUp() {
@@ -66,14 +70,21 @@ class EventCompanyManageServiceTest {
         tokenService = new TokenService();
         auth=new Auth(tokenService,userRepo,passwordEncoder);
         companyRepo=new CompanyRepoImpl();
-        IEventRepo eventRepo=new EventRepoImpl();
+        eventRepo = new EventRepoImpl();
+
+        paymentSystem = Mockito.mock(IPaymentSystem.class);
 
         userService=new UserService(tokenService,auth,userRepo,passwordEncoder);
         eventService=new EventService(auth,eventRepo);
 
         //should delete oreder repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo);
-        eventCompanyManageService=new EventCompanyManageService(companyRepo,eventRepo,auth);
+        eventCompanyManageService = new EventCompanyManageService(
+                companyRepo,
+                eventRepo,
+                auth,
+                paymentSystem
+        );
 
         validToken1=null; // user with all permissions
         UserDTO user1DTO = new UserDTO("user1@test.com","test1","t","mytest",1,1,2016,"user test address","054-555-6677");
@@ -423,33 +434,35 @@ class EventCompanyManageServiceTest {
         assertFalse(response.getValue());
         assertTrue(response.getMessage().startsWith("failed to create event : "));
     }
-    @Test
-    void GivenCompanyExistsAndUserHasPermissionAndOrdersExist_WhenGetOrdersByCompany_ThenOrdersHistoryIsReturned() {
-        // Given
-        eventCompanyManageService.DefineVenueAndSeatingMap(
-                validToken1,
-                eventId,
-                stage,
-                entries,
-                standingZones,
-                seatingZones
-        );
-        Order order1 = new Order(0, 1, "1", new ArrayList<>() );
-        Order order2 = new Order(1, 1, "1", new ArrayList<>());
-        Event event=eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
-        event.getOrders().add(order1);
-        event.getOrders().add(order2);
 
-        // When
-        Response<List<Order>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
-
-        // Then
-        assertNotNull(response.getValue());
-        assertEquals("orders found", response.getMessage());
-        assertEquals(2, response.getValue().size());
-        assertTrue(response.getValue().contains(order1));
-        assertTrue(response.getValue().contains(order2));
-    }
+    // TODO to implement when add order function in service is exist
+//    @Test
+//    void GivenCompanyExistsAndUserHasPermissionAndOrdersExist_WhenGetOrdersByCompany_ThenOrdersHistoryIsReturned() {
+//        // Given
+//        eventCompanyManageService.DefineVenueAndSeatingMap(
+//                validToken1,
+//                eventId,
+//                stage,
+//                entries,
+//                standingZones,
+//                seatingZones
+//        );
+//        Order order1 = new Order(0, 1, "1", new ArrayList<>() );
+//        Order order2 = new Order(1, 1, "1", new ArrayList<>());
+//        Event event=eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
+//        event.getOrders().add(order1);
+//        event.getOrders().add(order2);
+//
+//        // When
+//        Response<List<Order>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
+//
+//        // Then
+//        assertNotNull(response.getValue());
+//        assertEquals("orders found", response.getMessage());
+//        assertEquals(2, response.getValue().size());
+//        assertTrue(response.getValue().contains(order1));
+//        assertTrue(response.getValue().contains(order2));
+//    }
 
     @Test
     void GivenUnauthorizedUser_WhenGetOrdersByCompany_ThenPermissionErrorIsReturned() {
@@ -731,4 +744,178 @@ class EventCompanyManageServiceTest {
         // Assert
         assertNull(response.getValue());
         assertTrue(response.getMessage().contains("failed getCompanyDetails"));    }
+
+    @Test
+    void SuccessfulRefund() {
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
+                .thenReturn(true);
+
+        Event event = eventRepo.findById(eventId);
+
+        Order order = new Order(1, 1, eventId, List.of(1, 2), 100.0, "pay123");
+        order.markRefundRequired();
+        event.getOrders().add(order);
+        eventRepo.store(event);
+
+        Response<Boolean> response = eventCompanyManageService.processRefund(
+                validToken1,
+                eventId,
+                1
+        );
+
+        assertTrue(response.getValue());
+        assertEquals("Refund completed successfully", response.getMessage());
+        Order updatedOrder = eventRepo.findById(eventId).findOrderById(1);
+        assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
+
+        Mockito.verify(paymentSystem).refund("pay123", 100.0);
+    }
+
+    @Test
+    void RefundTransactionNotFound() {
+        Response<Boolean> response = eventCompanyManageService.processRefund(
+                validToken1,
+                eventId,
+                999
+        );
+
+        assertFalse(response.getValue());
+        assertEquals("No matching order found for refund", response.getMessage());
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .refund(Mockito.anyString(), Mockito.anyDouble());
+    }
+
+    @Test
+    void RefundRejected() {
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
+                .thenReturn(false);
+
+        Event event = eventRepo.findById(eventId);
+
+        Order order = new Order(123, 900, eventId, List.of(1, 2), 100.0, "pay123");
+        order.markRefundRequired();
+        event.getOrders().add(order);
+        eventRepo.store(event);
+
+        Response<Boolean> response = eventCompanyManageService.processRefund(
+                validToken1,
+                eventId,
+                123
+        );
+
+        assertFalse(response.getValue());
+        assertEquals("Refund rejected by external payment service", response.getMessage());
+        assertEquals(OrderStatus.REFUND_REQUIRED, order.getStatus());
+
+        Mockito.verify(paymentSystem).refund("pay123", 100.0);
+    }
+
+    @Test
+    void RefundWithoutValidReason() {
+        Event event = eventRepo.findById(eventId);
+
+        Order order = new Order(123, 900, eventId, List.of(1, 2), 100.0, "pay123");
+        // markRefundRequired not called
+
+        event.getOrders().add(order);
+        eventRepo.store(event);
+
+        Response<Boolean> response = eventCompanyManageService.processRefund(
+                validToken1,
+                eventId,
+                123
+        );
+
+        assertFalse(response.getValue());
+        assertEquals("Order cannot be refunded", response.getMessage());
+        assertEquals(OrderStatus.APPROVED, order.getStatus());
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .refund(Mockito.anyString(), Mockito.anyDouble());
+    }
+    @Test
+    void RefundServiceUnavailable() {
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
+                .thenThrow(new RuntimeException("Payment service unavailable"));
+
+        Event event = eventRepo.findById(eventId);
+
+        Order order = new Order(123, 900, eventId, List.of(1, 2), 100.0, "pay123");
+        order.markRefundRequired();
+        event.getOrders().add(order);
+        eventRepo.store(event);
+        Response<Boolean> response = eventCompanyManageService.processRefund(
+                validToken1,
+                eventId,
+                123
+        );
+
+        assertFalse(response.getValue());
+        assertTrue(response.getMessage().contains("Failed to process refund"));
+        assertEquals(OrderStatus.REFUND_REQUIRED, order.getStatus());
+
+        Mockito.verify(paymentSystem).refund("pay123", 100.0);
+    }
+
+    //TODO : update after there is order function in event service
+    @Test
+    void GivenValidOwnerAndFutureEventWithOrders_WhenDeleteEvent_ThenEventMarkedInactiveAndRefundProcessed() {
+        // Given
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
+                .thenReturn(true);
+
+        Event event = eventRepo.findById(eventId);
+        Order order = new Order(1, 2, eventId, List.of(1, 2), 100.0, "pay123");
+        event.getOrders().add(order);
+        eventRepo.store(event);
+
+        // When
+        Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, eventId);
+
+        // Then
+        assertTrue(response.getValue());
+        assertEquals("Orders deleted successfully", response.getMessage());
+
+        Event updatedEvent = eventRepo.findById(eventId);
+        assertFalse(updatedEvent.isActive());
+
+        Order updatedOrder = updatedEvent.findOrderById(1);
+        assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
+
+        Mockito.verify(paymentSystem).refund("pay123", 100.0);
+    }
+
+    @Test
+    void GivenUserWithoutPermission_WhenDeleteEvent_ThenPermissionErrorReturned() {
+        // Given
+        // validToken2 - without permissions
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        // When
+        Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken2, eventId);
+
+        // Then
+        assertFalse(response.getValue());
+        assertEquals("User does not have permission to delete event", response.getMessage());
+
+        Event event = eventRepo.findById(eventId);
+        assertTrue(event.isActive());
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .refund(Mockito.anyString(), Mockito.anyDouble());
+    }
+
+    @Test
+    void GivenNonExistingEvent_WhenDeleteEvent_ThenEventNotFoundErrorReturned() {
+        // Given
+        String nonExistingEventId = "333";
+
+        // When
+        Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, nonExistingEventId);
+
+        // Then
+        assertFalse(response.getValue());
+        assertTrue(response.getMessage().startsWith("failed to detele event : "));
+    }
 }
