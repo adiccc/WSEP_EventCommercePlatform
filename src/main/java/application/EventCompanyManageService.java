@@ -408,6 +408,57 @@ public class EventCompanyManageService {
         });
     }
 
+    public Response<SalesReportDTO> generateSalesReports(int companyId, String token){
+        logger.log(Level.INFO, "generateSalesReports called");
+        try {
+            Company company = companyRepo.findById(companyId);
+            if (company == null) {
+                logger.log(Level.SEVERE, "company not found");
+                return new Response<>(null, "company not found");
+            }
+            int userId = auth.getUserId(token).getValue();
+            boolean isMember = userId != -1;
+            boolean isUserPermitted = isMember && (company.getCompanyPermission().checkPermission(userId, PermissionType.GENERATE_SALES_REPORTS)); //פה זו דרישה רק של בעל חברה אבל עדיין אוונר יוכל
+            if (!isUserPermitted) {
+                logger.log(Level.SEVERE, "User is not permitted to generate sales report");
+                return new Response<>(null, "User is not permitted generate sales report");
+            }
+            Set<Integer> allsSubTree = company.getCompanyPermission().getSubTreeAppointees(userId);
+            double totalRevenue = 0;
+            int totalTicketsSold = 0;
+            List<EventSalesRecordDTO> events = new ArrayList<>();
+            List<Event> allEvents = eventRepo.findByCompany(companyId);
+            for (Event e : allEvents) {
+                if(allsSubTree.contains(e.getCreatorId())){
+                    double eventRevnue = 0;
+                    int eventTicketsSold = 0;
+                    for(Order o : e.getOrders()){
+                        eventRevnue += o.getTotalSum();
+                        eventTicketsSold += o.getNumOfTickets();
+
+                        totalRevenue += o.getTotalSum();
+                        totalTicketsSold += o.getNumOfTickets();
+                    }
+                    if(eventTicketsSold>0) {
+                        EventSalesRecordDTO eventSalesRecordDTO = new EventSalesRecordDTO(e.getId(), e.getName(), e.getCreatorId(), eventTicketsSold, eventRevnue);
+                        events.add(eventSalesRecordDTO);
+                    }
+                }
+            }
+            if(events.isEmpty()){
+                logger.log(Level.WARNING, "No sales data found for company " + companyId);
+                return new Response<>(new SalesReportDTO(companyId,totalRevenue,totalTicketsSold,new ArrayList<>()), "No future events found for company " + companyId);
+            }
+            SalesReportDTO result = new SalesReportDTO(companyId,totalRevenue,totalTicketsSold,events);
+            logger.log(Level.INFO, "Sales Report generated successfully");
+            return new Response<>(result, "Sales Report generated successfully");
+        }
+        catch(Exception e){
+            logger.log(Level.SEVERE, "failed generate sales report : " + e.getMessage());
+            return new Response<>(null, "failed generate sales report : " + e.getMessage());
+        }
+    }
+
     public Response<Boolean> processRefund(String token, String eventId, int orderId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");

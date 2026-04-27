@@ -62,7 +62,6 @@ class EventCompanyManageServiceTest {
     private String validToken2;
     private String invalidToken;
     private EventService eventService;
-    private IEventRepo eventRepo;
     private IPaymentSystem paymentSystem;
 
     @BeforeEach
@@ -756,6 +755,7 @@ class EventCompanyManageServiceTest {
         Event e =eventRepo.findById(event);
         Order order = new Order(1, 1, eventId, purchasedTickets);
         e.getOrders().add(order);
+        eventRepo.store(e);
         Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, validToken1);
 
         assertNotNull(response.getValue());
