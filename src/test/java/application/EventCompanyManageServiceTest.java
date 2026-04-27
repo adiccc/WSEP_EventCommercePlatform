@@ -755,6 +755,7 @@ class EventCompanyManageServiceTest {
         Order order = new Order(1, 1, eventId, List.of(1, 2), 100.0, "pay123");
         order.markRefundRequired();
         event.getOrders().add(order);
+        eventRepo.store(event);
 
         Response<Boolean> response = eventCompanyManageService.processRefund(
                 validToken1,
@@ -764,7 +765,8 @@ class EventCompanyManageServiceTest {
 
         assertTrue(response.getValue());
         assertEquals("Refund completed successfully", response.getMessage());
-        assertEquals(OrderStatus.REFUNDED, order.getStatus());
+        Order updatedOrder = eventRepo.findById(eventId).findOrderById(1);
+        assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
 
         Mockito.verify(paymentSystem).refund("pay123", 100.0);
     }
@@ -794,6 +796,7 @@ class EventCompanyManageServiceTest {
         Order order = new Order(123, 900, eventId, List.of(1, 2), 100.0, "pay123");
         order.markRefundRequired();
         event.getOrders().add(order);
+        eventRepo.store(event);
 
         Response<Boolean> response = eventCompanyManageService.processRefund(
                 validToken1,
@@ -816,6 +819,7 @@ class EventCompanyManageServiceTest {
         // markRefundRequired not called
 
         event.getOrders().add(order);
+        eventRepo.store(event);
 
         Response<Boolean> response = eventCompanyManageService.processRefund(
                 validToken1,
@@ -840,7 +844,7 @@ class EventCompanyManageServiceTest {
         Order order = new Order(123, 900, eventId, List.of(1, 2), 100.0, "pay123");
         order.markRefundRequired();
         event.getOrders().add(order);
-
+        eventRepo.store(event);
         Response<Boolean> response = eventCompanyManageService.processRefund(
                 validToken1,
                 eventId,

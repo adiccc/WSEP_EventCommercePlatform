@@ -33,6 +33,9 @@ public class Order {
         this.userId = order.userId;
         this.eventId = order.eventId;
         this.tickets=new ArrayList<>(order.tickets);
+        this.status = order.status;
+        this.totalSum = order.totalSum;
+        this.paymentConfirmationId = order.paymentConfirmationId;
     }
 
     public OrderStatus getStatus() {
