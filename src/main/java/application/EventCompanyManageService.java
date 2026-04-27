@@ -8,6 +8,8 @@ import domain.company.ICompanyRepo;
 import domain.dataType.*;
 import domain.dto.CompanyDetailsDTO;
 import domain.dto.EventDTO;
+import domain.dto.EventSalesRecordDTO;
+import domain.dto.SalesReportDTO;
 import domain.event.Event;
 import domain.event.EventMap;
 import domain.event.EventQueue;
@@ -24,6 +26,7 @@ import org.apache.commons.logging.LogFactory;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Set;
 import java.util.logging.*;
 
 import java.util.List;

@@ -8,9 +8,7 @@ public class Order {
     private int userId;
     private String eventId;
     private List<Integer> tickets;
-    private OrderStatus status;
     private double totalSum;
-    private String paymentConfirmationId;
 
     public Order(int orderId, int userId, String eventId, List<Integer> tickets,double totalSum, String paymentConfirmationId) {
         this.orderId = orderId;

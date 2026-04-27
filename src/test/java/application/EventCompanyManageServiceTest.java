@@ -8,6 +8,7 @@ import domain.company.ContactInfo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.CompanyDetailsDTO;
+import domain.dto.SalesReportDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
@@ -48,6 +49,7 @@ class EventCompanyManageServiceTest {
     private IAuth auth;
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
+    private IEventRepo eventRepo;
 
     private LocalDateTime eventDate;
     private String eventId;
@@ -744,8 +746,72 @@ class EventCompanyManageServiceTest {
         // Assert
         assertNull(response.getValue());
         assertTrue(response.getMessage().contains("failed getCompanyDetails"));    }
+         // ===================== Generate Sales Reports Tests =====================
+    @Test
+    void GivenOwnerWithSalesData_WhenGenerateSalesReports_ThenReturnReportWithData() {
+        // Arrange
+        Event event = eventService.ViewEventDetails(validToken1, companyId, eventId).getValue();
+        List<Integer> purchasedTickets = new ArrayList<>();
+        purchasedTickets.add(101);
+        purchasedTickets.add(102);
+        Order order = new Order(1, 1, eventId, purchasedTickets);
+        event.getOrders().add(order);
+        eventRepo.store(event);
+        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, validToken1);
+
+        assertNotNull(response.getValue());
+        assertEquals("Sales Report generated successfully", response.getMessage());
+        assertEquals(companyId, response.getValue().getCompanyId());
+        assertFalse(response.getValue().getEventRecords().isEmpty());
+        assertEquals(1, response.getValue().getEventRecords().size());
+        assertTrue(response.getValue().getTotalTicketsSold() > 0);
+    }
 
     @Test
+    void GivenCompanyWithNoSales_WhenGenerateSalesReports_ThenReturnEmptyReport() {
+        // Arrange
+
+        // Act
+        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, validToken1);
+
+        // Assert
+        assertNotNull(response.getValue());
+        assertEquals("No future events found for company " + companyId, response.getMessage()); // תואם למחרוזת בקוד שלך
+
+        assertTrue(response.getValue().getEventRecords().isEmpty());
+        assertEquals(0, response.getValue().getTotalTicketsSold());
+        assertEquals(0.0, response.getValue().getTotalRevenue());
+    }
+
+    @Test
+    void GivenUnauthorizedUser_WhenGenerateSalesReports_ThenErrorNotPermitted() {
+        // Act
+        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, validToken2);
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("User is not permitted generate sales report", response.getMessage());
+    }
+
+    @Test
+    void GivenGuest_WhenGenerateSalesReports_ThenErrorNotPermitted() {
+        // Act
+        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, invalidToken);
+
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("User is not permitted generate sales report", response.getMessage());
+    }
+
+    @Test
+    void GivenInvalidCompanyId_WhenGenerateSalesReports_ThenErrorNotFound() {
+        // Act
+        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(9999, validToken1);
+
+        // Assert
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("not found"));
+    }
+        @Test
     void SuccessfulRefund() {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenReturn(true);
@@ -918,4 +984,5 @@ class EventCompanyManageServiceTest {
         assertFalse(response.getValue());
         assertTrue(response.getMessage().startsWith("failed to detele event : "));
     }
+
 }
