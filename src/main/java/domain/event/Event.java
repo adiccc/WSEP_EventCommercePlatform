@@ -50,6 +50,14 @@ public class Event {
     public List<Order> getOrders() {
         return orders;
     }
+    public Order findOrderById(int orderId) {
+        for (Order order : orders) {
+            if (order.getOrderId() == orderId) {
+                return order;
+            }
+        }
+        return null;
+    }
 
     public int getCompanyId() {
         return companyId;
