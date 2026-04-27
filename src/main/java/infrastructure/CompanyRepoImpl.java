@@ -18,9 +18,8 @@ public class CompanyRepoImpl implements ICompanyRepo {
 
     @Override
     public void store(Company company) {
-        Company currentCompany = companies.get(company.getCompanyId());
-
-        if (currentCompany == null) {
+        if (company.getVersion() == 0) {
+            // New company — insert only, never fall through to update path
             Company newEntry = new Company(company);
             Company existing = companies.putIfAbsent(newEntry.getCompanyId(), newEntry);
             if (existing != null) {
@@ -30,6 +29,13 @@ public class CompanyRepoImpl implements ICompanyRepo {
             }
             logger.info("store: company " + company.getCompanyId() + " inserted successfully");
             return;
+        }
+
+        // Existing company — update with version check
+        Company currentCompany = companies.get(company.getCompanyId());
+        if (currentCompany == null) {
+            logger.warning("store failed: company " + company.getCompanyId() + " not found for update");
+            throw new NoSuchElementException("Company " + company.getCompanyId() + " not found for update");
         }
 
         Company updatedCompany = new Company(company);
