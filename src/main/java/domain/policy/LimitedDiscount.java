@@ -8,6 +8,10 @@ public class LimitedDiscount extends DiscountElement {
         this.percentage = percentage;
         this.minQuantity = minQuantity;
     }
+    public LimitedDiscount(LimitedDiscount discount) {
+        this.percentage = discount.percentage;
+        this.minQuantity = discount.minQuantity;
+    }
 
     @Override
     public double apply(double originalPrice, int quantity, String couponCode) {

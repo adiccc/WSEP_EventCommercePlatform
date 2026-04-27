@@ -1,5 +1,6 @@
 package domain.event;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class Order {
@@ -13,6 +14,12 @@ public class Order {
         this.userId = userId;
         this.eventId = eventId;
         this.tickets = tickets;
+    }
+    public Order(Order order) {
+        this.orderId = order.orderId;
+        this.userId = order.userId;
+        this.eventId = order.eventId;
+        this.tickets=new ArrayList<>(order.tickets);
     }
 
 }

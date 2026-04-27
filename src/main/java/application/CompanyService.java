@@ -37,53 +37,55 @@ public class CompanyService {
 
     public Response<Company> createProductionCompany(String sessionToken, int companyId, String companyName,
                                                      String email, String phone, String bankAccount) {
+        return RetryHelper.executeWithRetry(() ->{
         try {
-            logger.info("Attempting to create company: " + companyName + " for user: " + sessionToken);
-            int userId = auth.getUserId(sessionToken).getValue();
-            Member user = userRepo.findById(userId);
-            if (user == null) {
-                return new Response<>(null, "User not found.");
-            }
+                logger.info("Attempting to create company: " + companyName + " for user: " + sessionToken);
+                int userId = auth.getUserId(sessionToken).getValue();
+                Member user = userRepo.findById(userId);
+                if (user == null) {
+                    return new Response<>(null, "User not found.");
+                }
 //            if (!user.isConnected()) {
 //                return new Response<>(null, "User must be logged in to create a company.");
 //            }
-            if (!auth.isLoggedIn(sessionToken).getValue()) {
-                return new Response<>(null, "User must be logged in to create a company.");
-            }
+                if (!auth.isLoggedIn(sessionToken).getValue()) {
+                    return new Response<>(null, "User must be logged in to create a company.");
+                }
 
 
                 if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
-                return new Response<>(null, "Invalid contact or bank account information.");
-            }
-
-            synchronized (companyRepo) {
-                if (companyRepo.existsById(companyId)) {
-                    return new Response<>(null, "Company ID already exists in the system.");
-                }
-                if (companyRepo.existsByName(companyName)) {
-                    return new Response<>(null, "Company name is already taken.");
+                    return new Response<>(null, "Invalid contact or bank account information.");
                 }
 
-                ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
-                PurchasePolicy defaultPurchase = new PurchasePolicy();
-                DiscountPolicy defaultDiscount = new DiscountPolicy();
-                Company newCompany = new Company(companyId, companyName, userId,
-                        contactInfo, defaultPurchase, defaultDiscount);
+                synchronized (companyRepo) {
+                    if (companyRepo.existsById(companyId)) {
+                        return new Response<>(null, "Company ID already exists in the system.");
+                    }
+                    if (companyRepo.existsByName(companyName)) {
+                        return new Response<>(null, "Company name is already taken.");
+                    }
 
-                Founder founderRole = new Founder(companyId);
-                user.addRole(founderRole);
+                    ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
+                    PurchasePolicy defaultPurchase = new PurchasePolicy();
+                    DiscountPolicy defaultDiscount = new DiscountPolicy();
+                    Company newCompany = new Company(companyId, companyName, userId,
+                            contactInfo, defaultPurchase, defaultDiscount);
 
-                companyRepo.store(newCompany);
-                userRepo.store(user);
+                    Founder founderRole = new Founder(companyId);
+                    user.addRole(founderRole);
 
-                logger.info("Company " + companyName + " created successfully");
-                return new Response<>(newCompany, "Production company created successfully.");
+                    companyRepo.store(newCompany);
+                    userRepo.store(user);
+
+                    logger.info("Company " + companyName + " created successfully");
+                    return new Response<>(newCompany, "Production company created successfully.");
+                }
+
+            } catch(Exception e){
+                logger.severe("Failed to create company " + companyName + ". Error: " + e.getMessage());
+                return new Response<>(null, "System error occurred: " + e.getMessage());
             }
-
-        } catch (Exception e) {
-            logger.severe("Failed to create company " + companyName + ". Error: " + e.getMessage());
-            return new Response<>(null, "System error occurred: " + e.getMessage());
-        }
+        });
     }
 
     /**
@@ -95,184 +97,196 @@ public class CompanyService {
      * Only an owner of the company may call this.
      */
     public Response<RolesPermissionsTreeDTO> viewRolesAndPermissionsTree(String token, int companyId) {
-        logger.info("viewRolesAndPermissionsTree called for companyId: " + companyId);
-        try {
-            // 1. Validate token (covers "user not logged in")
-            if (auth.isLoggedIn(token).isError()) {
-                logger.warning("viewRolesAndPermissionsTree failed: invalid or expired token");
-                return Response.error("Invalid or expired token");
+        return RetryHelper.executeWithRetry(() ->
+        {
+            logger.info("viewRolesAndPermissionsTree called for companyId: " + companyId);
+            try {
+                // 1. Validate token (covers "user not logged in")
+                if (auth.isLoggedIn(token).isError()) {
+                    logger.warning("viewRolesAndPermissionsTree failed: invalid or expired token");
+                    return Response.error("Invalid or expired token");
+                }
+
+                int userId = auth.getUserId(token).getValue();
+
+                // 2. Company must exist
+                Company company = companyRepo.findById(companyId);
+                if (company == null) {
+                    logger.warning("viewRolesAndPermissionsTree failed: company not found, id: " + companyId);
+                    return Response.error("Company not found");
+                }
+
+                // 3. Requesting user must be an owner
+                if (!company.isOwner(userId)) {
+                    logger.warning("viewRolesAndPermissionsTree failed: user " + userId + " is not an owner of company " + companyId);
+                    return Response.error("User does not have permission to view roles and permissions");
+                }
+
+                // 4. Build the roles tree
+                Map<String, Set<PermissionType>> managersPermissions = new HashMap<>();
+                for (Map.Entry<String, ManagerAppointment> entry : company.getManagersPermissionsMap().entrySet()) {
+                    managersPermissions.put(entry.getKey(), entry.getValue().getPermissions());
+                }
+
+                RolesPermissionsTreeDTO tree = new RolesPermissionsTreeDTO(
+                        company.getFounderId(),
+                        company.getOwnerIds(),
+                        managersPermissions
+                );
+
+                logger.info("viewRolesAndPermissionsTree succeeded for companyId: " + companyId);
+                return Response.ok(tree);
+
+            } catch (Exception e) {
+                logger.severe("Unexpected error in viewRolesAndPermissionsTree for companyId: " + companyId + ". Error: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
             }
-
-            int userId = auth.getUserId(token).getValue();
-
-            // 2. Company must exist
-            Company company = companyRepo.findById(companyId);
-            if (company == null) {
-                logger.warning("viewRolesAndPermissionsTree failed: company not found, id: " + companyId);
-                return Response.error("Company not found");
-            }
-
-            // 3. Requesting user must be an owner
-            if (!company.isOwner(userId)) {
-                logger.warning("viewRolesAndPermissionsTree failed: user " + userId + " is not an owner of company " + companyId);
-                return Response.error("User does not have permission to view roles and permissions");
-            }
-
-            // 4. Build the roles tree
-            Map<String, Set<PermissionType>> managersPermissions = new HashMap<>();
-            for (Map.Entry<String, ManagerAppointment> entry : company.getManagersPermissionsMap().entrySet()) {
-                managersPermissions.put(entry.getKey(), entry.getValue().getPermissions());
-            }
-
-            RolesPermissionsTreeDTO tree = new RolesPermissionsTreeDTO(
-                    company.getFounderId(),
-                    company.getOwnerIds(),
-                    managersPermissions
-            );
-
-            logger.info("viewRolesAndPermissionsTree succeeded for companyId: " + companyId);
-            return Response.ok(tree);
-
-        } catch (Exception e) {
-            logger.severe("Unexpected error in viewRolesAndPermissionsTree for companyId: " + companyId + ". Error: " + e.getMessage());
-            return Response.error("Unexpected error: " + e.getMessage());
-        }
+        });
     }
 
     public Response<Boolean> updatePurchasePolicy(String token, int companyId, PurchasePolicy policy) {
-        logger.info("Starting updatePurchasePolicy for companyId: " + companyId);
-        try {
-            int userId = auth.getUserId(token).getValue();
-            Company company = companyRepo.findById(companyId);
-            company.updatePurchasePolicy(userId, policy);
-            companyRepo.store(company);
-            logger.info("Purchase policy updated successfully for companyId: " + companyId);
-            return Response.ok(true);
-        } catch (SecurityException e) {
-            logger.warning("updatePurchasePolicy unauthorized for companyId: " + companyId + ". " + e.getMessage());
-            return Response.error(e.getMessage());
-        } catch (IllegalArgumentException e) {
-            logger.warning("updatePurchasePolicy bad arguments for companyId: " + companyId + ". " + e.getMessage());
-            return Response.error(e.getMessage());
-        } catch (IllegalStateException e) {
-            logger.warning("updatePurchasePolicy invalid state for companyId: " + companyId + ". " + e.getMessage());
-            return Response.error(e.getMessage());
-        } catch (Exception e) {
-            logger.severe("Unexpected error in updatePurchasePolicy for companyId: " + companyId + ". Error: " + e.getMessage());
-            return  Response.error("Unexpected error in updatePurchasePolicy for companyId: " + companyId);
-        }
+        return RetryHelper.executeWithRetry(() ->
+        {
+            logger.info("Starting updatePurchasePolicy for companyId: " + companyId);
+            try {
+                int userId = auth.getUserId(token).getValue();
+                Company company = companyRepo.findById(companyId);
+                company.updatePurchasePolicy(userId, policy);
+                companyRepo.store(company);
+                logger.info("Purchase policy updated successfully for companyId: " + companyId);
+                return Response.ok(true);
+            } catch (SecurityException e) {
+                logger.warning("updatePurchasePolicy unauthorized for companyId: " + companyId + ". " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalArgumentException e) {
+                logger.warning("updatePurchasePolicy bad arguments for companyId: " + companyId + ". " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalStateException e) {
+                logger.warning("updatePurchasePolicy invalid state for companyId: " + companyId + ". " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (Exception e) {
+                logger.severe("Unexpected error in updatePurchasePolicy for companyId: " + companyId + ". Error: " + e.getMessage());
+                return Response.error("Unexpected error in updatePurchasePolicy for companyId: " + companyId);
+            }
+        });
     }
 
     public Response<Boolean> addDiscountToCompany(String token, int companyId, Discount discount) {
-        logger.info("addDiscountToCompany called for companyId: " + companyId);
+        return RetryHelper.executeWithRetry(() ->
+        {
+            logger.info("addDiscountToCompany called for companyId: " + companyId);
 
-        try {
-            // 1. Validate token
-            if (auth.isLoggedIn(token).isError()) {
-                logger.warning("addDiscountToCompany failed: invalid or expired token");
-                return Response.error("Invalid or expired token");
+            try {
+                // 1. Validate token
+                if (auth.isLoggedIn(token).isError()) {
+                    logger.warning("addDiscountToCompany failed: invalid or expired token");
+                    return Response.error("Invalid or expired token");
+                }
+
+                int userId = auth.getUserId(token).getValue();
+
+                // 2. Company must exist
+                Company company = companyRepo.findById(companyId);
+                if (company == null) {
+                    logger.warning("addDiscountToCompany failed: company not found, id: " + companyId);
+                    return Response.error("Company not found");
+                }
+
+                // 3. Company must be active
+                if (!company.isActive()) {
+                    logger.warning("addDiscountToCompany failed: company is not active, id: " + companyId);
+                    return Response.error("Company is not active");
+                }
+
+                // 4. Discount must be valid
+                if (discount == null || !discount.isValid()) {
+                    logger.warning("addDiscountToCompany failed: invalid discount");
+                    return Response.error("Invalid discount data");
+                }
+
+                // 5. Apply (permissions + duplicates checked inside Company)
+                company.addDiscount(userId, discount);
+                companyRepo.store(company);
+
+                logger.info("addDiscountToCompany succeeded for companyId: " + companyId);
+                return Response.ok(true);
+
+            } catch (SecurityException e) {
+                logger.warning("addDiscountToCompany unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+
+            } catch (IllegalArgumentException e) {
+                logger.warning("addDiscountToCompany invalid data: " + e.getMessage());
+                return Response.error(e.getMessage());
+
+            } catch (IllegalStateException e) {
+                logger.warning("addDiscountToCompany invalid state: " + e.getMessage());
+                return Response.error(e.getMessage());
+
+            } catch (Exception e) {
+                logger.severe("Unexpected error in addDiscountToCompany: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
             }
-
-            int userId = auth.getUserId(token).getValue();
-
-            // 2. Company must exist
-            Company company = companyRepo.findById(companyId);
-            if (company == null) {
-                logger.warning("addDiscountToCompany failed: company not found, id: " + companyId);
-                return Response.error("Company not found");
-            }
-
-            // 3. Company must be active
-            if (!company.isActive()) {
-                logger.warning("addDiscountToCompany failed: company is not active, id: " + companyId);
-                return Response.error("Company is not active");
-            }
-
-            // 4. Discount must be valid
-            if (discount == null || !discount.isValid()) {
-                logger.warning("addDiscountToCompany failed: invalid discount");
-                return Response.error("Invalid discount data");
-            }
-
-            // 5. Apply (permissions + duplicates checked inside Company)
-            company.addDiscount(userId, discount);
-            companyRepo.store(company);
-
-            logger.info("addDiscountToCompany succeeded for companyId: " + companyId);
-            return Response.ok(true);
-
-        } catch (SecurityException e) {
-            logger.warning("addDiscountToCompany unauthorized: " + e.getMessage());
-            return Response.error(e.getMessage());
-
-        } catch (IllegalArgumentException e) {
-            logger.warning("addDiscountToCompany invalid data: " + e.getMessage());
-            return Response.error(e.getMessage());
-
-        } catch (IllegalStateException e) {
-            logger.warning("addDiscountToCompany invalid state: " + e.getMessage());
-            return Response.error(e.getMessage());
-
-        } catch (Exception e) {
-            logger.severe("Unexpected error in addDiscountToCompany: " + e.getMessage());
-            return Response.error("Unexpected error: " + e.getMessage());
-        }
+        });
     }
 
     public Response<Boolean> removeDiscountFromCompany(String token, int companyId, Discount discount) {
-        logger.info("removeDiscountFromCompany called for companyId: " + companyId);
+        return RetryHelper.executeWithRetry(() ->
+        {
+            logger.info("removeDiscountFromCompany called for companyId: " + companyId);
 
-        try {
-            // 1. Validate token
-            if (auth.isLoggedIn(token).isError()) {
-                logger.warning("removeDiscountFromCompany failed: invalid or expired token");
-                return Response.error("Invalid or expired token");
+            try {
+                // 1. Validate token
+                if (auth.isLoggedIn(token).isError()) {
+                    logger.warning("removeDiscountFromCompany failed: invalid or expired token");
+                    return Response.error("Invalid or expired token");
+                }
+
+                int userId = auth.getUserId(token).getValue();
+
+                // 2. Company must exist
+                Company company = companyRepo.findById(companyId);
+                if (company == null) {
+                    logger.warning("removeDiscountFromCompany failed: company not found, id: " + companyId);
+                    return Response.error("Company not found");
+                }
+
+                // 3. Company must be active
+                if (!company.isActive()) {
+                    logger.warning("removeDiscountFromCompany failed: company is not active, id: " + companyId);
+                    return Response.error("Company is not active");
+                }
+
+                // 4. Discount must be valid
+                if (discount == null || !discount.isValid()) {
+                    logger.warning("removeDiscountFromCompany failed: invalid discount");
+                    return Response.error("Invalid discount data");
+                }
+
+                // 5. Apply (permissions + existence checked inside Company)
+                company.removeDiscount(userId, discount);
+                companyRepo.store(company);
+
+                logger.info("removeDiscountFromCompany succeeded for companyId: " + companyId);
+                return Response.ok(true);
+
+            } catch (SecurityException e) {
+                logger.warning("removeDiscountFromCompany unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+
+            } catch (IllegalArgumentException e) {
+                logger.warning("removeDiscountFromCompany invalid data: " + e.getMessage());
+                return Response.error(e.getMessage());
+
+            } catch (IllegalStateException e) {
+                logger.warning("removeDiscountFromCompany invalid state: " + e.getMessage());
+                return Response.error(e.getMessage());
+
+            } catch (Exception e) {
+                logger.severe("Unexpected error in removeDiscountFromCompany: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
             }
-
-            int userId = auth.getUserId(token).getValue();
-
-            // 2. Company must exist
-            Company company = companyRepo.findById(companyId);
-            if (company == null) {
-                logger.warning("removeDiscountFromCompany failed: company not found, id: " + companyId);
-                return Response.error("Company not found");
-            }
-
-            // 3. Company must be active
-            if (!company.isActive()) {
-                logger.warning("removeDiscountFromCompany failed: company is not active, id: " + companyId);
-                return Response.error("Company is not active");
-            }
-
-            // 4. Discount must be valid
-            if (discount == null || !discount.isValid()) {
-                logger.warning("removeDiscountFromCompany failed: invalid discount");
-                return Response.error("Invalid discount data");
-            }
-
-            // 5. Apply (permissions + existence checked inside Company)
-            company.removeDiscount(userId, discount);
-            companyRepo.store(company);
-
-            logger.info("removeDiscountFromCompany succeeded for companyId: " + companyId);
-            return Response.ok(true);
-
-        } catch (SecurityException e) {
-            logger.warning("removeDiscountFromCompany unauthorized: " + e.getMessage());
-            return Response.error(e.getMessage());
-
-        } catch (IllegalArgumentException e) {
-            logger.warning("removeDiscountFromCompany invalid data: " + e.getMessage());
-            return Response.error(e.getMessage());
-
-        } catch (IllegalStateException e) {
-            logger.warning("removeDiscountFromCompany invalid state: " + e.getMessage());
-            return Response.error(e.getMessage());
-
-        } catch (Exception e) {
-            logger.severe("Unexpected error in removeDiscountFromCompany: " + e.getMessage());
-            return Response.error("Unexpected error: " + e.getMessage());
-        }
+        });
     }
     public Response<List<CompanyDTO>> getAvailableCompanies(String token) { //TODO taking care of guest part, additional input : String guestUuid
         logger.info("getAvailableCompanies called");

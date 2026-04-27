@@ -18,6 +18,13 @@ public class SeatingZone extends Zone {
             }
         }
     }
+    public SeatingZone(SeatingZone seatingZone) {
+        super(seatingZone.getName(), seatingZone.getPrice(), seatingZone.getElementPosition());
+        this.tickets=new ArrayList<>();
+        for(SeatingTicket st:tickets){
+            this.tickets.add(new SeatingTicket(st));
+        }
+    }
     public SeatingZone(SeatingZoneDTO seatingZoneDTO) {
         super(seatingZoneDTO.getName(), seatingZoneDTO.getPrice(), seatingZoneDTO.getPosition());
         int rows = seatingZoneDTO.getRows();

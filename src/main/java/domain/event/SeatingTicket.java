@@ -8,4 +8,8 @@ public class SeatingTicket extends Ticket {
         this.row = row;
         this.col = col;
     }
+    public SeatingTicket(SeatingTicket seatingTicket) {
+        this.col = seatingTicket.col;
+        this.row = seatingTicket.row;
+    }
 }

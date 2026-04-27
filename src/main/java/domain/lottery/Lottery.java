@@ -26,7 +26,7 @@ public class Lottery {
         this.winners = new ArrayList<>();
         this.registerWindow = registerWindow;
         this.expirationTime = expirationTime;
-        this.version = 1; // Initial version
+        this.version = 0; // Initial version
     }
 
     // Copy Constructor - essential for returning detached copies from the Repo

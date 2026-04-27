@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class Company {
     private int companyId;
@@ -21,6 +22,7 @@ public class Company {
     private int founderId;
     private Set<Integer> ownerIds;
     private Map<String, ManagerAppointment> managersPermissionsMap;
+    private long version;
 
     public Company(int companyId, String companyName, int founderId, ContactInfo contactInfo,
                    PurchasePolicy defaultPurchase, DiscountPolicy defaultDiscount) {
@@ -37,6 +39,30 @@ public class Company {
         this.managersPermissionsMap = new HashMap<>();
         this.purchasePolicy = new PurchasePolicy();
         this.discountPolicy = new DiscountPolicy();
+        this.version = 0;
+    }
+    public Company(Company company) {
+        this.companyId = company.getCompanyId();
+        this.companyName = company.getCompanyName();
+        this.founderId = company.getFounderId();
+        this.contactInfo = new ContactInfo(company.getContactInfo());
+        this.purchasePolicy = new PurchasePolicy(company.getPurchasePolicy());
+        this.discountPolicy = new DiscountPolicy(company.getDiscountPolicy());
+        this.isActive = company.isActive;
+        this.ownerIds = new HashSet<>(company.getOwnerIds());
+        this.managersPermissionsMap = company.managersPermissionsMap.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> new ManagerAppointment(e.getValue())
+                ));
+        this.version=company.version;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+    public void setVersion(long version) {
+        this.version = version;
     }
 
     public void updatePurchasePolicy(int userId, PurchasePolicy newPolicy) {

@@ -19,6 +19,10 @@ public class ManagerAppointment {
         this.managerId = managerId;
         this.permissions = permissions;
     }
+    public ManagerAppointment(ManagerAppointment managerAppointment) {
+        this.managerId = managerAppointment.getManagerId();
+        this.permissions = EnumSet.copyOf(managerAppointment.getPermissions());
+    }
 
     public String getManagerId() { return managerId; }
 

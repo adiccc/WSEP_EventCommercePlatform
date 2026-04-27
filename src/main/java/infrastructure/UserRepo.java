@@ -7,8 +7,10 @@ import domain.user.User;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import Exception.OptimisticLockingFailureException;
 
 public class UserRepo implements IUserRepo {
     private final ConcurrentHashMap<Integer, Member> usersPerId = new ConcurrentHashMap<>();
@@ -16,42 +18,74 @@ public class UserRepo implements IUserRepo {
     private final AtomicInteger userIdGenerator = new AtomicInteger(1);
 
     @Override
-    public void store(Member mem) {
-        if(mem.getUserId() == null) {
+    public synchronized void store(Member mem) {
+        if (mem.getUserId() == null) {
             int id = userIdGenerator.getAndIncrement();
             mem.setUserId(id);
+            Member newEntry = new Member(mem);
+            usersPerId.put(id, newEntry);
+            emailById.put(newEntry.getIdentifier(), id);
+            return;
         }
-            usersPerId.put(mem.getUserId(), mem);
-            emailById.put(mem.getIdentifier(), mem.getUserId());
 
+        Member currentMember = usersPerId.get(mem.getUserId());
+
+        if (currentMember == null) {
+            Member newEntry = new Member(mem);
+            usersPerId.put(newEntry.getUserId(), newEntry);
+            emailById.put(newEntry.getIdentifier(), newEntry.getUserId());
+            return;
+        }
+
+        Member updatedMember = new Member(mem);
+        updatedMember.setVersion(mem.getVersion() + 1);
+
+        boolean replaced = usersPerId.replace(mem.getUserId(), currentMember, updatedMember);
+
+        if (!replaced) {
+            throw new OptimisticLockingFailureException(
+                    "User " + mem.getUserId() + " version mismatch. Expected: " +
+                            mem.getVersion() + ", but found: " + currentMember.getVersion()
+            );
+        }
+
+        emailById.put(updatedMember.getIdentifier(), updatedMember.getUserId());
     }
     @Override
     public boolean existsUser(String email){
         return emailById.containsKey(email);
     }
     @Override
-    public Member findUserByEmail(String email){
-        if(emailById.containsKey(email)) {
-            return usersPerId.get(emailById.get(email));
+    public Member findUserByEmail(String email) {
+        Integer id = emailById.get(email);
+        if (id != null) {
+            return findById(id);
         }
         return null;
     }
-
     @Override
     public Member findById(Integer userId) {
-        return usersPerId.get(userId);
+        Member dbMember = usersPerId.get(userId);
+        if (dbMember != null) {
+            return new Member(dbMember);
+        }
+        throw new NoSuchElementException("User not found with ID: " + userId);
     }
-
     @Override
-    public List<Member> getAll(){
-        return new ArrayList<>(usersPerId.values());
+    public List<Member> getAll() {
+        List<Member> copies = new ArrayList<>();
+        for (Member m : usersPerId.values()) {
+            copies.add(new Member(m));
+        }
+        return copies;
     }
-
     @Override
     public void delete(Integer userId) {
         Member member = usersPerId.get(userId);
-        emailById.remove(member.getIdentifier());
-        usersPerId.remove(userId);
+        if (member != null) {
+            emailById.remove(member.getIdentifier());
+            usersPerId.remove(userId);
+        }
     }
 
 }
