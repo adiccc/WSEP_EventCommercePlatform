@@ -1,8 +1,10 @@
 package application;
 
+import DTO.QueueEntryResultDTO;
 import domain.dto.UserDTO;
 import domain.user.IUserRepo;
 import domain.user.Member;
+import domain.webQueue.WebQueue;
 import infrastructure.Auth;
 import infrastructure.PasswordEncoderUtil;
 import infrastructure.UserRepo;
@@ -24,19 +26,26 @@ class UserServiceTest {
 
     @BeforeEach
     void setUp() {
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(100);
+
         realTokenService = new TokenService();
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
-        auth = new Auth(realTokenService, userRepo, passwordEncoder);
+        auth = new Auth(realTokenService, userRepo, passwordEncoder, Set.of());
 
         userService = new UserService(realTokenService, auth, userRepo, passwordEncoder);
     }
+
     private UserDTO createValidDTO() {
         return new UserDTO(
                 "yarin@bgu.ac.il", "Yarin", "Levi", "Password123!",
                 15, 5, 2000, "Beer Sheva", "050-123-4567"
         );
     }
+
+    // --- register ---
+
     @Test
     void GivenValidGuestAndData_WhenRegisterUser_ThenSuccessAndEncrypted() {
         UserDTO dto = createValidDTO();
@@ -50,32 +59,28 @@ class UserServiceTest {
         assertEquals("yarin@bgu.ac.il", savedUser.getIdentifier());
         assertTrue(passwordEncoder.matches("Password123!", savedUser.getPassword()));
     }
+
     @Test
     void GivenValidJwtToken_WhenRegisterUser_ThenErrorMustBeGuest() {
-        //Arrange
         UserDTO activeUserDTO = new UserDTO("active_user@bgu.ac.il", "Active", "User", "Pass123!", 1, 1, 2000, "City", "050-123-4567");
         userService.registerUser(null, activeUserDTO);
         String realJwtToken = userService.login("active_user@bgu.ac.il", "Pass123!").getValue();
 
-        // Act
         UserDTO dto = createValidDTO();
         Response<Boolean> response = userService.registerUser(realJwtToken, dto);
 
-        // Assert
         assertTrue(response.isError());
         assertTrue(response.getMessage().contains("must be a guest"));
         assertNull(userRepo.findUserByEmail("yarin@bgu.ac.il"));
     }
+
     @Test
     void GivenExistingEmail_WhenRegisterUser_ThenErrorUserExists() {
-        // Arrange
         UserDTO existingUser = createValidDTO();
         userService.registerUser(null, existingUser);
 
-        // Act
         Response<Boolean> response = userService.registerUser(null, existingUser);
 
-        // Assert
         assertTrue(response.isError());
         assertTrue(response.getMessage().contains("already exists"));
     }
@@ -96,6 +101,7 @@ class UserServiceTest {
         assertTrue(response.isError());
         assertEquals("birth date cannot be after current date", response.getMessage());
     }
+
     @Test
     void GivenInvalidEmailFormat_WhenRegisterUser_ThenError() {
         UserDTO dto = new UserDTO("yarin.bgu.ac.il", "Yarin", "Levi", "Pass", 1, 1, 2000, "City", "050-123-4567");
@@ -111,6 +117,7 @@ class UserServiceTest {
         assertTrue(response.isError());
         assertEquals("Invalid phone format", response.getMessage());
     }
+
     @Test
     void GivenEmptyFirstName_WhenRegisterUser_ThenError() {
         UserDTO dto = new UserDTO("yarin@bgu.ac.il", "   ", "Levi", "Pass", 1, 1, 2000, "City", "050-123-4567");
@@ -143,26 +150,26 @@ class UserServiceTest {
         assertEquals("Address cannot be null", response.getMessage());
     }
 
+    // --- login ---
+
     @Test
     void GivenRegisteredUser_WhenLoginWithValidCredentials_ThenReturnToken() {
-        // Arrange
         UserDTO dto = createValidDTO();
         userService.registerUser(null, dto);
-        // Act
+
         Response<String> response = userService.login("yarin@bgu.ac.il", "Password123!");
-        // Assert
+
         assertNotNull(response.getValue());
         assertEquals("Login successful", response.getMessage());
     }
 
     @Test
     void GivenRegisteredUser_WhenLoginWithWrongPassword_ThenReturnError() {
-        // Arrange
         UserDTO dto = createValidDTO();
         userService.registerUser(null, dto);
-        // Act
+
         Response<String> response = userService.login("yarin@bgu.ac.il", "WrongPass!");
-        // Assert
+
         assertTrue(response.isError());
         assertNull(response.getValue());
         assertEquals("Invalid email or password", response.getMessage());
@@ -170,50 +177,99 @@ class UserServiceTest {
 
     @Test
     void GivenUnregisteredUser_WhenLogin_ThenReturnError() {
-        //we don't have any set up of registering some user
         Response<String> response = userService.login("ghost@bgu.ac.il", "Pass123!");
-        // Assert
         assertNull(response.getValue());
         assertEquals("Invalid email or password", response.getMessage());
     }
 
+    // --- logout ---
+
     @Test
-    void GivenLoggedInUser_WhenLogout_ThenSuccessAndTokenBlacklisted() {
-        // Arrange
+    void GivenLoggedInUser_WhenLogout_ThenSuccessAndQueueSlotFreed() {
         UserDTO dto = createValidDTO();
         userService.registerUser(null, dto);
-        Response<String> loginResponse = userService.login(dto.getEmail(), dto.getPassword());
-        String validToken = loginResponse.getValue();
-        // Act
-        Response<Boolean> logoutResponse = userService.logout(validToken);
-        // Assert
-        assertTrue(logoutResponse.getValue());
-        assertEquals("Logout successful", logoutResponse.getMessage());
+        String token = userService.login(dto.getEmail(), dto.getPassword()).getValue();
+        int activeBefore = WebQueue.getInstance().getActiveCount();
+
+        Response<Boolean> response = userService.logout(token);
+
+        assertTrue(response.getValue());
+        assertEquals("Logout successful", response.getMessage());
+        assertEquals(activeBefore - 1, WebQueue.getInstance().getActiveCount());
     }
 
     @Test
     void GivenGuest_WhenLogout_ThenErrorUserInGuestState() {
         Response<Boolean> responseNull = userService.logout(null);
         Response<Boolean> responseBlank = userService.logout("   ");
-        // Assert
+
         assertFalse(responseNull.getValue());
         assertEquals("User is in guest state", responseNull.getMessage());
-
         assertFalse(responseBlank.getValue());
         assertEquals("User is in guest state", responseBlank.getMessage());
     }
 
     @Test
     void GivenAlreadyLoggedOutUser_WhenLogoutAgain_ThenError() {
-        // Arrange
         UserDTO dto = createValidDTO();
         userService.registerUser(null, dto);
-        String validToken = userService.login(dto.getEmail(), dto.getPassword()).getValue();
-        userService.logout(validToken);
-        Response<Boolean> response = userService.logout(validToken);
-        // Assert
+        String token = userService.login(dto.getEmail(), dto.getPassword()).getValue();
+        userService.logout(token);
+
+        Response<Boolean> response = userService.logout(token);
+
         assertTrue(response.isError());
         assertFalse(response.getValue());
         assertEquals("Logout failed", response.getMessage());
+    }
+
+    // --- enter (queue) ---
+
+    @Test
+    void GivenCapacityAvailable_WhenEnter_ThenAdmittedImmediately() {
+        Response<QueueEntryResultDTO> response = userService.enter();
+
+        assertFalse(response.isError());
+        assertTrue(response.getValue().isAdmitted());
+        assertNotNull(response.getValue().getToken());
+    }
+
+    @Test
+    void GivenSystemFull_WhenEnter_ThenPlacedInQueue() {
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(1);
+        userService.enter(); // fills the only slot
+
+        Response<QueueEntryResultDTO> response = userService.enter();
+
+        assertFalse(response.isError());
+        assertFalse(response.getValue().isAdmitted());
+        assertEquals(1, response.getValue().getPosition());
+    }
+
+    // --- getQueueStatus ---
+
+    @Test
+    void GivenAdmittedUser_WhenGetQueueStatus_ThenReturnsAdmitted() {
+        String uuid = userService.enter().getValue().getToken();
+
+        Response<QueueEntryResultDTO> status = userService.getQueueStatus(uuid);
+
+        assertFalse(status.isError());
+        assertTrue(status.getValue().isAdmitted());
+    }
+
+    @Test
+    void GivenWaitingUser_WhenGetQueueStatus_ThenReturnsPosition() {
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(1);
+        userService.enter(); // fills the slot
+        String waitingUuid = userService.enter().getValue().getToken();
+
+        Response<QueueEntryResultDTO> status = userService.getQueueStatus(waitingUuid);
+
+        assertFalse(status.isError());
+        assertFalse(status.getValue().isAdmitted());
+        assertEquals(1, status.getValue().getPosition());
     }
 }

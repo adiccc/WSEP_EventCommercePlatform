@@ -1,5 +1,6 @@
 package domain.event;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class Order {
@@ -26,6 +27,12 @@ public class Order {
     }
     public int getOrderId() {
         return orderId;
+    }
+    public Order(Order order) {
+        this.orderId = order.orderId;
+        this.userId = order.userId;
+        this.eventId = order.eventId;
+        this.tickets=new ArrayList<>(order.tickets);
     }
 
     public OrderStatus getStatus() {

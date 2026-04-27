@@ -19,12 +19,13 @@ public class Event {
     private String name;
     private LocalDateTime saleStartDate;
     private boolean hasLottery;
-    private Purchase purchasePolicy;
+    private PurchasePolicy purchasePolicy;
     private DiscountPolicy discountPolicy;
     private boolean active;
     private GeographicalArea location;
     private CategoryEvent categoryEvent;
     private List<Order> orders;
+    private long version;
 
 
     public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent categoryEvent) {
@@ -45,8 +46,41 @@ public class Event {
         this.categoryEvent = categoryEvent;
         this.eventQueue = new EventQueue();
         this.orders = new ArrayList<>();
+        this.version = 0;
     }
 
+    public Event(Event event){
+        if(event.eventMap==null){
+            this.eventMap=null;
+        }else{
+            this.eventMap = new EventMap(event.eventMap);
+        }
+        this.companyId = event.companyId;
+        this.creatorId = event.creatorId;
+        this.date = event.date;
+        this.name = event.name;
+        this.saleStartDate = event.saleStartDate;
+        this.hasLottery = event.hasLottery;
+        this.purchasePolicy=new PurchasePolicy(event.purchasePolicy);
+        this.discountPolicy=new DiscountPolicy(event.discountPolicy);
+        this.id=event.id;
+        this.eventQueue = new EventQueue(event.eventQueue);
+        this.active = event.active;
+        this.location = event.location;
+        this.categoryEvent = event.categoryEvent;
+        this.orders=new ArrayList<>();
+        for(Order order : event.orders){
+            this.orders.add(new Order(order));
+        }
+        this.version = event.version;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+    public void setVersion(long version) {
+        this.version = version;
+    }
     public List<Order> getOrders() {
         return orders;
     }

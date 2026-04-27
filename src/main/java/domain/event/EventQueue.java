@@ -9,6 +9,9 @@ public class EventQueue {
     public EventQueue() {
         this.waitingUsers = new LinkedList<>();
     }
+    public EventQueue(EventQueue eventQueue) {
+        this.waitingUsers = new LinkedList<>(eventQueue.waitingUsers);
+    }
 
     public void enqueue(String token) {
         if (!waitingUsers.contains(token)) {

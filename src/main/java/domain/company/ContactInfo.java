@@ -11,6 +11,11 @@ public class ContactInfo {
         this.phone = phone;
         this.bankAccount = bankAccount;
     }
+    public ContactInfo(ContactInfo contactInfo) {
+        this.email = contactInfo.getEmail();
+        this.phone = contactInfo.getPhone();
+        this.bankAccount = contactInfo.getBankAccount();
+    }
 
     public String getEmail() { return email; }
     public String getPhone() { return phone; }

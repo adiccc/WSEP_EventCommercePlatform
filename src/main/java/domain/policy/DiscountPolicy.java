@@ -10,6 +10,18 @@ public class DiscountPolicy implements Discount {
         this.discounts = new ArrayList<>();
     }
 
+    public DiscountPolicy(DiscountPolicy discountPolicy) {
+        this.discounts=new ArrayList<>();
+        for(Discount discount : discountPolicy.getDiscounts()) {
+            if(discount instanceof CodeCoupun){
+                this.discounts.add(new CodeCoupun((CodeCoupun) discount));
+            }if(discount instanceof LimitedDiscount){
+                this.discounts.add(new LimitedDiscount((LimitedDiscount)discount));
+            } if(discount instanceof VisualDiscount){
+                this.discounts.add(new VisualDiscount((VisualDiscount)discount));
+            }
+        }
+    }
     public void addDiscount(Discount discount) {
         if(discountExists(discount))
             throw new RuntimeException("Discount already exists");

@@ -9,6 +9,9 @@ public class MaxTicketsRule extends PurchaseRule {
         this.maxTickets = maxTickets;
     }
 
+    public MaxTicketsRule(MaxTicketsRule rule) {
+        this.maxTickets = rule.maxTickets;
+    }
     @Override
     public boolean isSatisfied(UserDTO user, int quantity, int ticketsBoughtForEvent) {
         return ticketsBoughtForEvent + quantity <= maxTickets;

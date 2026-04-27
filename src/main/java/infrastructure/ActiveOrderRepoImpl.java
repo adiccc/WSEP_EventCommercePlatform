@@ -2,36 +2,63 @@ package infrastructure;
 
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
+import Exception.OptimisticLockingFailureException;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ActiveOrderRepoImpl implements IActiveOrderRepo {
-    private Map<Integer, ActiveOrder> activeOrders; // key: activeOrderId, value: ActiveOrder
+    private ConcurrentHashMap<Integer, ActiveOrder> activeOrders; // key: activeOrderId, value: ActiveOrder
 
     public ActiveOrderRepoImpl() {
-        activeOrders = new HashMap<>();
+        activeOrders = new ConcurrentHashMap<>();
     }
 
     @Override
     public ActiveOrder findById(Integer id) {
-        if(activeOrders.containsKey(id))
-            return activeOrders.get(id);
-        throw new NoSuchElementException();
+        ActiveOrder dbOrder = activeOrders.get(id);
+        if (dbOrder != null) {
+            return new ActiveOrder(dbOrder);
+        }
+        throw new NoSuchElementException("ActiveOrder not found with ID: " + id);
     }
 
     @Override
     public List<ActiveOrder> getAll() {
-        return new ArrayList<>(activeOrders.values());
+        List<ActiveOrder> copies = new ArrayList<>();
+        for (ActiveOrder order : activeOrders.values()) {
+            copies.add(new ActiveOrder(order));
+        }
+        return copies;
     }
-
     @Override
     public void delete(Integer id) {
         activeOrders.remove(id);
     }
 
     @Override
-    public void store(ActiveOrder entity) {
-        activeOrders.put(entity.getId(), entity);
+    public synchronized void store(ActiveOrder entity) {
+        ActiveOrder currentOrder = activeOrders.get(entity.getId());
+
+        if (currentOrder == null) {
+            ActiveOrder newEntry = new ActiveOrder(entity);
+            activeOrders.put(newEntry.getId(), newEntry);
+            return;
+        }
+
+        ActiveOrder updatedOrder = new ActiveOrder(entity);
+        updatedOrder.setVersion(entity.getVersion() + 1);
+
+        boolean replaced = activeOrders.replace(entity.getId(), currentOrder, updatedOrder);
+
+        if (!replaced) {
+            throw new OptimisticLockingFailureException(
+                    "ActiveOrder " + entity.getId() + " version mismatch. Expected: " +
+                            entity.getVersion() + ", but found: " + currentOrder.getVersion()
+            );
+        }
     }
 
 }

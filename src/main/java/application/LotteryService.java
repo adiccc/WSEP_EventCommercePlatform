@@ -31,51 +31,55 @@ public class LotteryService {
     }
 
     public Response<Boolean> createLottery(String token, String eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
-        logger.log(Level.INFO, "createLottery called");
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "createLottery called");
 
-        // check valid token
-        int userId = auth.getUserId(token).getValue();
-        if(userId == -1) {
-            logger.severe("Invalid token");
-            return new Response<>(false, "Invalid token");
-        }
-        try {
-            Event event = eventRepo.findById(eventId);
-            if(event.getCreatorId() != userId) {
-                return new Response<>(false, "User id mismatch to the creator of this event");
+            // check valid token
+            int userId = auth.getUserId(token).getValue();
+            if (userId == -1) {
+                logger.severe("Invalid token");
+                return new Response<>(false, "Invalid token");
             }
-            if (!event.hasLottery()) {
-                return new Response<>(false, "This event does not support lottery");
-            }
-            if (capacity <= 0) {
-                return new Response<>(false, "Capacity must be greater than 0");
-            }
-            if (registerWindow.isBefore(LocalDateTime.now())) {
-                return new Response<>(false, "Register window must be in the future");
-            }
-            if (registerWindow.isAfter(event.getSaleStartDate())){
-                return new Response<>(false, "Register window must be before sale start date");
-            }if (expirationTime <= 0) {
-                return new Response<>(false, "Expiration time must be greater than 0");
-            }
-            Lottery lottery = new Lottery(eventId, capacity, registerWindow, expirationTime);
-            event.setActive(true);
-            lotteryRepo.store(lottery);
-            eventRepo.store(event);
+            try {
+                Event event = eventRepo.findById(eventId);
+                if (event.getCreatorId() != userId) {
+                    return new Response<>(false, "User id mismatch to the creator of this event");
+                }
+                if (!event.hasLottery()) {
+                    return new Response<>(false, "This event does not support lottery");
+                }
+                if (capacity <= 0) {
+                    return new Response<>(false, "Capacity must be greater than 0");
+                }
+                if (registerWindow.isBefore(LocalDateTime.now())) {
+                    return new Response<>(false, "Register window must be in the future");
+                }
+                if (registerWindow.isAfter(event.getSaleStartDate())) {
+                    return new Response<>(false, "Register window must be before sale start date");
+                }
+                if (expirationTime <= 0) {
+                    return new Response<>(false, "Expiration time must be greater than 0");
+                }
+                Lottery lottery = new Lottery(eventId, capacity, registerWindow, expirationTime);
+                event.setActive(true);
+                eventRepo.store(event);
+                lotteryRepo.store(lottery);
 
-            // Schedule the background task to draw winners when the registration window closes
-            scheduleLotteryDraw(lottery);
+                // Schedule the background task to draw winners when the registration window closes
+                scheduleLotteryDraw(lottery);
 
-            logger.log(Level.INFO, "Lottery created successfully");
-            return new Response<>(true, "Lottery created successfully");
 
-        } catch (NoSuchElementException e) {
-            logger.log(Level.SEVERE, "event not found: " + e.getMessage());
-            return new Response<>(false, "event not found");
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "failed creating lottery : " + e.getMessage());
-            return new Response<>(false, "failed to create lottery : " + e.getMessage());
-        }
+                logger.log(Level.INFO, "Lottery created successfully");
+                return new Response<>(true, "Lottery created successfully");
+
+                } catch (NoSuchElementException e) {
+                    logger.log(Level.SEVERE, "event not found: " + e.getMessage());
+                    return new Response<>(false, "event not found");
+                } catch (Exception e) {
+                    logger.log(Level.SEVERE, "failed creating lottery : " + e.getMessage());
+                    return new Response<>(false, "failed to create lottery : " + e.getMessage());
+                }
+        });
     }
 
 
