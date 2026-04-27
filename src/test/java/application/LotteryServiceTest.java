@@ -17,6 +17,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import org.mockito.Mockito;
+
 class LotteryServiceTest {
 
     private final int companyId = 111;
@@ -50,10 +52,12 @@ class LotteryServiceTest {
         eventRepo = new EventRepoImpl();
         lotteryRepo = new LotteryRepoImpl();
 
+        IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
+
         UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
         CompanyService companyService = new CompanyService(auth, companyRepo, userRepo);
          eventCompanyManageService =
-                new EventCompanyManageService(companyRepo, eventRepo, auth);
+                new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
 
         lotteryService = new LotteryService(lotteryRepo, eventRepo, auth);
 
