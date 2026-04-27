@@ -363,52 +363,56 @@ public class EventCompanyManageService {
             }
         });
     }
-
     public Response<Boolean> processRefund(String token, String eventId, int orderId) {
-        logger.log(Level.INFO, "processRefund called");
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "processRefund called");
 
-        // check valid token
-        int userId = auth.getUserId(token).getValue();
-        if (userId == -1) {
-            logger.severe("Invalid token");
-            return new Response<>(false, "Invalid token");
-        }
-
-        try {
-            Event event = eventRepo.findById(eventId);
-            Order order = event.findOrderById(orderId);
-
-            if (order == null) {
-                logger.log(Level.SEVERE, "Order not found for refund");
-                return new Response<>(false, "No matching order found for refund");
+            int userId = auth.getUserId(token).getValue();
+            if (userId == -1) {
+                logger.severe("Invalid token");
+                return new Response<>(false, "Invalid token");
             }
 
-            if (!order.canBeRefunded()) {
-                logger.log(Level.SEVERE, "Order cannot be refunded");
-                return new Response<>(false, "Order cannot be refunded");
-            }
+            try {
+                Event event = eventRepo.findById(eventId);
+                Order order = event.findOrderById(orderId);
 
-            boolean refundApproved = paymentSystem.refund(
-                    order.getPaymentConfirmationId(),
-                    order.getTotalSum()
-            );
+                if (order == null) {
+                    logger.log(Level.SEVERE, "Order not found for refund");
+                    return new Response<>(false, "No matching order found for refund");
+                }
 
-            if (refundApproved) {
-                order.markRefunded();
+                if (!order.canBeRefunded()) {
+                    logger.log(Level.SEVERE, "Order cannot be refunded");
+                    return new Response<>(false, "Order cannot be refunded");
+                }
+
+                boolean refundApproved = paymentSystem.refund(
+                        order.getPaymentConfirmationId(),
+                        order.getTotalSum()
+                );
+
+                if (refundApproved) {
+                    order.markRefunded();
+                    eventRepo.store(event);
+                    logger.log(Level.INFO, "Refund completed successfully");
+                    return new Response<>(true, "Refund completed successfully");
+                }
+
+                order.markRefundRequired();
                 eventRepo.store(event);
-                logger.log(Level.INFO, "Refund completed successfully");
-                return new Response<>(true, "Refund completed successfully");
-            }
-            // TODO: notify buyer about refund result when notification service is implemented
-            logger.log(Level.SEVERE, "Refund rejected by external payment service");
-            return new Response<>(false, "Refund rejected by external payment service");
 
-        } catch (NoSuchElementException e) {
-            logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
-            return new Response<>(false, "Event not found");
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
-            return new Response<>(false, "Failed to process refund: " + e.getMessage());
-        }
+                logger.log(Level.SEVERE, "Refund rejected by external payment service");
+                return new Response<>(false, "Refund rejected by external payment service");
+
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
+                return new Response<>(false, "Event not found");
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
+                return new Response<>(false, "Failed to process refund: " + e.getMessage());
+            }
+        });
     }
+
 }
