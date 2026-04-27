@@ -8,7 +8,6 @@ import domain.user.IUserRepo;
 import domain.user.Member;
 import domain.webQueue.WebQueue;
 
-import java.util.Map;
 import java.util.logging.Logger;
 
 public class AdminService {
@@ -73,7 +72,7 @@ public class AdminService {
      *
      * Effects:
      *  - Member account is deactivated (isActive = false)
-     *  - If the user is the founder of a company → that company is deactivated
+     *  - If the user is the founder of a company → removal is blocked (return error)
      *  - If the user is an owner (non-founder) → removed from ownerIds;
      *    all managers they appointed cascade to the founder
      *  - If the user is a manager → removed from companyTree;
@@ -102,9 +101,8 @@ public class AdminService {
                 boolean changed = false;
 
                 if (perms.getFounderId() == userIdToRemove) {
-                    // Founder removed → deactivate the whole company
-                    company.deactivate();
-                    changed = true;
+                    logger.warning("removeUser blocked: userId " + userIdToRemove + " is the founder of company " + company.getCompanyId());
+                    return Response.error("Cannot remove user: they are the founder of company \"" + company.getCompanyName() + "\"");
 
                 } else if (perms.isOwner(userIdToRemove)) {
                     // Owner removed → reassign any managers they appointed to the founder
