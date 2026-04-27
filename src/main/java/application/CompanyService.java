@@ -1,6 +1,7 @@
 package application;
 
 import java.util.*;
+import java.util.NoSuchElementException;
 import java.util.logging.Logger;
 
 import domain.company.*;
@@ -53,8 +54,12 @@ public class CompanyService {
             }
 
             synchronized (companyRepo) {
-                if (companyRepo.findById(companyId) != null) {
+                try {
+                    companyRepo.findById(companyId);
+                    // no exception → company already exists
                     return new Response<>(null, "Company ID already exists in the system.");
+                } catch (NoSuchElementException ignored) {
+                    // expected: company does not exist yet, continue
                 }
                 if (companyRepo.existsByName(companyName)) {
                     return new Response<>(null, "Company name is already taken.");
@@ -104,10 +109,6 @@ public class CompanyService {
 
             // 2. Company must exist
             Company company = companyRepo.findById(companyId);
-            if (company == null) {
-                logger.warning("viewRolesAndPermissionsTree failed: company not found, id: " + companyId);
-                return Response.error("Company not found");
-            }
 
             // 3. Requesting user must be an owner
             if (!company.getCompanyPermission().isOwner(userId)) {
@@ -127,6 +128,9 @@ public class CompanyService {
             logger.info("viewRolesAndPermissionsTree succeeded for companyId: " + companyId);
             return Response.ok(tree);
 
+        } catch (NoSuchElementException e) {
+            logger.warning("viewRolesAndPermissionsTree failed: company not found, id: " + companyId);
+            return Response.error("Company not found");
         } catch (Exception e) {
             logger.severe("Unexpected error in viewRolesAndPermissionsTree for companyId: " + companyId + ". Error: " + e.getMessage());
             return Response.error("Unexpected error: " + e.getMessage());
@@ -317,10 +321,6 @@ public class CompanyService {
         }
         try{
             Company company = companyRepo.findById(companyId);
-            if(company == null){
-                logger.warning("deactivateCompany failed: company not found, id: " + companyId);
-                return  new Response<>(false, "Company not found");
-            }
             if(company.isActive()) {
                 company.deactivate();
                 companyRepo.store(company);
@@ -331,6 +331,10 @@ public class CompanyService {
                 logger.warning("deactivateCompany failed: company is already deactivated, id: " + companyId);
                 return  new Response<>(false, "Company is already deactivated");
             }
+        }
+        catch (NoSuchElementException e) {
+            logger.warning("deactivateCompany failed: company not found, id: " + companyId);
+            return  new Response<>(false, "Company not found");
         }
         catch (Exception e) {
             logger.severe("Unexpected error in deactivateCompany: " + e.getMessage());
