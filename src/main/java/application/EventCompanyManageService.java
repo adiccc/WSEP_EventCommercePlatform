@@ -302,7 +302,12 @@ public class EventCompanyManageService {
                 event=eventRepo.findById(eventId);
                 orders = event.getOrders();
                 for(Order order : orders){
-                    processRefund(token,eventId,order.getOrderId());
+                    try {
+                        processRefund(token, event.getId(), order.getOrderId());
+                    } catch (Exception e) {
+                        logger.log(Level.SEVERE, "Failed to process automatic refund for order " +
+                                order.getOrderId() + " in event " + event.getId() + ": " + e.getMessage());
+                    }
                 }
                 logger.log(Level.INFO, "Orders deleted successfully");
                 return new Response<>(true, "Orders deleted successfully");
