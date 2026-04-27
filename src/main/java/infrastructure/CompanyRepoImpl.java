@@ -17,25 +17,14 @@ public class CompanyRepoImpl implements ICompanyRepo {
     }
 
     @Override
-    public void store(Company company) {
-        if (company.getVersion() == 0) {
-            // New company — insert only, never fall through to update path
+    public synchronized void store(Company company) {
+        Company currentCompany = companies.get(company.getCompanyId());
+
+        if (currentCompany == null) {
             Company newEntry = new Company(company);
-            Company existing = companies.putIfAbsent(newEntry.getCompanyId(), newEntry);
-            if (existing != null) {
-                logger.warning("store failed: company " + company.getCompanyId() + " was already created concurrently");
-                throw new OptimisticLockingFailureException(
-                        "Company " + company.getCompanyId() + " was already created concurrently");
-            }
+            companies.put(newEntry.getCompanyId(), newEntry);
             logger.info("store: company " + company.getCompanyId() + " inserted successfully");
             return;
-        }
-
-        // Existing company — update with version check
-        Company currentCompany = companies.get(company.getCompanyId());
-        if (currentCompany == null) {
-            logger.warning("store failed: company " + company.getCompanyId() + " not found for update");
-            throw new NoSuchElementException("Company " + company.getCompanyId() + " not found for update");
         }
 
         Company updatedCompany = new Company(company);
