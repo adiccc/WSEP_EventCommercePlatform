@@ -750,13 +750,12 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenOwnerWithSalesData_WhenGenerateSalesReports_ThenReturnReportWithData() {
         // Arrange
-        Event event = eventService.ViewEventDetails(validToken1, companyId, eventId).getValue();
+        String event = eventCompanyManageService.createEvent(validToken1,companyId,eventDate,"event1",eventDate.minusDays(1), false,GeographicalArea.NORTH,CategoryEvent.SPORTS).getValue();
         List<Integer> purchasedTickets = new ArrayList<>();
         purchasedTickets.add(101);
-        purchasedTickets.add(102);
+        Event e =eventRepo.findById(event);
         Order order = new Order(1, 1, eventId, purchasedTickets);
-        event.getOrders().add(order);
-        eventRepo.store(event);
+        e.getOrders().add(order);
         Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, validToken1);
 
         assertNotNull(response.getValue());
