@@ -1,5 +1,6 @@
 package domain.activeOrder;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class ActiveOrder {
@@ -7,12 +8,29 @@ public class ActiveOrder {
     private int userId;
     private String eventId;
     private List<Integer> tickets;
+    private long version;
 
     public ActiveOrder(int orderId, int userId, String eventId, List<Integer> tickets) {
         this.orderId = orderId; //how to generate orderId? maybe use a static variable that increments with each new order?
         this.userId = userId;
         this.eventId = eventId;
         this.tickets = tickets;
+        this.version = 0;
+    }
+
+    public ActiveOrder(ActiveOrder activeOrder) {
+        this.orderId = activeOrder.orderId;
+        this.userId = activeOrder.userId;
+        this.eventId = activeOrder.eventId;
+        this.tickets = new ArrayList<>(activeOrder.tickets);
+
+    }
+
+    public long getVersion() {
+        return version;
+    }
+    public void setVersion(long version) {
+        this.version = version;
     }
 
     public int getId() {

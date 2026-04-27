@@ -10,6 +10,10 @@ public class VisualDiscount extends DiscountElement {
         this.percentage = percentage;
         this.endDate = endDate;
     }
+    public VisualDiscount(VisualDiscount visualDiscount) {
+        this.percentage = visualDiscount.getPercentage();
+        this.endDate = visualDiscount.getEndDate();
+    }
 
     @Override
     public double apply(double originalPrice, int quantity, String couponCode) {
