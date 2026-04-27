@@ -144,7 +144,7 @@ class CompanyServiceUpdatedTest {
         Response<Boolean> response = service.updatePurchasePolicy(OWNER_TOKEN, COMPANY_ID, newPolicy);
 
         assertFalse(response.isError());
-        assertEquals(newPolicy, companyRepo.findById(COMPANY_ID).getPurchasePolicy());
+        assertEquals(newPolicy.describe(), companyRepo.findById(COMPANY_ID).getPurchasePolicy().describe());
     }
 
     @Test
