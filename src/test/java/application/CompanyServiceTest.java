@@ -3,6 +3,7 @@ package application;
 import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
+import domain.company.Permissions;
 import domain.event.IOrderRepo;
 import domain.policy.DiscountPolicy;
 import domain.user.IUserRepo;
@@ -37,9 +38,9 @@ class CompanyServiceTest {
 
     @BeforeEach
     void setUp() {
-        company = new Company(COMPANY_ID, "Test Company", OWNER_ID,
+        company = new Company(COMPANY_ID, "Test Company",
                 new ContactInfo("test@test.com", "0500000000", "bank-1"),
-                new PurchasePolicy(), new DiscountPolicy());
+                new PurchasePolicy(), new DiscountPolicy(), new Permissions(OWNER_ID));
 
         ICompanyRepo companyRepo = new CompanyRepoImpl();
         companyRepo.store(company);

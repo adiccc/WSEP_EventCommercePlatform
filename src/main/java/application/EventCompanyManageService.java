@@ -66,7 +66,7 @@ public class EventCompanyManageService {
                 Company c = this.companyRepo.findById(companyId);
 
                 // check appropriate permission
-                if (userId != eventCreator || !c.checkPermission(userId, CREATE_EVENT)) {
+                if (userId != eventCreator || !c.getCompanyPermission().checkPermission(userId, CREATE_EVENT)) {
                     logger.severe("User does not have permission to define venue and seating map for this event");
                     return new Response<>(false, "Permission required");
                 }
@@ -124,7 +124,7 @@ public class EventCompanyManageService {
 
             try {
                 Company c = this.companyRepo.findById(companyId);
-                if (!c.checkPermission(creatorId, CREATE_EVENT)) {
+                if (!c.getCompanyPermission().checkPermission(creatorId, CREATE_EVENT)) {
                     logger.severe("User does not have permission to create event for this company");
                     return new Response<>(null, "Permission required");
                 }
@@ -324,7 +324,7 @@ public class EventCompanyManageService {
                 Company company = companyRepo.findById(companyId);
 
                 // validate relevant permissions
-                if (!company.checkPermission(userId, VIEW_ORDERS_HISTORY)) {
+                if (!company.getCompanyPermission().checkPermission(userId, VIEW_ORDERS_HISTORY)) {
                     logger.log(Level.SEVERE, "Permission required");
                     return new Response<>(null, "Permission required");
                 }
@@ -352,6 +352,7 @@ public class EventCompanyManageService {
             }
         });
     }
+
     public Response<CompanyDetailsDTO> getCompanyDetails(String token, int companyId) {
         return RetryHelper.executeWithRetry(() ->
         {
@@ -365,7 +366,7 @@ public class EventCompanyManageService {
                 int userId = auth.getUserId(token).getValue();
                 boolean isMember = userId != -1;
                 //TODO when check permission is implemented change just for a call to that function
-                boolean isUserPermitted = company.isActive() || (isMember && (company.isOwner(userId) || company.checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES)));
+                boolean isUserPermitted = company.isActive() || (isMember && (company.isOwner(userId) || company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES)));
                 if (!isUserPermitted) {
                     logger.log(Level.SEVERE, "User is not permitted to view closed companies");
                     return new Response<>(null, "User is not permitted to view closed companies");
@@ -390,7 +391,6 @@ public class EventCompanyManageService {
                         company.getContactInfo().getPhone(),
                         company.getPurchasePolicy().describe(),
                         company.getDiscountPolicy().describe(),
-                        company.getFounderId(),
                         futureEvents);
                 if (futureEvents.isEmpty()) {
                     logger.log(Level.INFO, "No future events found for company " + companyId);
@@ -404,6 +404,7 @@ public class EventCompanyManageService {
             }
         });
     }
+
     public Response<Boolean> processRefund(String token, String eventId, int orderId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");

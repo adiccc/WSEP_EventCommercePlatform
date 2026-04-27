@@ -1,4 +1,4 @@
-package domain.company;
+package domain.unitTest.company;
 
 import application.CompanyService;
 import application.IAuth;
@@ -8,11 +8,11 @@ import domain.company.ICompanyRepo;
 import domain.event.IOrderRepo;
 import domain.user.IUserRepo;
 import domain.user.Member;
-import domain.user.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.NoSuchElementException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -25,8 +25,6 @@ class CompanyUnitTest {
     private IOrderRepo orderRepoMock;
     private CompanyService companyService;
     private Member mockUser;
-    private int userId;
-    private String sessionToken;
 
     @BeforeEach
     public void setUp() {
@@ -37,17 +35,17 @@ class CompanyUnitTest {
 
         companyService = new CompanyService(authMock, companyRepoMock, userRepoMock);
 
-        mockUser = new Member("user123","aa", "aa","bb","050-432-6677", LocalDate.of(2001,5,12),"ee");
+        mockUser = new Member("user123", "aa", "aa", "bb", "050-432-6677", LocalDate.of(2001, 5, 12), "ee");
         mockUser.setConnected(true);
 
-        when(authMock.getUserId(anyString())).thenReturn(new Response<>(1,""));
-        when(authMock.isLoggedIn("token123")).thenReturn(new Response<>(true,""));
+        when(authMock.getUserId(anyString())).thenReturn(new Response<>(1, ""));
+        when(authMock.isLoggedIn("token123")).thenReturn(new Response<>(true, ""));
     }
 
     @Test
     public void GivenValidInputs_WhenCreateProductionCompany_ThenReturnSuccessAndCreateCompany() {
         when(userRepoMock.findById(1)).thenReturn(mockUser);
-        when(companyRepoMock.existsById(555)).thenReturn(false);
+        when(companyRepoMock.findById(555)).thenThrow(new NoSuchElementException());
         when(companyRepoMock.existsByName("LiveNation")).thenReturn(false);
 
         Response<Company> response = companyService.createProductionCompany(
@@ -64,7 +62,7 @@ class CompanyUnitTest {
     @Test
     public void GivenExistingCompanyId_WhenCreateProductionCompany_ThenReturnError() {
         when(userRepoMock.findById(1)).thenReturn(mockUser);
-        when(companyRepoMock.existsById(555)).thenReturn(true);
+        when(companyRepoMock.findById(555)).thenReturn(mock(Company.class));
 
         Response<Company> response = companyService.createProductionCompany(
                 "token123", 555, "LiveNation", "admin@livenation.com", "0501234567", "bank-123"
@@ -75,18 +73,16 @@ class CompanyUnitTest {
 
         verify(companyRepoMock, never()).store(any(Company.class));
     }
+
     @Test
     public void GivenDisconnectedUser_WhenCreateProductionCompany_ThenReturnError() {
-        // Given
-        when(authMock.isLoggedIn("token123")).thenReturn(new Response<>(false,""));
+        when(authMock.isLoggedIn("token123")).thenReturn(new Response<>(false, ""));
 
-        // When
         Response<Company> response = companyService.createProductionCompany(
                 "token123", 555, "LiveNation",
                 "admin@livenation.com", "0501234567", "bank-123"
         );
 
-        // Then
         assertNull(response.getValue());
         assertFalse(response.getMessage().contains("logged in"));
 
@@ -94,22 +90,9 @@ class CompanyUnitTest {
         verify(userRepoMock, never()).store(any(Member.class));
     }
 
-    // @Test
-    // public void GivenDisconnectedUser_WhenCreateProductionCompany_ThenReturnError() {
-    // mockUser.setConnected(false);
-    // when(userRepoMock.findById(1)).thenReturn(mockUser);
-    //
-    // Response<Company> response = companyService.createProductionCompany(
-    // "token123", 555, "LiveNation", "admin@livenation.com", "0501234567", "bank-123"
-    // );
-    // // assertNull(response.getValue());
-    // assertTrue(response.getMessage().contains("logged in"));
-    // }
-
     @Test
     public void GivenInvalidEmail_WhenCreateProductionCompany_ThenReturnError() {
         when(userRepoMock.findById(1)).thenReturn(mockUser);
-        when(companyRepoMock.existsById(555)).thenReturn(false);
 
         Response<Company> response = companyService.createProductionCompany(
                 "token123", 555, "LiveNation", "invalidEmailFormat", "0501234567", "bank-123"

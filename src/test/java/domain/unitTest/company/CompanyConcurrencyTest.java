@@ -1,11 +1,11 @@
-package domain.company;
+package domain.unitTest.company;
 
 import application.CompanyService;
 import application.IAuth;
 import application.Response;
+import domain.company.Company;
 import domain.event.IOrderRepo;
 import domain.user.Member;
-import domain.user.User;
 import infrastructure.CompanyRepoImpl;
 import infrastructure.UserRepo;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,12 +34,12 @@ class CompanyConcurrencyTest {
         IAuth authMock = mock(IAuth.class);
         IOrderRepo orderRepoMock = mock(IOrderRepo.class);
 
-        when(authMock.getUserId(anyString())).thenReturn(new Response<>(1,""));
+        when(authMock.getUserId(anyString())).thenReturn(new Response<>(1, ""));
         when(authMock.isLoggedIn(anyString())).thenReturn(Response.ok(true));
 
         companyService = new CompanyService(authMock, companyRepo, userRepo);
 
-        Member member = new Member("admin123","aa","aa","ff","050-422-4567", LocalDate.of(2022,12,3),"aa");
+        Member member = new Member("admin123", "aa", "aa", "ff", "050-422-4567", LocalDate.of(2022, 12, 3), "aa");
         member.setConnected(true);
         userRepo.store(member);
     }

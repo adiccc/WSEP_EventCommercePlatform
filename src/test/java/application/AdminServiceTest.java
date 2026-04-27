@@ -1,9 +1,13 @@
 package application;
 
+import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
+import domain.event.IEventRepo;
 import domain.user.IUserRepo;
 import domain.webQueue.WebQueue;
 import infrastructure.Auth;
+import infrastructure.CompanyRepoImpl;
+import infrastructure.EventRepoImpl;
 import infrastructure.PasswordEncoderUtil;
 import infrastructure.UserRepo;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,8 +38,10 @@ class AdminServiceTest {
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         IAuth auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(ADMIN_EMAIL));
 
+        ICompanyRepo companyRepo = new CompanyRepoImpl();
+        IEventRepo eventRepo = new EventRepoImpl();
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
-        adminService = new AdminService(auth);
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo);
 
         UserDTO adminDTO = new UserDTO(ADMIN_EMAIL, "Admin", "User", PASSWORD, 1, 1, 1990, "City", "050-000-0000");
         UserDTO userDTO = new UserDTO(USER_EMAIL, "Regular", "User", PASSWORD, 1, 1, 1990, "City", "050-111-1111");

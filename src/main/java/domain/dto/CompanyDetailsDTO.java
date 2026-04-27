@@ -13,10 +13,9 @@ public class CompanyDetailsDTO {
     private String phone;
     private String purchasePolicy; //describe function of Purchase policy class
     private String discountPolicy; //need to take also as String waiting for implementation
-    private int founderId;
     List<EventDTO> futureEvents;
     
-    public CompanyDetailsDTO(int companyId, String companyName, boolean isActive, String email, String phone, String purchasePolicy, String discountPolicy, int founderId, List<EventDTO> futureEvents) {
+    public CompanyDetailsDTO(int companyId, String companyName, boolean isActive, String email, String phone, String purchasePolicy, String discountPolicy, List<EventDTO> futureEvents) {
         this.companyId = companyId;
         this.companyName = companyName;
         this.isActive = isActive;
@@ -24,7 +23,6 @@ public class CompanyDetailsDTO {
         this.phone = phone;
         this.purchasePolicy = purchasePolicy;
         this.discountPolicy = discountPolicy;
-        this.founderId = founderId;
         this.futureEvents = futureEvents;
     }
 

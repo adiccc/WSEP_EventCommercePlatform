@@ -7,16 +7,19 @@ import java.util.Set;
 
 public class ManagerAppointment {
 
-    private String managerId;
+    private int managerId;
+    private int appointedBy;   // the owner who appointed this manager
     private Set<PermissionType> permissions;
 
-    public ManagerAppointment(String managerId) {
+    public ManagerAppointment(int managerId, int appointedBy) {
         this.managerId = managerId;
+        this.appointedBy = appointedBy;
         this.permissions = EnumSet.noneOf(PermissionType.class);
     }
 
-    public ManagerAppointment(String managerId, Set<PermissionType> permissions) {
+    public ManagerAppointment(int managerId, int appointedBy, Set<PermissionType> permissions) {
         this.managerId = managerId;
+        this.appointedBy = appointedBy;
         this.permissions = permissions;
     }
     public ManagerAppointment(ManagerAppointment managerAppointment) {
@@ -24,7 +27,9 @@ public class ManagerAppointment {
         this.permissions = EnumSet.copyOf(managerAppointment.getPermissions());
     }
 
-    public String getManagerId() { return managerId; }
+    public int getManagerId()    { return managerId; }
+    public int getAppointedBy()  { return appointedBy; }
+    public void setAppointedBy(int appointedBy) { this.appointedBy = appointedBy; }
 
     public Set<PermissionType> getPermissions() { return permissions; }
 
