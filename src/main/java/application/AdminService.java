@@ -14,33 +14,39 @@ public class AdminService {
     }
 
     public Response<Boolean> setMaxCapacity(String token, int capacity) {
-        logger.info("setMaxCapacity attempt");
-        try {
-            if (!auth.isAdmin(token).getValue()) {
-                logger.warning("setMaxCapacity failed: unauthorized");
-                return Response.error("Unauthorized: admin access required");
+        return RetryHelper.executeWithRetry(() ->
+        {
+            logger.info("setMaxCapacity attempt");
+            try {
+                if (!auth.isAdmin(token).getValue()) {
+                    logger.warning("setMaxCapacity failed: unauthorized");
+                    return Response.error("Unauthorized: admin access required");
+                }
+                WebQueue.getInstance().setMaxCapacity(capacity);
+                logger.info("Max capacity updated to: " + capacity);
+                return Response.ok(true);
+            } catch (Exception e) {
+                logger.severe("setMaxCapacity failed due to server error: " + e.getMessage());
+                return Response.error(e.getMessage());
             }
-            WebQueue.getInstance().setMaxCapacity(capacity);
-            logger.info("Max capacity updated to: " + capacity);
-            return Response.ok(true);
-        } catch (Exception e) {
-            logger.severe("setMaxCapacity failed due to server error: " + e.getMessage());
-            return Response.error(e.getMessage());
-        }
+        });
     }
 
     public Response<Integer> getMaxCapacity(String token) {
-        logger.info("getMaxCapacity attempt");
-        try {
-            if (!auth.isAdmin(token).getValue()) {
-                logger.warning("getMaxCapacity failed: unauthorized");
-                return Response.error("Unauthorized: admin access required");
+        return RetryHelper.executeWithRetry(() ->
+        {
+            logger.info("getMaxCapacity attempt");
+            try {
+                if (!auth.isAdmin(token).getValue()) {
+                    logger.warning("getMaxCapacity failed: unauthorized");
+                    return Response.error("Unauthorized: admin access required");
+                }
+                return Response.ok(WebQueue.getInstance().getMaxCapacity());
+            } catch (Exception e) {
+                logger.severe("getMaxCapacity failed due to server error: " + e.getMessage());
+                return Response.error(e.getMessage());
             }
-            return Response.ok(WebQueue.getInstance().getMaxCapacity());
-        } catch (Exception e) {
-            logger.severe("getMaxCapacity failed due to server error: " + e.getMessage());
-            return Response.error(e.getMessage());
-        }
+        });
     }
 
     public Response<Integer> getActiveCount(String token) {
@@ -58,16 +64,19 @@ public class AdminService {
     }
 
     public Response<Integer> getWaitingCount(String token) {
-        logger.info("getWaitingCount attempt");
-        try {
-            if (!auth.isAdmin(token).getValue()) {
-                logger.warning("getWaitingCount failed: unauthorized");
-                return Response.error("Unauthorized: admin access required");
+        return RetryHelper.executeWithRetry(() ->
+        {
+            logger.info("getWaitingCount attempt");
+            try {
+                if (!auth.isAdmin(token).getValue()) {
+                    logger.warning("getWaitingCount failed: unauthorized");
+                    return Response.error("Unauthorized: admin access required");
+                }
+                return Response.ok(WebQueue.getInstance().getWaitingCount());
+            } catch (Exception e) {
+                logger.severe("getWaitingCount failed due to server error: " + e.getMessage());
+                return Response.error(e.getMessage());
             }
-            return Response.ok(WebQueue.getInstance().getWaitingCount());
-        } catch (Exception e) {
-            logger.severe("getWaitingCount failed due to server error: " + e.getMessage());
-            return Response.error(e.getMessage());
-        }
+        });
     }
 }
