@@ -29,8 +29,7 @@ import java.util.logging.*;
 import java.util.List;
 import java.util.NoSuchElementException;
 
-import static domain.dataType.PermissionType.CREATE_EVENT;
-import static domain.dataType.PermissionType.VIEW_ORDERS_HISTORY;
+import static domain.dataType.PermissionType.*;
 
 // TODO: update all EventCompanyManageService initializations to pass IPaymentSystem
 public class EventCompanyManageService {
@@ -265,6 +264,48 @@ public class EventCompanyManageService {
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "failed adding zones to event map : " + e.getMessage());
                 return new Response<>(false, "failed to add zones to event map : " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Boolean> DeleteEvent(String token, String eventId) {
+        return RetryHelper.executeWithRetry(()->{
+            logger.log(Level.INFO, "DeleteEvent called");
+            int userId = auth.getUserId(token).getValue();
+            if (userId == -1) {
+                logger.severe("Invalid token");
+                return new Response<>(false, "Invalid token");
+            }
+            try{
+                Event event = eventRepo.findById(eventId);
+                if(event.getDate().isBefore(LocalDateTime.now())) {
+                    logger.severe("Event deletion can be on future events only");
+                    return new Response<>(false, "Event deletion can be on future events only");
+                }
+                int companyId= event.getCompanyId();
+                Company company = companyRepo.findById(companyId);
+                if(!company.checkPermission(userId,DELETE_EVENT)){
+                    logger.severe("User does not have permission to delete event");
+                    return new Response<>(false, "User does not have permission to delete event");
+                }
+                event.setActive(false);
+                // not in version 1 - send notification to all users who bought tickets to the event
+                List<Order> orders = event.getOrders();
+
+                for(Order order : orders){
+                    order.markRefundRequired();
+                }
+                eventRepo.store(event);
+                event=eventRepo.findById(eventId);
+                orders = event.getOrders();
+                for(Order order : orders){
+                    processRefund(token,eventId,order.getOrderId());
+                }
+                logger.log(Level.INFO, "Orders deleted successfully");
+                return new Response<>(true, "Orders deleted successfully");
+            }catch(Exception e){
+                logger.log(Level.SEVERE, "failed delete event : " + e.getMessage());
+                return new Response<>(false, "failed to detele event : " + e.getMessage());
             }
         });
     }

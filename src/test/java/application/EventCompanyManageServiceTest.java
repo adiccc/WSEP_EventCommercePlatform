@@ -857,4 +857,65 @@ class EventCompanyManageServiceTest {
 
         Mockito.verify(paymentSystem).refund("pay123", 100.0);
     }
+
+    //TODO : update after there is order function in event service
+    @Test
+    void GivenValidOwnerAndFutureEventWithOrders_WhenDeleteEvent_ThenEventMarkedInactiveAndRefundProcessed() {
+        // Given
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
+                .thenReturn(true);
+
+        Event event = eventRepo.findById(eventId);
+        Order order = new Order(1, 2, eventId, List.of(1, 2), 100.0, "pay123");
+        event.getOrders().add(order);
+        eventRepo.store(event);
+
+        // When
+        Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, eventId);
+
+        // Then
+        assertTrue(response.getValue());
+        assertEquals("Orders deleted successfully", response.getMessage());
+
+        Event updatedEvent = eventRepo.findById(eventId);
+        assertFalse(updatedEvent.isActive());
+
+        Order updatedOrder = updatedEvent.findOrderById(1);
+        assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
+
+        Mockito.verify(paymentSystem).refund("pay123", 100.0);
+    }
+
+    @Test
+    void GivenUserWithoutPermission_WhenDeleteEvent_ThenPermissionErrorReturned() {
+        // Given
+        // validToken2 - without permissions
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        // When
+        Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken2, eventId);
+
+        // Then
+        assertFalse(response.getValue());
+        assertEquals("User does not have permission to delete event", response.getMessage());
+
+        Event event = eventRepo.findById(eventId);
+        assertTrue(event.isActive());
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .refund(Mockito.anyString(), Mockito.anyDouble());
+    }
+
+    @Test
+    void GivenNonExistingEvent_WhenDeleteEvent_ThenEventNotFoundErrorReturned() {
+        // Given
+        String nonExistingEventId = "333";
+
+        // When
+        Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, nonExistingEventId);
+
+        // Then
+        assertFalse(response.getValue());
+        assertTrue(response.getMessage().startsWith("failed to detele event : "));
+    }
 }
