@@ -63,4 +63,12 @@ public class EventRepoImpl implements IEventRepo {
                 .map(Event::new)
                 .collect(Collectors.toList());
     }
+
+    @Override
+    public List<Event> findByCreator(int creatorId) {
+        return events.values().stream()
+                .filter(e -> e.getCreatorId() == creatorId)
+                .map(Event::new)
+                .collect(Collectors.toList());
+    }
 }

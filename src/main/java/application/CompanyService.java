@@ -54,34 +54,32 @@ public class CompanyService {
                     return new Response<>(null, "Invalid contact or bank account information.");
                 }
 
-                synchronized (companyRepo) {
-                    try {
-                        companyRepo.findById(companyId);
-                        // no exception → company already exists
-                        return new Response<>(null, "Company ID already exists in the system.");
-                    } catch (NoSuchElementException ignored) {
-                        // expected: company does not exist yet, continue
-                    }
-                    if (companyRepo.existsByName(companyName)) {
-                        return new Response<>(null, "Company name is already taken.");
-                    }
-
-                    ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
-                    PurchasePolicy defaultPurchase = new PurchasePolicy();
-                    DiscountPolicy defaultDiscount = new DiscountPolicy();
-                    Permissions companyPermission = new Permissions(userId);
-                    Company newCompany = new Company(companyId, companyName,
-                            contactInfo, defaultPurchase, defaultDiscount, companyPermission);
-
-                    Founder founderRole = new Founder(companyId);
-                    user.addRole(founderRole);
-
-                    companyRepo.store(newCompany);
-                    userRepo.store(user);
-
-                    logger.info("Company " + companyName + " created successfully");
-                    return new Response<>(newCompany, "Production company created successfully.");
+                try {
+                    companyRepo.findById(companyId);
+                    // no exception → company already exists
+                    return new Response<>(null, "Company ID already exists in the system.");
+                } catch (NoSuchElementException ignored) {
+                    // expected: company does not exist yet, continue
                 }
+                if (companyRepo.existsByName(companyName)) {
+                    return new Response<>(null, "Company name is already taken.");
+                }
+
+                ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
+                PurchasePolicy defaultPurchase = new PurchasePolicy();
+                DiscountPolicy defaultDiscount = new DiscountPolicy();
+                Permissions companyPermission = new Permissions(userId);
+                Company newCompany = new Company(companyId, companyName,
+                        contactInfo, defaultPurchase, defaultDiscount, companyPermission);
+
+                Founder founderRole = new Founder(companyId);
+                user.addRole(founderRole);
+
+                companyRepo.store(newCompany);
+                userRepo.store(user);
+
+                logger.info("Company " + companyName + " created successfully");
+                return new Response<>(newCompany, "Production company created successfully.");
 
             } catch(Exception e){
                 logger.severe("Failed to create company " + companyName + ". Error: " + e.getMessage());
