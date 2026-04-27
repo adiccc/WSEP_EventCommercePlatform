@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import static domain.config.PurchaseConfig.MAX_ACTIVE_ORDERS_PER_EVENT;
 import static org.junit.jupiter.api.Assertions.*;
 
 import org.mockito.Mockito;
@@ -33,6 +34,7 @@ class ActiveOrderServiceTest {
     private LotteryRepoImpl lotteryRepo;
     private EventCompanyManageService companyEventService;
     private IPaymentSystem paymentSystem;
+    private ITicketSupply ticketSupply;
 
     private int userId1;
     private String validToken;
@@ -48,7 +50,7 @@ class ActiveOrderServiceTest {
     private List<SeatingZoneDTO> seatingZones;
 
     private final int companyId = 1;
-    private final int capacity = 100;
+    private final int capacity = MAX_ACTIVE_ORDERS_PER_EVENT;
 
     @BeforeEach
     void setUp() {
@@ -81,6 +83,7 @@ class ActiveOrderServiceTest {
         lotteryRepo = new LotteryRepoImpl();
 
         paymentSystem = Mockito.mock(IPaymentSystem.class);
+        ticketSupply = Mockito.mock(ITicketSupply.class);
 
         CompanyService companyService = new CompanyService(auth, companyRepo, userRepo);
         companyService.createProductionCompany(validToken, companyId,
@@ -114,7 +117,15 @@ class ActiveOrderServiceTest {
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
 
-        service = new ActiveOrderService(auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo);
+        service = new ActiveOrderService(
+                auth,
+                activeOrderRepo,
+                eventRepo,
+                companyRepo,
+                lotteryRepo,
+                paymentSystem,
+                ticketSupply
+        );
     }
 
     @Test

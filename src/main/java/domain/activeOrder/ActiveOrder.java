@@ -40,4 +40,15 @@ public class ActiveOrder {
     public String getEventId() {
         return eventId;
     }
+    public int getUserId() {
+        return userId;
+    }
+
+    public List<Integer> getTickets() {
+        return new ArrayList<>(tickets);
+    }
+
+    public boolean hasTickets() {
+        return tickets != null && !tickets.isEmpty();
+    }
 }
