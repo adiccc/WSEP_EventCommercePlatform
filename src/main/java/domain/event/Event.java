@@ -1,6 +1,7 @@
 package domain.event;
 
 import domain.dataType.CategoryEvent;
+import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
 import domain.policy.*;
 
@@ -170,5 +171,53 @@ public class Event {
 
     public EventMap getEventMap() {
         return eventMap;
+    }
+
+    public boolean isFuture() {
+        return date.isAfter(LocalDateTime.now());
+    }
+
+    public boolean matches(EventSearchFilter filter) {
+        if (!isActive() || !isFuture()) return false;
+
+        if (filter.getKeyword() != null && !filter.getKeyword().isEmpty()) {
+            if (!name.toLowerCase().contains(filter.getKeyword().toLowerCase()))
+                return false;
+        }
+
+        if (filter.getStartDate() != null && date.isBefore(filter.getStartDate()))
+            return false;
+
+        if (filter.getEndDate() != null && date.isAfter(filter.getEndDate()))
+            return false;
+
+        if (filter.getCategory() != null && categoryEvent != filter.getCategory())
+            return false;
+
+        if (filter.getLocation() != null && location != filter.getLocation())
+            return false;
+
+        if (!matchesPrice(filter))
+            return false;
+
+        return true;
+    }
+
+
+    private boolean matchesPrice(EventSearchFilter filter) {
+        if (filter.getMinPrice() == null && filter.getMaxPrice() == null)
+            return true;
+
+        return eventMap.getZones().stream().anyMatch(z -> {
+            double price = z.getPrice();
+
+            if (filter.getMinPrice() != null && price < filter.getMinPrice())
+                return false;
+
+            if (filter.getMaxPrice() != null && price > filter.getMaxPrice())
+                return false;
+
+            return true;
+        });
     }
 }
