@@ -168,4 +168,126 @@ class ActiveOrderServiceTest {
         assertNull(response.getValue());
         assertEquals("The sale for this event has not started yet", response.getMessage());
     }
+
+        @Test
+    void GivenValidDetails_WhenGuestSelectTicketsQuantity_ThenSuccess(){
+
+        }
+
+
+    @Test
+    void GivenValidTokenAndAvailableTickets_WhenGuestSelectsQuantity_ThenOrderIsCreatedSuccessfully() {
+        Event event = eventRepo.findById(eventId);
+        event.setSaleStartDate(LocalDateTime.now().minusHours(1));
+        event.setActive(true);
+        eventRepo.store(event);
+
+        int eventIdInt = Integer.parseInt(eventId); // המרה ל-int לפי החתימה של הפונקציה שלך
+        int requestedQuantity = 5;
+        String zoneName = "floor"; // תואם ל-StandingZoneDTO מה-setUp
+
+        // Act
+        Response<Integer> response = service.guestSelectTicketsQuantity(validToken, eventIdInt, zoneName, requestedQuantity);
+
+        // Assert - תוצאה צפויה כפי שהוגדר בטבלה ובקוד
+        assertNotNull(response.getValue(), "Should return a valid order ID");
+        assertEquals("Tickets quantity selected successfully", response.getMessage());
+
+        // מוודאים שההזמנה באמת נשמרה ב-DB (טיימר הופעל)
+        ActiveOrder order = activeOrderRepo.findById(response.getValue());
+        assertNotNull(order, "Order should be stored in activeOrderRepo");
+        assertEquals(userId1, order.getUserId());
+        assertEquals(requestedQuantity, order.getTicketsIds().size(), "Should reserve exactly 5 tickets");
+    }
+
+    @Test
+    void GivenRequestedQuantityExceedsZoneCapacity_WhenGuestSelectsQuantity_ThenReturnNotEnoughTicketsError() {
+        // Arrange - תרחיש: Not_Enough_Tickets
+        Event event = eventRepo.findById(eventId);
+        event.setSaleStartDate(LocalDateTime.now().minusHours(1));
+        event.setActive(true);
+        eventRepo.store(event);
+
+        int eventIdInt = Integer.parseInt(eventId);
+        int excessiveQuantity = 201; // אזור "floor" הוגדר ב-setUp עם 200 מקומות בלבד
+        String zoneName = "floor";
+
+        // Act
+        Response<Integer> response = service.guestSelectTicketsQuantity(validToken, eventIdInt, zoneName, excessiveQuantity);
+
+        // Assert - תוצאה צפויה כפי שהוגדר בטבלה
+        assertNull(response.getValue(), "Order should not be created");
+        // הפונקציה שלך תופסת את השגיאה מהדומיין ומוסיפה קידומת
+        assertTrue(response.getMessage().contains("Not enough tickets available in this zone"),
+                "Should return error indicating not enough tickets");
+    }
+
+    @Test
+    void GivenNonExistentEventId_WhenGuestSelectsQuantity_ThenReturnEventNotFoundError() {
+        // Arrange - תרחיש: Event_Not_Found
+        int invalidEventId = 9999;
+        int requestedQuantity = 2;
+        String zoneName = "floor";
+
+        // Act
+        Response<Integer> response = service.guestSelectTicketsQuantity(validToken, invalidEventId, zoneName, requestedQuantity);
+
+        // Assert - תוצאה צפויה כפי שהוגדר בטבלה ובקוד (NoSuchElementException)
+        assertNull(response.getValue(), "Order should not be created for non-existent event");
+        assertEquals("Event not found", response.getMessage());
+    }
+
+    @Test
+    void GivenInvalidGuestToken_WhenGuestSelectsQuantity_ThenReturnInvalidTokenError() {
+        // Arrange - בדיקת שגיאה לפי לוגיקת הקוד (שכבת האפליקציה)
+        String invalidToken = "invalid-dummy-token";
+        int eventIdInt = Integer.parseInt(eventId);
+        int requestedQuantity = 2;
+        String zoneName = "floor";
+
+        // Act
+        Response<Integer> response = service.guestSelectTicketsQuantity(invalidToken, eventIdInt, zoneName, requestedQuantity);
+
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenZeroOrNegativeQuantity_WhenGuestSelectsQuantity_ThenReturnQuantityMustBeGreaterError() {
+        // Arrange - מקרה קצה לפי הלוגיקה בקוד הסרוויס
+        Event event = eventRepo.findById(eventId);
+        event.setSaleStartDate(LocalDateTime.now().minusHours(1));
+        event.setActive(true);
+        eventRepo.store(event);
+
+        int eventIdInt = Integer.parseInt(eventId);
+        int zeroQuantity = 0;
+        String zoneName = "floor";
+
+        // Act
+        Response<Integer> response = service.guestSelectTicketsQuantity(validToken, eventIdInt, zoneName, zeroQuantity);
+
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("Quantity must be greater than 0", response.getMessage());
+    }
+
+    @Test
+    void GivenInactiveEvent_WhenGuestSelectsQuantity_ThenReturnEventNotActiveError() {
+        // Arrange - תרחיש: Event_Not_Active (מוגדר בטבלה)
+        Event event = eventRepo.findById(eventId);
+        event.setActive(false); // הפיכת האירוע ללא פעיל
+        eventRepo.store(event);
+
+        int eventIdInt = Integer.parseInt(eventId);
+
+        // Act
+        Response<Integer> response = service.guestSelectTicketsQuantity(validToken, eventIdInt, "floor", 2);
+
+        // Assert
+        assertNull(response.getValue(), "Order should not be created for an inactive event");
+        // הערה חשובה: בקוד ששלחת קודם, הפונקציה לא בודקת explicitly אם האירוע פעיל לפני יצירת ההזמנה.
+        // אם הטסט הזה נכשל, תצטרכי להוסיף לקוד שלך: if (!e.isActive()) return new Response<>(null, "Event is not active");
+    }
 }

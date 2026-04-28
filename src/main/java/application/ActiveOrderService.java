@@ -27,7 +27,7 @@ public class ActiveOrderService {
     private final ILotteryRepo lotteryRepo;
     private final IAuth auth;
     private final int capacity = 100;
-    private int orderExpireMinutes = 15;
+    private int orderExpireMinutes = 10;
 
 
     public ActiveOrderService(IAuth auth, IActiveOrderRepo activeOrderRepo, IEventRepo eventRepo, ICompanyRepo companyRepo, ILotteryRepo lotteryRepo) {
