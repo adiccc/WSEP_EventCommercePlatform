@@ -8,6 +8,7 @@ import domain.company.ContactInfo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.CompanyDetailsDTO;
+import domain.dto.EventDetailsDTO;
 import domain.dto.OrderDTO;
 import domain.dto.SalesReportDTO;
 import domain.dto.UserDTO;
@@ -128,7 +129,7 @@ class EventCompanyManageServiceTest {
 
         assertEquals("map saved successfully", response.getMessage());
         assertTrue(response.getValue());
-        Event event=eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
+        EventDetailsDTO event=eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
         assertNotNull(event);
         assertNotNull(event.getMap());
     }
@@ -146,7 +147,7 @@ class EventCompanyManageServiceTest {
 
         assertFalse(response.getValue());
         assertEquals("Permission required", response.getMessage());
-        Event event=eventService.ViewEventDetails(validToken2,companyId,eventId).getValue();
+        EventDetailsDTO event=eventService.ViewEventDetails(validToken2,companyId,eventId).getValue();
         assertNull(event);
     }
 
@@ -302,8 +303,8 @@ class EventCompanyManageServiceTest {
         assertTrue(response.getValue());
         assertEquals("Event updated successfully", response.getMessage());
 
-        Event updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
-        assertEquals(requestedDate, updatedEvent.getDate());
+        EventDetailsDTO updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
+        assertEquals(requestedDate.toString(), updatedEvent.getDate());
     }
 
 
@@ -332,10 +333,10 @@ class EventCompanyManageServiceTest {
         assertFalse(response.getValue());
         assertEquals("Event date can only be after the original date", response.getMessage());
 
-        Event updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
+        EventDetailsDTO updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
         assertEquals(
                 originalDate.withSecond(0).withNano(0),
-                updatedEvent.getDate().withSecond(0).withNano(0)
+                LocalDateTime.parse(updatedEvent.getDate()).withSecond(0).withNano(0)
         );
     }
 
@@ -363,10 +364,10 @@ class EventCompanyManageServiceTest {
         assertFalse(response.getValue());
         assertEquals("Event date can only be after the original date", response.getMessage());
 
-        Event updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
+        EventDetailsDTO updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
         assertEquals(
                 originalDate.withSecond(0).withNano(0),
-                updatedEvent.getDate().withSecond(0).withNano(0)
+                LocalDateTime.parse(updatedEvent.getDate()).withSecond(0).withNano(0)
         );
     }
 
@@ -395,11 +396,11 @@ class EventCompanyManageServiceTest {
         assertFalse(response.getValue());
         assertEquals("User id mismatch to the creator of the event", response.getMessage());
 
-        Response<Event> r= eventService.ViewEventDetails(validToken2,companyId,eventId);
-        Event updatedEvent =r.getValue();
+        Response<EventDetailsDTO> r= eventService.ViewEventDetails(validToken2,companyId,eventId);
+        EventDetailsDTO updatedEvent =r.getValue();
         assertEquals(
                 originalDate.withSecond(0).withNano(0),
-                updatedEvent.getDate().withSecond(0).withNano(0)
+                LocalDateTime.parse(updatedEvent.getDate()).withSecond(0).withNano(0)
         );
     }
 
@@ -540,8 +541,8 @@ class EventCompanyManageServiceTest {
         assertEquals("Zones added to event map successfully", response.getMessage());
 
         // Verify the zones were actually added
-        Event updatedEvent = eventService.ViewEventDetails(validToken1, companyId, eventId).getValue();
-        int totalZones = updatedEvent.getMap().getZones().size();
+        EventDetailsDTO updatedEvent = eventService.ViewEventDetails(validToken1, companyId, eventId).getValue();
+        int totalZones = updatedEvent.getMap().getSeatingZones().size() + updatedEvent.getMap().getStandingZones().size();
         assertEquals(4, totalZones); // 2 original + 2 new
     }
 

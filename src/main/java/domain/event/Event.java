@@ -159,4 +159,16 @@ public class Event {
     public EventQueue getEventQueue() {
         return eventQueue;
     }
+
+    public PurchasePolicy getPurchasePolicy() {
+        return purchasePolicy;
+    }
+
+    public DiscountPolicy getDiscountPolicy() {
+        return discountPolicy;
+    }
+
+    public EventMap getEventMap() {
+        return eventMap;
+    }
 }

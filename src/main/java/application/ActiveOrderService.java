@@ -2,6 +2,7 @@ package application;
 
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
+import domain.dto.EventMapDTO;
 import domain.event.Event;
 import domain.event.EventMap;
 import domain.event.EventQueue;
@@ -32,7 +33,7 @@ public class ActiveOrderService {
         this.auth = auth;
     }
 
-    public Response<EventMap> enterEventPurchase(String token, int companyId, String eventId) {
+    public Response<EventMapDTO> enterEventPurchase(String token, int companyId, String eventId) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "enterEventPurchase called");
@@ -86,7 +87,7 @@ public class ActiveOrderService {
                     }
                 }
                 logger.log(Level.INFO, "Event map retrieved successfully");
-                return new Response<>(e.getMap(), "Event map retrieved successfully");
+                return new Response<>(new EventMapDTO(e.getMap()), "Event map retrieved successfully");
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(null, "Event not found");
