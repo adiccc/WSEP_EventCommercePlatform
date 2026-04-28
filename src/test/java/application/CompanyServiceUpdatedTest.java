@@ -1,7 +1,6 @@
 package application;
 
 import domain.company.Company;
-import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
 import domain.policy.*;
@@ -117,5 +116,70 @@ class CompanyServiceUpdatedTest {
 
         assertNotNull(response.getValue());
         assertEquals(2, response.getValue().size());
+    }
+
+    // ===================== Update Purchase Policy =====================
+
+    @Test
+    void GivenOwnerAndValidPolicy_WhenUpdatePurchasePolicy_ThenSuccess() {
+        PurchasePolicy policy = new PurchasePolicy();
+        policy.addRule(new MaxTicketsRule(4));
+
+        Response<Boolean> response = service.updatePurchasePolicy(OWNER_TOKEN, COMPANY_ID, policy);
+
+        assertFalse(response.isError());
+        assertEquals(Boolean.TRUE, response.getValue());
+    }
+
+    @Test
+    void GivenOwnerAndExistingPolicy_WhenUpdatePurchasePolicy_ThenPolicyReplaced() {
+        PurchasePolicy oldPolicy = new PurchasePolicy();
+        oldPolicy.addRule(new MaxTicketsRule(2));
+        service.updatePurchasePolicy(OWNER_TOKEN, COMPANY_ID, oldPolicy);
+
+        PurchasePolicy newPolicy = new PurchasePolicy();
+        newPolicy.addRule(new MaxTicketsRule(4));
+        newPolicy.addRule(new MinAgeRule(18));
+
+        Response<Boolean> response = service.updatePurchasePolicy(OWNER_TOKEN, COMPANY_ID, newPolicy);
+
+        assertFalse(response.isError());
+        assertEquals(newPolicy.describe(), companyRepo.findById(COMPANY_ID).getPurchasePolicy().describe());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenUpdatePurchasePolicy_ThenError() {
+        Response<Boolean> response = service.updatePurchasePolicy("invalid-token", COMPANY_ID, new PurchasePolicy());
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNonOwner_WhenUpdatePurchasePolicy_ThenError() {
+        PurchasePolicy policy = new PurchasePolicy();
+        policy.addRule(new MaxTicketsRule(4));
+        Response<Boolean> response = service.updatePurchasePolicy(OTHER_TOKEN, COMPANY_ID, policy);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNegativeTicketCount_WhenUpdatePurchasePolicy_ThenError() {
+        PurchasePolicy policy = new PurchasePolicy();
+        policy.addRule(new MaxTicketsRule(-1));
+        Response<Boolean> response = service.updatePurchasePolicy(OWNER_TOKEN, COMPANY_ID, policy);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNegativeMinAge_WhenUpdatePurchasePolicy_ThenError() {
+        PurchasePolicy policy = new PurchasePolicy();
+        policy.addRule(new MinAgeRule(-5));
+        Response<Boolean> response = service.updatePurchasePolicy(OWNER_TOKEN, COMPANY_ID, policy);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenCompanyNotFound_WhenUpdatePurchasePolicy_ThenError() {
+        Response<Boolean> response = service.updatePurchasePolicy(OWNER_TOKEN, 999, new PurchasePolicy());
+        assertTrue(response.isError());
     }
 }

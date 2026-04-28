@@ -17,11 +17,11 @@ public class RolesPermissionsTreeDTO {
 
     private final int founderId;
     private final Set<Integer> ownerIds;
-    private final Map<String, Set<PermissionType>> managersPermissions;
+    private final Map<Integer, Set<PermissionType>> managersPermissions;
 
     public RolesPermissionsTreeDTO(int founderId,
                                    Set<Integer> ownerIds,
-                                   Map<String, Set<PermissionType>> managersPermissions) {
+                                   Map<Integer, Set<PermissionType>> managersPermissions) {
         this.founderId = founderId;
         this.ownerIds = ownerIds;
         this.managersPermissions = managersPermissions;
@@ -35,7 +35,7 @@ public class RolesPermissionsTreeDTO {
         return ownerIds;
     }
 
-    public Map<String, Set<PermissionType>> getManagersPermissions() {
+    public Map<Integer, Set<PermissionType>> getManagersPermissions() {
         return managersPermissions;
     }
 

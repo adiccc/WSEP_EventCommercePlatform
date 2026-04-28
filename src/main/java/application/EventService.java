@@ -1,9 +1,10 @@
 package application;
 
 import domain.dataType.EventSearchFilter;
+import domain.dto.EventDTO;
+import domain.dto.EventDetailsDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
-import domain.dataType.Zone;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -23,7 +24,7 @@ public class EventService {
         this.auth = auth;
     }
 
-    public Response<Event> ViewEventDetails(String token, int companyId, String eventId) {
+    public Response<EventDetailsDTO> ViewEventDetails(String token, int companyId, String eventId) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "ViewEventDetails called");
@@ -44,7 +45,7 @@ public class EventService {
                     return new Response<>(null, "The selected event is not active");
                 }
                 logger.log(Level.INFO, "Event details retrieved successfully");
-                return new Response<>(e, "Event details retrieved successfully");
+                return new Response<>(new EventDetailsDTO(e), "Event details retrieved successfully");
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(null, "Event not found");
@@ -55,7 +56,7 @@ public class EventService {
         });
     }
 
-    public Response<List<Event>> searchEvents(String token, EventSearchFilter filter) {
+    public Response<List<EventDTO>> searchEvents(String token, EventSearchFilter filter) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.info("Search events called");
@@ -122,10 +123,11 @@ public class EventService {
 
                 if (result.isEmpty()) {
                     logger.log(Level.INFO, "No matching events found");
-                    return new Response<>(null, "No matching events found");
+                    return new Response<List<EventDTO>>(null, "No matching events found");
                 }
+                List<EventDTO> eventDTOs = result.stream().map(EventDTO::new).collect(Collectors.toList());
                 logger.log(Level.INFO, "Events retrieved successfully");
-                return new Response<>(result, "Events retrieved successfully");
+                return new Response<>(eventDTOs, "Events retrieved successfully");
 
             } catch (Exception e) {
                 logger.severe("Search failed: " + e.getMessage());

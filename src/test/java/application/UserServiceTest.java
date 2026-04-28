@@ -33,7 +33,6 @@ class UserServiceTest {
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
         auth = new Auth(realTokenService, userRepo, passwordEncoder, Set.of());
-
         userService = new UserService(realTokenService, auth, userRepo, passwordEncoder);
     }
 

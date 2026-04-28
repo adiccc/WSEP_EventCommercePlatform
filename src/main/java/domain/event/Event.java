@@ -82,7 +82,10 @@ public class Event {
         this.version = version;
     }
     public List<Order> getOrders() {
-        return orders;
+         if(orders==null){
+             orders = new ArrayList<>();
+         }
+         return orders;
     }
     public Order findOrderById(int orderId) {
         for (Order order : orders) {
@@ -98,6 +101,9 @@ public class Event {
     }
     public int getCreatorId(){
         return creatorId;
+    }
+    public void setCreatorId(int creatorId) {
+        this.creatorId = creatorId;
     }
 
     public void setMap(EventMap eventMap) {
@@ -152,5 +158,17 @@ public class Event {
 
     public EventQueue getEventQueue() {
         return eventQueue;
+    }
+
+    public PurchasePolicy getPurchasePolicy() {
+        return purchasePolicy;
+    }
+
+    public DiscountPolicy getDiscountPolicy() {
+        return discountPolicy;
+    }
+
+    public EventMap getEventMap() {
+        return eventMap;
     }
 }

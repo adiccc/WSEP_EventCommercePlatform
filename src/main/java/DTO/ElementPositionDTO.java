@@ -1,9 +1,9 @@
 package DTO;
 
 public class ElementPositionDTO {
-    private int x;
-    private int y;
-    public ElementPositionDTO(int x, int y) {
+    private double x;
+    private double y;
+    public ElementPositionDTO(double x, double y) {
         this.x = x;
         this.y = y;
     }

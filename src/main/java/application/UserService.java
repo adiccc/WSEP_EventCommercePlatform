@@ -1,11 +1,13 @@
 package application;
-
+import domain.company.Company;
+import domain.company.ICompanyRepo;
 import DTO.QueueEntryResultDTO;
 import domain.dto.UserDTO;
 import domain.user.Member;
 import domain.user.IUserRepo;
+import application.IAuth;
+import domain.user.User;
 import domain.webQueue.WebQueue;
-
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.util.logging.Logger;
@@ -19,7 +21,8 @@ public class UserService {
     private final IPasswordEncoder passwordEncoder;
     private final IUserRepo userRepo;
 
-    public UserService(TokenService tokenService, IAuth auth, IUserRepo userRepo, IPasswordEncoder passwordEncoder) {
+    public UserService(TokenService tokenService, IAuth auth, IUserRepo userRepo,
+                       IPasswordEncoder passwordEncoder) {
         this.tokenService = tokenService;
         this.auth = auth;
         this.userRepo = userRepo;

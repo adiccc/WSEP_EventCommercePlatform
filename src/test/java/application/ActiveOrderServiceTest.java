@@ -6,6 +6,7 @@ import DTO.StandingZoneDTO;
 import domain.activeOrder.ActiveOrder;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
+import domain.dto.EventMapDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.EventMap;
@@ -130,7 +131,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenInvalidToken_WhenEnterPurchase_ThenErrorReturned() {
-        Response<EventMap> response = service.enterEventPurchase("", companyId, eventId);
+        Response<EventMapDTO> response = service.enterEventPurchase("", companyId, eventId);
 
         assertNull(response.getValue());
         assertEquals("Invalid token", response.getMessage());
@@ -138,7 +139,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenNonExistingEvent_WhenEnterPurchase_ThenEventNotFound() {
-        Response<EventMap> response = service.enterEventPurchase(validToken, companyId, "bad-id");
+        Response<EventMapDTO> response = service.enterEventPurchase(validToken, companyId, "bad-id");
 
         assertNull(response.getValue());
         assertEquals("Event not found", response.getMessage());
@@ -146,7 +147,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenWrongCompany_WhenEnterPurchase_ThenMismatchError() {
-        Response<EventMap> response = service.enterEventPurchase(validToken, 999, eventId);
+        Response<EventMapDTO> response = service.enterEventPurchase(validToken, 999, eventId);
 
         assertNull(response.getValue());
         assertEquals("The selected event does not belong to the company", response.getMessage());
@@ -174,7 +175,7 @@ class ActiveOrderServiceTest {
         futureEvent.setActive(true);
         eventRepo.store(futureEvent);
 
-        Response<EventMap> response = service.enterEventPurchase(validToken, companyId, futureEventId);
+        Response<EventMapDTO> response = service.enterEventPurchase(validToken, companyId, futureEventId);
 
         assertNull(response.getValue());
         assertEquals("The sale for this event has not started yet", response.getMessage());
