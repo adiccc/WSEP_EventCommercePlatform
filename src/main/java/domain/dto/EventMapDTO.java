@@ -29,8 +29,8 @@ public class EventMapDTO {
                         standingZone.getName(),
                         standingZone.getPrice(),
                         new ElementPositionDTO(
-                                (int) standingZone.getElementPosition().getX(),
-                                (int) standingZone.getElementPosition().getY()
+                                 standingZone.getElementPosition().getX(),
+                                 standingZone.getElementPosition().getY()
                         )
                 ));
             }
@@ -42,20 +42,20 @@ public class EventMapDTO {
                         seatingZone.getName(),
                         seatingZone.getPrice(),
                         new ElementPositionDTO(
-                                (int)  seatingZone.getElementPosition().getX(),
-                                (int)  seatingZone.getElementPosition().getY()
+                                  seatingZone.getElementPosition().getX(),
+                                  seatingZone.getElementPosition().getY()
                         )
                 ));
             }
         }
 
         for (ElementPosition entry : eventMap.getEntries()) {
-            entries.add(new ElementPositionDTO((int) entry.getX(), (int)entry.getY()));
+            entries.add(new ElementPositionDTO( entry.getX(), entry.getY()));
         }
 
         this.stage = new ElementPositionDTO(
-                (int) eventMap.getStage().getX(),
-                (int) eventMap.getStage().getY()
+                 eventMap.getStage().getX(),
+                 eventMap.getStage().getY()
         );
     }
 

@@ -5,7 +5,6 @@ import domain.dto.EventDTO;
 import domain.dto.EventDetailsDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
-import domain.dataType.Zone;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;

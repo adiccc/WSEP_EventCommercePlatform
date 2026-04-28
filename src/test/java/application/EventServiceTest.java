@@ -1,18 +1,21 @@
 package application;
 
+import DTO.ElementPositionDTO;
+import DTO.SeatingZoneDTO;
+import DTO.StandingZoneDTO;
+import domain.company.Company;
 import domain.dataType.*;
 import domain.dto.EventDTO;
 import domain.dto.EventDetailsDTO;
+import domain.dto.UserDTO;
 import domain.event.EventMap;
 import domain.user.IUserRepo;
 import domain.user.Member;
-import infrastructure.Auth;
-import infrastructure.PasswordEncoderUtil;
-import infrastructure.UserRepo;
+import infrastructure.*;
 import org.junit.jupiter.api.Test;
 import domain.event.Event;
-import infrastructure.EventRepoImpl;
 import org.junit.jupiter.api.BeforeEach;
+import org.mockito.Mockito;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -23,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.*;
 class EventServiceTest {
     private final int company1 = 1;
     private final int company2 = 2;
-    private final int userId = 123;
 
     private IAuth auth;
     private  TokenService tokenService;
@@ -31,90 +33,59 @@ class EventServiceTest {
     private IPasswordEncoder passwordEncoder;
     private EventRepoImpl eventRepo;
     private EventService service;
-    private EventSearchFilter filter;
 
     private String validToken;
-    private Event activeEvent;
-    private Event inactiveEvent;
-    private Event eventCompany2;
+    private String activeEvent1Id;
+    private String inactiveEventId;
+    private String activeEvent2Id;
+
+    private ElementPositionDTO stage;
+    private List<ElementPositionDTO> entries;
+    private List<StandingZoneDTO> standingZones;
+    private List<SeatingZoneDTO> seatingZones;
 
     @BeforeEach
     void setUp() {
         eventRepo = new EventRepoImpl();
-
-        // Active event (company1)
-        activeEvent = new Event(
-                company1,
-                456,
-                LocalDateTime.now().plusDays(10),
-                "active event",
-                LocalDateTime.now().plusDays(5),
-                true,
-                GeographicalArea.JERUSALEM,
-                CategoryEvent.SPORTS
-        );
-        Zone expensive = new StandingZone("VIP", 300.0, 50, new ElementPosition(1,1));
-        Zone cheap = new StandingZone("Regular", 100.0, 23, new ElementPosition(2,2));
-
-        EventMap map = new EventMap(
-                new ElementPosition(0,0),
-                List.of(new ElementPosition(5,5)),
-                List.of(expensive, cheap)
-        );
-
-        activeEvent.setMap(map);
-        activeEvent.setActive(true);
-        eventRepo.store(activeEvent);
-
-        // Inactive event (company1)
-        inactiveEvent = new Event(
-                company1,
-                userId,
-                LocalDateTime.now().plusDays(10),
-                "inactive event",
-                LocalDateTime.now().plusDays(5),
-                false,
-                GeographicalArea.SOUTH,
-                CategoryEvent.CONFERENCE
-        );
-        eventRepo.store(inactiveEvent);
-
-        // Event for company2
-        eventCompany2 = new Event(
-                company2,
-                234,
-                LocalDateTime.now().plusDays(10),
-                "other company event",
-                LocalDateTime.now().plusDays(5),
-                true,
-                GeographicalArea.NORTH,
-                CategoryEvent.FESTIVAL
-        );
-
-        eventCompany2.setMap(map);
-        eventCompany2.setActive(true);
-        eventRepo.store(eventCompany2);
-
         tokenService = new TokenService();
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
         auth = new Auth(tokenService,userRepo,passwordEncoder);
-        Member member1 = new Member("test-user1", "yy","yarin", "shemer","050-4273201", LocalDate.of(2002,4,15),"Omer");
-        userRepo.store(member1);
-        validToken=tokenService.generateToken("test-user1");
+        CompanyRepoImpl companyRepo = new CompanyRepoImpl();
+        IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
+        EventCompanyManageService eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
         service = new EventService(auth, eventRepo);
-    }
+
+        UserService userService=new UserService(tokenService,auth,userRepo,passwordEncoder);
+        UserDTO userDTO = new UserDTO("user1@test.com","test1","t","mytest",1,1,2016,"user test address","054-555-6677");
+        userService.registerUser(validToken,userDTO);
+        validToken=userService.login("user1@test.com","mytest").getValue();
+
+        CompanyService companyService=new CompanyService(auth,companyRepo,userRepo);
+        Response<Company> c1=companyService.createProductionCompany(validToken,company1,"test-company","testC@company.com","054-5556677","leumi");
+
+        // Active event (company1)
+        activeEvent1Id = eventCompanyManageService.createEvent(validToken, company1 ,LocalDateTime.now().plusDays(10),"active event",LocalDateTime.now().plusDays(5),false, GeographicalArea.JERUSALEM, CategoryEvent.SPORTS).getValue();
+        stage = new ElementPositionDTO(10, 20);
+        entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
+        standingZones = List.of(new StandingZoneDTO(50, "VIP", 300.0, new ElementPositionDTO(1, 1)));
+        seatingZones = List.of(new SeatingZoneDTO(10, 20, "Regular", 100.0, new ElementPositionDTO(5, 5)));
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken, activeEvent1Id, stage, entries, standingZones, seatingZones);
+
+        // Inactive event (company1) - since we havent define map for this event, it will be inactive
+        inactiveEventId = eventCompanyManageService.createEvent(validToken, company1 ,LocalDateTime.now().plusDays(10),"inactive event",LocalDateTime.now().plusDays(5),false, GeographicalArea.SOUTH, CategoryEvent.CONFERENCE).getValue();
+       }
 
     @Test
     void GivenValidEvent_WhenViewEventDetails_ThenEventDetailsAreReturned() {
         Response<EventDetailsDTO> response = service.ViewEventDetails(
                 validToken,
                 company1,
-                activeEvent.getId()
+                activeEvent1Id
         );
 
         assertNotNull(response.getValue());
-        assertEquals(activeEvent.getId(), response.getValue().getId());
+        assertEquals(activeEvent1Id, response.getValue().getId());
         assertEquals("Event details retrieved successfully", response.getMessage());
     }
 
@@ -135,8 +106,8 @@ class EventServiceTest {
 
         Response<EventDetailsDTO> response = service.ViewEventDetails(
                 validToken,
-                company1,
-                eventCompany2.getId()
+                company2,
+                activeEvent1Id
         );
 
         assertNull(response.getValue());
@@ -149,7 +120,7 @@ class EventServiceTest {
         Response<EventDetailsDTO> response = service.ViewEventDetails(
                 validToken,
                 company1,
-                inactiveEvent.getId()
+                inactiveEventId
         );
 
         assertNull(response.getValue());
@@ -161,7 +132,7 @@ class EventServiceTest {
         Response<EventDetailsDTO> response = service.ViewEventDetails(
                 "",
                 company1,
-                activeEvent.getId()
+                activeEvent1Id
         );
 
         assertNull(response.getValue());
