@@ -776,7 +776,7 @@ class EventCompanyManageServiceTest {
 
         // Assert
         assertNotNull(response.getValue());
-        assertEquals("No future events found for company " + companyId, response.getMessage()); // תואם למחרוזת בקוד שלך
+        assertEquals("No future events found for company " + companyId, response.getMessage()); // match the string in the code
 
         assertTrue(response.getValue().getEventRecords().isEmpty());
         assertEquals(0, response.getValue().getTotalTicketsSold());
