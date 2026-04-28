@@ -4,34 +4,25 @@ import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.event.Event;
 import domain.event.EventMap;
-import domain.event.EventQueue;
-import domain.event.Order;
-import domain.policy.Discount;
+import domain.policy.DiscountPolicy;
+import domain.policy.PurchasePolicy;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 
-public class EventDTO {
+public class EventDetailsDTO {
     private String eventID;
     private String eventName;
     private String eventDate;
-    private String eventLocation; //get Georgraphical area
+    private int companyId;
     private int creatorId;
     private String saleStartDate;
     private String categoryEvent;
+    private String eventLocation;
+    private EventMapDTO eventMap;
+    private String purchasePolicy;
+    private String discountPolicy;
 
-    public EventDTO(String eventID, String eventName, LocalDateTime eventDate, LocalDateTime saleStartDate, CategoryEvent categoryEvent, GeographicalArea eventLocation, int creatorId) {
-        this.eventID = eventID;
-        this.eventName = eventName;
-        this.eventDate = eventDate.toString();
-        this.eventLocation = eventLocation.name();
-        this.saleStartDate = saleStartDate.toString();
-        this.categoryEvent = categoryEvent.name();
-        this.creatorId = creatorId;
-    }
-
-    public EventDTO(Event event) {
+    public EventDetailsDTO(Event event) {
         this.eventID = event.getId();
         this.eventName = event.getName();
         this.eventDate = event.getDate().toString();
@@ -39,6 +30,14 @@ public class EventDTO {
         this.saleStartDate = event.getSaleStartDate().toString();
         this.categoryEvent = event.getCategoryEvent().name();
         this.creatorId = event.getCreatorId();
+        this.companyId = event.getCompanyId();
+        this.purchasePolicy = event.getPurchasePolicy().describe();
+        this.discountPolicy = event.getDiscountPolicy().describe();
+        if (event.getEventMap() != null) {
+            this.eventMap = new EventMapDTO(event.getEventMap());
+        } else {
+            this.eventMap = null;
+        }
     }
 
     public String getEventID() {
