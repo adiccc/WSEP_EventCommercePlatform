@@ -8,6 +8,7 @@ import domain.company.ContactInfo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.CompanyDetailsDTO;
+import domain.dto.OrderDTO;
 import domain.dto.SalesReportDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
@@ -455,7 +456,7 @@ class EventCompanyManageServiceTest {
 //        event.getOrders().add(order2);
 //
 //        // When
-//        Response<List<Order>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
+//        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
 //
 //        // Then
 //        assertNotNull(response.getValue());
@@ -471,7 +472,7 @@ class EventCompanyManageServiceTest {
         // invalidToken2 belongs to user2, who is not the company owner
 
         // When
-        Response<List<Order>> response =eventCompanyManageService.getOrdersByCompany(validToken2, companyId);
+        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(validToken2, companyId);
 
         // Then
         assertNull(response.getValue());
@@ -484,7 +485,7 @@ class EventCompanyManageServiceTest {
         int nonExistingCompanyId = 999999;
 
         // When
-        Response<List<Order>> response =eventCompanyManageService.getOrdersByCompany(validToken1, nonExistingCompanyId);
+        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(validToken1, nonExistingCompanyId);
 
         // Then
         assertNull(response.getValue());
@@ -497,7 +498,7 @@ class EventCompanyManageServiceTest {
         String loggedOutToken = null;
 
         // When
-        Response<List<Order>> response =eventCompanyManageService.getOrdersByCompany(loggedOutToken, companyId);
+        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(loggedOutToken, companyId);
 
         // Then
         assertNull(response.getValue());
@@ -510,7 +511,7 @@ class EventCompanyManageServiceTest {
         // event exists, but no orders were added to it
 
         // When
-        Response<List<Order>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
+        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
 
         // Then
         assertNull(response.getValue());
@@ -931,7 +932,16 @@ class EventCompanyManageServiceTest {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenReturn(true);
 
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
         Event event = eventRepo.findById(eventId);
+
         Order order = new Order(1, 2, eventId, List.of(1, 2), 100.0, "pay123");
         event.getOrders().add(order);
         eventRepo.store(event);

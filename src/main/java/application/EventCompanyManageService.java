@@ -6,10 +6,7 @@ import DTO.StandingZoneDTO;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.*;
-import domain.dto.CompanyDetailsDTO;
-import domain.dto.EventDTO;
-import domain.dto.EventSalesRecordDTO;
-import domain.dto.SalesReportDTO;
+import domain.dto.*;
 import domain.event.Event;
 import domain.event.EventMap;
 import domain.event.EventQueue;
@@ -67,6 +64,11 @@ public class EventCompanyManageService {
                 int companyId = event.getCompanyId();
                 int eventCreator = event.getCreatorId();
                 Company c = this.companyRepo.findById(companyId);
+
+                if(!c.isActive()){
+                    logger.severe("Company is closed, cannot define venue and seating map for events of this company");
+                    return new Response<>(false, "Company is closed, cannot define venue and seating map for events of this company");
+                }
 
                 // check appropriate permission
                 if (userId != eventCreator || !c.getCompanyPermission().checkPermission(userId, CREATE_EVENT)) {
@@ -127,6 +129,12 @@ public class EventCompanyManageService {
 
             try {
                 Company c = this.companyRepo.findById(companyId);
+
+                if(!c.isActive()){
+                    logger.severe("Company is closed, cannot define venue and seating map for events of this company");
+                    return new Response<>(null, "Company is closed, cannot define venue and seating map for events of this company");
+                }
+
                 if (!c.getCompanyPermission().checkPermission(creatorId, CREATE_EVENT)) {
                     logger.severe("User does not have permission to create event for this company");
                     return new Response<>(null, "Permission required");
@@ -281,6 +289,10 @@ public class EventCompanyManageService {
             }
             try{
                 Event event = eventRepo.findById(eventId);
+                if (!event.isActive()){
+                    logger.severe("Event is not active yet, cannot be deleted");
+                    return new Response<>(false, "Event is not active yet, cannot be deleted");
+                }
                 if(event.getDate().isBefore(LocalDateTime.now())) {
                     logger.severe("Event deletion can be on future events only");
                     return new Response<>(false, "Event deletion can be on future events only");
@@ -302,7 +314,12 @@ public class EventCompanyManageService {
                 event=eventRepo.findById(eventId);
                 orders = event.getOrders();
                 for(Order order : orders){
-                    processRefund(token,eventId,order.getOrderId());
+                    try {
+                        processRefund(token, event.getId(), order.getOrderId());
+                    } catch (Exception e) {
+                        logger.log(Level.SEVERE, "Failed to process automatic refund for order " +
+                                order.getOrderId() + " in event " + event.getId() + ": " + e.getMessage());
+                    }
                 }
                 logger.log(Level.INFO, "Orders deleted successfully");
                 return new Response<>(true, "Orders deleted successfully");
@@ -313,7 +330,7 @@ public class EventCompanyManageService {
         });
     }
 
-    public Response<List<Order>> getOrdersByCompany(String token, int companyId) {
+    public Response<List<OrderDTO>> getOrdersByCompany(String token, int companyId) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "getOrdersByCompany called");
@@ -343,8 +360,10 @@ public class EventCompanyManageService {
                     logger.log(Level.SEVERE, "No orders found for company " + companyId);
                     return new Response<>(null, "No orders found for company " + companyId);
                 }
+
+                List<OrderDTO> orderDTOs = orders.stream().map(OrderDTO::new).toList();
                 logger.log(Level.INFO, "Orders found: " + orders.size());
-                return new Response<>(orders, "orders found");
+                return new Response<>(orderDTOs, "Orders found");
 
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "company not found: " + e.getMessage());
