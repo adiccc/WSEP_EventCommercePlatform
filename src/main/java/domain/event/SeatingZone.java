@@ -2,41 +2,66 @@ package domain.event;
 
 import DTO.SeatingZoneDTO;
 import domain.dataType.ElementPosition;
+import domain.dataType.TicketStatus;
 
-import java.util.ArrayList;
-import java.util.List;
+
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class SeatingZone extends Zone {
-    private List<SeatingTicket> tickets;
+    private Map<String, SeatingTicket> ticketMap;
     private AtomicInteger ticketIdGenerator = new AtomicInteger(1);
 
     public SeatingZone(String name, double price, int rows, int cols, ElementPosition elementPosition) {
         super(name, price, elementPosition);
-        this.tickets = new ArrayList<>();
+        this.ticketMap = new HashMap<>();
         for(int i=0; i<rows; i++) {
             for(int j=0; j<cols; j++) {
-                tickets.add(new SeatingTicket(ticketIdGenerator.getAndIncrement(),i,j));
+                    String seatKey = i + "-" + j;
+                    ticketMap.put(seatKey, new SeatingTicket(ticketIdGenerator.getAndIncrement(), i, j));
             }
         }
     }
     public SeatingZone(SeatingZone seatingZone) {
         super(seatingZone.getName(), seatingZone.getPrice(), seatingZone.getElementPosition());
-        this.tickets=new ArrayList<>();
-        for(SeatingTicket st:tickets){
-            this.tickets.add(new SeatingTicket(st));
+        this.ticketMap = new HashMap<>();
+        for(Map.Entry<String, SeatingTicket> entry : seatingZone.ticketMap.entrySet()) {
+            this.ticketMap.put(entry.getKey(), new SeatingTicket(entry.getValue()));
         }
     }
     public SeatingZone(SeatingZoneDTO seatingZoneDTO) {
         super(seatingZoneDTO.getName(), seatingZoneDTO.getPrice(), seatingZoneDTO.getPosition());
         int rows = seatingZoneDTO.getRows();
         int cols = seatingZoneDTO.getCols();
-        this.tickets = new ArrayList<>();
+        this.ticketMap = new HashMap<>();
         for(int i=0; i<rows; i++) {
             for(int j=0; j<cols; j++) {
-                tickets.add(new SeatingTicket(ticketIdGenerator.getAndIncrement(),i,j));
+                ticketMap.put(i + "-" + j, new SeatingTicket(ticketIdGenerator.getAndIncrement(), i, j));
             }
         }
     }
 
+
+    //todo think about synchronization
+    public Collection<Integer> bookTickets(List<String> seats) {
+        List<Integer> bookedTicketIds = new ArrayList<>();
+        for(String seat : seats) {
+            String[] parts = seat.split("-");
+            int row = Integer.parseInt(parts[0]);
+            int col = Integer.parseInt(parts[1]);
+            String seatKey = row + "-" + col;
+            for (Map.Entry<String, SeatingTicket> entry : ticketMap.entrySet()) {
+                if (entry.getKey().equals(seatKey)) {
+                    SeatingTicket ticket = entry.getValue();
+                    if (ticket.getStatus() == TicketStatus.AVAILABLE) {
+                        ticket.setStatus(TicketStatus.LOCKED);
+                        bookedTicketIds.add(ticket.getTicketId());
+                    } else {
+                        throw new IllegalArgumentException("Seat " + seat + " is not available.");
+                    }
+                }
+            }
+        }
+        return bookedTicketIds;
+    }
 }

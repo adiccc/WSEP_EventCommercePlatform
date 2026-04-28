@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class Event {
     private String id;
@@ -163,7 +164,7 @@ public class Event {
         //todo
     }
 
-    public List<Integer> bookStandingTickets(int userid,String zone,int quantity) {
-        return eventMap.bookStandingTickets(userid,zone,quantity);
+    public List<Integer> bookTickets(boolean member, Map<String, List<String>> seatingZones, Map<String, Integer> standingZones) {
+        return eventMap.bookTickets(seatingZones,standingZones);
     }
 }

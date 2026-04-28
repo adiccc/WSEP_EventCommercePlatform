@@ -22,21 +22,19 @@ class StandingZoneTest {
     @Test
     void GivenZoneWithEnoughAvailableTickets_WhenBookTickets_ThenReturnsTicketsAndUpdatesAvailability() {
         // Act
-        List<Integer> bookedIds = standingZone.bookTickets(USER_ID, 2);
-
+        List<Integer> bookedIds = standingZone.bookTickets(2);
         // Assert
         assertNotNull(bookedIds);
         assertEquals(2, bookedIds.size());
         assertEquals(3, standingZone.getAvaliable());
-        assertTrue(standingZone.userContainTickets(USER_ID));
-        assertTrue(standingZone.userContainTicket(USER_ID, bookedIds.get(0)));
-        assertTrue(standingZone.userContainTicket(USER_ID, bookedIds.get(1)));
+        assertTrue(bookedIds.contains(1));
+        assertTrue(bookedIds.contains(2));
     }
 
     @Test
     void GivenZoneWithExactlyAvailableTickets_WhenBookTickets_ThenReturnsTicketsAndZoneIsFull() {
         // Act
-        List<Integer> bookedIds = standingZone.bookTickets(USER_ID, 5);
+        List<Integer> bookedIds = standingZone.bookTickets(5);
 
         // Assert
         assertEquals(5, bookedIds.size());
@@ -48,7 +46,7 @@ class StandingZoneTest {
         // Act & Assert
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> standingZone.bookTickets(USER_ID, 6)
+                () -> standingZone.bookTickets(6)
         );
 
         assertEquals("Not enough tickets available in this zone.", exception.getMessage());

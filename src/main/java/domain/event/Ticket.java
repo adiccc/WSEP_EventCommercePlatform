@@ -24,4 +24,8 @@ public abstract class Ticket {
         }
         return false; //cannot change status if it's not available
     }
+
+    public TicketStatus getStatus() {
+        return status;
+    }
 }

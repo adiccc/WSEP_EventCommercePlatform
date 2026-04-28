@@ -1,5 +1,6 @@
 package domain.activeOrder;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -8,14 +9,16 @@ public class ActiveOrder {
     private int userId;
     private String eventId;
     private List<Integer> tickets;
+    private LocalDateTime expireTime;
     private long version;
 
-    public ActiveOrder(int orderId, int userId, String eventId, List<Integer> tickets) {
-        this.orderId = orderId; //how to generate orderId? maybe use a static variable that increments with each new order?
+    public ActiveOrder(int orderId, int userId, String eventId, List<Integer> tickets, int expireMinutes) {
+        this.orderId = orderId;
         this.userId = userId;
         this.eventId = eventId;
         this.tickets = tickets;
         this.version = 0;
+        this.expireTime = LocalDateTime.now().plusMinutes(expireMinutes);
     }
 
     public ActiveOrder(ActiveOrder activeOrder) {
@@ -23,7 +26,8 @@ public class ActiveOrder {
         this.userId = activeOrder.userId;
         this.eventId = activeOrder.eventId;
         this.tickets = new ArrayList<>(activeOrder.tickets);
-
+        this.expireTime = activeOrder.expireTime;
+        this.version = activeOrder.version;
     }
 
     public long getVersion() {

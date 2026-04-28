@@ -12,6 +12,7 @@ import domain.lottery.Lottery;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -103,35 +104,60 @@ public class ActiveOrderService {
         });
     }
 
-    public Response<Integer> guestSelectTicketsQuantity(String token,int eventId, String zone,int quantity) {
-        logger.log(Level.INFO, "guestSelectTicketsQuantity called");
 
-        // check valid token - for guest the same ?
-        if (!auth.isLoggedIn(token).getValue()) {
-            return new Response<>(null, "Invalid token");
-        }
+    public Response<Integer>guestSelectTickets(String identifier, String eventId, Map<String, List<String>> seatingZones,Map<String, Integer> standingZones) {
+        logger.log(Level.INFO, "guestSelectTickets called");
+
         try {
-            Event e = this.eventRepo.findById(String.valueOf(eventId));
-            if (quantity <= 0) {
-                logger.log(Level.SEVERE, "Quantity must be greater than 0");
-                return new Response<>(null, "Quantity must be greater than 0");
-            }
-            if (e.quantityExceedsPolicy(auth.getUserId(token).getValue(),quantity)) {
-                logger.log(Level.SEVERE, "Quantity exceeds event policy");
-                return new Response<>(null, "Quantity exceeds event policy");
-            }
+
+            Event e = this.eventRepo.findById(eventId);
             int orderId = idGenerator.getAndIncrement();
-            List<Integer> tickets = e.bookStandingTickets(auth.getUserId(token).getValue(),zone,quantity); // check here quantity and policy
-            ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(token).getValue(), String.valueOf(eventId), tickets,orderExpireMinutes);
+            //todo - synchronize
+            List<Integer> tickets = e.bookTickets(false,seatingZones,standingZones); // check here quantity and policy
+            this.eventRepo.store(e);
+
+            ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(identifier).getValue(), eventId, tickets,orderExpireMinutes);
             activeOrderRepo.store(newActiveOrder);
-            logger.log(Level.INFO, "Tickets quantity selected successfully");
-            return new Response<>(newActiveOrder.getId(), "Tickets quantity selected successfully");
+            logger.log(Level.INFO, "Tickets selected successfully");
+            return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
             return new Response<>(null, "Event not found");
         } catch (Exception e) {
-            logger.log(Level.SEVERE, "Failed to select tickets quantity : " + e.getMessage());
-            return new Response<>(null, "Failed to select tickets quantity : " + e.getMessage());
+            logger.log(Level.SEVERE, "Failed to select tickets : " + e.getMessage());
+            return new Response<>(null, "Failed to select tickets : " + e.getMessage());
         }
     }
+
+//    public Response<Integer> guestSelectTicketsQuantity(String token,String eventId, String zone,int quantity) {
+//        logger.log(Level.INFO, "guestSelectTicketsQuantity called");
+//
+//        // check valid token - for guest the same ?
+////        if (!auth.isLoggedIn(token).getValue()) {
+////            return new Response<>(null, "Invalid token");
+////        }
+//        try {
+//            Event e = this.eventRepo.findById(eventId);
+//            if (quantity <= 0) {
+//                logger.log(Level.SEVERE, "Quantity must be greater than 0");
+//                return new Response<>(null, "Quantity must be greater than 0");
+//            }
+//            if (e.quantityExceedsPolicy(auth.getUserId(token).getValue(),quantity)) {
+//                logger.log(Level.SEVERE, "Quantity exceeds event policy");
+//                return new Response<>(null, "Quantity exceeds event policy");
+//            }
+//            int orderId = idGenerator.getAndIncrement();
+//            List<Integer> tickets = e.bookStandingTickets(auth.getUserId(token).getValue(),zone,quantity); // check here quantity and policy
+//            ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(token).getValue(), eventId, tickets,orderExpireMinutes);
+//            activeOrderRepo.store(newActiveOrder);
+//            logger.log(Level.INFO, "Tickets quantity selected successfully");
+//            return new Response<>(newActiveOrder.getId(), "Tickets quantity selected successfully");
+//        } catch (NoSuchElementException e) {
+//            logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
+//            return new Response<>(null, "Event not found");
+//        } catch (Exception e) {
+//            logger.log(Level.SEVERE, "Failed to select tickets quantity : " + e.getMessage());
+//            return new Response<>(null, "Failed to select tickets quantity : " + e.getMessage());
+//        }
+//    }
 }

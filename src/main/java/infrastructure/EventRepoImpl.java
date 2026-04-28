@@ -37,7 +37,6 @@ public class EventRepoImpl implements IEventRepo {
     @Override
     public synchronized void store(Event entity) {
         Event currentEvent = events.get(entity.getId());
-
         if (currentEvent == null) {
             Event newEntry = new Event(entity);
             events.put(newEntry.getId(), newEntry);
