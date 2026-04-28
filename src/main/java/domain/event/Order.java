@@ -63,4 +63,16 @@ public class Order {
     public int getNumOfTickets() {
         return tickets.size();
     }
+
+        public int getUserId() {
+            return userId;
+        }
+
+        public String getEventId() {
+            return eventId;
+        }
+
+        public List<Integer> getTickets() {
+            return tickets;
+        }
 }

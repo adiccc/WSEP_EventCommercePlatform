@@ -4,6 +4,7 @@ import domain.event.Event;
 import domain.event.IEventRepo;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import Exception.OptimisticLockingFailureException;
 
@@ -11,7 +12,7 @@ public class EventRepoImpl implements IEventRepo {
     Map<String,Event> events; // key: eventId, value: event
 
     public EventRepoImpl() {
-        events = new HashMap<>();
+        events = new ConcurrentHashMap<>();
     }
 
     public Event findById(String id) {
