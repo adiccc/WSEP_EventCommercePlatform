@@ -8,6 +8,8 @@ import domain.company.ICompanyRepo;
 import domain.dataType.*;
 import domain.dto.CompanyDetailsDTO;
 import domain.dto.EventDTO;
+import domain.dto.EventSalesRecordDTO;
+import domain.dto.SalesReportDTO;
 import domain.event.Event;
 import domain.event.EventMap;
 import domain.event.EventQueue;
@@ -24,6 +26,7 @@ import org.apache.commons.logging.LogFactory;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Set;
 import java.util.logging.*;
 
 import java.util.List;
@@ -365,8 +368,7 @@ public class EventCompanyManageService {
                 }
                 int userId = auth.getUserId(token).getValue();
                 boolean isMember = userId != -1;
-                //TODO when check permission is implemented change just for a call to that function
-                boolean isUserPermitted = company.isActive() || (isMember && (company.isOwner(userId) || company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES)));
+                boolean isUserPermitted = company.isActive() || (isMember || company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES));
                 if (!isUserPermitted) {
                     logger.log(Level.SEVERE, "User is not permitted to view closed companies");
                     return new Response<>(null, "User is not permitted to view closed companies");
@@ -402,6 +404,60 @@ public class EventCompanyManageService {
                 logger.log(Level.SEVERE, "failed getCompanyDetails : " + e.getMessage());
                 return new Response<>(null, "failed getCompanyDetails : " + e.getMessage());
             }
+        });
+    }
+
+    public Response<SalesReportDTO> generateSalesReports(int companyId, String token){
+        return RetryHelper.executeWithRetry(() -> {
+        logger.log(Level.INFO, "generateSalesReports called");
+        try {
+            Company company = companyRepo.findById(companyId);
+            if (company == null) {
+                logger.log(Level.SEVERE, "company not found");
+                return new Response<>(null, "company not found");
+            }
+            int userId = auth.getUserId(token).getValue();
+            boolean isMember = userId != -1;
+            boolean isUserPermitted = isMember && (company.getCompanyPermission().checkPermission(userId, PermissionType.GENERATE_SALES_REPORTS)); 
+            //The requerment is just for the Owner 
+            if (!isUserPermitted) {
+                logger.log(Level.SEVERE, "User is not permitted to generate sales report");
+                return new Response<>(null, "User is not permitted generate sales report");
+            }
+            Set<Integer> allsSubTree = company.getCompanyPermission().getSubTreeAppointees(userId);
+            double totalRevenue = 0;
+            int totalTicketsSold = 0;
+            List<EventSalesRecordDTO> events = new ArrayList<>();
+            List<Event> allEvents = eventRepo.findByCompany(companyId);
+            for (Event e : allEvents) {
+                if(allsSubTree.contains(e.getCreatorId())){
+                    double eventRevnue = 0;
+                    int eventTicketsSold = 0;
+                    for(Order o : e.getOrders()){
+                        eventRevnue += o.getTotalSum();
+                        eventTicketsSold += o.getNumOfTickets();
+
+                        totalRevenue += o.getTotalSum();
+                        totalTicketsSold += o.getNumOfTickets();
+                    }
+                    if(eventTicketsSold>0) {
+                        EventSalesRecordDTO eventSalesRecordDTO = new EventSalesRecordDTO(e.getId(), e.getName(), e.getCreatorId(), eventTicketsSold, eventRevnue);
+                        events.add(eventSalesRecordDTO);
+                    }
+                }
+            }
+            if(events.isEmpty()){
+                logger.log(Level.WARNING, "No sales data found for company " + companyId);
+                return new Response<>(new SalesReportDTO(companyId,totalRevenue,totalTicketsSold,new ArrayList<>()), "No future events found for company " + companyId);
+            }
+            SalesReportDTO result = new SalesReportDTO(companyId,totalRevenue,totalTicketsSold,events);
+            logger.log(Level.INFO, "Sales Report generated successfully");
+            return new Response<>(result, "Sales Report generated successfully");
+        }
+        catch(Exception e){
+            logger.log(Level.SEVERE, "failed generate sales report : " + e.getMessage());
+            return new Response<>(null, "failed generate sales report : " + e.getMessage());
+        }
         });
     }
 

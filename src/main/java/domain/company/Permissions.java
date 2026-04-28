@@ -55,8 +55,27 @@ public class Permissions {
     public HashMap<Integer, HierarchyDTO> getCompanyTree() {
         return companyTree;
     }
-
-    public void removeOwner(int ownerId) {
+        public Set<Integer> getSubTreeAppointees(int rootUserId) { //function that gets all the subtree of some user
+        Set<Integer> subTreeAppointees = new HashSet<>();
+        Queue<Integer> queue = new LinkedList<>();
+        queue.add(rootUserId);
+        subTreeAppointees.add(rootUserId);
+        while (!queue.isEmpty()) {
+            int currentUserId = queue.poll();
+            if(companyTree.containsKey(currentUserId)) {
+                List<Integer> directAppointees = companyTree.get(currentUserId).getMyAppointees();
+                for (Integer directAppointee : directAppointees) {
+                    if(!subTreeAppointees.contains(directAppointee)) {
+                        subTreeAppointees.add(directAppointee);
+                        queue.add(directAppointee);
+                    }
+                }
+            }
+        }
+        return subTreeAppointees;
+    }
+        public void removeOwner(int ownerId) {
         ownerIds.remove(ownerId);
     }
+
 }

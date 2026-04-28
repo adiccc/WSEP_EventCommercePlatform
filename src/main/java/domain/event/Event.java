@@ -82,7 +82,10 @@ public class Event {
         this.version = version;
     }
     public List<Order> getOrders() {
-        return orders;
+         if(orders==null){
+             orders = new ArrayList<>();
+         }
+         return orders;
     }
     public Order findOrderById(int orderId) {
         for (Order order : orders) {
