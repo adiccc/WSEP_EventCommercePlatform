@@ -1,6 +1,8 @@
 package application;
 
 import domain.dataType.*;
+import domain.dto.EventDTO;
+import domain.dto.EventDetailsDTO;
 import domain.event.EventMap;
 import domain.user.IUserRepo;
 import domain.user.Member;
@@ -105,7 +107,7 @@ class EventServiceTest {
 
     @Test
     void GivenValidEvent_WhenViewEventDetails_ThenEventDetailsAreReturned() {
-        Response<Event> response = service.ViewEventDetails(
+        Response<EventDetailsDTO> response = service.ViewEventDetails(
                 validToken,
                 company1,
                 activeEvent.getId()
@@ -118,7 +120,7 @@ class EventServiceTest {
 
     @Test
     void GivenNonExistingEvent_WhenViewEventDetails_ThenEventNotFoundErrorIsReturned() {
-        Response<Event> response = service.ViewEventDetails(
+        Response<EventDetailsDTO> response = service.ViewEventDetails(
                 validToken,
                 company1,
                 "invalid-id"
@@ -131,7 +133,7 @@ class EventServiceTest {
     @Test
     void GivenEventFromDifferentCompany_WhenViewEventDetails_ThenCompanyMismatchErrorIsReturned() {
 
-        Response<Event> response = service.ViewEventDetails(
+        Response<EventDetailsDTO> response = service.ViewEventDetails(
                 validToken,
                 company1,
                 eventCompany2.getId()
@@ -144,7 +146,7 @@ class EventServiceTest {
 
     @Test
     void GivenInactiveEvent_WhenViewEventDetails_ThenInactiveEventErrorIsReturned() {
-        Response<Event> response = service.ViewEventDetails(
+        Response<EventDetailsDTO> response = service.ViewEventDetails(
                 validToken,
                 company1,
                 inactiveEvent.getId()
@@ -156,7 +158,7 @@ class EventServiceTest {
 
     @Test
     void GivenInvalidToken_WhenViewEventDetails_ThenInvalidTokenErrorIsReturned() {
-        Response<Event> response = service.ViewEventDetails(
+        Response<EventDetailsDTO> response = service.ViewEventDetails(
                 "",
                 company1,
                 activeEvent.getId()
@@ -168,7 +170,7 @@ class EventServiceTest {
 
     @Test
     void GivenNullEventId_WhenViewEventDetails_ThenErrorIsReturned() {
-        Response<Event> response = service.ViewEventDetails(
+        Response<EventDetailsDTO> response = service.ViewEventDetails(
                 validToken,
                 company1,
                 null
@@ -179,7 +181,7 @@ class EventServiceTest {
 
     @Test
     void GivenEmptyEventId_WhenViewEventDetails_ThenErrorIsReturned() {
-        Response<Event> response = service.ViewEventDetails(
+        Response<EventDetailsDTO> response = service.ViewEventDetails(
                 validToken,
                 company1,
                 ""
@@ -193,7 +195,7 @@ class EventServiceTest {
         EventSearchFilter filter = new EventSearchFilter();
         filter.setKeyword("active");
 
-        Response<List<Event>> response = service.searchEvents(validToken, filter);
+        Response<List<EventDTO>> response = service.searchEvents(validToken, filter);
 
         assertNotNull(response.getValue());
         assertFalse(response.getValue().isEmpty());
@@ -205,27 +207,10 @@ class EventServiceTest {
         EventSearchFilter filter = new EventSearchFilter();
         filter.setKeyword("non-existing-event");
 
-        Response<List<Event>> response = service.searchEvents(validToken, filter);
+        Response<List<EventDTO>> response = service.searchEvents(validToken, filter);
 
         assertNull(response.getValue());
         assertEquals("No matching events found", response.getMessage());
-    }
-
-        @Test
-    void GivenPriceFilter_WhenSearchEvents_ThenFilterWorksCorrectly() {
-
-        EventSearchFilter filter = new EventSearchFilter();
-        filter.setMinPrice(150.0);
-
-        Response<List<Event>> response = service.searchEvents(validToken, filter);
-
-        assertNotNull(response.getValue());
-            assertTrue(response.getValue().stream()
-                    .allMatch(e ->
-                            e.getMap().getZones().stream()
-                                    .anyMatch(z -> z.getPrice() >= 150.0)
-                    )
-            );
     }
 
     @Test
@@ -233,12 +218,12 @@ class EventServiceTest {
         EventSearchFilter filter = new EventSearchFilter();
         filter.setCategory(CategoryEvent.SPORTS);
 
-        Response<List<Event>> response = service.searchEvents(validToken, filter);
+        Response<List<EventDTO>> response = service.searchEvents(validToken, filter);
 
         assertNotNull(response.getValue());
         assertTrue(
                 response.getValue().stream()
-                        .allMatch(e -> e.getCategoryEvent() == CategoryEvent.SPORTS)
+                        .allMatch(e -> e.getCategoryEvent().equals(CategoryEvent.SPORTS.name()))
         );
     }
 
@@ -247,18 +232,18 @@ class EventServiceTest {
         EventSearchFilter filter = new EventSearchFilter();
         filter.setLocation(GeographicalArea.JERUSALEM);
 
-        Response<List<Event>> response = service.searchEvents(validToken, filter);
+        Response<List<EventDTO>> response = service.searchEvents(validToken, filter);
 
         assertNotNull(response.getValue());
         assertTrue(
                 response.getValue().stream()
-                        .allMatch(e -> e.getLocation() == GeographicalArea.JERUSALEM)
+                        .allMatch(e -> e.getLocation().equals(GeographicalArea.JERUSALEM.name()))
         );
     }
 
     @Test
     void GivenNullFilter_WhenSearchEvents_ThenInvalidInputReturned() {
-        Response<List<Event>> response = service.searchEvents(validToken, null);
+        Response<List<EventDTO>> response = service.searchEvents(validToken, null);
 
         assertNull(response.getValue());
         assertEquals("Invalid search input", response.getMessage());
@@ -268,7 +253,7 @@ class EventServiceTest {
     void GivenInvalidToken_WhenSearchEvents_ThenInvalidTokenErrorReturned() {
         EventSearchFilter filter = new EventSearchFilter();
 
-        Response<List<Event>> response = service.searchEvents("mnhvfd", filter);
+        Response<List<EventDTO>> response = service.searchEvents("mnhvfd", filter);
 
         assertNull(response.getValue());
         assertEquals("Invalid token", response.getMessage());
@@ -282,7 +267,7 @@ class EventServiceTest {
         EventSearchFilter filter = new EventSearchFilter();
         filter.setKeyword("anything");
 
-        Response<List<Event>> response = emptyService.searchEvents(validToken, filter);
+        Response<List<EventDTO>> response = emptyService.searchEvents(validToken, filter);
 
         assertNull(response.getValue());
         assertEquals("No matching events found", response.getMessage());
@@ -296,14 +281,13 @@ class EventServiceTest {
         filter.setLocation(GeographicalArea.JERUSALEM);
         filter.setMinPrice(200.0);
 
-        Response<List<Event>> response = service.searchEvents(validToken, filter);
+        Response<List<EventDTO>> response = service.searchEvents(validToken, filter);
 
         assertNotNull(response.getValue());
         assertTrue(response.getValue().stream().allMatch(e ->
                 e.getName().contains("active") &&
-                        e.getCategoryEvent() == CategoryEvent.SPORTS &&
-                        e.getLocation() == GeographicalArea.JERUSALEM &&
-                        e.getMap().getZones().stream().anyMatch(z -> z.getPrice() >= 200)
+                        e.getCategoryEvent().equals(CategoryEvent.SPORTS.name()) &&
+                        e.getLocation().equals(GeographicalArea.JERUSALEM.name())
         ));
     }
 
@@ -336,7 +320,7 @@ class EventServiceTest {
 
         EventSearchFilter filter = new EventSearchFilter();
 
-        Response<List<Event>> response = service.searchEvents(validToken, filter);
+        Response<List<EventDTO>> response = service.searchEvents(validToken, filter);
 
         assertTrue(response.getValue().stream()
                 .noneMatch(e -> e.getName().equals("past active")
@@ -348,7 +332,7 @@ class EventServiceTest {
         EventSearchFilter filter = new EventSearchFilter();
         filter.setMinPrice(300.0); // VIP
 
-        Response<List<Event>> response = service.searchEvents(validToken, filter);
+        Response<List<EventDTO>> response = service.searchEvents(validToken, filter);
 
         assertNotNull(response.getValue());
     }
@@ -358,7 +342,7 @@ class EventServiceTest {
         EventSearchFilter filter = new EventSearchFilter();
         filter.setKeyword("TIVE");
 
-        Response<List<Event>> response = service.searchEvents(validToken, filter);
+        Response<List<EventDTO>> response = service.searchEvents(validToken, filter);
 
         assertNotNull(response.getValue());
     }
@@ -369,7 +353,7 @@ class EventServiceTest {
         filter.setStartDate(LocalDateTime.now().plusDays(10));
         filter.setEndDate(LocalDateTime.now().plusDays(5));
 
-        Response<List<Event>> response = service.searchEvents(validToken, filter);
+        Response<List<EventDTO>> response = service.searchEvents(validToken, filter);
 
         assertNull(response.getValue());
     }

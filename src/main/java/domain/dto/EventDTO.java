@@ -44,4 +44,16 @@ public class EventDTO {
     public String getEventID() {
         return eventID;
     }
+
+    public String getCategoryEvent() {
+        return categoryEvent;
+    }
+
+    public String getLocation() {
+        return eventLocation;
+    }
+
+    public String getName() {
+        return eventName;
+    }
 }
