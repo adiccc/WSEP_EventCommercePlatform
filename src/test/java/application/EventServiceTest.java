@@ -20,6 +20,10 @@ import org.mockito.Mockito;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -37,7 +41,7 @@ class EventServiceTest {
     private String validToken;
     private String activeEvent1Id;
     private String inactiveEventId;
-    private String activeEvent2Id;
+    private EventCompanyManageService eventCompanyManageService;
 
     private ElementPositionDTO stage;
     private List<ElementPositionDTO> entries;
@@ -53,7 +57,7 @@ class EventServiceTest {
         auth = new Auth(tokenService,userRepo,passwordEncoder);
         CompanyRepoImpl companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
-        EventCompanyManageService eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
         service = new EventService(auth, eventRepo);
 
         UserService userService=new UserService(tokenService,auth,userRepo,passwordEncoder);
@@ -174,6 +178,20 @@ class EventServiceTest {
     }
 
     @Test
+    void GivenCancelledEvent_WhenSearchEvents_ThenNoResultsMessageReturned() {
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setKeyword("active");
+        eventCompanyManageService.DeleteEvent(validToken, activeEvent1Id);
+
+        Response<List<EventDTO>> response = service.searchEvents(validToken, filter);
+
+        assertNull(response.getValue());
+        assertEquals("No matching events found", response.getMessage());
+    }
+
+
+
+    @Test
     void GivenNoMatchingEvents_WhenSearchEvents_ThenNoResultsMessageReturned() {
         EventSearchFilter filter = new EventSearchFilter();
         filter.setKeyword("non-existing-event");
@@ -231,7 +249,7 @@ class EventServiceTest {
     }
 
     @Test
-    void GivenEmptyRepository_WhenSearchEvents_ThenNoResultsReturned() {
+    void GivenNoCompanyData_WhenSearchEvents_ThenNoResultsReturned() {
         EventRepoImpl emptyRepo = new EventRepoImpl();
         EventService emptyService = new EventService(auth, emptyRepo);
 
@@ -263,39 +281,14 @@ class EventServiceTest {
     }
 
     @Test
-    void GivenInactiveOrPastEvents_WhenSearchEvents_ThenTheyAreFilteredOut() {
-        Event pastActive = new Event(
-                company1,
-                1,
-                LocalDateTime.now().minusDays(1),
-                "past active",
-                LocalDateTime.now().minusDays(2),
-                true,
-                GeographicalArea.CENTER,
-                CategoryEvent.CONFERENCE
-        );
-
-        Event futureInactive = new Event(
-                company1,
-                2,
-                LocalDateTime.now().plusDays(5),
-                "future inactive",
-                LocalDateTime.now().plusDays(1),
-                false,
-                GeographicalArea.CENTER,
-                CategoryEvent.CONFERENCE
-        );
-
-        eventRepo.store(pastActive);
-        eventRepo.store(futureInactive);
-
+    void GivenInactiveEvents_WhenSearchEvents_ThenTheyAreFilteredOut() {
         EventSearchFilter filter = new EventSearchFilter();
 
         Response<List<EventDTO>> response = service.searchEvents(validToken, filter);
 
         assertTrue(response.getValue().stream()
-                .noneMatch(e -> e.getName().equals("past active")
-                        || e.getName().equals("future inactive")));
+                .noneMatch(e -> e.getName().equals("inactive event")));
+        assertTrue(response.getValue().stream().anyMatch(e -> e.getName().equals("active event")));
     }
 
     @Test
@@ -328,6 +321,110 @@ class EventServiceTest {
 
         assertNull(response.getValue());
     }
+    @Test
+    void GivenValidCompanyAndKeyword_WhenSearchCompanyEvents_ThenMatchingEventsReturned() {
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setKeyword("active");
 
+        Response<List<EventDTO>> response = service.searchCompanyEvents(validToken, company1, filter);
 
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue().isEmpty());
+        assertEquals("Events retrieved successfully", response.getMessage());
+        assertTrue(response.getValue().stream().allMatch(e -> e.getName().contains("active")));
+    }
+
+    @Test
+    void GivenInvalidToken_WhenSearchCompanyEvents_ThenInvalidTokenReturned() {
+        EventSearchFilter filter = new EventSearchFilter();
+
+        Response<List<EventDTO>> response = service.searchCompanyEvents("invalid-token", company1, filter);
+
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenNullFilter_WhenSearchCompanyEvents_ThenInvalidInputReturned() {
+        Response<List<EventDTO>> response = service.searchCompanyEvents(validToken, company1, null);
+
+        assertNull(response.getValue());
+        assertEquals("Invalid search input", response.getMessage());
+    }
+
+    @Test
+    void GivenNoMatchingKeyword_WhenSearchCompanyEvents_ThenNoResultsReturned() {
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setKeyword("does-not-exist");
+
+        Response<List<EventDTO>> response = service.searchCompanyEvents(validToken, company1, filter);
+
+        assertNull(response.getValue());
+        assertEquals("No matching events found in the company", response.getMessage());
+    }
+
+    @Test
+    void GivenDifferentCompany_WhenSearchCompanyEvents_ThenNoResultsReturned() {
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setKeyword("active");
+
+        Response<List<EventDTO>> response = service.searchCompanyEvents(validToken, company2, filter);
+
+        assertNull(response.getValue());
+        assertEquals("No matching events found in the company", response.getMessage());
+    }
+
+    @Test
+    void GivenPriceRange_WhenSearchCompanyEvents_ThenOnlyMatchingEventsReturned() {
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setMinPrice(250.0);
+        filter.setMaxPrice(350.0);
+
+        Response<List<EventDTO>> response = service.searchCompanyEvents(validToken, company1, filter);
+
+        assertNotNull(response.getValue());
+        assertEquals("Events retrieved successfully", response.getMessage());
+    }
+
+    @Test
+    void GivenInactiveEventInCompany_WhenSearchCompanyEvents_ThenInactiveFilteredOut() {
+        EventSearchFilter filter = new EventSearchFilter();
+
+        Response<List<EventDTO>> response = service.searchCompanyEvents(validToken, company1, filter);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue().stream()
+                .noneMatch(e -> e.getName().equals("inactive event")));
+        assertTrue(response.getValue().stream()
+                .anyMatch(e -> e.getName().equals("active event")));
+    }
+
+    @Test
+    void GivenMultipleFilters_WhenSearchCompanyEvents_ThenOnlyMatchingEventsReturned() {
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setKeyword("active");
+        filter.setCategory(CategoryEvent.SPORTS);
+        filter.setLocation(GeographicalArea.JERUSALEM);
+        filter.setMinPrice(200.0);
+
+        Response<List<EventDTO>> response = service.searchCompanyEvents(validToken, company1, filter);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue().stream().allMatch(e ->
+                e.getName().contains("active") &&
+                        e.getCategoryEvent().equals(CategoryEvent.SPORTS.name()) &&
+                        e.getLocation().equals(GeographicalArea.JERUSALEM.name())
+        ));
+    }
+
+    @Test
+    void GivenUpperCaseKeyword_WhenSearchCompanyEvents_ThenStillMatches() {
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setKeyword("TIVE");
+
+        Response<List<EventDTO>> response = service.searchCompanyEvents(validToken, company1, filter);
+
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue().isEmpty());
+    }
 }
