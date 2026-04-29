@@ -42,10 +42,12 @@ class ActiveOrderServiceTest {
 
     private String validToken;
     private String eventId;
+    private String concurrentEventId;
 
     private TokenService tokenService;
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
+    private UserService userService;
 
     private ElementPositionDTO stage;
     private List<ElementPositionDTO> entries;
@@ -62,7 +64,7 @@ class ActiveOrderServiceTest {
         passwordEncoder = new PasswordEncoderUtil();
         auth = new Auth(tokenService, userRepo, passwordEncoder);
 
-        UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
+        userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
 
         userService.registerUser(
                 "",
@@ -103,6 +105,19 @@ class ActiveOrderServiceTest {
                 CategoryEvent.SPORTS
         );
 
+        Response<String> eventResponse = companyEventService.createEvent(
+                validToken,
+                companyId,
+                LocalDateTime.now().plusDays(5),
+                "Concurrent Event",
+                LocalDateTime.now().minusMinutes(10),     // saleStartDate already started
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS
+        );
+
+        concurrentEventId = eventResponse.getValue();
+
         eventId = r.getValue();
 
         stage = new ElementPositionDTO(10, 20);
@@ -110,8 +125,8 @@ class ActiveOrderServiceTest {
         standingZones = List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1)));
         seatingZones = List.of(new SeatingZoneDTO(10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
 
-        companyEventService.DefineVenueAndSeatingMap(validToken, eventId,
-                stage, entries, standingZones, seatingZones);
+        companyEventService.DefineVenueAndSeatingMap(validToken, eventId,stage, entries, standingZones, seatingZones);
+        companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId,stage, entries, standingZones, seatingZones);
 
         LotteryService lotteryService = new LotteryService(lotteryRepo, eventRepo, auth);
         lotteryService.createLottery(validToken, eventId, 10,
@@ -154,36 +169,28 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenConcurrentUsersBelowCapacity_WhenEnterPurchase_ThenAllReceiveMap() throws Exception {
-        int usersCount = 10;
+    void GivenValidEvent_WhenEnterPurchase_ThenReturnEventMap() {
+        Response<EventMapDTO> response =
+                service.enterEventPurchase(validToken, companyId, concurrentEventId);
 
-        Response<String> eventResponse = companyEventService.createEvent(
-                validToken,
-                companyId,
-                LocalDateTime.now().plusDays(5),          // eventDate
-                "Concurrent Event Below Capacity",
-                LocalDateTime.now().minusMinutes(10),     // saleStartDate already started
-                false,
-                GeographicalArea.CENTER,
-                CategoryEvent.SPORTS
-        );
+        assertNotNull(response.getValue());
+        assertEquals("Event map retrieved successfully", response.getMessage());
+    }
 
-        String concurrentEventId = eventResponse.getValue();
-
-        companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId,
-                stage, entries, standingZones, seatingZones);
+    @Test
+    void GivenConcurrentUsersExactlyAtCapacity_WhenEnterPurchase_ThenAllReceiveMap() throws Exception {
+        int usersCount = capacity;
 
         List<String> tokens = new ArrayList<>();
         for (int i = 0; i < usersCount; i++) {
             String email = "concurrent" + i + "@mail.com";
-            UserService us = new UserService(tokenService, auth, userRepo, passwordEncoder);
 
-            us.registerUser("", new UserDTO(
+            userService.registerUser("", new UserDTO(
                     email, "f" + i, "l" + i, "pass",
-                    1, 1, 2000, "Israel", "050-427-320" + i
+                    1, 1, 2000, "Israel", "050-427-3201"
             ));
 
-            tokens.add(us.login(email, "pass").getValue());
+            tokens.add(userService.login(email, "pass").getValue());
         }
 
         ExecutorService executor = Executors.newFixedThreadPool(usersCount);
@@ -213,4 +220,123 @@ class ActiveOrderServiceTest {
         assertEquals(usersCount, success);
         assertEquals(0, queued);
     }
+
+
+    @Test
+    void GivenConcurrentUsersAboveCapacity_WhenEnterPurchase_ThenOnlyCapacityReceiveMapAndRestQueued() throws Exception {
+        int overflow = 5;
+        int usersCount = capacity + overflow; // 25 total, only 20 can get in
+
+        List<String> tokens = new ArrayList<>();
+        for (int i = 0; i < usersCount; i++) {
+            String email = "overcap" + i + "@mail.com";
+
+            userService.registerUser("", new UserDTO(
+                    email, "f" + i, "l" + i, "pass",
+                    1, 1, 2000, "Israel", "050-200-1111"
+            ));
+
+            tokens.add(userService.login(email, "pass").getValue());
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(usersCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<EventMapDTO>>> futures = new ArrayList<>();
+
+        for (String token : tokens) {
+            futures.add(executor.submit(() -> {
+                start.await();
+                return service.enterEventPurchase(token, companyId, concurrentEventId);
+            }));
+        }
+
+        start.countDown();
+
+        int success = 0;
+        int queued = 0;
+
+        for (Future<Response<EventMapDTO>> future : futures) {
+            Response<EventMapDTO> response = future.get();
+            if (response.getValue() != null) success++;
+            if (response.getMessage() != null && response.getMessage().startsWith("Event is full")) queued++;
+        }
+
+        executor.shutdown();
+
+        assertEquals(capacity, success, "Exactly capacity users should receive the event map");
+        assertEquals(overflow, queued, "All overflow users should be added to the waiting queue");
+        assertEquals(usersCount, success + queued, "Every request must result in either a map or a queue position");
+    }
+
+
+    //two users race to claim  simultaneously. Exactly one user receives the event map.
+     //The other is added to the waiting queue — not silently dropped.
+    @Test
+    void GivenOneSlotRemaining_WhenEnterPurchase__ThenOnlyOneReceivesMap() throws Exception {
+        //  Fill capacity - leave exactly one open
+        for (int i = 0; i < capacity - 1; i++) {
+            String email = "lastslot_filler" + i + "@mail.com";
+            userService.registerUser("", new UserDTO(
+                    email, "f" + i, "l" + i, "pass",
+                    1, 1, 2000, "Israel", "050-600-9999"
+            ));
+            String fillerToken = userService.login(email, "pass").getValue();
+
+            Response<EventMapDTO> fillerResp =
+                    service.enterEventPurchase(fillerToken, companyId, concurrentEventId);
+            assertNotNull(fillerResp.getValue(),
+                    "Filler user " + i + " should have received the map (slot available)");
+        }
+
+        String emailA = "racer_a@mail.com";
+        String emailB = "racer_b@mail.com";
+
+
+        userService.registerUser("", new UserDTO(
+                emailA, "racer", "A", "pass",
+                1, 1, 2000, "Israel", "050-700-0001"
+        ));
+        userService.registerUser("", new UserDTO(
+                emailB, "racer", "B", "pass",
+                1, 1, 2000, "Israel", "050-700-0002"
+        ));
+
+        String tokenA = userService.login(emailA, "pass").getValue();
+        String tokenB = userService.login(emailB, "pass").getValue();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<EventMapDTO>> futureA = executor.submit(() -> {
+            start.await();
+            return service.enterEventPurchase(tokenA, companyId, concurrentEventId);
+        });
+        Future<Response<EventMapDTO>> futureB = executor.submit(() -> {
+            start.await();
+            return service.enterEventPurchase(tokenB, companyId, concurrentEventId);
+        });
+
+        start.countDown(); // release both threads at the exact same moment
+
+        Response<EventMapDTO> responseA = futureA.get();
+        Response<EventMapDTO> responseB = futureB.get();
+        executor.shutdown();
+
+        int success = 0;
+        int queued  = 0;
+
+        if (responseA.getValue() != null) success++; else queued++;
+        if (responseB.getValue() != null) success++; else queued++;
+
+        // The critical race-condition assertion:
+        // tryAcquireSlot must be atomic — two threads must never both win the last slot
+        assertEquals(1, success);
+        assertEquals(1, queued);
+
+        // Confirm the loser has a real queue position (not an error response)
+        Response<EventMapDTO> loser = (responseA.getValue() == null) ? responseA : responseB;
+        assertTrue(loser.getMessage().startsWith("Event is full"),
+                "Losing racer should receive a queue confirmation, got: " + loser.getMessage());
+    }
+
 }
