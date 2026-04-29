@@ -269,7 +269,7 @@ class ActiveOrderServiceTest {
     }
 
 
-    //two users race to claim  simultaneously. Exactly one user receives the event map.
+    //two users race to claim simultaneously. Exactly one user receives the event map.
     @Test
     void GivenOneSlotRemaining_WhenEnterPurchase__ThenOnlyOneReceivesMap() throws Exception {
         //  Fill capacity - leave exactly one open

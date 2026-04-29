@@ -10,7 +10,10 @@ public class EventQueue {
         this.waitingUsers = new LinkedList<>();
     }
     public EventQueue(EventQueue eventQueue) {
-        this.waitingUsers = new LinkedList<>(eventQueue.waitingUsers);
+        this.waitingUsers = new LinkedList<>();
+        for (String s : eventQueue.waitingUsers) {
+            this.waitingUsers.add(s);
+        }
     }
 
     public void enqueue(String token) {

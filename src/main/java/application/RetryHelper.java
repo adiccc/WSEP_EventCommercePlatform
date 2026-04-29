@@ -7,7 +7,7 @@ import java.util.logging.Logger;
 
 public class RetryHelper {
     private static final Logger logger = Logger.getLogger(RetryHelper.class.getName());
-    private static final int MAX_RETRIES = 3;
+    private static final int MAX_RETRIES = 20;
 
     public static <T> Response<T> executeWithRetry(Callable<Response<T>> action) {
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {

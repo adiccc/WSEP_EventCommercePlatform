@@ -14,7 +14,7 @@ import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.Order;
 import domain.webQueue.WebQueue;
-
+import Exception.OptimisticLockingFailureException;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.List;
@@ -51,6 +51,8 @@ public class AdminService {
                 WebQueue.getInstance().setMaxCapacity(capacity);
                 logger.info("Max capacity updated to: " + capacity);
                 return Response.ok(true);
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("setMaxCapacity failed due to server error: " + e.getMessage());
                 return Response.error(e.getMessage());
@@ -67,6 +69,8 @@ public class AdminService {
                     return Response.error("Unauthorized: admin access required");
                 }
                 return Response.ok(WebQueue.getInstance().getMaxCapacity());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("getMaxCapacity failed due to server error: " + e.getMessage());
                 return Response.error(e.getMessage());
@@ -83,6 +87,8 @@ public class AdminService {
                     return Response.error("Unauthorized: admin access required");
                 }
                 return Response.ok(WebQueue.getInstance().getActiveCount());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("getActiveCount failed due to server error: " + e.getMessage());
                 return Response.error(e.getMessage());
@@ -183,6 +189,8 @@ public class AdminService {
                 logger.info("removeUser succeeded for userId: " + userIdToRemove);
                 return Response.ok(true);
 
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("removeUser failed for userId: " + userIdToRemove + ". Error: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
@@ -199,6 +207,8 @@ public class AdminService {
                     return Response.error("Unauthorized: admin access required");
                 }
                 return Response.ok(WebQueue.getInstance().getWaitingCount());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("getWaitingCount failed due to server error: " + e.getMessage());
                 return Response.error(e.getMessage());
@@ -245,6 +255,8 @@ public class AdminService {
             } catch (NoSuchElementException e) {
                 logger.warning("closeCompanyByAdmin failed: company not found with id " + companyId);
                 return new Response<>(false, "Company not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("closeCompanyByAdmin failed due to server error: " + e.getMessage());
                 return new Response<>(false, e.getMessage());
@@ -296,6 +308,8 @@ public class AdminService {
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
                 return new Response<>(false, "Failed to process refund: " + e.getMessage());

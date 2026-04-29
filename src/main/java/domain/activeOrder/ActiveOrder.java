@@ -1,5 +1,7 @@
 package domain.activeOrder;
 
+import domain.event.Event;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,5 +41,14 @@ public class ActiveOrder {
 
     public String getEventId() {
         return eventId;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+
+        ActiveOrder other = (ActiveOrder) obj;
+        return orderId==other.orderId && version == other.getVersion();
     }
 }

@@ -236,4 +236,13 @@ public class Event {
             activePurchaseSessions.decrementAndGet();
         }
     }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+
+        Event other = (Event) obj;
+        return id.equals(other.id) && version == other.version;
+    }
 }

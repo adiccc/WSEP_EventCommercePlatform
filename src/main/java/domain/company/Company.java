@@ -1,5 +1,6 @@
 package domain.company;
 
+import domain.activeOrder.ActiveOrder;
 import domain.dataType.PermissionType;
 import domain.dto.HierarchyDTO;
 import domain.policy.Discount;
@@ -100,5 +101,13 @@ public class Company {
     }
     public Map<Integer, HierarchyDTO> getManagersPermissionsMap() {
         return companyPermission.getCompanyTree();
+    }
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+
+        Company other = (Company) obj;
+        return companyId==other.companyId && version == other.getVersion();
     }
 }

@@ -9,7 +9,7 @@ import domain.event.EventQueue;
 import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
-
+import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
 import java.util.NoSuchElementException;
 import java.util.logging.Level;
@@ -68,25 +68,28 @@ public class ActiveOrderService {
                             return new Response<>(null, "User is not a lottery winner and lottery registration is still open");
                     }
                 }
-
-                boolean acquired = eventRepo.tryAcquireSlot(eventId, capacity);
-
+                boolean acquired = e.tryAcquirePurchaseSlot(capacity);
                 if (!acquired) {
-                    int position = eventRepo.addToQueueIfAbsent(eventId, token);
-                    if (position == -1) {
-                        position = eventRepo.getQueuePosition(eventId, token);
+                    if (e.getEventQueue().contains(token)) {
+                        int position = e.getEventQueue().position(token);
                         return new Response<>(null,
                                 "User is still waiting in queue. Position: " + position);
                     }
+                    e.getEventQueue().enqueue(token);
+                    int position = e.getEventQueue().position(token);
+                    eventRepo.store(e); // persist the updated event with the new queue state
                     return new Response<>(null,
                             "Event is full, user added to waiting queue. Position: " + position);
                 }
+                eventRepo.store(e); // persist the updated event with the new queue state
 
                 logger.log(Level.INFO, "Event map retrieved successfully");
                 return new Response<>(new EventMapDTO(e.getMap()), "Event map retrieved successfully");
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(null, "Event not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to enter event purchase : " + e.getMessage());
                 return new Response<>(null, "Failed to enter event purchase  : " + e.getMessage());

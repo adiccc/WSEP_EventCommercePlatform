@@ -51,7 +51,14 @@ public class LotteryRepoImpl implements ILotteryRepo {
             return;
         }
 
-        // --- OPTIMISTIC LOCKING CHECK ---
+        if (currentLottery.getVersion() != lottery.getVersion()) {
+            throw new OptimisticLockingFailureException(
+                    "Event " + lottery.getId() + " version mismatch. Expected: " +
+                            lottery.getVersion() + ", but found: " + currentLottery.getVersion()
+            );
+        }
+
+        // OPTIMISTIC LOCKING CHECK
         Lottery updatedLottery = new Lottery(lottery); // Copy incoming state
         updatedLottery.setVersion(lottery.getVersion() + 1); // Increment version for the NEW state
 
@@ -60,8 +67,7 @@ public class LotteryRepoImpl implements ILotteryRepo {
 
         if (!replaced) {
             throw new OptimisticLockingFailureException(
-                    "Lottery " + lottery.getId() + " version mismatch. Expected: " +
-                            lottery.getVersion() + ", but found: " + currentLottery.getVersion()
+                    "Event " + lottery.getId() + " was modified concurrently"
             );
         }
     }

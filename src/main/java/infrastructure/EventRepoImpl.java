@@ -46,6 +46,13 @@ public class EventRepoImpl implements IEventRepo {
             return;
         }
 
+        if (currentEvent.getVersion() != entity.getVersion()) {
+            throw new OptimisticLockingFailureException(
+                    "Event " + entity.getId() + " version mismatch. Expected: " +
+                            entity.getVersion() + ", but found: " + currentEvent.getVersion()
+            );
+        }
+
         Event updatedEvent = new Event(entity);
         updatedEvent.setVersion(entity.getVersion() + 1);
 
@@ -53,11 +60,11 @@ public class EventRepoImpl implements IEventRepo {
 
         if (!replaced) {
             throw new OptimisticLockingFailureException(
-                    "Event " + entity.getId() + " version mismatch. Expected: " +
-                            entity.getVersion() + ", but found: " + currentEvent.getVersion()
+                    "Event " + entity.getId() + " was modified concurrently"
             );
         }
     }
+
     @Override
     public List<Event> findByCompany(int companyId) {
         return events.values().stream()
@@ -72,44 +79,5 @@ public class EventRepoImpl implements IEventRepo {
                 .filter(e -> e.getCreatorId() == creatorId)
                 .map(Event::new)
                 .collect(Collectors.toList());
-    }
-
-    @Override
-    public synchronized boolean tryAcquireSlot(String eventId, int capacity) {
-        Event stored = events.get(eventId);
-        if (stored == null){
-            throw new NoSuchElementException("Event not found: " + eventId);
-        }
-        return stored.tryAcquirePurchaseSlot(capacity);
-    }
-
-    @Override
-    public synchronized void releaseSlot(String eventId) {
-        Event stored = events.get(eventId);
-        if (stored != null) {
-            stored.releasePurchaseSlot();
-        }
-    }
-
-    //Adds token to queue if not already present and returns the position in queue
-    @Override
-    public synchronized int addToQueueIfAbsent(String eventId, String token) {
-        Event stored = events.get(eventId);
-        if (stored == null) {
-            throw new NoSuchElementException("Event not found: " + eventId);
-        }
-        EventQueue queue = stored.getEventQueue();
-        if (queue.contains(token)) {
-            return -1; // already in queue
-        }
-        queue.enqueue(token);
-        return queue.position(token);
-    }
-
-    @Override
-    public synchronized int getQueuePosition(String eventId, String token) {
-        Event stored = events.get(eventId);
-        if (stored == null) throw new NoSuchElementException("Event not found: " + eventId);
-        return stored.getEventQueue().position(token);
     }
 }

@@ -36,7 +36,12 @@ public class UserRepo implements IUserRepo {
             emailById.put(newEntry.getIdentifier(), newEntry.getUserId());
             return;
         }
-
+        if (currentMember.getVersion() != mem.getVersion()) {
+            throw new OptimisticLockingFailureException(
+                    "Event " + mem.getUserId() + " version mismatch. Expected: " +
+                            mem.getVersion() + ", but found: " + currentMember.getVersion()
+            );
+        }
         Member updatedMember = new Member(mem);
         updatedMember.setVersion(mem.getVersion() + 1);
 
@@ -44,8 +49,7 @@ public class UserRepo implements IUserRepo {
 
         if (!replaced) {
             throw new OptimisticLockingFailureException(
-                    "User " + mem.getUserId() + " version mismatch. Expected: " +
-                            mem.getVersion() + ", but found: " + currentMember.getVersion()
+                    "Event " + mem.getUserId() + " was modified concurrently"
             );
         }
 

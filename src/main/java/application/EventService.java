@@ -7,6 +7,7 @@ import domain.event.Event;
 import domain.event.IEventRepo;
 import java.time.LocalDateTime;
 import java.util.List;
+import Exception.OptimisticLockingFailureException;
 import java.util.NoSuchElementException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -121,6 +122,8 @@ public class EventService {
                 logger.log(Level.INFO, "Events retrieved successfully");
                 return new Response<>(result, "Events retrieved successfully");
 
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Search failed: " + e.getMessage());
                 return new Response<>(null, "Search failed");
