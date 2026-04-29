@@ -4,7 +4,7 @@ import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
-
+import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.NoSuchElementException;
@@ -75,6 +75,8 @@ public class LotteryService {
                 } catch (NoSuchElementException e) {
                     logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                     return new Response<>(false, "event not found");
+                } catch (OptimisticLockingFailureException e) {
+                    throw e;
                 } catch (Exception e) {
                     logger.log(Level.SEVERE, "failed creating lottery : " + e.getMessage());
                     return new Response<>(false, "failed to create lottery : " + e.getMessage());
@@ -113,6 +115,8 @@ public class LotteryService {
             // TODO: notify winners (not in this version)
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Could not draw lottery, ID not found: " + lotteryId);
+        } catch (OptimisticLockingFailureException e) {
+            throw e;
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error during lottery draw for ID: " + lotteryId, e);
         }

@@ -26,6 +26,12 @@ public class CompanyRepoImpl implements ICompanyRepo {
             logger.info("store: company " + company.getCompanyId() + " inserted successfully");
             return;
         }
+        if (currentCompany.getVersion() != company.getVersion()) {
+            throw new OptimisticLockingFailureException(
+                    "Event " + currentCompany.getCompanyId() + " version mismatch. Expected: " +
+                            company.getVersion() + ", but found: " + currentCompany.getVersion()
+            );
+        }
 
         Company updatedCompany = new Company(company);
         updatedCompany.setVersion(company.getVersion() + 1);
@@ -36,8 +42,7 @@ public class CompanyRepoImpl implements ICompanyRepo {
             logger.warning("store failed: company " + company.getCompanyId() + " version mismatch. Expected: " +
                     company.getVersion() + ", but found: " + currentCompany.getVersion());
             throw new OptimisticLockingFailureException(
-                    "Company " + company.getCompanyId() + " version mismatch. Expected: " +
-                            company.getVersion() + ", but found: " + currentCompany.getVersion()
+                    "Event " + company.getCompanyId() + " was modified concurrently"
             );
         }
         logger.info("store: company " + company.getCompanyId() + " updated to version " + updatedCompany.getVersion());

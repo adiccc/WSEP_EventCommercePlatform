@@ -1,5 +1,7 @@
 package domain.user;
 
+import domain.activeOrder.ActiveOrder;
+
 import java.time.LocalDate;
 import java.util.Date;
 
@@ -53,5 +55,14 @@ public class Member extends User{
 
     public boolean isActive() { return isActive; }
     public void deactivate() { this.isActive = false; }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+
+        Member other = (Member) obj;
+        return userId==other.userId && version == other.getVersion();
+    }
 
 }
