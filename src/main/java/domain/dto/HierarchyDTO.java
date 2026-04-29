@@ -2,10 +2,7 @@ package domain.dto;
 
 import domain.dataType.PermissionType;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class HierarchyDTO {
     private int myManager; // who is my manager

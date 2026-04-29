@@ -1,11 +1,14 @@
 package application;
 
 import domain.dataType.EventSearchFilter;
+import domain.dto.EventDTO;
+import domain.dto.EventDetailsDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import Exception.OptimisticLockingFailureException;
 import java.util.NoSuchElementException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -22,7 +25,7 @@ public class EventService {
         this.auth = auth;
     }
 
-    public Response<Event> ViewEventDetails(String token, int companyId, String eventId) {
+    public Response<EventDetailsDTO> ViewEventDetails(String token, int companyId, String eventId) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "ViewEventDetails called");
@@ -43,7 +46,7 @@ public class EventService {
                     return new Response<>(null, "The selected event is not active");
                 }
                 logger.log(Level.INFO, "Event details retrieved successfully");
-                return new Response<>(e, "Event details retrieved successfully");
+                return new Response<>(new EventDetailsDTO(e), "Event details retrieved successfully");
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(null, "Event not found");
@@ -54,7 +57,7 @@ public class EventService {
         });
     }
 
-    public Response<List<Event>> searchEvents(String token, EventSearchFilter filter) {
+    public Response<List<EventDTO>> searchEvents(String token, EventSearchFilter filter) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.info("Search events called");
@@ -71,57 +74,14 @@ public class EventService {
             try {
                 List<Event> events = eventRepo.getAll();
 
-                List<Event> result = events.stream()
-                        .filter(Event::isActive) //Only active events
-                        .filter(e -> e.getDate().isAfter(LocalDateTime.now())) //Only future events
-                        //Search by name
-                        .filter(e -> {
-                            if (filter.getKeyword() == null || filter.getKeyword().isEmpty())
-                                return true;
-                            return e.getName().toLowerCase()
-                                    .contains(filter.getKeyword().toLowerCase());
-                        })
-
-                        // Search by date range
-                        .filter(e -> {
-                            if (filter.getStartDate() == null) return true;
-                            return !e.getDate().isBefore(filter.startDate);
-                        })
-                        .filter(e -> {
-                            if (filter.getEndDate() == null) return true;
-                            return !e.getDate().isAfter(filter.getEndDate());
-                        })
-
-                        // Search by category (enum)
-                        .filter(e -> {
-                            if (filter.getCategory() == null) return true;
-                            return e.getCategoryEvent() == filter.getCategory();
-                        })
-
-                        // Search by location (enum)
-                        .filter(e -> {
-                            if (filter.getLocation() == null) return true;
-                            return e.getLocation() == filter.getLocation();
-                        })
-
-                        // Search by price range (min and max price)
-                        .filter(e -> {
-                            if (filter.getMinPrice() == null && filter.getMaxPrice() == null)
-                                return true;
-
-                            return e.getMap().getZones().stream().anyMatch(z -> {
-                                double price = z.getPrice();
-                                if (filter.getMinPrice() != null && price < filter.getMinPrice())
-                                    return false;
-                                if (filter.getMaxPrice() != null && price > filter.getMaxPrice())
-                                    return false;
-                                return true;
-                            });
-                        }).toList();
+                List<EventDTO> result = events.stream()
+                        .filter(e -> e.matches(filter))
+                        .map(EventDTO::new)
+                        .collect(Collectors.toList());
 
                 if (result.isEmpty()) {
                     logger.log(Level.INFO, "No matching events found");
-                    return new Response<>(null, "No matching events found");
+                    return new Response(null, "No matching events found");
                 }
                 logger.log(Level.INFO, "Events retrieved successfully");
                 return new Response<>(result, "Events retrieved successfully");
@@ -131,7 +91,43 @@ public class EventService {
                 return new Response<>(null, "Search failed");
             }
         });
-
     }
 
+    public Response<List<EventDTO>> searchCompanyEvents(String token, int companyId, EventSearchFilter filter) {
+        return RetryHelper.executeWithRetry(() ->
+        {
+            logger.info("Search company events called");
+
+            // token validation
+            if (!auth.isLoggedIn(token).getValue()) {
+                return new Response<>(null, "Invalid token");
+            }
+
+            if (filter == null) {
+                return new Response<>(null, "Invalid search input");
+            }
+
+            try {
+                List<Event> events = eventRepo.findByCompany(companyId);
+
+                List<EventDTO> result = events.stream()
+                        .filter(e -> e.matches(filter))
+                        .map(EventDTO::new)
+                        .collect(Collectors.toList());
+
+                if (result.isEmpty()) {
+                    logger.log(Level.INFO, "No matching events found in the company");
+                    return new Response<List<EventDTO>>(null, "No matching events found in the company");
+                }
+                logger.log(Level.INFO, "Events retrieved successfully");
+                return new Response<>(result, "Events retrieved successfully");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Search failed: " + e.getMessage());
+                return new Response<>(null, "Search failed");
+            }
+        });
+    }
 }

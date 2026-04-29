@@ -3,13 +3,14 @@ package application;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
+import domain.dto.EventMapDTO;
 import domain.event.Event;
 import domain.event.EventMap;
 import domain.event.EventQueue;
 import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
-
+import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -29,16 +30,18 @@ public class ActiveOrderService {
     private final int capacity = 100;
     private int orderExpireMinutes = 10;
 
+    private final int capacity;
 
-    public ActiveOrderService(IAuth auth, IActiveOrderRepo activeOrderRepo, IEventRepo eventRepo, ICompanyRepo companyRepo, ILotteryRepo lotteryRepo) {
+    public ActiveOrderService(IAuth auth, IActiveOrderRepo activeOrderRepo, IEventRepo eventRepo, ICompanyRepo companyRepo, ILotteryRepo lotteryRepo, int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
         this.lotteryRepo = lotteryRepo;
         this.auth = auth;
+        this.capacity = capacity;
     }
 
-    public Response<EventMap> enterEventPurchase(String token, int companyId, String eventId) {
+    public Response<EventMapDTO> enterEventPurchase(String token, int companyId, String eventId) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "enterEventPurchase called");
@@ -63,25 +66,6 @@ public class ActiveOrderService {
                     return new Response<>(null, "The sale for this event has not started yet");
                 }
 
-                long activeOrdersCount = activeOrderRepo.getAll().stream()
-                        .filter(order -> order.getEventId().equals(eventId))
-                        .count();
-
-                if (activeOrdersCount >= capacity) {
-                    EventQueue queue = e.getEventQueue();
-
-                    if (!queue.contains(token)) {
-                        queue.enqueue(token);
-                        logger.log(Level.INFO, "Event is full, user added to waiting queue");
-                        return new Response<>(null, "Event is full, user added to waiting queue");
-                    }
-
-                    if (!queue.isFirst(token)) {
-                        logger.log(Level.SEVERE, "User is still waiting in queue");
-                        return new Response<>(null, "User is still waiting in queue");
-                    }
-                }
-
                 if (e.hasLottery()) {
                     Lottery l = lotteryRepo.findById(eventId);
                     int code = auth.getUserId(token).getValue(); // the code of each user who registered to the lottery is his ID because there ara no notifications in the system
@@ -91,11 +75,28 @@ public class ActiveOrderService {
                             return new Response<>(null, "User is not a lottery winner and lottery registration is still open");
                     }
                 }
+                boolean acquired = e.tryAcquirePurchaseSlot(capacity);
+                if (!acquired) {
+                    if (e.getEventQueue().contains(token)) {
+                        int position = e.getEventQueue().position(token);
+                        return new Response<>(null,
+                                "User is still waiting in queue. Position: " + position);
+                    }
+                    e.getEventQueue().enqueue(token);
+                    int position = e.getEventQueue().position(token);
+                    eventRepo.store(e); // persist the updated event with the new queue state
+                    return new Response<>(null,
+                            "Event is full, user added to waiting queue. Position: " + position);
+                }
+                eventRepo.store(e); // persist the updated event with the new queue state
+
                 logger.log(Level.INFO, "Event map retrieved successfully");
-                return new Response<>(e.getMap(), "Event map retrieved successfully");
+                return new Response<>(new EventMapDTO(e.getMap()), "Event map retrieved successfully");
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(null, "Event not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to enter event purchase : " + e.getMessage());
                 return new Response<>(null, "Failed to enter event purchase  : " + e.getMessage());

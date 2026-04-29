@@ -10,7 +10,10 @@ public class EventQueue {
         this.waitingUsers = new LinkedList<>();
     }
     public EventQueue(EventQueue eventQueue) {
-        this.waitingUsers = new LinkedList<>(eventQueue.waitingUsers);
+        this.waitingUsers = new LinkedList<>();
+        for (String s : eventQueue.waitingUsers) {
+            this.waitingUsers.add(s);
+        }
     }
 
     public void enqueue(String token) {
@@ -23,6 +26,19 @@ public class EventQueue {
         if (!waitingUsers.isEmpty()) {
             waitingUsers.poll();
         }
+    }
+
+    public int position(String token) {
+        int pos = 1;
+
+        for (String t : waitingUsers) {
+            if (t.equals(token)) {
+                return pos;
+            }
+            pos++;
+        }
+
+        return -1; // not found
     }
 
     public boolean isFirst(String token) {

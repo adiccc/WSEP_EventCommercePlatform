@@ -3,7 +3,7 @@ package application;
 import java.util.*;
 import java.util.NoSuchElementException;
 import java.util.logging.Logger;
-
+import Exception.OptimisticLockingFailureException;
 import domain.company.*;
 import domain.dataType.PermissionType;
 import domain.dto.CompanyDTO;
@@ -83,6 +83,8 @@ public class CompanyService {
                     return new Response<>(newCompany, "Production company created successfully.");
                 }
 
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch(Exception e){
                 logger.severe("Failed to create company " + companyName + ". Error: " + e.getMessage());
                 return new Response<>(null, "System error occurred: " + e.getMessage());
@@ -136,6 +138,8 @@ public class CompanyService {
             } catch (NoSuchElementException e) {
                 logger.warning("viewRolesAndPermissionsTree failed: company not found, id: " + companyId);
                 return Response.error("Company not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in viewRolesAndPermissionsTree for companyId: " + companyId + ". Error: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
@@ -163,6 +167,8 @@ public class CompanyService {
             } catch (IllegalStateException e) {
                 logger.warning("updatePurchasePolicy invalid state for companyId: " + companyId + ". " + e.getMessage());
                 return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in updatePurchasePolicy for companyId: " + companyId + ". Error: " + e.getMessage());
                 return Response.error("Unexpected error in updatePurchasePolicy for companyId: " + companyId);
@@ -222,6 +228,8 @@ public class CompanyService {
                 logger.warning("addDiscountToCompany invalid state: " + e.getMessage());
                 return Response.error(e.getMessage());
 
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in addDiscountToCompany: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
@@ -281,6 +289,8 @@ public class CompanyService {
                 logger.warning("removeDiscountFromCompany invalid state: " + e.getMessage());
                 return Response.error(e.getMessage());
 
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in removeDiscountFromCompany: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
@@ -310,7 +320,6 @@ public class CompanyService {
                 for (Company company : allCompanies) {
                     // isUserPermitted means or the company is active
                     // if the company isn't active only members who are owners and have the right permitting can access
-                    //TODO when check permission is implemented change just for a call to that function
                     boolean isUserPermitted = company.isActive() || (isMember && (company.getCompanyPermission().isOwner(userId) || company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES)));
                     if (isUserPermitted) {
                         filteredCompanies.add(new CompanyDTO(
@@ -328,6 +337,8 @@ public class CompanyService {
             } catch (SecurityException e) {
                 logger.warning("getAvailableCompanies unauthorized: " + e.getMessage());
                 return new Response<>(null, "Invalid or expired token");
+            }   catch (OptimisticLockingFailureException e) {
+                throw e;
             }
         });
     }
@@ -354,6 +365,8 @@ public class CompanyService {
             } catch (NoSuchElementException e) {
                 logger.warning("deactivateCompany failed: company not found, id: " + companyId);
                 return new Response<>(false, "Company not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in deactivateCompany: " + e.getMessage());
                 return new Response<>(false, "Unexpected error: " + e.getMessage());

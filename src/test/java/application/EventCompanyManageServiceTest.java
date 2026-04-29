@@ -8,6 +8,9 @@ import domain.company.ContactInfo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.CompanyDetailsDTO;
+import domain.dto.EventDetailsDTO;
+import domain.dto.OrderDTO;
+import domain.dto.SalesReportDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
@@ -48,6 +51,7 @@ class EventCompanyManageServiceTest {
     private IAuth auth;
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
+    private IEventRepo eventRepo;
 
     private LocalDateTime eventDate;
     private String eventId;
@@ -60,7 +64,6 @@ class EventCompanyManageServiceTest {
     private String validToken2;
     private String invalidToken;
     private EventService eventService;
-    private IEventRepo eventRepo;
     private IPaymentSystem paymentSystem;
 
     @BeforeEach
@@ -126,7 +129,7 @@ class EventCompanyManageServiceTest {
 
         assertEquals("map saved successfully", response.getMessage());
         assertTrue(response.getValue());
-        Event event=eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
+        EventDetailsDTO event=eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
         assertNotNull(event);
         assertNotNull(event.getMap());
     }
@@ -144,7 +147,7 @@ class EventCompanyManageServiceTest {
 
         assertFalse(response.getValue());
         assertEquals("Permission required", response.getMessage());
-        Event event=eventService.ViewEventDetails(validToken2,companyId,eventId).getValue();
+        EventDetailsDTO event=eventService.ViewEventDetails(validToken2,companyId,eventId).getValue();
         assertNull(event);
     }
 
@@ -300,8 +303,8 @@ class EventCompanyManageServiceTest {
         assertTrue(response.getValue());
         assertEquals("Event updated successfully", response.getMessage());
 
-        Event updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
-        assertEquals(requestedDate, updatedEvent.getDate());
+        EventDetailsDTO updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
+        assertEquals(requestedDate.toString(), updatedEvent.getDate());
     }
 
 
@@ -330,10 +333,10 @@ class EventCompanyManageServiceTest {
         assertFalse(response.getValue());
         assertEquals("Event date can only be after the original date", response.getMessage());
 
-        Event updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
+        EventDetailsDTO updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
         assertEquals(
                 originalDate.withSecond(0).withNano(0),
-                updatedEvent.getDate().withSecond(0).withNano(0)
+                LocalDateTime.parse(updatedEvent.getDate()).withSecond(0).withNano(0)
         );
     }
 
@@ -361,10 +364,10 @@ class EventCompanyManageServiceTest {
         assertFalse(response.getValue());
         assertEquals("Event date can only be after the original date", response.getMessage());
 
-        Event updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
+        EventDetailsDTO updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
         assertEquals(
                 originalDate.withSecond(0).withNano(0),
-                updatedEvent.getDate().withSecond(0).withNano(0)
+                LocalDateTime.parse(updatedEvent.getDate()).withSecond(0).withNano(0)
         );
     }
 
@@ -393,11 +396,11 @@ class EventCompanyManageServiceTest {
         assertFalse(response.getValue());
         assertEquals("User id mismatch to the creator of the event", response.getMessage());
 
-        Response<Event> r= eventService.ViewEventDetails(validToken2,companyId,eventId);
-        Event updatedEvent =r.getValue();
+        Response<EventDetailsDTO> r= eventService.ViewEventDetails(validToken2,companyId,eventId);
+        EventDetailsDTO updatedEvent =r.getValue();
         assertEquals(
                 originalDate.withSecond(0).withNano(0),
-                updatedEvent.getDate().withSecond(0).withNano(0)
+                LocalDateTime.parse(updatedEvent.getDate()).withSecond(0).withNano(0)
         );
     }
 
@@ -454,7 +457,7 @@ class EventCompanyManageServiceTest {
 //        event.getOrders().add(order2);
 //
 //        // When
-//        Response<List<Order>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
+//        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
 //
 //        // Then
 //        assertNotNull(response.getValue());
@@ -470,7 +473,7 @@ class EventCompanyManageServiceTest {
         // invalidToken2 belongs to user2, who is not the company owner
 
         // When
-        Response<List<Order>> response =eventCompanyManageService.getOrdersByCompany(validToken2, companyId);
+        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(validToken2, companyId);
 
         // Then
         assertNull(response.getValue());
@@ -483,7 +486,7 @@ class EventCompanyManageServiceTest {
         int nonExistingCompanyId = 999999;
 
         // When
-        Response<List<Order>> response =eventCompanyManageService.getOrdersByCompany(validToken1, nonExistingCompanyId);
+        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(validToken1, nonExistingCompanyId);
 
         // Then
         assertNull(response.getValue());
@@ -496,7 +499,7 @@ class EventCompanyManageServiceTest {
         String loggedOutToken = null;
 
         // When
-        Response<List<Order>> response =eventCompanyManageService.getOrdersByCompany(loggedOutToken, companyId);
+        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(loggedOutToken, companyId);
 
         // Then
         assertNull(response.getValue());
@@ -509,7 +512,7 @@ class EventCompanyManageServiceTest {
         // event exists, but no orders were added to it
 
         // When
-        Response<List<Order>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
+        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
 
         // Then
         assertNull(response.getValue());
@@ -538,8 +541,8 @@ class EventCompanyManageServiceTest {
         assertEquals("Zones added to event map successfully", response.getMessage());
 
         // Verify the zones were actually added
-        Event updatedEvent = eventService.ViewEventDetails(validToken1, companyId, eventId).getValue();
-        int totalZones = updatedEvent.getMap().getZones().size();
+        EventDetailsDTO updatedEvent = eventService.ViewEventDetails(validToken1, companyId, eventId).getValue();
+        int totalZones = updatedEvent.getMap().getSeatingZones().size() + updatedEvent.getMap().getStandingZones().size();
         assertEquals(4, totalZones); // 2 original + 2 new
     }
 
@@ -744,8 +747,73 @@ class EventCompanyManageServiceTest {
         // Assert
         assertNull(response.getValue());
         assertTrue(response.getMessage().contains("failed getCompanyDetails"));    }
+         // ===================== Generate Sales Reports Tests =====================
+    @Test
+    void GivenOwnerWithSalesData_WhenGenerateSalesReports_ThenReturnReportWithData() {
+        // Arrange
+        //TODO: make sure that when order is completed change the change to use only repo's and services!!!!
+        String event = eventCompanyManageService.createEvent(validToken1,companyId,eventDate,"event1",eventDate.minusDays(1), false,GeographicalArea.NORTH,CategoryEvent.SPORTS).getValue();
+        List<Integer> purchasedTickets = new ArrayList<>();
+        purchasedTickets.add(101);
+        Event e =eventRepo.findById(event);
+        Order order = new Order(1, 1, eventId, purchasedTickets);
+        e.getOrders().add(order);
+        eventRepo.store(e);
+        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, validToken1);
+
+        assertNotNull(response.getValue());
+        assertEquals("Sales Report generated successfully", response.getMessage());
+        assertEquals(companyId, response.getValue().getCompanyId());
+        assertFalse(response.getValue().getEventRecords().isEmpty());
+        assertEquals(1, response.getValue().getEventRecords().size());
+        assertTrue(response.getValue().getTotalTicketsSold() > 0);
+    }
 
     @Test
+    void GivenCompanyWithNoSales_WhenGenerateSalesReports_ThenReturnEmptyReport() {
+        // Arrange
+
+        // Act
+        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, validToken1);
+
+        // Assert
+        assertNotNull(response.getValue());
+        assertEquals("No future events found for company " + companyId, response.getMessage()); // match the string in the code
+
+        assertTrue(response.getValue().getEventRecords().isEmpty());
+        assertEquals(0, response.getValue().getTotalTicketsSold());
+        assertEquals(0.0, response.getValue().getTotalRevenue());
+    }
+
+    @Test
+    void GivenUnauthorizedUser_WhenGenerateSalesReports_ThenErrorNotPermitted() {
+        // Act
+        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, validToken2);
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("User is not permitted generate sales report", response.getMessage());
+    }
+
+    @Test
+    void GivenGuest_WhenGenerateSalesReports_ThenErrorNotPermitted() {
+        // Act
+        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, invalidToken);
+
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("User is not permitted generate sales report", response.getMessage());
+    }
+
+    @Test
+    void GivenInvalidCompanyId_WhenGenerateSalesReports_ThenErrorNotFound() {
+        // Act
+        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(9999, validToken1);
+
+        // Assert
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("not found"));
+    }
+        @Test
     void SuccessfulRefund() {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenReturn(true);
@@ -865,7 +933,16 @@ class EventCompanyManageServiceTest {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenReturn(true);
 
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
         Event event = eventRepo.findById(eventId);
+
         Order order = new Order(1, 2, eventId, List.of(1, 2), 100.0, "pay123");
         event.getOrders().add(order);
         eventRepo.store(event);
@@ -918,4 +995,5 @@ class EventCompanyManageServiceTest {
         assertFalse(response.getValue());
         assertTrue(response.getMessage().startsWith("failed to detele event : "));
     }
+
 }

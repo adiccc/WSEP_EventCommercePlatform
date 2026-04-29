@@ -4,13 +4,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Order {
+    private OrderStatus status;
     private int orderId;
     private int userId;
     private String eventId;
     private List<Integer> tickets;
-    private OrderStatus status;
     private double totalSum;
-    private String paymentConfirmationId;
+    String paymentConfirmationId;
 
     public Order(int orderId, int userId, String eventId, List<Integer> tickets,double totalSum, String paymentConfirmationId) {
         this.orderId = orderId;
@@ -59,4 +59,20 @@ public class Order {
     public String getPaymentConfirmationId() {
         return paymentConfirmationId;
     }
+
+    public int getNumOfTickets() {
+        return tickets.size();
+    }
+
+        public int getUserId() {
+            return userId;
+        }
+
+        public String getEventId() {
+            return eventId;
+        }
+
+        public List<Integer> getTickets() {
+            return tickets;
+        }
 }

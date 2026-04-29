@@ -5,6 +5,7 @@ import domain.dataType.ElementPosition;
 import domain.dataType.GeographicalArea;
 import domain.event.SeatingZone;
 import domain.event.Event;
+import domain.dataType.EventSearchFilter;
 import domain.event.EventMap;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,14 +20,35 @@ class EventTest {
 
     private final int companyId = 900;
     private final int creatorId = 123;
-    private EventMap map;
+    private EventMap map1;
+    private EventMap map2;
+    private Event event;
     @BeforeEach
     void setUp() {
         ElementPosition stage = new ElementPosition(10, 20);
         ElementPosition entry = new ElementPosition(5, 5);
         ElementPosition posZone = new ElementPosition(15, 15);
         SeatingZone vipZone = new SeatingZone("VIP", 100, 50,50, posZone);
-        map = new EventMap(stage, List.of(entry), List.of(vipZone));
+        map1 = new EventMap(stage, List.of(entry), List.of(vipZone));
+        event = new Event(
+                companyId,
+                creatorId,
+                LocalDateTime.now().plusDays(5), // future event
+                "Test Event",
+                LocalDateTime.now().minusDays(1), // sale started
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS
+        );
+        SeatingZone zone = new SeatingZone("Zone", 50, 10, 10, new ElementPosition(1,1));
+
+        map2 = new EventMap(
+                new ElementPosition(0,0),
+                List.of(new ElementPosition(1,1)),
+                List.of(zone)
+        );
+        event.setMap(map2);
+        event.setActive(true);
     }
 
     @Test
@@ -35,7 +57,7 @@ class EventTest {
         LocalDateTime pastSaleDate = LocalDateTime.now().minusHours(1);
         Event event = new Event(companyId, creatorId, LocalDateTime.now().plusDays(10), "Test Event", pastSaleDate, false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
 
-        event.setMap(map);
+        event.setMap(map1);
 
         // Assert
         assertTrue(event.isAvailableForSale(), "Event should be available for sale since the map exists and the sale date has passed.");
@@ -47,7 +69,7 @@ class EventTest {
         LocalDateTime futureSaleDate = LocalDateTime.now().plusHours(1);
         Event event = new Event(companyId, creatorId, LocalDateTime.now().plusDays(10), "Test Event", futureSaleDate, false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
 
-        event.setMap(map);
+        event.setMap(map1);
 
         // Assert
         assertFalse(event.isAvailableForSale(), "Event should not be available since the sale start date has not yet arrived.");
@@ -90,5 +112,41 @@ class EventTest {
         assertTrue(event.isActive());
     }
 
+    @Test
+    void GivenPriceWithinRange_WhenMatches_ThenReturnTrue() {
+        event.setMap(map1);
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setMinPrice(80.0);
+        filter.setMaxPrice(120.0);
 
+        assertTrue(event.matches(filter));
+    }
+
+    @Test
+    void GivenPriceBelowMin_WhenMatches_ThenReturnFalse() {
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setMinPrice(80.0);
+
+        assertFalse(event.matches(filter));
+    }
+
+    @Test
+    void GivenMultipleZones_OneMatchesPrice_WhenMatches_ThenReturnTrue() {
+        SeatingZone cheapZone = new SeatingZone("Cheap", 50, 10, 10, new ElementPosition(1,1));
+        SeatingZone vipZone = new SeatingZone("VIP", 100, 10, 10, new ElementPosition(2,2));
+
+        EventMap customMap = new EventMap(
+                new ElementPosition(0,0),
+                List.of(new ElementPosition(1,1)),
+                List.of(cheapZone, vipZone)
+        );
+
+        event.setMap(customMap);
+
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setMinPrice(90.0);
+        filter.setMaxPrice(110.0);
+
+        assertTrue(event.matches(filter)); //  vipZone
+    }
 }
