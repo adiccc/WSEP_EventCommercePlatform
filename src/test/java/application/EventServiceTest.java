@@ -186,7 +186,7 @@ class EventServiceTest {
         assertNotNull(response);
 
         if (response.getValue() == null) {
-            assertEquals("Event not found", response.getMessage());
+            assertEquals("The selected event is not active", response.getMessage());
         } else {
             assertEquals(activeEvent1Id, response.getValue().getId());
             assertNotNull(response.getValue().getName());

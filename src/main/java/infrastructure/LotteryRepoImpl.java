@@ -58,7 +58,7 @@ public class LotteryRepoImpl implements ILotteryRepo {
             );
         }
 
-        // OPTIMISTIC LOCKING CHECK
+        // OPTIMISTIC LOCKING C
         Lottery updatedLottery = new Lottery(lottery); // Copy incoming state
         updatedLottery.setVersion(lottery.getVersion() + 1); // Increment version for the NEW state
 
