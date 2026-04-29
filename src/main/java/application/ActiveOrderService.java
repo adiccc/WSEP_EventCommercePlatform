@@ -23,14 +23,15 @@ public class ActiveOrderService {
     private final ICompanyRepo companyRepo;
     private final ILotteryRepo lotteryRepo;
     private final IAuth auth;
-    private final int capacity = 100;
+    private final int capacity;
 
-    public ActiveOrderService(IAuth auth, IActiveOrderRepo activeOrderRepo, IEventRepo eventRepo, ICompanyRepo companyRepo, ILotteryRepo lotteryRepo) {
+    public ActiveOrderService(IAuth auth, IActiveOrderRepo activeOrderRepo, IEventRepo eventRepo, ICompanyRepo companyRepo, ILotteryRepo lotteryRepo, int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
         this.lotteryRepo = lotteryRepo;
         this.auth = auth;
+        this.capacity = capacity;
     }
 
     public Response<EventMapDTO> enterEventPurchase(String token, int companyId, String eventId) {
@@ -58,25 +59,6 @@ public class ActiveOrderService {
                     return new Response<>(null, "The sale for this event has not started yet");
                 }
 
-                long activeOrdersCount = activeOrderRepo.getAll().stream()
-                        .filter(order -> order.getEventId().equals(eventId))
-                        .count();
-
-                if (activeOrdersCount >= capacity) {
-                    EventQueue queue = e.getEventQueue();
-
-                    if (!queue.contains(token)) {
-                        queue.enqueue(token);
-                        logger.log(Level.INFO, "Event is full, user added to waiting queue");
-                        return new Response<>(null, "Event is full, user added to waiting queue");
-                    }
-
-                    if (!queue.isFirst(token)) {
-                        logger.log(Level.SEVERE, "User is still waiting in queue");
-                        return new Response<>(null, "User is still waiting in queue");
-                    }
-                }
-
                 if (e.hasLottery()) {
                     Lottery l = lotteryRepo.findById(eventId);
                     int code = auth.getUserId(token).getValue(); // the code of each user who registered to the lottery is his ID because there ara no notifications in the system
@@ -86,6 +68,20 @@ public class ActiveOrderService {
                             return new Response<>(null, "User is not a lottery winner and lottery registration is still open");
                     }
                 }
+
+                boolean acquired = eventRepo.tryAcquireSlot(eventId, capacity);
+
+                if (!acquired) {
+                    int position = eventRepo.addToQueueIfAbsent(eventId, token);
+                    if (position == -1) {
+                        position = eventRepo.getQueuePosition(eventId, token);
+                        return new Response<>(null,
+                                "User is still waiting in queue. Position: " + position);
+                    }
+                    return new Response<>(null,
+                            "Event is full, user added to waiting queue. Position: " + position);
+                }
+
                 logger.log(Level.INFO, "Event map retrieved successfully");
                 return new Response<>(new EventMapDTO(e.getMap()), "Event map retrieved successfully");
             } catch (NoSuchElementException e) {

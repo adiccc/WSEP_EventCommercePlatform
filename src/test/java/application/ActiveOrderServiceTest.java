@@ -18,7 +18,12 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -35,7 +40,6 @@ class ActiveOrderServiceTest {
     private EventCompanyManageService companyEventService;
     private IPaymentSystem paymentSystem;
 
-    private int userId1;
     private String validToken;
     private String eventId;
 
@@ -49,7 +53,7 @@ class ActiveOrderServiceTest {
     private List<SeatingZoneDTO> seatingZones;
 
     private final int companyId = 1;
-    private final int capacity = 100;
+    private final int capacity = 20;
 
     @BeforeEach
     void setUp() {
@@ -73,7 +77,6 @@ class ActiveOrderServiceTest {
                 )
         );
 
-        userId1 = userRepo.findUserByEmail("testuser1@gmail.com").getUserId();
         validToken = userService.login("testuser1@gmail.com", "yy").getValue();
 
         eventRepo = new EventRepoImpl();
@@ -115,7 +118,7 @@ class ActiveOrderServiceTest {
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
 
-        service = new ActiveOrderService(auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo);
+        service = new ActiveOrderService(auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo, capacity);
     }
 
     @Test
@@ -144,29 +147,70 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenFutureSaleWithoutLottery_WhenEnterPurchase_ThenSaleNotStarted() {
-        Response<String> r = companyEventService.createEvent(
+        Response<EventMapDTO> response = service.enterEventPurchase(validToken, companyId, eventId);
+
+        assertNull(response.getValue());
+        assertEquals("The sale for this event has not started yet", response.getMessage());
+    }
+
+    @Test
+    void GivenConcurrentUsersBelowCapacity_WhenEnterPurchase_ThenAllReceiveMap() throws Exception {
+        int usersCount = 10;
+
+        Response<String> eventResponse = companyEventService.createEvent(
                 validToken,
                 companyId,
-                LocalDateTime.now().plusDays(5),
-                "Future Event",
-                LocalDateTime.now().plusHours(2),
+                LocalDateTime.now().plusDays(5),          // eventDate
+                "Concurrent Event Below Capacity",
+                LocalDateTime.now().minusMinutes(10),     // saleStartDate already started
                 false,
                 GeographicalArea.CENTER,
                 CategoryEvent.SPORTS
         );
 
-        String futureEventId = r.getValue();
+        String concurrentEventId = eventResponse.getValue();
 
-        companyEventService.DefineVenueAndSeatingMap(validToken, futureEventId,
+        companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId,
                 stage, entries, standingZones, seatingZones);
 
-        Event futureEvent = eventRepo.findById(futureEventId);
-        futureEvent.setActive(true);
-        eventRepo.store(futureEvent);
+        List<String> tokens = new ArrayList<>();
+        for (int i = 0; i < usersCount; i++) {
+            String email = "concurrent" + i + "@mail.com";
+            UserService us = new UserService(tokenService, auth, userRepo, passwordEncoder);
 
-        Response<EventMapDTO> response = service.enterEventPurchase(validToken, companyId, futureEventId);
+            us.registerUser("", new UserDTO(
+                    email, "f" + i, "l" + i, "pass",
+                    1, 1, 2000, "Israel", "050-427-320" + i
+            ));
 
-        assertNull(response.getValue());
-        assertEquals("The sale for this event has not started yet", response.getMessage());
+            tokens.add(us.login(email, "pass").getValue());
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(usersCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<EventMapDTO>>> futures = new ArrayList<>();
+
+        for (String token : tokens) {
+            futures.add(executor.submit(() -> {
+                start.await();
+                return service.enterEventPurchase(token, companyId, concurrentEventId);
+            }));
+        }
+
+        start.countDown();
+
+        int success = 0;
+        int queued = 0;
+
+        for (Future<Response<EventMapDTO>> future : futures) {
+            Response<EventMapDTO> response = future.get();
+            if (response.getValue() != null) success++;
+            if ("Event is full, user added to waiting queue".equals(response.getMessage())) queued++;
+        }
+
+        executor.shutdown();
+
+        assertEquals(usersCount, success);
+        assertEquals(0, queued);
     }
 }

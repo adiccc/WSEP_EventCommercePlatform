@@ -25,6 +25,19 @@ public class EventQueue {
         }
     }
 
+    public int position(String token) {
+        int pos = 1;
+
+        for (String t : waitingUsers) {
+            if (t.equals(token)) {
+                return pos;
+            }
+            pos++;
+        }
+
+        return -1; // not found
+    }
+
     public boolean isFirst(String token) {
         return !waitingUsers.isEmpty() && waitingUsers.peek().equals(token);
     }
