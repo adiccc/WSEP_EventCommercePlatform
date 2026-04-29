@@ -42,7 +42,6 @@ public class SeatingZone extends Zone {
     }
 
 
-    //todo think about synchronization
     public Collection<Integer> bookTickets(List<String> seats) {
         List<Integer> bookedTicketIds = new ArrayList<>();
         for(String seat : seats) {
