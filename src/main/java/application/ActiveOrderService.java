@@ -5,8 +5,6 @@ import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
 import domain.dto.EventMapDTO;
 import domain.event.Event;
-import domain.event.EventMap;
-import domain.event.EventQueue;
 import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
@@ -27,10 +25,8 @@ public class ActiveOrderService {
     private final ICompanyRepo companyRepo;
     private final ILotteryRepo lotteryRepo;
     private final IAuth auth;
-    private final int capacity = 100;
-    private int orderExpireMinutes = 10;
-
-    private final int capacity;
+    private int capacity = 100;
+    private final int orderExpireMinutes = 10;
 
     public ActiveOrderService(IAuth auth, IActiveOrderRepo activeOrderRepo, IEventRepo eventRepo, ICompanyRepo companyRepo, ILotteryRepo lotteryRepo, int capacity) {
         this.eventRepo = eventRepo;
@@ -122,6 +118,8 @@ public class ActiveOrderService {
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
             return new Response<>(null, "Event not found");
+        } catch (OptimisticLockingFailureException e) {
+            throw e;
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Failed to select tickets : " + e.getMessage());
             return new Response<>(null, "Failed to select tickets : " + e.getMessage());

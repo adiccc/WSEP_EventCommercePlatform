@@ -36,6 +36,7 @@ public class StandingZone extends Zone {
         }
         this.available = zone.available;
     }
+
     public StandingZone(StandingZoneDTO standingZoneDTO) {
         super(standingZoneDTO.getName(),standingZoneDTO.getPrice(),standingZoneDTO.getPosition());
         this.capacity = standingZoneDTO.getCapacty();

@@ -11,6 +11,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class SeatingZone extends Zone {
     private Map<String, SeatingTicket> ticketMap;
     private AtomicInteger ticketIdGenerator = new AtomicInteger(1);
+    private int rows;
+    private int cols;
 
     public SeatingZone(String name, double price, int rows, int cols, ElementPosition elementPosition) {
         super(name, price, elementPosition);
@@ -21,6 +23,8 @@ public class SeatingZone extends Zone {
                     ticketMap.put(seatKey, new SeatingTicket(ticketIdGenerator.getAndIncrement(), i, j));
             }
         }
+        this.rows = rows;
+        this.cols = cols;
     }
     public SeatingZone(SeatingZone seatingZone) {
         super(seatingZone.getName(), seatingZone.getPrice(), seatingZone.getElementPosition());
@@ -28,6 +32,8 @@ public class SeatingZone extends Zone {
         for(Map.Entry<String, SeatingTicket> entry : seatingZone.ticketMap.entrySet()) {
             this.ticketMap.put(entry.getKey(), new SeatingTicket(entry.getValue()));
         }
+            this.rows = seatingZone.rows;
+            this.cols = seatingZone.cols;
     }
     public SeatingZone(SeatingZoneDTO seatingZoneDTO) {
         super(seatingZoneDTO.getName(), seatingZoneDTO.getPrice(), seatingZoneDTO.getPosition());
@@ -39,6 +45,8 @@ public class SeatingZone extends Zone {
                 ticketMap.put(i + "-" + j, new SeatingTicket(ticketIdGenerator.getAndIncrement(), i, j));
             }
         }
+        this.rows = rows;
+        this.cols = cols;
     }
 
 
@@ -63,4 +71,13 @@ public class SeatingZone extends Zone {
         }
         return bookedTicketIds;
     }
+
+    public int getRows() {
+        return rows;
+    }
+
+    public int getCols() {
+        return cols;
+    }
+
 }
