@@ -97,9 +97,9 @@ class ActiveOrderServiceTest {
         Response<String> r = companyEventService.createEvent(
                 validToken,
                 companyId,
-                LocalDateTime.now().plusDays(5),      //eventDate
+                LocalDateTime.now().plusDays(5),
                 "Test Event",
-                LocalDateTime.now().plusHours(2),     //saleStartDate
+                LocalDateTime.now().plusHours(2),     //saleStartDate is in the future
                 true,
                 GeographicalArea.CENTER,
                 CategoryEvent.SPORTS
@@ -183,7 +183,7 @@ class ActiveOrderServiceTest {
 
         List<String> tokens = new ArrayList<>();
         for (int i = 0; i < usersCount; i++) {
-            String email = "concurrent" + i + "@mail.com";
+            String email = "A" + i + "@mail.com";
 
             userService.registerUser("", new UserDTO(
                     email, "f" + i, "l" + i, "pass",
@@ -229,7 +229,7 @@ class ActiveOrderServiceTest {
 
         List<String> tokens = new ArrayList<>();
         for (int i = 0; i < usersCount; i++) {
-            String email = "overcap" + i + "@mail.com";
+            String email = "B" + i + "@mail.com";
 
             userService.registerUser("", new UserDTO(
                     email, "f" + i, "l" + i, "pass",
@@ -270,12 +270,11 @@ class ActiveOrderServiceTest {
 
 
     //two users race to claim  simultaneously. Exactly one user receives the event map.
-     //The other is added to the waiting queue — not silently dropped.
     @Test
     void GivenOneSlotRemaining_WhenEnterPurchase__ThenOnlyOneReceivesMap() throws Exception {
         //  Fill capacity - leave exactly one open
         for (int i = 0; i < capacity - 1; i++) {
-            String email = "lastslot_filler" + i + "@mail.com";
+            String email = "C" + i + "@mail.com";
             userService.registerUser("", new UserDTO(
                     email, "f" + i, "l" + i, "pass",
                     1, 1, 2000, "Israel", "050-600-9999"
@@ -316,7 +315,7 @@ class ActiveOrderServiceTest {
             return service.enterEventPurchase(tokenB, companyId, concurrentEventId);
         });
 
-        start.countDown(); // release both threads at the exact same moment
+        start.countDown();
 
         Response<EventMapDTO> responseA = futureA.get();
         Response<EventMapDTO> responseB = futureB.get();
@@ -328,8 +327,7 @@ class ActiveOrderServiceTest {
         if (responseA.getValue() != null) success++; else queued++;
         if (responseB.getValue() != null) success++; else queued++;
 
-        // The critical race-condition assertion:
-        // tryAcquireSlot must be atomic — two threads must never both win the last slot
+        // The critical race-condition assertion: two threads must never both win the last slot
         assertEquals(1, success);
         assertEquals(1, queued);
 
