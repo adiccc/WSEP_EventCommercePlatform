@@ -36,6 +36,7 @@ public class Member extends User{
         this.phoneNumber=member.phoneNumber;
         this.dateOfBirth=member.dateOfBirth;
         this.address=member.address;
+        this.isActive=member.isActive;
         this.version=member.version;
     }
     public long getVersion() {

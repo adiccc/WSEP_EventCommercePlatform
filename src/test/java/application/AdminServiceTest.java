@@ -336,7 +336,90 @@ class AdminServiceTest {
         // Assert: The refund failed, so the order status remains REFUND_REQUIRED
         Order updatedOrder = updatedEvent.findOrderById(1);
         assertEquals(domain.event.OrderStatus.REFUND_REQUIRED, updatedOrder.getStatus());
+    }
 
+    // ══════════════════════════════════════════════════════════════
+    // II.6.1  Remove User from System — Acceptance Tests
+    // ══════════════════════════════════════════════════════════════
+
+    /** Convenience: register a new user and return their assigned userId. */
+    private int registerUser(String email) {
+        userService.registerUser(null, new UserDTO(
+                email, "Test", "User", PASSWORD, 1, 1, 1995, "City", "050-999-0000"));
+        return userRepo.findUserByEmail(email).getUserId();
+    }
+
+    // --- Successful_Removal (plain member) ---
+    @Test
+    void GivenAdminToken_WhenRemovePlainUser_ThenUserDeactivated() {
+        int plainId = registerUser("plain@accept.com");
+
+        Response<Boolean> response = adminService.removeUser(adminToken, plainId);
+
+        assertFalse(response.isError(), "Expected success but got: " + response.getMessage());
+        assertTrue(response.getValue());
+        assertFalse(userRepo.findById(plainId).isActive(),
+                "User should be deactivated in the repo after removal");
+    }
+
+    // --- Unauthorized_Non_Admin ---
+    @Test
+    void GivenNonAdminToken_WhenRemoveUser_ThenUnauthorized() {
+        int plainId = registerUser("noadmin_target@accept.com");
+
+        Response<Boolean> response = adminService.removeUser(nonAdminToken, plainId);
+
+        assertTrue(response.isError());
+        assertTrue(response.getMessage().contains("Unauthorized"));
+        assertTrue(userRepo.findById(plainId).isActive(), "Target user should remain active");
+    }
+
+    // --- User_Not_Found ---
+    @Test
+    void GivenNonExistentUserId_WhenRemoveUser_ThenError() {
+        Response<Boolean> response = adminService.removeUser(adminToken, 99999);
+
+        assertTrue(response.isError());
+        assertTrue(response.getMessage().contains("not found"));
+    }
+
+    // --- User_Already_Removed ---
+    @Test
+    void GivenAlreadyRemovedUser_WhenRemoveUserAgain_ThenError() {
+        int userId = registerUser("once@accept.com");
+        adminService.removeUser(adminToken, userId); // first removal — succeeds
+
+        Response<Boolean> response = adminService.removeUser(adminToken, userId); // second attempt
+
+        assertTrue(response.isError());
+        assertTrue(response.getMessage().contains("already removed"));
+    }
+
+    // --- Founder_Blocked ---
+    @Test
+    void GivenUserIsCompanyFounder_WhenRemoveUser_ThenBlockedWithFounderError() {
+        // The admin user is the founder of the company created in setUp()
+        int adminId = userRepo.findUserByEmail(ADMIN_EMAIL).getUserId();
+
+        Response<Boolean> response = adminService.removeUser(adminToken, adminId);
+
+        assertTrue(response.isError());
+        assertTrue(response.getMessage().toLowerCase().contains("founder"),
+                "Error should mention 'founder'; got: " + response.getMessage());
+        assertTrue(userRepo.findById(adminId).isActive(), "Founder should remain active");
+    }
+
+    // --- Logged_Out_Admin_Token ---
+    @Test
+    void GivenLoggedOutAdminToken_WhenRemoveUser_ThenUnauthorized() {
+        int targetId = registerUser("target@accept.com");
+        userService.logout(adminToken); // invalidate the admin's session
+
+        Response<Boolean> response = adminService.removeUser(adminToken, targetId);
+
+        assertTrue(response.isError());
+        assertTrue(response.getMessage().contains("Unauthorized"));
+        assertTrue(userRepo.findById(targetId).isActive(), "Target user should not be removed");
     }
 
 

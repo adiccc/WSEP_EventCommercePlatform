@@ -1,183 +1,129 @@
 package application;
 
-import domain.company.Company;
-import domain.company.ContactInfo;
 import domain.company.ICompanyRepo;
-import domain.company.Permissions;
 import domain.dataType.PermissionType;
-import domain.dto.HierarchyDTO;
 import domain.dto.RolesPermissionsTreeDTO;
-import domain.event.IOrderRepo;
-import domain.event.Order;
-import domain.policy.DiscountPolicy;
-import domain.policy.PurchasePolicy;
+import domain.dto.UserDTO;
 import domain.user.IUserRepo;
+import infrastructure.Auth;
 import infrastructure.CompanyRepoImpl;
+import infrastructure.PasswordEncoderUtil;
+import infrastructure.UserRepo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 
 /**
- * Acceptance tests for II.4.15 – View roles and permissions tree.
+ * Acceptance tests for II.4.15 – View Roles and Permissions Tree.
  *
  * Use-case: a company owner requests the roles/permissions tree for their company.
  *
- * Actors       : company owner
+ * Actor         : company owner
  * Pre-conditions:
- *   - User is connected (valid token)
+ *   - User is logged in (valid token)
  *   - Company exists in the system
  *   - Requesting user is an owner of that company
  *
- * Acceptance tests (from the spec):
- *   Successful_View           – owner gets full tree (founder, owners, managers + permissions)
- *   Unauthorized_Access       – non-owner is rejected
- *   Company_Not_Found         – unknown companyId returns error
- *   Logged_Out_User_Access    – invalid/expired token returns error
+ * Test categories (black-box, no mocks — full real stack):
+ *   Successful_View        – owner gets the full tree (founder + owners, no managers = empty map)
+ *   Company_With_No_Managers – newly created company has empty managers map
+ *   Unauthorized_Access    – non-owner is rejected
+ *   Company_Not_Found      – unknown companyId returns error
+ *   Logged_Out_User_Access – invalid/expired token returns error
  */
-
-/*
 class ViewRolesAndPermissionsTreeTest {
 
-    private static final int COMPANY_ID   = 1;
-    private static final int FOUNDER_ID   = 100;   // also an owner
-    private static final int OWNER_ID     = 123;
-    private static final int NON_OWNER_ID = 456;
-    private static final int MANAGER_ID = 789;
+    private static final int COMPANY_ID = 1;
 
-    private static final String OWNER_TOKEN     = "owner-token";
-    private static final String NON_OWNER_TOKEN = "non-owner-token";
-    private static final String INVALID_TOKEN   = "invalid-or-expired-token";
+    private CompanyService companyService;
+    private UserService    userService;
+    private IAuth          auth;
 
-    private CompanyService service;
-    private Company company;
-
-    private IAuth buildAuth() {
-        return new IAuth() {
-            @Override public Response<String> login(String u, String p) { return Response.ok(""); }
-            @Override public Response<Boolean> logout(String token) {
-                return Response.ok(false);
-            }
-            @Override public Response<Boolean> isLoggedIn(String token) {
-                if(OWNER_TOKEN.equals(token) || NON_OWNER_TOKEN.equals(token)){
-                    return new Response<>(true, null);
-                }
-                else return new Response<>(false,"") ;
-            }
-            @Override public Response<Integer> getUserId(String token) {
-                if (OWNER_TOKEN.equals(token))     return new Response<>(OWNER_ID, "");
-                if (NON_OWNER_TOKEN.equals(token)) return new Response<>(NON_OWNER_ID,"");
-                return new Response<>(-1, "");
-            }
-            @Override public Response<Boolean> isAdmin(String token) { return new Response<>(false, ""); }
-        };
-    }
-
-    private IOrderRepo emptyOrderRepo() {
-        return new IOrderRepo() {
-            @Override public Order findById(Integer id) { return null; }
-            @Override public List<Order> getAll() { return new ArrayList<>(); }
-            @Override public void delete(Integer id) {}
-            @Override public void store(Order o) {}
-            @Override public int getTicketsBoughtByUserForEvent(int userId, int eventId) { return 0; }
-        };
-    }
+    private String ownerToken;
+    private String nonOwnerToken;
+    private int    ownerId;
 
     @BeforeEach
     void setUp() {
-        // Build the company with a founder, one extra owner, and one manager
-        company = new Company(
-                COMPANY_ID, "Test Company",
-                new ContactInfo("test@test.com", "0500000000", "bank-1"),
-                new PurchasePolicy(), new DiscountPolicy(),
-                new Permissions(FOUNDER_ID)
+        IUserRepo        userRepo        = new UserRepo();
+        ICompanyRepo     companyRepo     = new CompanyRepoImpl();
+        IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
+        TokenService     tokenService    = new TokenService();
+
+        auth           = new Auth(tokenService, userRepo, passwordEncoder);
+        userService    = new UserService(tokenService, auth, userRepo, passwordEncoder);
+        companyService = new CompanyService(auth, companyRepo, userRepo);
+
+        // Register and log in the future company owner
+        UserDTO ownerDTO = new UserDTO(
+                "owner@test.com", "Owner", "Tester", "Password123!",
+                1, 1, 1990, "Tel Aviv", "050-111-1111");
+        userService.registerUser(null, ownerDTO);
+        ownerToken = userService.login("owner@test.com", "Password123!").getValue();
+        ownerId    = auth.getUserId(ownerToken).getValue();
+
+        // Register and log in a user who will NOT be an owner of any company
+        UserDTO nonOwnerDTO = new UserDTO(
+                "viewer@test.com", "Viewer", "Tester", "Password123!",
+                1, 1, 1992, "Haifa", "050-222-2222");
+        userService.registerUser(null, nonOwnerDTO);
+        nonOwnerToken = userService.login("viewer@test.com", "Password123!").getValue();
+
+        // Create a company — the logged-in owner automatically becomes the founder
+        companyService.createProductionCompany(
+                ownerToken, COMPANY_ID, "RoleTestCompany",
+                "info@roletest.com", "050-333-3333", "bank-acc-1"
         );
-
-        // Add an extra owner (OWNER_ID), appointed by the founder
-        company.getCompanyPermission().addOwner(OWNER_ID);
-
-        // Add a manager with some permissions, appointed by OWNER_ID
-        HierarchyDTO managerDTO = new HierarchyDTO(
-                OWNER_ID, new ArrayList<>(),
-                EnumSet.of(PermissionType.MANAGE_EVENTS_INVENTORY, PermissionType.VIEW_PURCHASE_HISTORY)
-        );
-        company.getManagersPermissionsMap().put(MANAGER_ID, managerDTO);
-
-        ICompanyRepo companyRepo = new CompanyRepoImpl();
-        companyRepo.store(company);
-
-        service = new CompanyService(buildAuth(), companyRepo, mock(IUserRepo.class));
     }
 
     // ── Successful_View ────────────────────────────────────────────────────────
 
     @Test
-    void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenReturnsFullTree() {
-        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID);
+    void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenReturnsTree() {
+        Response<RolesPermissionsTreeDTO> response =
+                companyService.viewRolesAndPermissionsTree(ownerToken, COMPANY_ID);
 
         assertFalse(response.isError(), "Expected success but got: " + response.getMessage());
-        RolesPermissionsTreeDTO tree = response.getValue();
-        assertNotNull(tree);
-
-        // Founder is correct
-        assertEquals(FOUNDER_ID, tree.getFounderId());
-
-        // Owner set contains both founder and the extra owner
-        assertTrue(tree.getOwnerIds().contains(FOUNDER_ID));
-        assertTrue(tree.getOwnerIds().contains(OWNER_ID));
-
-        // Manager entry with expected permissions
-        assertTrue(tree.getManagersPermissions().containsKey(MANAGER_ID));
-        assertTrue(tree.getManagersPermissions().get(MANAGER_ID).contains(PermissionType.MANAGE_EVENTS_INVENTORY));
-        assertTrue(tree.getManagersPermissions().get(MANAGER_ID).contains(PermissionType.VIEW_PURCHASE_HISTORY));
+        assertNotNull(response.getValue());
     }
 
     @Test
-    void GivenCompanyWithNoManagers_WhenViewRolesTree_ThenManagersMapIsEmpty() {
-        Company freshCompany = new Company(
-                2, "Fresh Co",
-                new ContactInfo("a@b.com", "050", "bank"),
-                new PurchasePolicy(), new DiscountPolicy(),
-                new Permissions(FOUNDER_ID)
-        );
-        ICompanyRepo repo2 = new CompanyRepoImpl();
-        repo2.store(freshCompany);
+    void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenFounderIdIsCorrect() {
+        RolesPermissionsTreeDTO tree =
+                companyService.viewRolesAndPermissionsTree(ownerToken, COMPANY_ID).getValue();
 
-        IAuth auth2 = new IAuth() {
-            @Override public Response<String> login(String u, String p) { return Response.ok(""); }
-            @Override public Response<Boolean> logout(String t) {
-                return Response.ok(false);
-            }
-            @Override public Response<Boolean> isLoggedIn(String t) {
-                if(OWNER_TOKEN.equals(t)){
-                    return new Response<>(true,null);
-                }
-                else return new Response<>(false,"");
-            }
-            @Override public Response<Integer> getUserId(String t) {
-                return new Response<>(FOUNDER_ID, "");
-            }
-            @Override public Response<Boolean> isAdmin(String t) { return new Response<>(false, ""); }
-        };
+        assertEquals(ownerId, tree.getFounderId(),
+                "Founder should be the user who created the company");
+    }
 
-        CompanyService svc2 = new CompanyService(auth2, repo2, mock(IUserRepo.class));
+    @Test
+    void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenOwnerSetContainsFounder() {
+        RolesPermissionsTreeDTO tree =
+                companyService.viewRolesAndPermissionsTree(ownerToken, COMPANY_ID).getValue();
 
-        Response<RolesPermissionsTreeDTO> response = svc2.viewRolesAndPermissionsTree(OWNER_TOKEN, 2);
+        assertTrue(tree.getOwnerIds().contains(ownerId),
+                "Founder is automatically an owner");
+    }
 
-        assertFalse(response.isError());
-        assertTrue(response.getValue().getManagersPermissions().isEmpty());
+    // --- Company_With_No_Managers ---
+
+    @Test
+    void GivenNewCompanyWithNoManagers_WhenViewRolesTree_ThenManagersMapIsEmpty() {
+        RolesPermissionsTreeDTO tree =
+                companyService.viewRolesAndPermissionsTree(ownerToken, COMPANY_ID).getValue();
+
+        assertTrue(tree.getManagersPermissions().isEmpty(),
+                "A brand-new company has no managers");
     }
 
     // ── Unauthorized_Access ────────────────────────────────────────────────────
 
     @Test
     void GivenNonOwner_WhenViewRolesTree_ThenError() {
-        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree(NON_OWNER_TOKEN, COMPANY_ID);
+        Response<RolesPermissionsTreeDTO> response =
+                companyService.viewRolesAndPermissionsTree(nonOwnerToken, COMPANY_ID);
 
         assertTrue(response.isError());
         assertNull(response.getValue());
@@ -187,7 +133,8 @@ class ViewRolesAndPermissionsTreeTest {
 
     @Test
     void GivenUnknownCompanyId_WhenViewRolesTree_ThenError() {
-        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree(OWNER_TOKEN, 999);
+        Response<RolesPermissionsTreeDTO> response =
+                companyService.viewRolesAndPermissionsTree(ownerToken, 9999);
 
         assertTrue(response.isError());
         assertNull(response.getValue());
@@ -197,18 +144,22 @@ class ViewRolesAndPermissionsTreeTest {
 
     @Test
     void GivenInvalidToken_WhenViewRolesTree_ThenError() {
-        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree(INVALID_TOKEN, COMPANY_ID);
+        Response<RolesPermissionsTreeDTO> response =
+                companyService.viewRolesAndPermissionsTree("not-a-real-token", COMPANY_ID);
 
         assertTrue(response.isError());
         assertNull(response.getValue());
     }
 
     @Test
-    void GivenExpiredToken_WhenViewRolesTree_ThenError() {
-        Response<RolesPermissionsTreeDTO> response = service.viewRolesAndPermissionsTree("-1", COMPANY_ID);
+    void GivenLoggedOutUser_WhenViewRolesTree_ThenError() {
+        // Log the owner out so their token is no longer valid
+        auth.logout(ownerToken);
+
+        Response<RolesPermissionsTreeDTO> response =
+                companyService.viewRolesAndPermissionsTree(ownerToken, COMPANY_ID);
 
         assertTrue(response.isError());
         assertNull(response.getValue());
     }
 }
-*/
