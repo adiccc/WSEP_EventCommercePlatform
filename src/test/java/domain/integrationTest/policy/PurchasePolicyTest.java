@@ -122,11 +122,10 @@ class PurchasePolicyTest {
     }
 
     @Test
-    void GivenOneInvalidRule_WhenIsValid_ThenReturnFalse() {
+    void GivenInvalidRule_WhenAddRule_ThenThrowsIllegalArgument() {
         PurchasePolicy policy = new PurchasePolicy();
         policy.addRule(new MaxTicketsRule(4));
-        policy.addRule(new MaxTicketsRule(-1));
-        assertFalse(policy.isValid());
+        assertThrows(IllegalArgumentException.class, () -> policy.addRule(new MaxTicketsRule(-1)));
     }
 
     @Test
