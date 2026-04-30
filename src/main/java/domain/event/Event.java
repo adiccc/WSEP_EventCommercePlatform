@@ -265,4 +265,9 @@ public class Event {
     public List<Integer> bookTickets(boolean member, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return eventMap.bookTickets(seatingZones,standingZones);
     }
+
+    //TODO : this implementation is for test only, this function should be implemented currectly
+    public void placeOrder(int userId,int orderId){
+        orders.add(new Order(orderId,userId," ",new ArrayList<>(),100.0,"order123"));
+    }
 }

@@ -8,12 +8,14 @@ import domain.dto.SeatingTicketDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
+import domain.event.*;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
@@ -142,4 +144,12 @@ public class ActiveOrderService {
 
     });}
 
+    //TODO : this implementation is for test only, this function should be implemented currectly
+    public Response<Boolean> placeOrder(String token, String eventId, int orderId) {
+        Event event =eventRepo.findById(eventId);
+        int userId=auth.getUserId(token).getValue();
+        event.placeOrder(userId,orderId);
+        eventRepo.store(event);
+        return new Response<>(true, "Order placed successfully");
+    }
 }
