@@ -9,12 +9,12 @@ import java.util.List;
 public class ActiveOrder {
     private int orderId;
     private int userId;
-    private String eventId;
+    private Integer eventId;
     private List<Integer> tickets;
     private LocalDateTime expireTime;
     private long version;
 
-    public ActiveOrder(int orderId, int userId, String eventId, List<Integer> tickets, int expireMinutes) {
+    public ActiveOrder(int orderId, int userId, Integer eventId, List<Integer> tickets, int expireMinutes) {
         this.orderId = orderId;
         this.userId = userId;
         this.eventId = eventId;
@@ -44,7 +44,7 @@ public class ActiveOrder {
         return orderId;
     }
 
-    public String getEventId() {
+    public Integer getEventId() {
         return eventId;
     }
 

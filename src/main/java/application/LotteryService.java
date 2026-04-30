@@ -30,7 +30,7 @@ public class LotteryService {
         this.scheduler = Executors.newScheduledThreadPool(10);
     }
 
-    public Response<Boolean> createLottery(String token, String eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
+    public Response<Boolean> createLottery(String token, int eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "createLottery called");
 
@@ -102,7 +102,7 @@ public class LotteryService {
 
 
     //Executes the actual lottery draw. This method is called automatically by the scheduler.
-    public void drawLottery(String lotteryId) {
+    public void drawLottery(int lotteryId) {
         logger.log(Level.INFO, "Starting draw for lottery ID: " + lotteryId);
         try {
             // Retrieve the lottery from the database
@@ -123,7 +123,7 @@ public class LotteryService {
     }
 
     // TODO: this implemetation is for test only, this function should be implemented
-    public Response<Boolean> registerUserToLottery(String token, String eventId) {
+    public Response<Boolean> registerUserToLottery(String token, int eventId) {
         Lottery lottery=lotteryRepo.findById(eventId);
         int userId = auth.getUserId(token).getValue();
         lottery.registerUserToLottery(userId);

@@ -41,8 +41,8 @@ class ActiveOrderServiceTest {
 
     private int userId1;
     private String validToken;
-    private String eventId;
-    private String concurrentEventId;
+    private Integer eventId;
+    private Integer concurrentEventId;
 
     private TokenService tokenService;
     private IUserRepo userRepo;
@@ -96,7 +96,7 @@ class ActiveOrderServiceTest {
 
         companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
 
-        Response<String> r = companyEventService.createEvent(
+        Response<Integer> r = companyEventService.createEvent(
                 validToken,
                 companyId,
                 LocalDateTime.now().plusDays(5),
@@ -107,7 +107,7 @@ class ActiveOrderServiceTest {
                 CategoryEvent.SPORTS
         );
 
-        Response<String> eventResponse = companyEventService.createEvent(
+        Response<Integer> eventResponse = companyEventService.createEvent(
                 validToken,
                 companyId,
                 LocalDateTime.now().plusDays(5),
@@ -156,7 +156,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenNonExistingEvent_WhenEnterPurchase_ThenEventNotFound() {
-        Response<EventMapDTO> response = service.enterEventPurchase(validToken, companyId, "bad-id");
+        Response<EventMapDTO> response = service.enterEventPurchase(validToken, companyId, -1);
 
         assertNull(response.getValue());
         assertEquals("Event not found", response.getMessage());
@@ -437,7 +437,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 1);
 
-        Response<Integer> response = service.guestSelectTickets(validToken, "bad-id", seating, standing);
+        Response<Integer> response = service.guestSelectTickets(validToken, -1, seating, standing);
 
         assertNull(response.getValue());
         assertEquals("Event not found", response.getMessage());

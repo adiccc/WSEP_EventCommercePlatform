@@ -26,7 +26,7 @@ public class EventService {
         this.auth = auth;
     }
 
-    public Response<EventDetailsDTO> ViewEventDetails(String token, int companyId, String eventId) {
+    public Response<EventDetailsDTO> ViewEventDetails(String token, int companyId, Integer eventId) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "ViewEventDetails called");
@@ -35,7 +35,7 @@ public class EventService {
             if (!auth.isLoggedIn(token).getValue()) {
                 return new Response<>(null, "Invalid token");
             }
-            if (eventId == null || eventId.isEmpty()) {
+            if (eventId == null) {
                 return new Response<>(null, "Invalid event ID");
             }
             try {
