@@ -90,7 +90,7 @@ class EventCompanyManageServiceTest {
         eventService=new EventService(auth,eventRepo);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,100,10);
 
         //should delete oreder repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo);

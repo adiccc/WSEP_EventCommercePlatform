@@ -21,12 +21,14 @@ import java.util.List;
 import java.util.Map;
 
 import java.util.NoSuchElementException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 
-import static domain.config.PurchaseConfig.MAX_ACTIVE_ORDERS_PER_EVENT;
 
 public class ActiveOrderService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
@@ -39,7 +41,8 @@ public class ActiveOrderService {
     private final IPaymentSystem paymentSystem;
     private final ITicketSupply ticketSupply;
     private int capacity = 100;
-    private final int orderExpireMinutes = 10;
+    private final int orderExpireMinutes;
+    private final ScheduledExecutorService cleanupScheduler;
 
 
     public ActiveOrderService(
@@ -50,7 +53,8 @@ public class ActiveOrderService {
             ILotteryRepo lotteryRepo,
             IPaymentSystem paymentSystem,
             ITicketSupply ticketSupply,
-            int capacity) {
+            int capacity,
+            int orderExpireMinutes) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
@@ -59,7 +63,23 @@ public class ActiveOrderService {
         this.paymentSystem = paymentSystem;
         this.ticketSupply = ticketSupply;
         this.capacity = capacity;
-       // this.capacity = MAX_ACTIVE_ORDERS_PER_EVENT;
+        this.orderExpireMinutes = orderExpireMinutes;
+        this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "active-order-cleanup");
+            t.setDaemon(true);
+            return t;
+        });
+
+        cleanupScheduler.scheduleAtFixedRate(
+                () -> {
+                    try {
+                        cleanupExpiredOrders();
+                    } catch (Throwable ex) {
+                        logger.log(Level.SEVERE, "Cleanup failed: " + ex.getMessage());
+                    }
+                },
+                30, 30, TimeUnit.SECONDS
+        );
     }
 
     public Response<EventMapDTO> enterEventPurchase(String token, int companyId, int eventId) {
@@ -156,7 +176,6 @@ public class ActiveOrderService {
     public Response<Integer>userSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return RetryHelper.executeWithRetry(()->{
         logger.log(Level.INFO, "userSelectTickets called");
-
         try {
             this.activeOrderRepo.alreadyHasActiveOrder(auth.getUserId(identifier).getValue(), eventId);
             int totalSeatingTickets = seatingZones.values().stream()
@@ -166,9 +185,9 @@ public class ActiveOrderService {
             int totalStandingTickets = standingZones.values().stream()
                     .mapToInt(Integer::intValue)
                     .sum();
-
             int totalTickets = totalSeatingTickets + totalStandingTickets;
             Event e = this.eventRepo.findById(eventId);
+            //todo: handle user/ guest
             Response<UserDTO> userResponse = auth.getUserDTO(identifier);
             e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
             int orderId = idGenerator.getAndIncrement();
@@ -187,7 +206,6 @@ public class ActiveOrderService {
             logger.log(Level.SEVERE, "Failed to select tickets : " + e.getMessage());
             return new Response<>(null, "Failed to select tickets : " + e.getMessage());
         }
-
     });}
 
     public void cleanupExpiredOrders() {
@@ -215,6 +233,10 @@ public class ActiveOrderService {
                 // swallow — keep processing other orders
             }
         }
+    }
+
+    public void shutdown() {
+        cleanupScheduler.shutdown();
     }
 
     //TODO : this implementation is for test only, this function should be implemented currectly
