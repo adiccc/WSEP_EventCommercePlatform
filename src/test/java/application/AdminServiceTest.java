@@ -338,9 +338,9 @@ class AdminServiceTest {
         assertEquals(domain.event.OrderStatus.REFUND_REQUIRED, updatedOrder.getStatus());
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // II.6.1  Remove User from System — Acceptance Tests
-    // ══════════════════════════════════════════════════════════════
+    // ============================================================
+    // II.6.1  Remove User from System - Acceptance Tests
+    // ============================================================
 
     /** Convenience: register a new user and return their assigned userId. */
     private int registerUser(String email) {
@@ -387,7 +387,7 @@ class AdminServiceTest {
     @Test
     void GivenAlreadyRemovedUser_WhenRemoveUserAgain_ThenError() {
         int userId = registerUser("once@accept.com");
-        adminService.removeUser(adminToken, userId); // first removal — succeeds
+        adminService.removeUser(adminToken, userId); // first removal - succeeds
 
         Response<Boolean> response = adminService.removeUser(adminToken, userId); // second attempt
 
@@ -422,6 +422,38 @@ class AdminServiceTest {
         assertTrue(userRepo.findById(targetId).isActive(), "Target user should not be removed");
     }
 
+    // --- Concurrency: Remove User ---
+    @Test
+    void GivenTwoThreadsRaceToRemoveSameUser_WhenRemoveUser_ThenOnlyOneSucceeds() throws Exception {
+        int targetId = registerUser("race_remove@accept.com");
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        java.util.concurrent.Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return adminService.removeUser(adminToken, targetId);
+        });
+        java.util.concurrent.Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return adminService.removeUser(adminToken, targetId);
+        });
+
+        start.countDown();
+
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = 0;
+        int failed  = 0;
+        if (!r1.isError()) success++; else failed++;
+        if (!r2.isError()) success++; else failed++;
+
+        assertEquals(1, success, "Only one removal should succeed");
+        assertEquals(1, failed,  "The second thread should see 'already removed'");
+        assertFalse(userRepo.findById(targetId).isActive(), "User must be deactivated exactly once");
+    }
 
     // Race Condition
     @Test

@@ -14,6 +14,10 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -55,10 +59,6 @@ class CompanyServiceUpdatedTest {
         OTHER_USER_ID = auth.getUserId(OTHER_TOKEN).getValue();
 
         service.createProductionCompany(OWNER_TOKEN,COMPANY_ID,"Test Company","test@test.com","0500000000","bank-1");
-//        company = new Company(COMPANY_ID, "Test Company", OWNER_ID,
-//                new ContactInfo("test@test.com", "0500000000", "bank-1"),
-//                new PurchasePolicy(), new DiscountPolicy());
-//        companyRepo.store(company);
     }
 
     // ===================== Get Available Companies =====================
@@ -462,5 +462,67 @@ class CompanyServiceUpdatedTest {
 
         assertTrue(response.isError());
         assertNull(response.getValue());
+    }
+
+    // ===================== Concurrency: Create Production Company =====================
+
+    @Test
+    void GivenTwoThreadsRaceWithSameCompanyId_WhenCreateProductionCompany_ThenOnlyOneSucceeds() throws Exception {
+        int racingId = 50;
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Company>> f1 = executor.submit(() -> {
+            start.await();
+            return service.createProductionCompany(OWNER_TOKEN, racingId, "CompanyA", "a@a.com", "050-111-0001", "bank-a");
+        });
+        Future<Response<Company>> f2 = executor.submit(() -> {
+            start.await();
+            return service.createProductionCompany(OTHER_TOKEN, racingId, "CompanyB", "b@b.com", "050-111-0002", "bank-b");
+        });
+
+        start.countDown();
+
+        Response<Company> r1 = f1.get();
+        Response<Company> r2 = f2.get();
+        executor.shutdown();
+
+        int success = 0;
+        int failed  = 0;
+        if (!r1.isError()) success++; else failed++;
+        if (!r2.isError()) success++; else failed++;
+
+        assertEquals(1, success, "Exactly one thread should successfully create the company");
+        assertEquals(1, failed,  "The losing thread should receive a duplicate-ID error");
+    }
+
+    @Test
+    void GivenTwoThreadsRaceWithSameCompanyName_WhenCreateProductionCompany_ThenOnlyOneSucceeds() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Company>> f1 = executor.submit(() -> {
+            start.await();
+            return service.createProductionCompany(OWNER_TOKEN, 60, "RacingName", "c@c.com", "050-222-0001", "bank-c");
+        });
+        Future<Response<Company>> f2 = executor.submit(() -> {
+            start.await();
+            return service.createProductionCompany(OTHER_TOKEN, 61, "RacingName", "d@d.com", "050-222-0002", "bank-d");
+        });
+
+        start.countDown();
+
+        Response<Company> r1 = f1.get();
+        Response<Company> r2 = f2.get();
+        executor.shutdown();
+
+        int success = 0;
+        int failed  = 0;
+        if (!r1.isError()) success++; else failed++;
+        if (!r2.isError()) success++; else failed++;
+
+        assertEquals(1, success, "Only one company with the same name should be created");
+        assertEquals(1, failed,  "The losing thread should receive a duplicate-name error");
     }
 }
