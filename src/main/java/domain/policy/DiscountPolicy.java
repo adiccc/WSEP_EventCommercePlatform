@@ -1,5 +1,8 @@
 package domain.policy;
 
+import DTO.DiscountDTO;
+
+import java.security.Policy;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,6 +25,28 @@ public class DiscountPolicy implements Discount {
             }
         }
     }
+
+    public static Discount dtoToDiscount(DiscountDTO discount) {
+        if(discount==null){
+            return null;
+        }
+        if(discount.getType()== DiscountDTO.Type.LIMITED){
+            return new LimitedDiscount(discount.getPercentage(), discount.getMinQuantity());
+        }
+        if(discount.getType()== DiscountDTO.Type.CODE_COUPON){
+            return new CodeCoupun(discount.getCode(), discount.getPercentage(),discount.getEndDate());
+        }
+        if(discount.getType()== DiscountDTO.Type.VISUAL){
+            return new VisualDiscount(discount.getPercentage(), discount.getEndDate());
+        }
+        if (discount.getType()==DiscountDTO.Type.Policy){
+            Discount discountPolicy = new DiscountPolicy();
+            for(Discount d : discount.getDiscounts())
+                discountPolicy.addDiscount(d);
+        }
+        return null;
+    }
+
     public void addDiscount(Discount discount) {
         if (!discount.isValid())
             throw new IllegalArgumentException("Invalid discount data");

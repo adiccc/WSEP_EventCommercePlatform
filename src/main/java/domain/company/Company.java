@@ -3,115 +3,85 @@ package domain.company;
 import DTO.DiscountDTO;
 import DTO.PurchaseRuleDTO;
 import domain.dataType.PermissionType;
-import domain.policy.CodeCoupun;
-import domain.policy.Discount;
-import domain.policy.DiscountPolicy;
-import domain.policy.LimitedDiscount;
-import domain.policy.MaxTicketsRule;
-import domain.policy.MinAgeRule;
-import domain.policy.Purchase;
-import domain.policy.PurchasePolicy;
-import domain.policy.VisualDiscount;
+import domain.policy.*;
+import domain.activeOrder.ActiveOrder;
+import domain.dataType.PermissionType;
+import domain.dto.HierarchyDTO;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class Company {
     private int companyId;
     private String companyName;
     private boolean isActive;
-
     private ContactInfo contactInfo;
     private PurchasePolicy purchasePolicy;
     private DiscountPolicy discountPolicy;
-
-    private int founderId;
-    private Set<Integer> ownerIds;
-    private Map<String, ManagerAppointment> managersPermissionsMap;
+    private Permissions companyPermission;
     private long version;
 
-    public Company(int companyId, String companyName, int founderId, ContactInfo contactInfo,
-                   PurchasePolicy defaultPurchase, DiscountPolicy defaultDiscount) {
+    public Company(int companyId, String companyName, ContactInfo contactInfo,
+                   PurchasePolicy defaultPurchase, DiscountPolicy defaultDiscount,
+                   Permissions companyPermission) {
         this.companyId = companyId;
         this.companyName = companyName;
-        this.founderId = founderId;
         this.contactInfo = contactInfo;
-
         this.purchasePolicy = defaultPurchase;
         this.discountPolicy = defaultDiscount;
+        this.companyPermission = companyPermission;
         this.isActive = true;
-        this.ownerIds = new HashSet<>();
-        this.ownerIds.add(founderId);
-        this.managersPermissionsMap = new HashMap<>();
-        this.purchasePolicy = new PurchasePolicy();
-        this.discountPolicy = new DiscountPolicy();
         this.version = 0;
     }
+
+    /** Deep-copy constructor — used by the repo for defensive copying */
     public Company(Company company) {
-        this.companyId = company.getCompanyId();
-        this.companyName = company.getCompanyName();
-        this.founderId = company.getFounderId();
-        this.contactInfo = new ContactInfo(company.getContactInfo());
-        this.purchasePolicy = new PurchasePolicy(company.getPurchasePolicy());
-        this.discountPolicy = new DiscountPolicy(company.getDiscountPolicy());
+        this.companyId = company.companyId;
+        this.companyName = company.companyName;
+        this.contactInfo = new ContactInfo(company.contactInfo);
+        this.purchasePolicy = new PurchasePolicy(company.purchasePolicy);
+        this.discountPolicy = new DiscountPolicy(company.discountPolicy);
         this.isActive = company.isActive;
-        this.ownerIds = new HashSet<>(company.getOwnerIds());
-        this.managersPermissionsMap = company.managersPermissionsMap.entrySet().stream()
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        e -> new ManagerAppointment(e.getValue())
-                ));
-        this.version=company.version;
+        this.companyPermission = new Permissions(company.companyPermission);
+        this.version = company.version;
     }
 
-    public long getVersion() {
-        return version;
-    }
-    public void setVersion(long version) {
-        this.version = version;
-    }
-
-    public void updatePurchasePolicy(int userId, PurchasePolicy newPolicy) {
-        if (!isActive)
-            throw new IllegalStateException("Company is not active");
-        if (!ownerIds.contains(userId))
-            throw new SecurityException("User does not have permission to update purchase policy");
-        if (!newPolicy.isValid())
-            throw new IllegalArgumentException("Invalid policy data");
-        this.purchasePolicy = newPolicy;
-    }
-    
+    public long getVersion() { return version; }
+    public void setVersion(long version) { this.version = version; }
 
     public void deactivate() { this.isActive = false; }
 
-    public boolean isOwner(int userId) { return ownerIds.contains(userId); }
-
-    public boolean checkPermission(int userId, PermissionType permissionType) {
-        // TODO: to implement (just for the test before we have the real implementation)
-        if (userId > 1) {
-            return false;
-        }
-        return true;
-    }
-
+    // --- Getters ---
     public int getCompanyId() { return companyId; }
     public String getCompanyName() { return companyName; }
     public boolean isActive() { return isActive; }
-    public int getFounderId() { return founderId; }
     public ContactInfo getContactInfo() { return contactInfo; }
     public PurchasePolicy getPurchasePolicy() { return purchasePolicy; }
     public DiscountPolicy getDiscountPolicy() { return discountPolicy; }
-    public Set<Integer> getOwnerIds() { return ownerIds; }
-    public Map<String, ManagerAppointment> getManagersPermissionsMap() { return managersPermissionsMap; }
+    public Permissions getCompanyPermission() { return companyPermission; }
+
+    public void addDiscount(int userId, DiscountDTO discount) {
+        if (!companyPermission.checkPermission(userId, PermissionType.MANAGE_POLICIES)) {
+            throw new SecurityException("User does not have permission to add discount policy");
+        }
+        discountPolicy.addDiscount(DiscountPolicy.dtoToDiscount(discount));
+    }
+
+    public void removeDiscount(int userId, DiscountDTO discount) {
+        if (!companyPermission.checkPermission(userId, PermissionType.MANAGE_POLICIES)) {
+            throw new SecurityException("User does not have permission to remove discount policy");
+        }
+        discountPolicy.removeDiscount(DiscountPolicy.dtoToDiscount(discount));
+    }
 
     public void addRule(int userId, PurchaseRuleDTO dto) {
         if (!checkPermission(userId, PermissionType.MANAGE_POLICIES) && !isOwner(userId))
             throw new SecurityException("User does not have permission to add purchase rule");
         if (!isActive)
             throw new IllegalStateException("Company is not active");
-        purchasePolicy.addRule(toRule(dto));
+        purchasePolicy.addRule(PurchasePolicy.dtoToPurchase(dto));
     }
 
     public void removeRule(int userId, PurchaseRuleDTO dto) {
@@ -119,33 +89,24 @@ public class Company {
             throw new SecurityException("User does not have permission to remove purchase rule");
         if (!isActive)
             throw new IllegalStateException("Company is not active");
-        purchasePolicy.removeRule(toRule(dto));
+        purchasePolicy.removeRule(PurchasePolicy.dtoToPurchase(dto));
     }
 
-    public void addDiscount(int userId, DiscountDTO dto) {
-        if (!checkPermission(userId, PermissionType.MANAGE_POLICIES) && !isOwner(userId))
-            throw new SecurityException("User does not have permission to add discount");
-        discountPolicy.addDiscount(toDiscount(dto));
+    public int getFounderId() { return companyPermission.getFounderId(); }
+    public Set<Integer> getOwnerIds() { return companyPermission.getOwnerIds(); }
+    public boolean isOwner(int userId) { return companyPermission.isOwner(userId); }
+    public boolean checkPermission(int userId, PermissionType permission) {
+        return companyPermission.checkPermission(userId, permission);
     }
-
-    public void removeDiscount(int userId, DiscountDTO dto) {
-        if (!checkPermission(userId, PermissionType.MANAGE_POLICIES) && !isOwner(userId))
-            throw new SecurityException("User does not have permission to remove discount");
-        discountPolicy.removeDiscount(toDiscount(dto));
+    public Map<Integer, HierarchyDTO> getManagersPermissionsMap() {
+        return companyPermission.getCompanyTree();
     }
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
 
-    private Purchase toRule(PurchaseRuleDTO dto) {
-        return switch (dto.getType()) {
-            case MIN_AGE -> new MinAgeRule(dto.getMinAge());
-            case MAX_TICKETS -> new MaxTicketsRule(dto.getMaxTickets());
-        };
-    }
-
-    private Discount toDiscount(DiscountDTO dto) {
-        return switch (dto.getType()) {
-            case VISUAL -> new VisualDiscount(dto.getPercentage(), dto.getEndDate());
-            case CODE_COUPON -> new CodeCoupun(dto.getCode(), dto.getPercentage(), dto.getEndDate());
-            case LIMITED -> new LimitedDiscount(dto.getPercentage(), dto.getMinQuantity());
-        };
+        Company other = (Company) obj;
+        return companyId==other.companyId && version == other.getVersion();
     }
 }

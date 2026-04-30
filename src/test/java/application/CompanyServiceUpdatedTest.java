@@ -2,6 +2,8 @@ package application;
 
 import DTO.DiscountDTO;
 import DTO.PurchaseRuleDTO;
+import Log.LoggerSetup;
+import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
 import domain.dto.CompanyDTO;
@@ -28,10 +30,12 @@ class CompanyServiceUpdatedTest {
     private UserService userService;
     private ICompanyRepo companyRepo;
     private IAuth auth;
+    private IUserRepo userRepo;
 
     @BeforeEach
     void setUp() {
-        IUserRepo userRepo = new UserRepo();
+        LoggerSetup.setup();
+        userRepo = new UserRepo();
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         TokenService tokenService = new TokenService();
         auth = new Auth(tokenService, userRepo, passwordEncoder);

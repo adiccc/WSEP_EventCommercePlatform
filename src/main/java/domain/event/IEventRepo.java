@@ -10,5 +10,5 @@ import java.util.List;
 
 public interface IEventRepo  extends IRepo<Event, String> {
     List<Event> findByCompany(int companyId);
-
+    List<Event> findByCreator(int creatorId);
 }

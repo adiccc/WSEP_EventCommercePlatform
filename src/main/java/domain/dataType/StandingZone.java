@@ -34,4 +34,12 @@ public class StandingZone extends Zone {
             this.tickets.add(new StandingTicket());
         }
     }
+
+    public int getCapacity() {
+        return capacity;
+    }
+
+     public List<StandingTicket> getTickets() {
+        return tickets;
+    }
 }

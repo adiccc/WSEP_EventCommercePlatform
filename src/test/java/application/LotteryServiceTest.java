@@ -1,5 +1,6 @@
 package application;
 
+import Log.LoggerSetup;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.UserDTO;
@@ -34,6 +35,9 @@ class LotteryServiceTest {
     private String eventId;
 
     private String validToken;
+    private String validToken1;
+    private String validToken2;
+    private String validToken3;
     private IAuth auth;
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
@@ -43,6 +47,7 @@ class LotteryServiceTest {
 
     @BeforeEach
     void setUp() {
+        LoggerSetup.setup();
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
         tokenService = new TokenService();
@@ -121,6 +126,40 @@ class LotteryServiceTest {
         );
 
         eventId = eventResponse.getValue();
+
+        // more valid users
+
+        // user with permission
+        UserDTO userDTO2 = new UserDTO(
+                "user11@test.com",
+                "test1",
+                "first",
+                "test1",
+                15,
+                4,
+                2002,
+                "Omer",
+                "050-427-3201"
+        );
+
+        userService.registerUser(null, userDTO2);
+        validToken2=userService.login("user11@test.com", "test1").getValue();
+
+        UserDTO userDTO3 = new UserDTO(
+                "user12@test.com",
+                "test1",
+                "first",
+                "test1",
+                15,
+                4,
+                2002,
+                "Omer",
+                "050-427-3201"
+        );
+
+        userService.registerUser(null, userDTO3);
+        validToken3=userService.login("user12@test.com", "test1").getValue();
+
     }
 
     // ==========================================
@@ -240,11 +279,12 @@ class LotteryServiceTest {
         LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
         lotteryService.createLottery(validToken, eventId, 2, lotteryDate_X, (long) 24.0);
 
-        // TODO: use service function to registerate users to the lottery
+        lotteryService.registerUserToLottery(validToken, eventId);
+        lotteryService.registerUserToLottery(validToken1, eventId);
+        lotteryService.registerUserToLottery(validToken2, eventId);
+        lotteryService.registerUserToLottery(validToken3, eventId);
         // Retrieve the newly created lottery to simulate users registering
         Lottery lottery = lotteryRepo.getAll().get(0);
-        lottery.getRegistered().addAll(List.of(101, 102, 103, 104)); // 4 users register
-        lotteryRepo.store(lottery); // Save state
 
         // Act: Manually trigger the draw (simulating the scheduler waking up)
         lotteryService.drawLottery(lottery.getId());
@@ -263,10 +303,10 @@ class LotteryServiceTest {
         LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
         lotteryService.createLottery(validToken, eventId, 10, lotteryDate_X, (long) 24.0);
 
-        // TODO: use service function to registerate users to the lottery
         Lottery lottery = lotteryRepo.getAll().get(0);
-        lottery.getRegistered().addAll(List.of(101, 102, 103)); // Only 3 users register
-        lotteryRepo.store(lottery);
+        lotteryService.registerUserToLottery(validToken, eventId);
+        lotteryService.registerUserToLottery(validToken1, eventId);
+        lotteryService.registerUserToLottery(validToken2, eventId);
 
         // Act: Manually trigger the draw
         lotteryService.drawLottery(lottery.getId());

@@ -1,9 +1,11 @@
 package infrastructure;
 
 import domain.event.Event;
+import domain.event.EventQueue;
 import domain.event.IEventRepo;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import Exception.OptimisticLockingFailureException;
 
@@ -11,7 +13,7 @@ public class EventRepoImpl implements IEventRepo {
     Map<String,Event> events; // key: eventId, value: event
 
     public EventRepoImpl() {
-        events = new HashMap<>();
+        events = new ConcurrentHashMap<>();
     }
 
     public Event findById(String id) {
@@ -44,6 +46,13 @@ public class EventRepoImpl implements IEventRepo {
             return;
         }
 
+        if (currentEvent.getVersion() != entity.getVersion()) {
+            throw new OptimisticLockingFailureException(
+                    "Event " + entity.getId() + " version mismatch. Expected: " +
+                            entity.getVersion() + ", but found: " + currentEvent.getVersion()
+            );
+        }
+
         Event updatedEvent = new Event(entity);
         updatedEvent.setVersion(entity.getVersion() + 1);
 
@@ -51,15 +60,23 @@ public class EventRepoImpl implements IEventRepo {
 
         if (!replaced) {
             throw new OptimisticLockingFailureException(
-                    "Event " + entity.getId() + " version mismatch. Expected: " +
-                            entity.getVersion() + ", but found: " + currentEvent.getVersion()
+                    "Event " + entity.getId() + " was modified concurrently"
             );
         }
     }
+
     @Override
     public List<Event> findByCompany(int companyId) {
         return events.values().stream()
                 .filter(e -> e.getCompanyId() == companyId)
+                .map(Event::new)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<Event> findByCreator(int creatorId) {
+        return events.values().stream()
+                .filter(e -> e.getCreatorId() == creatorId)
                 .map(Event::new)
                 .collect(Collectors.toList());
     }

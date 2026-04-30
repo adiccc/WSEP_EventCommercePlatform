@@ -1,11 +1,14 @@
 package application;
-
+import domain.company.Company;
+import domain.company.ICompanyRepo;
 import DTO.QueueEntryResultDTO;
 import domain.dto.UserDTO;
 import domain.user.Member;
 import domain.user.IUserRepo;
+import application.IAuth;
+import Exception.OptimisticLockingFailureException;
+import domain.user.User;
 import domain.webQueue.WebQueue;
-
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.util.logging.Logger;
@@ -19,7 +22,8 @@ public class UserService {
     private final IPasswordEncoder passwordEncoder;
     private final IUserRepo userRepo;
 
-    public UserService(TokenService tokenService, IAuth auth, IUserRepo userRepo, IPasswordEncoder passwordEncoder) {
+    public UserService(TokenService tokenService, IAuth auth, IUserRepo userRepo,
+                       IPasswordEncoder passwordEncoder) {
         this.tokenService = tokenService;
         this.auth = auth;
         this.userRepo = userRepo;
@@ -129,6 +133,8 @@ public class UserService {
                 userRepo.store(member);
                 logger.info("Registration successful for email: " + email);
                 return Response.ok(true);
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Registration failed due to unexpected server error for email " + dto.getEmail() + ". Error: " + e.getMessage());
                 return Response.error(e.getMessage());
@@ -165,6 +171,8 @@ public class UserService {
                 WebQueue.getInstance().notifyUserLeft();
                 logger.info("Logout successful for token: " + token);
                 return response;
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Logout failed due to unexpected server error for token: " + token);
                 return Response.error(e.getMessage());

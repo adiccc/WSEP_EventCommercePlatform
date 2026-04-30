@@ -1,6 +1,7 @@
 package domain.unitTest.Event;
 
 import domain.dataType.CategoryEvent;
+import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
 import domain.event.Event;
 import domain.event.EventMap;
@@ -66,5 +67,84 @@ class EventTest {
         assertFalse(event.isAvailableForSale(), "Event should not be available - no map and date is in the future.");
     }
 
+    @Test
+    void GivenMatchingKeyword_WhenMatches_ThenReturnTrue() {
+        Event event = new Event(
+                companyId,
+                creatorId,
+                LocalDateTime.now().plusDays(1), // future
+                "Football Game",
+                LocalDateTime.now().minusDays(1), // sale started
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS
+        );
+        event.setActive(true);
+
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setKeyword("football");
+
+        assertTrue(event.matches(filter));
+    }
+
+    @Test
+    void GivenNonMatchingKeyword_WhenMatches_ThenReturnFalse() {
+        Event event = new Event(
+                companyId,
+                creatorId,
+                LocalDateTime.now().plusDays(1), // future
+                "Basketball Game",
+                LocalDateTime.now().minusDays(1), // sale started
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS
+        );
+        event.setActive(true);
+
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setKeyword("football");
+
+        assertFalse(event.matches(filter));
+    }
+
+    @Test
+    void GivenDateOutOfRange_WhenMatches_ThenReturnFalse() {
+        Event event = new Event(
+                companyId,
+                creatorId,
+                LocalDateTime.now().plusDays(1), // future
+                "Football Game",
+                LocalDateTime.now().minusDays(1), // sale started
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS
+        );
+        event.setActive(true);
+
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setStartDate(LocalDateTime.now().plusDays(2));
+
+        assertFalse(event.matches(filter));
+    }
+
+    @Test
+    void GivenCategoryMismatch_WhenMatches_ThenReturnFalse() {
+        Event event = new Event(
+                companyId,
+                creatorId,
+                LocalDateTime.now().plusDays(1), // future
+                "Football Game",
+                LocalDateTime.now().minusDays(1), // sale started
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS
+        );
+        event.setActive(true);
+
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setCategory(CategoryEvent.FESTIVAL);
+
+        assertFalse(event.matches(filter));
+    }
 
 }

@@ -1,6 +1,7 @@
 package application;
 
 import DTO.QueueEntryResultDTO;
+import Log.LoggerSetup;
 import domain.dto.UserDTO;
 import domain.user.IUserRepo;
 import domain.user.Member;
@@ -26,6 +27,7 @@ class UserServiceTest {
 
     @BeforeEach
     void setUp() {
+        LoggerSetup.setup();
         WebQueue.resetForTesting();
         WebQueue.getInstance(100);
 
@@ -33,7 +35,6 @@ class UserServiceTest {
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
         auth = new Auth(realTokenService, userRepo, passwordEncoder, Set.of());
-
         userService = new UserService(realTokenService, auth, userRepo, passwordEncoder);
     }
 

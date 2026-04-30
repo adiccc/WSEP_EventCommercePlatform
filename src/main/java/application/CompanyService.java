@@ -1,15 +1,13 @@
 package application;
 
 import java.util.*;
+import java.util.NoSuchElementException;
 import java.util.logging.Logger;
-import java.util.Map;
-import java.util.Set;
-import domain.company.Company;
-import domain.company.ContactInfo;
-import domain.company.ICompanyRepo;
-import domain.company.ManagerAppointment;
+import Exception.OptimisticLockingFailureException;
+import domain.company.*;
 import domain.dataType.PermissionType;
 import domain.dto.CompanyDTO;
+import domain.dto.HierarchyDTO;
 import domain.dto.RolesPermissionsTreeDTO;
 import domain.event.IOrderRepo;
 import DTO.DiscountDTO;
@@ -53,14 +51,17 @@ public class CompanyService {
                     return new Response<>(null, "User must be logged in to create a company.");
                 }
 
-
                 if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
                     return new Response<>(null, "Invalid contact or bank account information.");
                 }
 
                 synchronized (companyRepo) {
-                    if (companyRepo.existsById(companyId)) {
+                    try {
+                        companyRepo.findById(companyId);
+                        // no exception → company already exists
                         return new Response<>(null, "Company ID already exists in the system.");
+                    } catch (NoSuchElementException ignored) {
+                        // expected: company does not exist yet, continue
                     }
                     if (companyRepo.existsByName(companyName)) {
                         return new Response<>(null, "Company name is already taken.");
@@ -69,8 +70,9 @@ public class CompanyService {
                     ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
                     PurchasePolicy defaultPurchase = new PurchasePolicy();
                     DiscountPolicy defaultDiscount = new DiscountPolicy();
-                    Company newCompany = new Company(companyId, companyName, userId,
-                            contactInfo, defaultPurchase, defaultDiscount);
+                    Permissions companyPermission = new Permissions(userId);
+                    Company newCompany = new Company(companyId, companyName,
+                            contactInfo, defaultPurchase, defaultDiscount, companyPermission);
 
                     Founder founderRole = new Founder(companyId);
                     user.addRole(founderRole);
@@ -82,6 +84,8 @@ public class CompanyService {
                     return new Response<>(newCompany, "Production company created successfully.");
                 }
 
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch(Exception e){
                 logger.severe("Failed to create company " + companyName + ". Error: " + e.getMessage());
                 return new Response<>(null, "System error occurred: " + e.getMessage());
@@ -102,8 +106,8 @@ public class CompanyService {
         {
             logger.info("viewRolesAndPermissionsTree called for companyId: " + companyId);
             try {
-                // 1. Validate token (covers "user not logged in")
-                if (!auth.isLoggedIn(token).getValue()) {
+                // 1. Validate token
+                if (auth.isLoggedIn(token).isError()) {
                     logger.warning("viewRolesAndPermissionsTree failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
@@ -112,32 +116,31 @@ public class CompanyService {
 
                 // 2. Company must exist
                 Company company = companyRepo.findById(companyId);
-                if (company == null) {
-                    logger.warning("viewRolesAndPermissionsTree failed: company not found, id: " + companyId);
-                    return Response.error("Company not found");
-                }
 
                 // 3. Requesting user must be an owner
-                if (!company.isOwner(userId)) {
+                if (!company.getCompanyPermission().isOwner(userId)) {
                     logger.warning("viewRolesAndPermissionsTree failed: user " + userId + " is not an owner of company " + companyId);
                     return Response.error("User does not have permission to view roles and permissions");
                 }
 
                 // 4. Build the roles tree
-                Map<String, Set<PermissionType>> managersPermissions = new HashMap<>();
-                for (Map.Entry<String, ManagerAppointment> entry : company.getManagersPermissionsMap().entrySet()) {
-                    managersPermissions.put(entry.getKey(), entry.getValue().getPermissions());
+                Map<Integer, Set<PermissionType>> managersPermissions = new HashMap<>();
+                for (Map.Entry<Integer, HierarchyDTO> entry : company.getCompanyPermission().getCompanyTree().entrySet()) {
+                    managersPermissions.put(entry.getKey(), entry.getValue().getAllPermissions());
                 }
-
                 RolesPermissionsTreeDTO tree = new RolesPermissionsTreeDTO(
-                        company.getFounderId(),
-                        company.getOwnerIds(),
+                        company.getCompanyPermission().getFounderId(),
+                        company.getCompanyPermission().getOwnerIds(),
                         managersPermissions
                 );
-
                 logger.info("viewRolesAndPermissionsTree succeeded for companyId: " + companyId);
                 return Response.ok(tree);
 
+            } catch (NoSuchElementException e) {
+                logger.warning("viewRolesAndPermissionsTree failed: company not found, id: " + companyId);
+                return Response.error("Company not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in viewRolesAndPermissionsTree for companyId: " + companyId + ". Error: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
@@ -183,6 +186,8 @@ public class CompanyService {
             } catch (IllegalStateException e) {
                 logger.warning("addRuleToCompany invalid state: " + e.getMessage());
                 return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in addRuleToCompany: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
@@ -287,6 +292,8 @@ public class CompanyService {
                 logger.warning("addDiscountToCompany invalid state: " + e.getMessage());
                 return Response.error(e.getMessage());
 
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in addDiscountToCompany: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
@@ -346,12 +353,15 @@ public class CompanyService {
                 logger.warning("removeDiscountFromCompany invalid state: " + e.getMessage());
                 return Response.error(e.getMessage());
 
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in removeDiscountFromCompany: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
         });
     }
+
     public Response<List<CompanyDTO>> getAvailableCompanies(String token) { //TODO taking care of guest part, additional input : String guestUuid
         return RetryHelper.executeWithRetry(() ->
         {
@@ -374,8 +384,7 @@ public class CompanyService {
                 for (Company company : allCompanies) {
                     // isUserPermitted means or the company is active
                     // if the company isn't active only members who are owners and have the right permitting can access
-                    //TODO when check permission is implemented change just for a call to that function
-                    boolean isUserPermitted = company.isActive() || (isMember && (company.isOwner(userId) || company.checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES)));
+                    boolean isUserPermitted = company.isActive() || (isMember && (company.getCompanyPermission().isOwner(userId) || company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES)));
                     if (isUserPermitted) {
                         filteredCompanies.add(new CompanyDTO(
                                 company.getCompanyId(),
@@ -392,6 +401,8 @@ public class CompanyService {
             } catch (SecurityException e) {
                 logger.warning("getAvailableCompanies unauthorized: " + e.getMessage());
                 return new Response<>(null, "Invalid or expired token");
+            }   catch (OptimisticLockingFailureException e) {
+                throw e;
             }
         });
     }
@@ -404,10 +415,6 @@ public class CompanyService {
                 logger.warning("deactivateCompany failed: invalid or expired token");
                 return new Response<>(false, "Invalid or expired token, deactivate failed");
             }
-            if (!companyRepo.existsById(companyId)) {
-                logger.warning("deactivateCompany failed: company not found, id: " + companyId);
-                return new Response<>(false, "Company not found");
-            }
             try {
                 Company company = companyRepo.findById(companyId);
                 if (company.isActive()) {
@@ -419,6 +426,11 @@ public class CompanyService {
                     logger.warning("deactivateCompany failed: company is already deactivated, id: " + companyId);
                     return new Response<>(false, "Company is already deactivated");
                 }
+            } catch (NoSuchElementException e) {
+                logger.warning("deactivateCompany failed: company not found, id: " + companyId);
+                return new Response<>(false, "Company not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in deactivateCompany: " + e.getMessage());
                 return new Response<>(false, "Unexpected error: " + e.getMessage());

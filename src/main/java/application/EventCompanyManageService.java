@@ -6,8 +6,7 @@ import DTO.StandingZoneDTO;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.*;
-import domain.dto.CompanyDetailsDTO;
-import domain.dto.EventDTO;
+import domain.dto.*;
 import domain.event.Event;
 import domain.event.EventMap;
 import domain.event.EventQueue;
@@ -21,9 +20,10 @@ import domain.lottery.ILotteryRepo;
 import domain.user.Member;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
+import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Set;
 import java.util.logging.*;
 
 import java.util.List;
@@ -65,8 +65,13 @@ public class EventCompanyManageService {
                 int eventCreator = event.getCreatorId();
                 Company c = this.companyRepo.findById(companyId);
 
+                if(!c.isActive()){
+                    logger.severe("Company is closed, cannot define venue and seating map for events of this company");
+                    return new Response<>(false, "Company is closed, cannot define venue and seating map for events of this company");
+                }
+
                 // check appropriate permission
-                if (userId != eventCreator || !c.checkPermission(userId, CREATE_EVENT)) {
+                if (userId != eventCreator || !c.getCompanyPermission().checkPermission(userId, CREATE_EVENT)) {
                     logger.severe("User does not have permission to define venue and seating map for this event");
                     return new Response<>(false, "Permission required");
                 }
@@ -101,6 +106,8 @@ public class EventCompanyManageService {
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "failed creating a map : " + e.getMessage());
                 return new Response<>(false, "failed to create map : " + e.getMessage());
@@ -124,7 +131,13 @@ public class EventCompanyManageService {
 
             try {
                 Company c = this.companyRepo.findById(companyId);
-                if (!c.checkPermission(creatorId, CREATE_EVENT)) {
+
+                if(!c.isActive()){
+                    logger.severe("Company is closed, cannot define venue and seating map for events of this company");
+                    return new Response<>(null, "Company is closed, cannot define venue and seating map for events of this company");
+                }
+
+                if (!c.getCompanyPermission().checkPermission(creatorId, CREATE_EVENT)) {
                     logger.severe("User does not have permission to create event for this company");
                     return new Response<>(null, "Permission required");
                 }
@@ -152,6 +165,8 @@ public class EventCompanyManageService {
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "company not found: " + e.getMessage());
                 return new Response<>(null, "Company not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
                 return new Response<>(null, "failed to create event : " + e.getMessage());
@@ -189,6 +204,8 @@ public class EventCompanyManageService {
                 eventRepo.store(event);
                 logger.log(Level.INFO, "Event updated successfully");
                 return new Response<>(true, "Event updated successfully");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
                 return new Response<>(false, "failed to create event : " + e.getMessage());
@@ -261,6 +278,8 @@ public class EventCompanyManageService {
                 logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
 
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "failed adding zones to event map : " + e.getMessage());
                 return new Response<>(false, "failed to add zones to event map : " + e.getMessage());
@@ -278,6 +297,10 @@ public class EventCompanyManageService {
             }
             try{
                 Event event = eventRepo.findById(eventId);
+                if (!event.isActive()){
+                    logger.severe("Event is not active yet, cannot be deleted");
+                    return new Response<>(false, "Event is not active yet, cannot be deleted");
+                }
                 if(event.getDate().isBefore(LocalDateTime.now())) {
                     logger.severe("Event deletion can be on future events only");
                     return new Response<>(false, "Event deletion can be on future events only");
@@ -299,18 +322,25 @@ public class EventCompanyManageService {
                 event=eventRepo.findById(eventId);
                 orders = event.getOrders();
                 for(Order order : orders){
-                    processRefund(token,eventId,order.getOrderId());
+                    try {
+                        processRefund(token, event.getId(), order.getOrderId());
+                    } catch (Exception e) {
+                        logger.log(Level.SEVERE, "Failed to process automatic refund for order " +
+                                order.getOrderId() + " in event " + event.getId() + ": " + e.getMessage());
+                    }
                 }
                 logger.log(Level.INFO, "Orders deleted successfully");
                 return new Response<>(true, "Orders deleted successfully");
-            }catch(Exception e){
+            }catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch(Exception e){
                 logger.log(Level.SEVERE, "failed delete event : " + e.getMessage());
                 return new Response<>(false, "failed to detele event : " + e.getMessage());
             }
         });
     }
 
-    public Response<List<Order>> getOrdersByCompany(String token, int companyId) {
+    public Response<List<OrderDTO>> getOrdersByCompany(String token, int companyId) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "getOrdersByCompany called");
@@ -324,7 +354,7 @@ public class EventCompanyManageService {
                 Company company = companyRepo.findById(companyId);
 
                 // validate relevant permissions
-                if (!company.checkPermission(userId, VIEW_ORDERS_HISTORY)) {
+                if (!company.getCompanyPermission().checkPermission(userId, VIEW_ORDERS_HISTORY)) {
                     logger.log(Level.SEVERE, "Permission required");
                     return new Response<>(null, "Permission required");
                 }
@@ -340,18 +370,23 @@ public class EventCompanyManageService {
                     logger.log(Level.SEVERE, "No orders found for company " + companyId);
                     return new Response<>(null, "No orders found for company " + companyId);
                 }
+
+                List<OrderDTO> orderDTOs = orders.stream().map(OrderDTO::new).toList();
                 logger.log(Level.INFO, "Orders found: " + orders.size());
-                return new Response<>(orders, "orders found");
+                return new Response<>(orderDTOs, "Orders found");
 
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "company not found: " + e.getMessage());
                 return new Response<>(null, "company not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "failed getOrdersByCompany : " + e.getMessage());
                 return new Response<>(null, "failed getOrdersByCompany : " + e.getMessage());
             }
         });
     }
+
     public Response<CompanyDetailsDTO> getCompanyDetails(String token, int companyId) {
         return RetryHelper.executeWithRetry(() ->
         {
@@ -364,8 +399,7 @@ public class EventCompanyManageService {
                 }
                 int userId = auth.getUserId(token).getValue();
                 boolean isMember = userId != -1;
-                //TODO when check permission is implemented change just for a call to that function
-                boolean isUserPermitted = company.isActive() || (isMember && (company.isOwner(userId) || company.checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES)));
+                boolean isUserPermitted = company.isActive() || (isMember || company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES));
                 if (!isUserPermitted) {
                     logger.log(Level.SEVERE, "User is not permitted to view closed companies");
                     return new Response<>(null, "User is not permitted to view closed companies");
@@ -390,7 +424,6 @@ public class EventCompanyManageService {
                         company.getContactInfo().getPhone(),
                         company.getPurchasePolicy().describe(),
                         company.getDiscountPolicy().describe(),
-                        company.getFounderId(),
                         futureEvents);
                 if (futureEvents.isEmpty()) {
                     logger.log(Level.INFO, "No future events found for company " + companyId);
@@ -398,12 +431,71 @@ public class EventCompanyManageService {
                 }
                 logger.log(Level.INFO, "Company details found: " + companyDetailsDTO);
                 return new Response<>(companyDetailsDTO, "Company details found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "failed getCompanyDetails : " + e.getMessage());
                 return new Response<>(null, "failed getCompanyDetails : " + e.getMessage());
             }
         });
     }
+
+    public Response<SalesReportDTO> generateSalesReports(int companyId, String token){
+        return RetryHelper.executeWithRetry(() -> {
+        logger.log(Level.INFO, "generateSalesReports called");
+        try {
+            Company company = companyRepo.findById(companyId);
+            if (company == null) {
+                logger.log(Level.SEVERE, "company not found");
+                return new Response<>(null, "company not found");
+            }
+            int userId = auth.getUserId(token).getValue();
+            boolean isMember = userId != -1;
+            boolean isUserPermitted = isMember && (company.getCompanyPermission().checkPermission(userId, PermissionType.GENERATE_SALES_REPORTS)); 
+            //The requerment is just for the Owner 
+            if (!isUserPermitted) {
+                logger.log(Level.SEVERE, "User is not permitted to generate sales report");
+                return new Response<>(null, "User is not permitted generate sales report");
+            }
+            Set<Integer> allsSubTree = company.getCompanyPermission().getSubTreeAppointees(userId);
+            double totalRevenue = 0;
+            int totalTicketsSold = 0;
+            List<EventSalesRecordDTO> events = new ArrayList<>();
+            List<Event> allEvents = eventRepo.findByCompany(companyId);
+            for (Event e : allEvents) {
+                if(allsSubTree.contains(e.getCreatorId())){
+                    double eventRevnue = 0;
+                    int eventTicketsSold = 0;
+                    for(Order o : e.getOrders()){
+                        eventRevnue += o.getTotalSum();
+                        eventTicketsSold += o.getNumOfTickets();
+
+                        totalRevenue += o.getTotalSum();
+                        totalTicketsSold += o.getNumOfTickets();
+                    }
+                    if(eventTicketsSold>0) {
+                        EventSalesRecordDTO eventSalesRecordDTO = new EventSalesRecordDTO(e.getId(), e.getName(), e.getCreatorId(), eventTicketsSold, eventRevnue);
+                        events.add(eventSalesRecordDTO);
+                    }
+                }
+            }
+            if(events.isEmpty()){
+                logger.log(Level.WARNING, "No sales data found for company " + companyId);
+                return new Response<>(new SalesReportDTO(companyId,totalRevenue,totalTicketsSold,new ArrayList<>()), "No future events found for company " + companyId);
+            }
+            SalesReportDTO result = new SalesReportDTO(companyId,totalRevenue,totalTicketsSold,events);
+            logger.log(Level.INFO, "Sales Report generated successfully");
+            return new Response<>(result, "Sales Report generated successfully");
+        }
+        catch (OptimisticLockingFailureException e) {
+            throw e;
+        } catch(Exception e){
+            logger.log(Level.SEVERE, "failed generate sales report : " + e.getMessage());
+            return new Response<>(null, "failed generate sales report : " + e.getMessage());
+        }
+        });
+    }
+
     public Response<Boolean> processRefund(String token, String eventId, int orderId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");
@@ -449,6 +541,8 @@ public class EventCompanyManageService {
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
                 return new Response<>(false, "Failed to process refund: " + e.getMessage());
