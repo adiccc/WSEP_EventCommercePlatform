@@ -16,7 +16,6 @@ class SeatingZoneTest {
 
     @BeforeEach
     void setUp() {
-        // אתחול אזור ישיבה: שם, מחיר, 2 שורות, 3 עמודות, מיקום התחלתי
         seatingZone = new SeatingZone("zone A", 50.0, 2, 3, new ElementPosition(0, 0));
     }
 
@@ -70,7 +69,6 @@ class SeatingZoneTest {
                 () -> seatingZone.bookTickets(List.of(ticket))
         );
 
-        // וידוא שהודעת השגיאה עדיין מתייחסת לכיסא הנכון
         assertEquals("Seat 1-1 is not available.", exception.getMessage());
     }
 }
