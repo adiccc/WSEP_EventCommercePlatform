@@ -12,11 +12,14 @@ public class Order {
     private double totalSum;
     String paymentConfirmationId;
 
-    public Order(int orderId, int userId, String eventId, List<Integer> tickets,double totalSum, String paymentConfirmationId) {
+
+    public Order(int orderId, int userId, String eventId,
+                 List<Integer> tickets, double totalSum,
+                 String paymentConfirmationId) {
         this.orderId = orderId;
         this.userId = userId;
         this.eventId = eventId;
-        this.tickets = tickets;
+        this.tickets = new ArrayList<>(tickets);
         this.status = OrderStatus.APPROVED;
         this.totalSum = totalSum;
         this.paymentConfirmationId = paymentConfirmationId;

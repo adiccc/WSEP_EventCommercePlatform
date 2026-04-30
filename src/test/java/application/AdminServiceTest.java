@@ -42,6 +42,7 @@ class AdminServiceTest {
     private ICompanyRepo companyRepo;
     private IUserRepo userRepo;
     private IPaymentSystem paymentSystem;
+    private ITicketSupply ticketSupply;
     private IEventRepo eventRepo;
     private EventCompanyManageService eventCompanyManageService;
     private CompanyService companyService;
@@ -79,7 +80,7 @@ class AdminServiceTest {
 
         IActiveOrderRepo activeOrderRepo =new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo = new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,100);
 
         eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
         companyService = new CompanyService(auth, companyRepo, userRepo);

@@ -30,6 +30,7 @@ public class ActiveOrder {
         this.tickets = new ArrayList<>(activeOrder.tickets);
         this.expireTime = activeOrder.expireTime;
         this.version = activeOrder.version;
+
     }
 
     public long getVersion() {
@@ -47,6 +48,17 @@ public class ActiveOrder {
         return eventId;
     }
 
+    public int getUserId() {
+        return userId;
+    }
+
+    public List<Integer> getTickets() {
+        return new ArrayList<>(tickets);
+    }
+
+    public boolean hasTickets() {
+        return tickets != null && !tickets.isEmpty();
+    }
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
@@ -54,9 +66,7 @@ public class ActiveOrder {
 
         ActiveOrder other = (ActiveOrder) obj;
         return orderId==other.orderId && version == other.getVersion();
+
     }
 
-        public int getUserId() {
-            return userId;
-        }
 }

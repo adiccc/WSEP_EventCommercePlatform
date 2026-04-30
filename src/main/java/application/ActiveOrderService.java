@@ -1,5 +1,8 @@
 package application;
 
+import DTO.TicketSupplyRequestDTO;
+import DTO.TicketSupplyResultDTO;
+
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
@@ -13,13 +16,17 @@ import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
+
 import java.util.List;
 import java.util.Map;
-import java.util.List;
+
 import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+
+import static domain.config.PurchaseConfig.MAX_ACTIVE_ORDERS_PER_EVENT;
 
 public class ActiveOrderService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
@@ -29,16 +36,30 @@ public class ActiveOrderService {
     private final ICompanyRepo companyRepo;
     private final ILotteryRepo lotteryRepo;
     private final IAuth auth;
+    private final IPaymentSystem paymentSystem;
+    private final ITicketSupply ticketSupply;
     private int capacity = 100;
     private final int orderExpireMinutes = 10;
 
-    public ActiveOrderService(IAuth auth, IActiveOrderRepo activeOrderRepo, IEventRepo eventRepo, ICompanyRepo companyRepo, ILotteryRepo lotteryRepo, int capacity) {
+
+    public ActiveOrderService(
+            IAuth auth,
+            IActiveOrderRepo activeOrderRepo,
+            IEventRepo eventRepo,
+            ICompanyRepo companyRepo,
+            ILotteryRepo lotteryRepo,
+            IPaymentSystem paymentSystem,
+            ITicketSupply ticketSupply,
+            int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
         this.lotteryRepo = lotteryRepo;
         this.auth = auth;
+        this.paymentSystem = paymentSystem;
+        this.ticketSupply = ticketSupply;
         this.capacity = capacity;
+       // this.capacity = MAX_ACTIVE_ORDERS_PER_EVENT;
     }
 
     public Response<EventMapDTO> enterEventPurchase(String token, int companyId, String eventId) {
@@ -104,6 +125,31 @@ public class ActiveOrderService {
         });
     }
 
+    public Response<TicketSupplyResultDTO> issueTickets(TicketSupplyRequestDTO request) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "issueTickets called");
+
+            if (request == null) {
+                return new Response<>(null, "Invalid ticket supply request");
+            }
+
+            try {
+                TicketSupplyResultDTO result = ticketSupply.issue(request);
+
+                if (result == null || !result.isSuccess()) {
+                    return new Response<>(result, "Ticket issuance failed");
+                }
+
+                return new Response<>(result, "Tickets issued successfully");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Ticket issuance failed: " + e.getMessage());
+                return new Response<>(null, "Ticket issuance failed");
+            }
+        });
+    }
 
     public Response<Integer>guestSelectTickets(String identifier, String eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return RetryHelper.executeWithRetry(()->{
@@ -144,6 +190,7 @@ public class ActiveOrderService {
     });}
 
     //TODO : this implementation is for test only, this function should be implemented currectly
+
     public Response<Boolean> placeOrder(String token, String eventId, int orderId) {
         Event event =eventRepo.findById(eventId);
         int userId=auth.getUserId(token).getValue();
