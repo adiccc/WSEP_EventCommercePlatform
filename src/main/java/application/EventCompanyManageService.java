@@ -41,7 +41,7 @@ public class EventCompanyManageService {
         this.paymentSystem = paymentSystem;
     }
 
-    public Response<Boolean> DefineVenueAndSeatingMap(String token, String eventId, ElementPositionDTO stage,
+    public Response<Boolean> DefineVenueAndSeatingMap(String token, Integer eventId, ElementPositionDTO stage,
             List<ElementPositionDTO> entries, List<StandingZoneDTO> standingZone, List<SeatingZoneDTO> seatingZone) {
         return RetryHelper.executeWithRetry(() ->
         {
@@ -110,7 +110,7 @@ public class EventCompanyManageService {
 
     }
 
-    public Response<String> createEvent(String token, int companyId, LocalDateTime date, String name,
+    public Response<Integer> createEvent(String token, int companyId, LocalDateTime date, String name,
             LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent category) {
         return RetryHelper.executeWithRetry(() ->
         {
@@ -168,7 +168,7 @@ public class EventCompanyManageService {
         });
     }
 
-    public Response<Boolean> UpdateEventDate(String token, String eventId, LocalDateTime date) {
+    public Response<Boolean> UpdateEventDate(String token, Integer eventId, LocalDateTime date) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "UpdateEventDate called");
@@ -209,7 +209,7 @@ public class EventCompanyManageService {
     }
 
     // adding new zones to an existing map of an event
-    public Response<Boolean> AddZonesToEventMap(String token, String eventId, List<StandingZoneDTO> standingZone,
+    public Response<Boolean> AddZonesToEventMap(String token, Integer eventId, List<StandingZoneDTO> standingZone,
             List<SeatingZoneDTO> seatingZone) {
         return RetryHelper.executeWithRetry(() ->
         {
@@ -281,7 +281,7 @@ public class EventCompanyManageService {
         });
     }
 
-    public Response<Boolean> DeleteEvent(String token, String eventId) {
+    public Response<Boolean> DeleteEvent(String token, Integer eventId) {
         return RetryHelper.executeWithRetry(()->{
             logger.log(Level.INFO, "DeleteEvent called");
             int userId = auth.getUserId(token).getValue();
@@ -490,7 +490,7 @@ public class EventCompanyManageService {
         });
     }
 
-    public Response<Boolean> processRefund(String token, String eventId, int orderId) {
+    public Response<Boolean> processRefund(String token, Integer eventId, int orderId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");
 

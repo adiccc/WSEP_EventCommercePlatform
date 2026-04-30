@@ -1,8 +1,6 @@
 package application;
 
-import DTO.ElementPositionDTO;
-import DTO.SeatingZoneDTO;
-import DTO.StandingZoneDTO;
+import DTO.*;
 import Log.LoggerSetup;
 import java.util.HashMap;
 import java.util.Map;
@@ -24,6 +22,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import static domain.config.PurchaseConfig.MAX_ACTIVE_ORDERS_PER_EVENT;
 import static org.junit.jupiter.api.Assertions.*;
 
 import org.mockito.Mockito;
@@ -38,11 +37,12 @@ class ActiveOrderServiceTest {
     private LotteryRepoImpl lotteryRepo;
     private EventCompanyManageService companyEventService;
     private IPaymentSystem paymentSystem;
+    private ITicketSupply ticketSupply;
 
     private int userId1;
     private String validToken;
-    private String eventId;
-    private String concurrentEventId;
+    private Integer eventId;
+    private Integer concurrentEventId;
 
     private TokenService tokenService;
     private IUserRepo userRepo;
@@ -88,6 +88,7 @@ class ActiveOrderServiceTest {
         lotteryRepo = new LotteryRepoImpl();
 
         paymentSystem = Mockito.mock(IPaymentSystem.class);
+        ticketSupply = Mockito.mock(ITicketSupply.class);
 
         CompanyService companyService = new CompanyService(auth, companyRepo, userRepo);
         companyService.createProductionCompany(validToken, companyId,
@@ -95,7 +96,7 @@ class ActiveOrderServiceTest {
 
         companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
 
-        Response<String> r = companyEventService.createEvent(
+        Response<Integer> r = companyEventService.createEvent(
                 validToken,
                 companyId,
                 LocalDateTime.now().plusDays(5),
@@ -106,7 +107,7 @@ class ActiveOrderServiceTest {
                 CategoryEvent.SPORTS
         );
 
-        Response<String> eventResponse = companyEventService.createEvent(
+        Response<Integer> eventResponse = companyEventService.createEvent(
                 validToken,
                 companyId,
                 LocalDateTime.now().plusDays(5),
@@ -126,17 +127,25 @@ class ActiveOrderServiceTest {
         standingZones = List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1)));
         seatingZones = List.of(new SeatingZoneDTO(10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
 
-        companyEventService.DefineVenueAndSeatingMap(validToken, eventId,stage, entries, standingZones, seatingZones);
-        companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId,stage, entries, standingZones, seatingZones);
+        companyEventService.DefineVenueAndSeatingMap(validToken, eventId, stage, entries, standingZones, seatingZones);
+        companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId, stage, entries, standingZones, seatingZones);
 
         LotteryService lotteryService = new LotteryService(lotteryRepo, eventRepo, auth);
         lotteryService.createLottery(validToken, eventId, 10,
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
 
-        service = new ActiveOrderService(auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo, capacity);
+        service = new ActiveOrderService(
+                auth,
+                activeOrderRepo,
+                eventRepo,
+                companyRepo,
+                lotteryRepo,
+                paymentSystem,
+                ticketSupply,
+                capacity
+        );
     }
-
     @Test
     void GivenInvalidToken_WhenEnterPurchase_ThenErrorReturned() {
         Response<EventMapDTO> response = service.enterEventPurchase("", companyId, eventId);
@@ -147,7 +156,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenNonExistingEvent_WhenEnterPurchase_ThenEventNotFound() {
-        Response<EventMapDTO> response = service.enterEventPurchase(validToken, companyId, "bad-id");
+        Response<EventMapDTO> response = service.enterEventPurchase(validToken, companyId, -1);
 
         assertNull(response.getValue());
         assertEquals("Event not found", response.getMessage());
@@ -337,7 +346,92 @@ class ActiveOrderServiceTest {
         assertTrue(loser.getMessage().startsWith("Event is full"),
                 "Losing racer should receive a queue confirmation, got: " + loser.getMessage());
     }
+    @Test
+    void GivenNullTicketSupplyRequest_WhenIssueTickets_ThenInvalidRequestReturned() {
+        Response<TicketSupplyResultDTO> response = service.issueTickets(null);
 
+
+        assertNull(response.getValue());
+        assertEquals("Invalid ticket supply request", response.getMessage());
+
+        Mockito.verify(ticketSupply, Mockito.never())
+                .issue(Mockito.any());
+    }
+
+    @Test
+    void GivenValidTicketSupplyRequest_WhenIssueTicketsAndExternalServiceApproves_ThenTicketsIssuedSuccessfully() {
+        TicketSupplyRequestDTO request = Mockito.mock(TicketSupplyRequestDTO.class);
+        TicketSupplyResultDTO result = Mockito.mock(TicketSupplyResultDTO.class);
+
+        Mockito.when(result.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(request)).thenReturn(result);
+
+        Response<TicketSupplyResultDTO> response = service.issueTickets(request);
+
+        assertNotNull(response.getValue());
+        assertEquals(result, response.getValue());
+        assertEquals("Tickets issued successfully", response.getMessage());
+
+        Mockito.verify(ticketSupply).issue(request);
+    }
+
+    @Test
+    void GivenValidTicketSupplyRequest_WhenIssueTicketsAndExternalServiceRejects_ThenTicketIssuanceFailed() {
+        TicketSupplyRequestDTO request = Mockito.mock(TicketSupplyRequestDTO.class);
+        TicketSupplyResultDTO result = Mockito.mock(TicketSupplyResultDTO.class);
+
+        Mockito.when(result.isSuccess()).thenReturn(false);
+        Mockito.when(ticketSupply.issue(request)).thenReturn(result);
+
+        Response<TicketSupplyResultDTO> response = service.issueTickets(request);
+
+        assertEquals(result, response.getValue());
+        assertEquals("Ticket issuance failed", response.getMessage());
+
+        Mockito.verify(ticketSupply).issue(request);
+    }
+
+    @Test
+    void GivenValidTicketSupplyRequest_WhenIssueTicketsAndExternalServiceReturnsNull_ThenTicketIssuanceFailed() {
+        TicketSupplyRequestDTO request = Mockito.mock(TicketSupplyRequestDTO.class);
+
+        Mockito.when(ticketSupply.issue(request)).thenReturn(null);
+
+        Response<TicketSupplyResultDTO> response = service.issueTickets(request);
+
+        assertNull(response.getValue());
+        assertEquals("Ticket issuance failed", response.getMessage());
+
+        Mockito.verify(ticketSupply).issue(request);
+    }
+    @Test
+    void GivenValidTicketSupplyRequest_WhenExternalServiceThrowsException_ThenTicketIssuanceFailed() {
+        TicketSupplyRequestDTO request = Mockito.mock(TicketSupplyRequestDTO.class);
+
+        Mockito.when(ticketSupply.issue(request))
+                .thenThrow(new RuntimeException("Service unavailable"));
+
+        Response<TicketSupplyResultDTO> response = service.issueTickets(request);
+
+        assertNull(response.getValue());
+        assertEquals("Ticket issuance failed", response.getMessage());
+
+        Mockito.verify(ticketSupply).issue(request);
+    }
+    @Test
+    void GivenValidTicketSupplyRequest_WhenIssueTicketsAndExternalServiceUnavailable_ThenTicketIssuanceFailed() {
+        TicketSupplyRequestDTO request = Mockito.mock(TicketSupplyRequestDTO.class);
+
+        Mockito.when(ticketSupply.issue(request))
+                .thenThrow(new RuntimeException("Ticket supply service unavailable"));
+
+        Response<TicketSupplyResultDTO> response = service.issueTickets(request);
+
+        assertNull(response.getValue());
+        assertEquals("Ticket issuance failed", response.getMessage());
+
+        Mockito.verify(ticketSupply).issue(request);
+    }
     @Test
     void GivenNonExistingEvent_WhenGuestSelectTickets_ThenEventNotFound() {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();

@@ -7,7 +7,7 @@ import java.util.Collections;
 import java.util.List;
 
 public class Lottery {
-    private String id; // this value is the same as the eventId, because each event can have only one
+    private int id; // this value is the same as the eventId, because each event can have only one
                        // lottery
     private int capacity;
     private List<Integer> registered;
@@ -19,7 +19,7 @@ public class Lottery {
     // Field for optimistic locking
     private long version;
 
-    public Lottery(String eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
+    public Lottery(int eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
         this.id = eventId;
         this.capacity = capacity;
         this.registered = new ArrayList<>();
@@ -41,7 +41,7 @@ public class Lottery {
         this.winners = new ArrayList<>(other.winners);
     }
 
-    public String getId() {
+    public int getId() {
         return id;
     }
 

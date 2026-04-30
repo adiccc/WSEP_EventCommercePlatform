@@ -28,4 +28,10 @@ public class MaxTicketsRule extends PurchaseRule {
     }
 
     public int getMaxTickets() { return maxTickets; }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj instanceof MaxTicketsRule other) return this.maxTickets == other.maxTickets;
+        return false;
+    }
 }

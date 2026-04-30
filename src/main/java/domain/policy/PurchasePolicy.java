@@ -1,8 +1,12 @@
 package domain.policy;
 
+import DTO.PurchaseRuleDTO;
 import domain.dto.UserDTO;
 import java.util.ArrayList;
 import java.util.List;
+
+import static DTO.PurchaseRuleDTO.Type.MAX_TICKETS;
+import static DTO.PurchaseRuleDTO.Type.MIN_AGE;
 
 public class PurchasePolicy implements Purchase {
     private List<Purchase> rules;
@@ -23,12 +27,43 @@ public class PurchasePolicy implements Purchase {
         }
     }
 
+    public static Purchase dtoToPurchase(PurchaseRuleDTO ruleDTO) {
+        if (ruleDTO == null)
+            return null;
+        if (ruleDTO.getType() == MIN_AGE)
+            return new MinAgeRule(ruleDTO.getMinAge());
+        if (ruleDTO.getType() == MAX_TICKETS)
+            return new MaxTicketsRule(ruleDTO.getMaxTickets());
+        if (ruleDTO.getType() == PurchaseRuleDTO.Type.PurchasePolicy) {
+            Purchase purchasePolicy = new PurchasePolicy();
+            for (Purchase p : ruleDTO.getPurchases())
+                purchasePolicy.addRule(p);
+        }
+        return null;
+    }
     public void addRule(Purchase rule) {
+        if (!rule.isValid())
+            throw new IllegalArgumentException("Invalid rule data");
+        if (ruleExists(rule))
+            throw new RuntimeException("Rule already exists");
         rules.add(rule);
     }
 
     public void removeRule(Purchase rule) {
-        rules.remove(rule);
+        for (Purchase r : rules) {
+            if (rule.equals(r)) {
+                rules.remove(r);
+                return;
+            }
+        }
+        throw new RuntimeException("Rule not found");
+    }
+
+    public boolean ruleExists(Purchase newRule) {
+        for (Purchase rule : rules) {
+            if (rule.ruleExists(newRule)) return true;
+        }
+        return false;
     }
 
     @Override
