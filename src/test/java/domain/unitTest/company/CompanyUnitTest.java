@@ -69,9 +69,9 @@ class CompanyUnitTest {
         when(authMock.isLoggedIn(INVALID_TOKEN)).thenReturn(Response.error("Invalid or expired token"));
     }
 
-    // ══════════════════════════════════════════════════════════════
+    // ============================================================
     // II.3.2  Create Production Company
-    // ══════════════════════════════════════════════════════════════
+    // ============================================================
 
     // --- Successful_Creation ---
     @Test
@@ -167,9 +167,9 @@ class CompanyUnitTest {
         assertTrue(response.getMessage().contains("Invalid contact"));
     }
 
-    // ══════════════════════════════════════════════════════════════
+    // ============================================================
     // II.4.15  View Roles and Permissions Tree
-    // ══════════════════════════════════════════════════════════════
+    // ============================================================
 
     /** Helper: build a company whose founder/owner is FOUNDER_USER_ID. */
     private Company buildCompanyWithFounder(int companyId) {
