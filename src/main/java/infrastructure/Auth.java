@@ -4,6 +4,7 @@ import application.IAuth;
 import application.IPasswordEncoder;
 import application.Response;
 import application.TokenService;
+import domain.dto.UserDTO;
 import domain.user.IUserRepo;
 import domain.user.Member;
 
@@ -151,4 +152,32 @@ public class Auth implements IAuth {
             return new Response<>(-1, "User is not found");
         }
     }
-}
+
+    public Response<UserDTO> getUserDTO(String token) {
+        if (!isLoggedIn(token).getValue()) {
+            logger.warning("User with token is not logged in");
+            return new Response<>(null, "User with token is not logged in");
+        }
+        try {
+            String username = tokenService.extractUsername(token);
+            if (username == null) {
+                logger.warning("User with token is not found");
+                return new Response<>(null, "User with token is not found");
+            }
+
+            Member member = userRepo.findUserByEmail(username);
+            if (member != null) {
+                logger.info("Retrieved member " + member.getIdentifier());
+                UserDTO userDTO = member.getUserDTO();
+                return new Response<>(userDTO, "Retrieved member");
+            }
+            else {
+                logger.warning("Member is not found");
+                return new Response<>(null, "Member is not found");
+            }
+
+        } catch (Exception e) {
+            logger.severe("User is not found");
+            return new Response<>(null, "User is not found");
+        }
+}}

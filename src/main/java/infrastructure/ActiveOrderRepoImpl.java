@@ -65,4 +65,12 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
         }
     }
 
+    public void alreadyHasActiveOrder(Integer userId, String eventId) {
+        for (ActiveOrder order : activeOrders.values()) {
+            if (order.getUserId() == userId && order.getEventId().equals(eventId)) {
+                throw new IllegalStateException("User already has an active order for this event");
+            }
+        }
+    }
+
 }

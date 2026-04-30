@@ -1,27 +1,36 @@
 package application;
 
+import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
 import domain.dto.EventMapDTO;
+import domain.dto.SeatingTicketDTO;
+import domain.dto.UserDTO;
+import domain.event.Event;
+import domain.event.IEventRepo;
 import domain.event.*;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class ActiveOrderService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
-
+    private final AtomicInteger idGenerator = new AtomicInteger(1);
     private final IEventRepo eventRepo;
     private final IActiveOrderRepo activeOrderRepo;
     private final ICompanyRepo companyRepo;
     private final ILotteryRepo lotteryRepo;
     private final IAuth auth;
-    private final int capacity;
+    private int capacity = 100;
+    private final int orderExpireMinutes = 10;
 
     public ActiveOrderService(IAuth auth, IActiveOrderRepo activeOrderRepo, IEventRepo eventRepo, ICompanyRepo companyRepo, ILotteryRepo lotteryRepo, int capacity) {
         this.eventRepo = eventRepo;
@@ -94,6 +103,46 @@ public class ActiveOrderService {
             }
         });
     }
+
+
+    public Response<Integer>guestSelectTickets(String identifier, String eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
+        return RetryHelper.executeWithRetry(()->{
+        logger.log(Level.INFO, "guestSelectTickets called");
+
+        try {
+            this.activeOrderRepo.alreadyHasActiveOrder(auth.getUserId(identifier).getValue(), eventId);
+
+            int totalSeatingTickets = seatingZones.values().stream()
+                    .mapToInt(List::size)
+                    .sum();
+
+            int totalStandingTickets = standingZones.values().stream()
+                    .mapToInt(Integer::intValue)
+                    .sum();
+
+            int totalTickets = totalSeatingTickets + totalStandingTickets;
+            Event e = this.eventRepo.findById(eventId);
+            Response<UserDTO> userResponse = auth.getUserDTO(identifier);
+            e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
+            int orderId = idGenerator.getAndIncrement();
+            List<Integer> tickets = e.bookTickets(false,seatingZones,standingZones); // check here quantity and policy
+            this.eventRepo.store(e);
+            ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(identifier).getValue(), eventId, tickets,orderExpireMinutes);
+            activeOrderRepo.store(newActiveOrder);
+            logger.log(Level.INFO, "Tickets selected successfully");
+            return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
+        } catch (NoSuchElementException e) {
+            logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
+            return new Response<>(null, "Event not found");
+        } catch (OptimisticLockingFailureException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Failed to select tickets : " + e.getMessage());
+            return new Response<>(null, "Failed to select tickets : " + e.getMessage());
+        }
+
+    });}
+
     //TODO : this implementation is for test only, this function should be implemented currectly
     public Response<Boolean> placeOrder(String token, String eventId, int orderId) {
         Event event =eventRepo.findById(eventId);

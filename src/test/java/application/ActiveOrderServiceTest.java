@@ -4,22 +4,20 @@ import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import Log.LoggerSetup;
+import java.util.HashMap;
+import java.util.Map;
 import domain.activeOrder.ActiveOrder;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.EventMapDTO;
+import domain.dto.SeatingTicketDTO;
 import domain.dto.UserDTO;
-import domain.event.Event;
-import domain.event.EventMap;
-import domain.lottery.Lottery;
 import domain.user.IUserRepo;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -41,6 +39,7 @@ class ActiveOrderServiceTest {
     private EventCompanyManageService companyEventService;
     private IPaymentSystem paymentSystem;
 
+    private int userId1;
     private String validToken;
     private String eventId;
     private String concurrentEventId;
@@ -337,6 +336,141 @@ class ActiveOrderServiceTest {
         Response<EventMapDTO> loser = (responseA.getValue() == null) ? responseA : responseB;
         assertTrue(loser.getMessage().startsWith("Event is full"),
                 "Losing racer should receive a queue confirmation, got: " + loser.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingEvent_WhenGuestSelectTickets_ThenEventNotFound() {
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 1);
+
+        Response<Integer> response = service.guestSelectTickets(validToken, "bad-id", seating, standing);
+
+        assertNull(response.getValue());
+        assertEquals("Event not found", response.getMessage());
+    }
+
+    @Test
+    void GivenValidStandingRequest_WhenGuestSelectTickets_ThenOrderIdReturned() {
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 3);
+
+        Response<Integer> response = service.guestSelectTickets(validToken, concurrentEventId, seating, standing);
+
+        assertNotNull(response.getValue());
+        assertEquals("Tickets selected successfully", response.getMessage());
+    }
+
+    @Test
+    void GivenStandingQuantityAboveZoneCapacity_WhenGuestSelectTickets_ThenFailureReturned() {
+        // "floor" zone capacity is 200
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 201);
+
+        Response<Integer> response = service.guestSelectTickets(validToken, concurrentEventId, seating, standing);
+
+        assertNull(response.getValue());
+        assertNotNull(response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistentStandingZoneName_WhenGuestSelectTickets_ThenFailureReturned() {
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("no-such-zone", 1);
+
+        Response<Integer> response = service.guestSelectTickets(validToken, concurrentEventId, seating, standing);
+
+        assertNull(response.getValue());
+    }
+
+    @Test
+    void GivenConcurrentRequestsWithinStandingCapacity_WhenGuestSelectTickets_ThenAllSucceedWithUniqueOrderIds() throws Exception {
+        // floor capacity = 200; 10 users x 20 tickets = 200 (exact fit)
+        int usersCount = 10;
+        int ticketsPerUser = 20;
+
+        List<String> tokens = new ArrayList<>();
+        for (int i = 0; i < usersCount; i++) {
+            String email = "G" + i + "@mail.com";
+            userService.registerUser("", new UserDTO(
+                    email, "f" + i, "l" + i, "pass",
+                    1, 1, 2000, "Israel", "050-111-2222"
+            ));
+            tokens.add(userService.login(email, "pass").getValue());
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(usersCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<Integer>>> futures = new ArrayList<>();
+
+        for (String t : tokens) {
+            futures.add(executor.submit(() -> {
+                start.await();
+                Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+                Map<String, Integer> standing = Map.of("floor", ticketsPerUser);
+                return service.guestSelectTickets(t, concurrentEventId, seating, standing);
+            }));
+        }
+
+        start.countDown();
+
+        List<Integer> orderIds = new ArrayList<>();
+        int success = 0;
+        for (Future<Response<Integer>> f : futures) {
+            Response<Integer> r = f.get();
+            if (r.getValue() != null) {
+                success++;
+                orderIds.add(r.getValue());
+            }
+        }
+        executor.shutdown();
+
+        assertEquals(usersCount, success, "All users should fit within standing capacity");
+        assertEquals(orderIds.size(), orderIds.stream().distinct().count(),
+                "Every active order must have a unique id");
+    }
+
+    @Test
+    void GivenConcurrentRequestsAboveStandingCapacity_WhenGuestSelectTickets_ThenOnlyFittingUsersSucceed() throws Exception {
+        // floor capacity = 200; 11 users x 20 tickets = 220 → only 10 should fit
+        int usersCount = 11;
+        int ticketsPerUser = 20;
+
+        List<String> tokens = new ArrayList<>();
+        for (int i = 0; i < usersCount; i++) {
+            String email = "H" + i + "@mail.com";
+            userService.registerUser("", new UserDTO(
+                    email, "f" + i, "l" + i, "pass",
+                    1, 1, 2000, "Israel", "050-333-4444"
+            ));
+            tokens.add(userService.login(email, "pass").getValue());
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(usersCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<Integer>>> futures = new ArrayList<>();
+
+        for (String t : tokens) {
+            futures.add(executor.submit(() -> {
+                start.await();
+                Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+                Map<String, Integer> standing = Map.of("floor", ticketsPerUser);
+                return service.guestSelectTickets(t, concurrentEventId, seating, standing);
+            }));
+        }
+
+        start.countDown();
+
+        int success = 0;
+        int failed = 0;
+        for (Future<Response<Integer>> f : futures) {
+            Response<Integer> r = f.get();
+            if (r.getValue() != null) success++;
+            else failed++;
+        }
+        executor.shutdown();
+
+        assertEquals(10, success, "Only 10 users (200/20) should fit in standing capacity");
+        assertEquals(1, failed, "1 user must be rejected when capacity is exhausted");
     }
 
 }

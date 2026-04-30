@@ -6,6 +6,9 @@ import DTO.SeatingZoneDTO;
 import DTO.ElementPositionDTO;
 import domain.dataType.*;
 import domain.event.EventMap;
+import domain.event.SeatingZone;
+import domain.event.StandingZone;
+import domain.event.Zone;
 
 import java.util.ArrayList;
 import java.util.List;
