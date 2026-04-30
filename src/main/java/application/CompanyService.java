@@ -233,7 +233,11 @@ public class CompanyService {
             } catch (IllegalStateException e) {
                 logger.warning("removeRuleFromCompany invalid state: " + e.getMessage());
                 return Response.error(e.getMessage());
-            } catch (Exception e) {
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            }
+            catch (Exception e) {
                 logger.severe("Unexpected error in removeRuleFromCompany: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
