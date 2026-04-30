@@ -1,5 +1,6 @@
 package application;
 
+import Log.LoggerSetup;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.UserDTO;
@@ -43,6 +44,7 @@ class LotteryServiceTest {
 
     @BeforeEach
     void setUp() {
+        LoggerSetup.setup();
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
         tokenService = new TokenService();
