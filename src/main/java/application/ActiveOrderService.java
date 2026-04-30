@@ -239,13 +239,19 @@ public class ActiveOrderService {
                 return new Response<>(null, "Invalid ticket supply request");
             }
 
-            TicketSupplyResultDTO result = ticketSupply.issue(request);
+            try {
+                TicketSupplyResultDTO result = ticketSupply.issue(request);
 
-            if (result == null || !result.isSuccess()) {
-                return new Response<>(result, "Ticket issuance failed");
+                if (result == null || !result.isSuccess()) {
+                    return new Response<>(result, "Ticket issuance failed");
+                }
+
+                return new Response<>(result, "Tickets issued successfully");
+
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Ticket issuance failed: " + e.getMessage());
+                return new Response<>(null, "Ticket issuance failed");
             }
-
-            return new Response<>(result, "Tickets issued successfully");
         });
     }
 

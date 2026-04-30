@@ -1,8 +1,6 @@
 package application;
 
-import DTO.ElementPositionDTO;
-import DTO.SeatingZoneDTO;
-import DTO.StandingZoneDTO;
+import DTO.*;
 import Log.LoggerSetup;
 import domain.activeOrder.ActiveOrder;
 import domain.dataType.CategoryEvent;
@@ -350,5 +348,75 @@ class ActiveOrderServiceTest {
         assertTrue(loser.getMessage().startsWith("Event is full"),
                 "Losing racer should receive a queue confirmation, got: " + loser.getMessage());
     }
+    @Test
+    void GivenNullTicketSupplyRequest_WhenIssueTickets_ThenInvalidRequestReturned() {
+        Response<TicketSupplyResultDTO> response = service.issueTickets(null);
 
+        assertNull(response.getValue());
+        assertEquals("Invalid ticket supply request", response.getMessage());
+
+        Mockito.verify(ticketSupply, Mockito.never())
+                .issue(Mockito.any());
+    }
+
+    @Test
+    void GivenValidTicketSupplyRequest_WhenIssueTicketsAndExternalServiceApproves_ThenTicketsIssuedSuccessfully() {
+        TicketSupplyRequestDTO request = Mockito.mock(TicketSupplyRequestDTO.class);
+        TicketSupplyResultDTO result = Mockito.mock(TicketSupplyResultDTO.class);
+
+        Mockito.when(result.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(request)).thenReturn(result);
+
+        Response<TicketSupplyResultDTO> response = service.issueTickets(request);
+
+        assertNotNull(response.getValue());
+        assertEquals(result, response.getValue());
+        assertEquals("Tickets issued successfully", response.getMessage());
+
+        Mockito.verify(ticketSupply).issue(request);
+    }
+
+    @Test
+    void GivenValidTicketSupplyRequest_WhenIssueTicketsAndExternalServiceRejects_ThenTicketIssuanceFailed() {
+        TicketSupplyRequestDTO request = Mockito.mock(TicketSupplyRequestDTO.class);
+        TicketSupplyResultDTO result = Mockito.mock(TicketSupplyResultDTO.class);
+
+        Mockito.when(result.isSuccess()).thenReturn(false);
+        Mockito.when(ticketSupply.issue(request)).thenReturn(result);
+
+        Response<TicketSupplyResultDTO> response = service.issueTickets(request);
+
+        assertEquals(result, response.getValue());
+        assertEquals("Ticket issuance failed", response.getMessage());
+
+        Mockito.verify(ticketSupply).issue(request);
+    }
+
+    @Test
+    void GivenValidTicketSupplyRequest_WhenIssueTicketsAndExternalServiceReturnsNull_ThenTicketIssuanceFailed() {
+        TicketSupplyRequestDTO request = Mockito.mock(TicketSupplyRequestDTO.class);
+
+        Mockito.when(ticketSupply.issue(request)).thenReturn(null);
+
+        Response<TicketSupplyResultDTO> response = service.issueTickets(request);
+
+        assertNull(response.getValue());
+        assertEquals("Ticket issuance failed", response.getMessage());
+
+        Mockito.verify(ticketSupply).issue(request);
+    }
+    @Test
+    void GivenValidTicketSupplyRequest_WhenExternalServiceThrowsException_ThenTicketIssuanceFailed() {
+        TicketSupplyRequestDTO request = Mockito.mock(TicketSupplyRequestDTO.class);
+
+        Mockito.when(ticketSupply.issue(request))
+                .thenThrow(new RuntimeException("Service unavailable"));
+
+        Response<TicketSupplyResultDTO> response = service.issueTickets(request);
+
+        assertNull(response.getValue());
+        assertEquals("Ticket issuance failed", response.getMessage());
+
+        Mockito.verify(ticketSupply).issue(request);
+    }
 }

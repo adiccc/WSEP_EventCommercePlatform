@@ -822,7 +822,7 @@ class EventCompanyManageServiceTest {
         assertTrue(response.getMessage().contains("not found"));
     }
         @Test
-    void SuccessfulRefund() {
+    void GivenRefundRequiredOrder_WhenProcessRefundAndExternalPaymentApproves_ThenOrderMarkedRefunded() {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenReturn(true);
 
@@ -848,7 +848,7 @@ class EventCompanyManageServiceTest {
     }
 
     @Test
-    void RefundTransactionNotFound() {
+    void GivenMissingOrder_WhenProcessRefund_ThenNoMatchingOrderReturned() {
         Response<Boolean> response = eventCompanyManageService.processRefund(
                 validToken1,
                 eventId,
@@ -863,7 +863,7 @@ class EventCompanyManageServiceTest {
     }
 
     @Test
-    void RefundRejected() {
+    void GivenRefundRequiredOrder_WhenProcessRefundAndExternalPaymentRejects_ThenOrderRemainsRefundRequired() {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenReturn(false);
 
@@ -888,7 +888,7 @@ class EventCompanyManageServiceTest {
     }
 
     @Test
-    void RefundWithoutValidReason() {
+    void GivenApprovedOrder_WhenProcessRefund_ThenOrderCannotBeRefunded() {
         Event event = eventRepo.findById(eventId);
 
         Order order = new Order(123, 900, eventId, List.of(1, 2), 100.0, "pay123");
@@ -911,7 +911,7 @@ class EventCompanyManageServiceTest {
                 .refund(Mockito.anyString(), Mockito.anyDouble());
     }
     @Test
-    void RefundServiceUnavailable() {
+    void GivenRefundRequiredOrder_WhenProcessRefundAndExternalPaymentServiceUnavailable_ThenOrderRemainsRefundRequired() {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenThrow(new RuntimeException("Payment service unavailable"));
 
