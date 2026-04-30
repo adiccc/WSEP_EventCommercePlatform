@@ -36,7 +36,10 @@ public class Member extends User{
         this.phoneNumber=member.phoneNumber;
         this.dateOfBirth=member.dateOfBirth;
         this.address=member.address;
+        this.isActive=member.isActive;
         this.version=member.version;
+        this.setConnected(member.isConnected());
+        member.getRoles().forEach(this::addRole);
     }
     public long getVersion() {
         return version;

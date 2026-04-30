@@ -81,7 +81,7 @@ public class CompanyService {
                     userRepo.store(user);
 
                     logger.info("Company " + companyName + " created successfully");
-                    return new Response<>(newCompany, "Production company created successfully.");
+                    return Response.ok(newCompany);
                 }
 
             } catch (OptimisticLockingFailureException e) {
@@ -107,7 +107,7 @@ public class CompanyService {
             logger.info("viewRolesAndPermissionsTree called for companyId: " + companyId);
             try {
                 // 1. Validate token
-                if (auth.isLoggedIn(token).isError()) {
+                if (!auth.isLoggedIn(token).getValue()) {
                     logger.warning("viewRolesAndPermissionsTree failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
