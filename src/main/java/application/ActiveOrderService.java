@@ -128,7 +128,6 @@ public class ActiveOrderService {
             List<Integer> tickets = e.bookTickets(false,seatingZones,standingZones); // check here quantity and policy
             this.eventRepo.store(e);
             ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(identifier).getValue(), eventId, tickets,orderExpireMinutes);
-            // todo : schedule deletion and ticket status -> available after expiration time
             activeOrderRepo.store(newActiveOrder);
             logger.log(Level.INFO, "Tickets selected successfully");
             return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
