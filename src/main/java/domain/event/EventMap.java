@@ -18,7 +18,14 @@ public class EventMap {
     }
 
     public EventMap(EventMap eventMap) {
-        this.zones = eventMap.zones;
+        this.zones = new ArrayList<>();
+        for (Zone z : eventMap.zones) {
+            if (z instanceof SeatingZone seatingZone) {
+                this.zones.add(new SeatingZone(seatingZone));
+            } else if (z instanceof StandingZone standingZone) {
+                this.zones.add(new StandingZone(standingZone));
+            }
+        }
         this.stage = eventMap.stage;
         this.entries = eventMap.entries;
     }
@@ -35,46 +42,50 @@ public class EventMap {
         return entries;
     }
 
-//    public List<Integer> bookStandingTickets(int userid,String zone, int quantity) {
-//        //find the zone
-//        for (Zone z : zones) {
-//            if (z.getName().equals(zone) && z instanceof StandingZone) {
-//                //check if there are enough tickets available
-//                if (((StandingZone) z).getAvaliable() >= quantity) {
-//                    //book the tickets and return their IDs
-//                    return ((StandingZone) z).bookTickets(userid,quantity);
-//                } else {
-//                    throw new IllegalArgumentException("Not enough tickets available in this zone.");
-//                }
-//            }
-//        }
-//        throw new IllegalArgumentException("Zone not found.");
-//    }
 
-    public List<Integer> bookTickets(Map<String,List<String>> seatingZones,Map<String,Integer>standingZones){
+    public List<Integer> bookTickets(Map<String, List<String>> seatingZones,
+                                     Map<String, Integer> standingZones) {
+
         List<Integer> bookedTicketsIds = new ArrayList<>();
-        //book seating zones
+
+        // --- Seating zones ---
         for (Map.Entry<String, List<String>> entry : seatingZones.entrySet()) {
             String zoneName = entry.getKey();
             List<String> seats = entry.getValue();
+            Zone matchedZone = null;
             for (Zone z : zones) {
-                if (z.getName().equals(zoneName) && z instanceof SeatingZone) {
-                    bookedTicketsIds.addAll(((SeatingZone) z).bookTickets(seats));
+                if (z.getName().equals(zoneName)) {
+                    matchedZone = z;
+                    break;
                 }
             }
+            if (matchedZone == null) {
+                throw new IllegalArgumentException("Seating zone does not exist: " + zoneName);
+            }
+            if (!(matchedZone instanceof SeatingZone)) {
+                throw new IllegalArgumentException("Zone is not a seating zone: " + zoneName);
+            }
+            bookedTicketsIds.addAll(((SeatingZone) matchedZone).bookTickets(seats));
         }
-        //book standing zones
+        // --- Standing zones ---
         for (Map.Entry<String, Integer> entry : standingZones.entrySet()) {
             String zoneName = entry.getKey();
             int quantity = entry.getValue();
+            Zone matchedZone = null;
             for (Zone z : zones) {
-                if (z.getName().equals(zoneName) && z instanceof StandingZone) {
-                    bookedTicketsIds.addAll(((StandingZone) z).bookTickets(quantity));
+                if (z.getName().equals(zoneName)) {
+                    matchedZone = z;
+                    break;
                 }
             }
+            if (matchedZone == null) {
+                throw new IllegalArgumentException("Standing zone does not exist: " + zoneName);
+            }
+            if (!(matchedZone instanceof StandingZone)) {
+                throw new IllegalArgumentException("Zone is not a standing zone: " + zoneName);
+            }
+            bookedTicketsIds.addAll(((StandingZone) matchedZone).bookTickets(quantity));
         }
         return bookedTicketsIds;
-
-
     }
 }
