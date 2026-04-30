@@ -10,6 +10,8 @@ import domain.dto.EventDTO;
 import domain.dto.EventDetailsDTO;
 import domain.dto.UserDTO;
 import domain.event.EventMap;
+import domain.event.StandingZone;
+import domain.event.Zone;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import infrastructure.*;

@@ -1,6 +1,7 @@
 package domain.user;
 
 import domain.activeOrder.ActiveOrder;
+import domain.dto.UserDTO;
 
 import java.time.LocalDate;
 import java.util.Date;
@@ -63,6 +64,12 @@ public class Member extends User{
 
         Member other = (Member) obj;
         return userId==other.userId && version == other.getVersion();
+    }
+
+    public UserDTO getUserDTO() {
+        return new UserDTO(this.getIdentifier(), this.firstName, this.lastName, this.password,
+                this.dateOfBirth.getDayOfMonth(), this.dateOfBirth.getMonthValue(), this.dateOfBirth.getYear(),
+                this.address, this.phoneNumber);
     }
 
 }
