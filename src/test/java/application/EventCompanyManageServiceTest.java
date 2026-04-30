@@ -4,6 +4,7 @@ import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import Log.LoggerSetup;
+import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.dataType.CategoryEvent;
@@ -18,6 +19,8 @@ import domain.event.IEventRepo;
 import domain.event.OrderStatus;
 import domain.event.IOrderRepo;
 import domain.event.Order;
+import domain.lottery.ILotteryRepo;
+import domain.lottery.Lottery;
 import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
 import domain.user.IUserRepo;
@@ -66,6 +69,7 @@ class EventCompanyManageServiceTest {
     private String invalidToken;
     private EventService eventService;
     private IPaymentSystem paymentSystem;
+    private ActiveOrderService activeOrderService;
 
     @BeforeEach
     void setUp() {
@@ -81,6 +85,9 @@ class EventCompanyManageServiceTest {
 
         userService=new UserService(tokenService,auth,userRepo,passwordEncoder);
         eventService=new EventService(auth,eventRepo);
+        IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
+        ILotteryRepo lotteryRepo=new LotteryRepoImpl();
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,100);
 
         //should delete oreder repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo);
@@ -440,34 +447,29 @@ class EventCompanyManageServiceTest {
         assertTrue(response.getMessage().startsWith("failed to create event : "));
     }
 
-    // TODO to implement when add order function in service is exist
-//    @Test
-//    void GivenCompanyExistsAndUserHasPermissionAndOrdersExist_WhenGetOrdersByCompany_ThenOrdersHistoryIsReturned() {
-//        // Given
-//        eventCompanyManageService.DefineVenueAndSeatingMap(
-//                validToken1,
-//                eventId,
-//                stage,
-//                entries,
-//                standingZones,
-//                seatingZones
-//        );
-//        Order order1 = new Order(0, 1, "1", new ArrayList<>() );
-//        Order order2 = new Order(1, 1, "1", new ArrayList<>());
-//        Event event=eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
-//        event.getOrders().add(order1);
-//        event.getOrders().add(order2);
-//
-//        // When
-//        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
-//
-//        // Then
-//        assertNotNull(response.getValue());
-//        assertEquals("orders found", response.getMessage());
-//        assertEquals(2, response.getValue().size());
-//        assertTrue(response.getValue().contains(order1));
-//        assertTrue(response.getValue().contains(order2));
-//    }
+    @Test
+    void GivenCompanyExistsAndUserHasPermissionAndOrdersExist_WhenGetOrdersByCompany_ThenOrdersHistoryIsReturned() {
+        // Given
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
+
+        activeOrderService.placeOrder(validToken1,eventId,1);
+        activeOrderService.placeOrder(validToken2,eventId,2);
+
+        // When
+        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
+
+        // Then
+        assertNotNull(response.getValue());
+        assertEquals("Orders found", response.getMessage());
+        assertEquals(2, response.getValue().size());
+    }
 
     @Test
     void GivenUnauthorizedUser_WhenGetOrdersByCompany_ThenPermissionErrorIsReturned() {
@@ -928,7 +930,6 @@ class EventCompanyManageServiceTest {
         Mockito.verify(paymentSystem).refund("pay123", 100.0);
     }
 
-    //TODO : update after there is order function in event service
     @Test
     void GivenValidOwnerAndFutureEventWithOrders_WhenDeleteEvent_ThenEventMarkedInactiveAndRefundProcessed() {
         // Given
@@ -945,10 +946,6 @@ class EventCompanyManageServiceTest {
         );
         Event event = eventRepo.findById(eventId);
 
-        Order order = new Order(1, 2, eventId, List.of(1, 2), 100.0, "pay123");
-        event.getOrders().add(order);
-        eventRepo.store(event);
-
         // When
         Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, eventId);
 
@@ -962,7 +959,7 @@ class EventCompanyManageServiceTest {
         Order updatedOrder = updatedEvent.findOrderById(1);
         assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
 
-        Mockito.verify(paymentSystem).refund("pay123", 100.0);
+        Mockito.verify(paymentSystem).refund("order123", 100.0);
     }
 
     @Test

@@ -3,14 +3,12 @@ package application;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
 import domain.dto.EventMapDTO;
-import domain.event.Event;
-import domain.event.EventMap;
-import domain.event.EventQueue;
-import domain.event.IEventRepo;
+import domain.event.*;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -95,5 +93,13 @@ public class ActiveOrderService {
                 return new Response<>(null, "Failed to enter event purchase  : " + e.getMessage());
             }
         });
+    }
+    //TODO : this implementation is for test only, this function should be implemented currectly
+    public Response<Boolean> placeOrder(String token, String eventId, int orderId) {
+        Event event =eventRepo.findById(eventId);
+        int userId=auth.getUserId(token).getValue();
+        event.placeOrder(userId,orderId);
+        eventRepo.store(event);
+        return new Response<>(true, "Order placed successfully");
     }
 }
