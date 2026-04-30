@@ -27,6 +27,9 @@ import domain.event.Order;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -333,5 +336,105 @@ class AdminServiceTest {
         Order updatedOrder = updatedEvent.findOrderById(1);
         assertEquals(domain.event.OrderStatus.REFUND_REQUIRED, updatedOrder.getStatus());
 
+    }
+
+
+    // Race Condition
+    @Test
+    void GivenHighLoad_WhenAdminClosesCompanyAndManagerUpdatesDateSimultaneously_ThenSystemRemainsConsistent() throws InterruptedException {
+        // Arrange: Prepare a new date for the manager to set
+        LocalDateTime newDate = eventDate.plusDays(10);
+
+        // Setup concurrency tools
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch startGun = new CountDownLatch(1);
+        CountDownLatch finishLine = new CountDownLatch(2);
+
+        // Act: Thread 1 - Admin attempts to close the company
+        executor.submit(() -> {
+            try {
+                startGun.await();
+                adminService.closeCompanyByAdmin(adminToken, companyId);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Act: Thread 2 - Manager attempts to update the event date
+        executor.submit(() -> {
+            try {
+                startGun.await();
+                eventCompanyManageService.UpdateEventDate(nonAdminToken, eventId, newDate);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Both threads execute exactly at the same millisecond
+        startGun.countDown();
+        finishLine.await(); // Wait for both threads to completely finish
+
+        // Assert: Verify system consistency
+        Company updatedCompany = companyRepo.findById(companyId);
+        Event updatedEvent = eventRepo.findById(eventId);
+
+        // Regardless of which thread finished first, the critical business rule is that a closed company means its events must be inactive.
+        assertFalse(updatedCompany.isActive(), "Company should be closed by the admin");
+        assertFalse(updatedEvent.isActive(), "Event should be deactivated due to company closure");
+
+        executor.shutdown();
+    }
+
+    @Test
+    void GivenHighLoad_WhenAdminClosesCompanyAndManagerAddsZoneSimultaneously_ThenSystemRemainsConsistent() throws InterruptedException {
+        // Arrange: Prepare new zones for the manager to add
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+
+        // Setup concurrency tools
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch startGun = new CountDownLatch(1);
+        CountDownLatch finishLine = new CountDownLatch(2);
+
+        // Act: Thread 1 - Admin attempts to close the company
+        executor.submit(() -> {
+            try {
+                startGun.await();
+                adminService.closeCompanyByAdmin(adminToken, companyId);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Act: Thread 2 - Manager attempts to add zones to the event map
+        executor.submit(() -> {
+            try {
+                startGun.await();
+                eventCompanyManageService.AddZonesToEventMap(nonAdminToken, eventId, newStandingZones, null);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Both threads execute exactly at the same millisecond
+        startGun.countDown();
+        finishLine.await();
+
+        // Assert: Verify data integrity
+        Company updatedCompany = companyRepo.findById(companyId);
+        Event updatedEvent = eventRepo.findById(eventId);
+
+        // The company and event MUST be inactive at the end of the process.
+        assertFalse(updatedCompany.isActive(), "Company should be closed");
+        assertFalse(updatedEvent.isActive(), "Event should be deactivated");
+
+        executor.shutdown();
     }
 }
