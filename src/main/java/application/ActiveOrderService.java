@@ -1,7 +1,9 @@
 package application;
 
+import DTO.PaymentDetailsDTO;
 import DTO.TicketSupplyRequestDTO;
 import DTO.TicketSupplyResultDTO;
+import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
 import domain.dto.EventMapDTO;
@@ -111,87 +113,122 @@ public class ActiveOrderService {
             }
         });
     }
-//    public Response<Integer> checkoutAndPayment(
-//            String token,
-//            String eventId,
-//            int activeOrderId,
-//            PaymentDetailsDTO paymentDetails) {
-//
-//        return RetryHelper.executeWithRetry(() -> {
-//            logger.log(Level.INFO, "checkoutAndPayment called");
-//
-//            int userId = auth.getUserId(token).getValue();
-//            if (userId == -1) {
-//                return new Response<>(null, "Invalid token");
-//            }
-//
-//            try {
-//                Event event = eventRepo.findById(eventId);
-//
-//                if (!event.isActive()) {
-//                    return new Response<>(null, "Event is not active");
-//                }
-//
-//                ActiveOrder activeOrder = activeOrderRepo.findById(activeOrderId);
-//
-//                if (activeOrder.getUserId() != userId) {
-//                    return new Response<>(null, "Active order does not belong to user");
-//                }
-//
-//                if (!activeOrder.getEventId().equals(eventId)) {
-//                    return new Response<>(null, "Active order does not belong to event");
-//                }
-//
-//                if (!activeOrder.hasTickets()) {
-//                    return new Response<>(null, "Active order has no selected tickets");
-//                }
-//
-//                // TODO: replace with real total calculation according to selected tickets,
-//                // event zones, discounts, and company/event policies.
-//                // TODO: implement Event.calculatePrice(...) using event/company discount policy.
-//                // double total = event.calculatePrice(activeOrder.getTickets());
-//
-////                String paymentConfirmationId = paymentSystem.pay(total, paymentDetails);
-//
-////                if (paymentConfirmationId == null || paymentConfirmationId.isBlank()) {
-////                    logger.log(Level.SEVERE, "Payment rejected");
-////                    return new Response<>(null, "Payment rejected");
-////                }
-//
-//                Order order = new Order(
-//                        activeOrder.getId(),
-//                        userId,
-//                        eventId,
-//                        activeOrder.getTickets(),
-//                        total,
-//                        paymentConfirmationId
-//                );
-//
-////                event.getOrders().add(order);
-//
-//                // TODO: mark selected tickets as SOLD when ticket locking/supply logic is ready.
-//                activeOrderRepo.delete(activeOrderId);
-//
-//                eventRepo.store(event);
-//
-//                // TODO: trigger Ticket Issuance UC using ticketSupply.issue(...)
-//                // Do not make checkout response depend on ticket issuance yet.
-//
-//                // TODO: notify queue/active-order manager that a purchase slot (ao) was released.
-//
-//                logger.log(Level.INFO, "Purchase completed successfully");
-//                return new Response<>(order.getOrderId(), "Purchase completed successfully");
-//
-//            } catch (NoSuchElementException e) {
-//                logger.log(Level.SEVERE, "Event or active order not found: " + e.getMessage());
-//                return new Response<>(null, "Event or active order not found");
-//
-//            } catch (Exception e) {
-//                logger.log(Level.SEVERE, "Failed to complete purchase: " + e.getMessage());
-//                return new Response<>(null, "Failed to complete purchase: " + e.getMessage());
-//            }
-//        });
-//    }
+    public Response<Integer> checkoutAndPayment(
+            String token,
+            String eventId,
+            int activeOrderId,
+            PaymentDetailsDTO paymentDetails) {
+
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "checkoutAndPayment called");
+
+            boolean shouldCleanupActiveOrder = false;
+            Event event = null;
+
+            int userId = auth.getUserId(token).getValue();
+            if (userId == -1) {
+                return new Response<>(null, "Invalid token");
+            }
+
+            try {
+                event = eventRepo.findById(eventId);
+
+                if (!event.isActive()) {
+                    return new Response<>(null, "Event is not active");
+                }
+
+                ActiveOrder activeOrder = activeOrderRepo.findById(activeOrderId);
+
+                if (activeOrder.getUserId() != userId) {
+                    return new Response<>(null, "Active order does not belong to user");
+                }
+
+                if (!activeOrder.getEventId().equals(eventId)) {
+                    return new Response<>(null, "Active order does not belong to event");
+                }
+
+                if (!activeOrder.hasTickets()) {
+                    return new Response<>(null, "Active order has no selected tickets");
+                }
+
+                // TODO: calculate real total using Event/DiscountPolicy
+                double total = 0.0;
+
+                // TODO: check ActiveOrder expiration when ActiveOrder supports expiresAt/isExpired().
+                // If expired: release tickets, delete active order, release purchase slot
+
+
+                // return expired response.
+
+                String paymentConfirmationId = paymentSystem.pay(total, paymentDetails);
+
+                if (paymentConfirmationId == null || paymentConfirmationId.isBlank()) {
+                    logger.log(Level.SEVERE, "Payment rejected");
+                    return new Response<>(null, "Payment rejected");
+                }
+
+                Order order = new Order(
+                        activeOrder.getId(),
+                        userId,
+                        eventId,
+                        activeOrder.getTickets(),
+                        total,
+                        paymentConfirmationId
+                );
+
+                event.getOrders().add(order);
+
+                TicketSupplyResultDTO issueResult =
+                        ticketSupply.issue(new TicketSupplyRequestDTO(activeOrder.getTickets()));
+
+                shouldCleanupActiveOrder = true;
+
+                if (issueResult == null || !issueResult.isSuccess()) {
+                    boolean refundApproved = paymentSystem.refund(
+                            order.getPaymentConfirmationId(),
+                            order.getTotalSum()
+                    );
+
+                    if (refundApproved) {
+                        order.markRefunded();
+                    } else {
+                        order.markRefundRequired();
+                    }
+
+                    // TODO: release tickets back to inventory when Event/Zone supports it.
+                    eventRepo.store(event);
+
+                    return new Response<>(null, "Ticket issuance failed");
+                }
+
+                // TODO: save issued codes on Order when model supports it?
+                // TODO: mark selected tickets as SOLD when ticket locking/supply logic is ready.
+
+                eventRepo.store(event);
+
+                logger.log(Level.INFO, "Purchase completed successfully");
+                return new Response<>(order.getOrderId(), "Purchase completed successfully");
+
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "Event or active order not found: " + e.getMessage());
+                return new Response<>(null, "Event or active order not found");
+
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to complete purchase: " + e.getMessage());
+                return new Response<>(null, "Failed to complete purchase: " + e.getMessage());
+
+            } finally {
+                if (shouldCleanupActiveOrder) {
+                    activeOrderRepo.delete(activeOrderId);
+
+                    if (event != null) {
+                        event.releasePurchaseSlot();
+                        eventRepo.store(event);
+                    }
+                }
+            }
+        });
+    }
 
 
     public Response<TicketSupplyResultDTO> issueTickets(TicketSupplyRequestDTO request) {
@@ -205,7 +242,6 @@ public class ActiveOrderService {
             TicketSupplyResultDTO result = ticketSupply.issue(request);
 
             if (result == null || !result.isSuccess()) {
-
                 return new Response<>(result, "Ticket issuance failed");
             }
 
