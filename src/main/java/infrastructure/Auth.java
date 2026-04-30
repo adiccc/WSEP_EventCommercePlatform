@@ -42,6 +42,10 @@ public class Auth implements IAuth {
                 logger.warning("Login failed: Invalid credentials for " + username);
                 return new Response<>(null,"Invalid email or password");
             }
+            if(!member.isActive()){
+                logger.warning("Login failed: member is blocked by Admin");
+                return new Response<>(null,"Login failed: member is blocked by Admin");
+            }
             String token = tokenService.generateToken(username);
             logger.info("Login successful for username: " + username);
             return new Response<>(token, "Login successful");

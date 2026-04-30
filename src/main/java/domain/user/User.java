@@ -8,16 +8,13 @@ public class User {
 
     private String identifier;
     private List<Role> roles;
-    private long version;
 
     public User(String identifier) {
         this.identifier = identifier;
         this.roles = new ArrayList<>();
-        this.version = 0;
     }
     public User(User other) {
         this.identifier = other.getIdentifier();
-        this.version = other.getVersion();
         this.roles = new ArrayList<>(other.getRoles());
     }
 
@@ -37,12 +34,6 @@ public class User {
         return roles;
     }
 
-    public long getVersion() {
-        return version;
-    }
-    public void setVersion(long version) {
-        this.version = version;
-    }
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
