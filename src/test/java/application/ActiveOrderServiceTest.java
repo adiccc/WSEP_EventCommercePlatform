@@ -8,6 +8,7 @@ import java.util.Map;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.EventMapDTO;
+import domain.dto.SeatingTicketDTO;
 import domain.dto.UserDTO;
 import domain.user.IUserRepo;
 import infrastructure.*;
@@ -336,7 +337,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenNonExistingEvent_WhenGuestSelectTickets_ThenEventNotFound() {
-        Map<String, List<String>> seating = new HashMap<>();
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 1);
 
         Response<Integer> response = service.guestSelectTickets(validToken, "bad-id", seating, standing);
@@ -347,7 +348,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenValidStandingRequest_WhenGuestSelectTickets_ThenOrderIdReturned() {
-        Map<String, List<String>> seating = new HashMap<>();
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 3);
 
         Response<Integer> response = service.guestSelectTickets(validToken, concurrentEventId, seating, standing);
@@ -359,7 +360,7 @@ class ActiveOrderServiceTest {
     @Test
     void GivenStandingQuantityAboveZoneCapacity_WhenGuestSelectTickets_ThenFailureReturned() {
         // "floor" zone capacity is 200
-        Map<String, List<String>> seating = new HashMap<>();
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 201);
 
         Response<Integer> response = service.guestSelectTickets(validToken, concurrentEventId, seating, standing);
@@ -370,7 +371,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenNonExistentStandingZoneName_WhenGuestSelectTickets_ThenFailureReturned() {
-        Map<String, List<String>> seating = new HashMap<>();
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("no-such-zone", 1);
 
         Response<Integer> response = service.guestSelectTickets(validToken, concurrentEventId, seating, standing);
@@ -401,7 +402,7 @@ class ActiveOrderServiceTest {
         for (String t : tokens) {
             futures.add(executor.submit(() -> {
                 start.await();
-                Map<String, List<String>> seating = new HashMap<>();
+                Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
                 Map<String, Integer> standing = Map.of("floor", ticketsPerUser);
                 return service.guestSelectTickets(t, concurrentEventId, seating, standing);
             }));
@@ -448,7 +449,7 @@ class ActiveOrderServiceTest {
         for (String t : tokens) {
             futures.add(executor.submit(() -> {
                 start.await();
-                Map<String, List<String>> seating = new HashMap<>();
+                Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
                 Map<String, Integer> standing = Map.of("floor", ticketsPerUser);
                 return service.guestSelectTickets(t, concurrentEventId, seating, standing);
             }));

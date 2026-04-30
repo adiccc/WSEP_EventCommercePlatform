@@ -5,6 +5,7 @@ import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
 import domain.dto.EventMapDTO;
 import domain.dto.SeatingTicketDTO;
+import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
@@ -119,7 +120,8 @@ public class ActiveOrderService {
 
             int totalTickets = totalSeatingTickets + totalStandingTickets;
             Event e = this.eventRepo.findById(eventId);
-//            e.quantityExceedsPolicy(auth.getUserDTO(identifier), totalTickets);
+            Response<UserDTO> userResponse = auth.getUserDTO(identifier);
+            e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
             int orderId = idGenerator.getAndIncrement();
             List<Integer> tickets = e.bookTickets(false,seatingZones,standingZones); // check here quantity and policy
             this.eventRepo.store(e);
