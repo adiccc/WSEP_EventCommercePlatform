@@ -259,6 +259,8 @@ public class ActiveOrderService {
 
                 return new Response<>(result, "Tickets issued successfully");
 
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Ticket issuance failed: " + e.getMessage());
                 return new Response<>(null, "Ticket issuance failed");
