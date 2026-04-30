@@ -10,7 +10,7 @@ import domain.policy.PurchasePolicy;
 import java.time.LocalDateTime;
 
 public class EventDetailsDTO {
-    private String eventID;
+    private Integer eventID;
     private String eventName;
     private String eventDate;
     private int companyId;
@@ -40,11 +40,11 @@ public class EventDetailsDTO {
         }
     }
 
-    public String getEventID() {
+    public Integer getEventID() {
         return eventID;
     }
 
-    public String getId() {
+    public Integer getId() {
         return eventID;
     }
 

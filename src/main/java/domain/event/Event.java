@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Map;
 
 public class Event {
-    private String id;
+    private int id;
     private int companyId;
     private int creatorId;
     private EventMap eventMap;
@@ -46,7 +46,7 @@ public class Event {
         purchasePolicy.addRule(new MaxTicketsRule(20));
         discountPolicy = new DiscountPolicy();
         discountPolicy.addDiscount(new LimitedDiscount(0.1, 5));
-        this.id = LocalDateTime.now().hashCode() + String.valueOf(creatorId);
+        this.id = -1; // will be set when stored in repo
         active = false;
         this.location = location;
         this.categoryEvent = categoryEvent;
@@ -140,7 +140,7 @@ public class Event {
         return hasLottery;
     }
 
-    public String getId() {
+    public int getId() {
         return id;
     }
 
@@ -247,7 +247,7 @@ public class Event {
         if (obj == null || getClass() != obj.getClass()) return false;
 
         Event other = (Event) obj;
-        return id.equals(other.id) && version == other.version;
+        return id == (other.id) && version == other.version;
     }
 
     public void quantityExceedsPolicy(UserDTO user, int quantity) {
@@ -268,6 +268,10 @@ public class Event {
 
     //TODO : this implementation is for test only, this function should be implemented currectly
     public void placeOrder(int userId,int orderId){
-        orders.add(new Order(orderId,userId," ",new ArrayList<>(),100.0,"order123"));
+        orders.add(new Order(orderId,userId,-1,new ArrayList<>(),100.0,"order123"));
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 }

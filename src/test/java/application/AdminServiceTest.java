@@ -49,7 +49,7 @@ class AdminServiceTest {
     private ActiveOrderService activeOrderService;
     private final int companyId = 900;
     private LocalDateTime eventDate;
-    private String eventId;
+    private Integer eventId;
     private ElementPositionDTO stage;
     private List<ElementPositionDTO> entries;
     private List<StandingZoneDTO> standingZones;

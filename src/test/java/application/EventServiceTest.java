@@ -40,8 +40,8 @@ class EventServiceTest {
     private EventService service;
 
     private String validToken;
-    private String activeEvent1Id;
-    private String inactiveEventId;
+    private Integer activeEvent1Id;
+    private Integer inactiveEventId;
     private EventCompanyManageService eventCompanyManageService;
 
     private ElementPositionDTO stage;
@@ -100,7 +100,7 @@ class EventServiceTest {
         Response<EventDetailsDTO> response = service.ViewEventDetails(
                 validToken,
                 company1,
-                "invalid-id"
+                -1
         );
 
         assertNull(response.getValue());
@@ -161,7 +161,7 @@ class EventServiceTest {
         Response<EventDetailsDTO> response = service.ViewEventDetails(
                 validToken,
                 company1,
-                ""
+                -1
         );
 
         assertNull(response.getValue());

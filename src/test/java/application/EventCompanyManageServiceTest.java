@@ -61,8 +61,7 @@ class EventCompanyManageServiceTest {
     private IEventRepo eventRepo;
 
     private LocalDateTime eventDate;
-    private String eventId;
-    private String pastEventId;
+    private Integer eventId;
 
 
     private UserService userService;
@@ -184,7 +183,7 @@ class EventCompanyManageServiceTest {
     void GivenMissingEventScenario_WhenDefineVenueAndSeatingMap_ThenEventNotFoundErrorIsShown() {
         Response<Boolean> response =eventCompanyManageService.DefineVenueAndSeatingMap(
                 validToken1,
-                "non-existing-event-id",
+                -1,
                 stage,
                 entries,
                 standingZones,
@@ -218,7 +217,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
         // Act: Standard sale (hasLottery = false)
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 validToken1, companyId, eventDate, "Standard Event", saleStartDate, false,GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -234,7 +233,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
         // Act: Lottery sale (hasLottery = true)
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 validToken1, companyId, eventDate, "Lottery Event", saleStartDate, false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -250,7 +249,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
         // Act
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 validToken2, companyId, eventDate, "Unauthorized Event", saleStartDate, false,GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -266,7 +265,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = pastEventDate.minusDays(1);
 
         // Act
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 validToken1, companyId, pastEventDate, "Past Event", saleStartDate, false,GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -282,7 +281,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
         // Act
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 null, companyId, eventDate, "No Token Event", saleStartDate, false,GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -442,7 +441,7 @@ class EventCompanyManageServiceTest {
         // When
         Response<Boolean> response =eventCompanyManageService.UpdateEventDate(
                 validToken1,
-                "non-existing-event-id",
+                -1,
                 requestedDate
         );
 
@@ -603,7 +602,7 @@ class EventCompanyManageServiceTest {
         // Act
         Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
                 validToken1,
-                "non-existing-event-id",
+                -1,
                 newStandingZones,
                 null
         );
@@ -652,7 +651,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenInactiveEvent_WhenAddZonesToEventMap_ThenEventNotActiveErrorIsReturned() {
         // Arrange: Create a Lottery Event. A lottery event does not become active immediately when a map is defined.
-        String lotteryEventId = eventCompanyManageService.createEvent(
+        Integer lotteryEventId = eventCompanyManageService.createEvent(
                 validToken1, companyId, LocalDateTime.now().plusDays(10), "Lottery Event",
                 LocalDateTime.now().plusDays(5), true, GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         ).getValue();
@@ -760,7 +759,7 @@ class EventCompanyManageServiceTest {
     void GivenOwnerWithSalesData_WhenGenerateSalesReports_ThenReturnReportWithData() {
         // Arrange
         //TODO: make sure that when order is completed change the change to use only repo's and services!!!!
-        String event = eventCompanyManageService.createEvent(validToken1,companyId,eventDate,"event1",eventDate.minusDays(1), false,GeographicalArea.NORTH,CategoryEvent.SPORTS).getValue();
+        Integer event = eventCompanyManageService.createEvent(validToken1,companyId,eventDate,"event1",eventDate.minusDays(1), false,GeographicalArea.NORTH,CategoryEvent.SPORTS).getValue();
         List<Integer> purchasedTickets = new ArrayList<>();
         purchasedTickets.add(101);
         Event e =eventRepo.findById(event);
@@ -990,7 +989,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenNonExistingEvent_WhenDeleteEvent_ThenEventNotFoundErrorReturned() {
         // Given
-        String nonExistingEventId = "333";
+        Integer nonExistingEventId = 333;
 
         // When
         Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, nonExistingEventId);
@@ -1050,55 +1049,55 @@ class EventCompanyManageServiceTest {
         executor.shutdown();
     }
 
-//    @Test
-//    void GivenHighLoad_WhenManagerCreatesMultipleEventsSimultaneously_ThenAllEventsAreSuccessfullyCreated() throws InterruptedException {
-//        // Arrange: Set up 20 concurrent event creations
-//        int numberOfConcurrentEvents = 20;
-//        ExecutorService executor = Executors.newFixedThreadPool(numberOfConcurrentEvents);
-//        CountDownLatch startGun = new CountDownLatch(1);
-//        CountDownLatch finishLine = new CountDownLatch(numberOfConcurrentEvents);
-//
-//        // Act: Create 20 threads, each trying to create a unique event for the same company
-//        for (int i = 0; i < numberOfConcurrentEvents; i++) {
-//            final int index = i;
-//            executor.submit(() -> {
-//                try {
-//                    startGun.await(); // Wait for the start signal
-//
-//                    LocalDateTime futureDate = LocalDateTime.now().plusDays(10 + index);
-//                    LocalDateTime saleDate = LocalDateTime.now().plusDays(5);
-//
-//                    eventCompanyManageService.createEvent(
-//                            validToken1,
-//                            companyId,
-//                            futureDate,
-//                            "Massive Concurrent Event " + index,
-//                            saleDate,
-//                            false,
-//                            GeographicalArea.CENTER,
-//                            CategoryEvent.FESTIVAL
-//                    );
-//                } catch (InterruptedException e) {
-//                    Thread.currentThread().interrupt();
-//                } finally {
-//                    finishLine.countDown();
-//                }
-//            });
-//        }
-//
-//        // All 20 creations hit the service simultaneously
-//        startGun.countDown();
-//        finishLine.await(); // Wait for all threads and their respective retries to finish
-//
-//        // Assert: Verify that no event was lost due to concurrent overwrites on the company list
-//        // We fetch all events for this company.
-//        // We expect the 1 original event from setUp() + 20 new concurrent events = 21 total events.
-//        List<Event> companyEvents = eventRepo.findByCompany(companyId);
-//
-//        assertEquals(numberOfConcurrentEvents + 1, companyEvents.size(),
-//                "All concurrent events must be successfully saved without overwriting each other");
-//
-//        executor.shutdown();
-//    }
+    @Test
+    void GivenHighLoad_WhenManagerCreatesMultipleEventsSimultaneously_ThenAllEventsAreSuccessfullyCreated() throws InterruptedException {
+        // Arrange: Set up 20 concurrent event creations
+        int numberOfConcurrentEvents = 20;
+        ExecutorService executor = Executors.newFixedThreadPool(numberOfConcurrentEvents);
+        CountDownLatch startGun = new CountDownLatch(1);
+        CountDownLatch finishLine = new CountDownLatch(numberOfConcurrentEvents);
+
+        // Act: Create 20 threads, each trying to create a unique event for the same company
+        for (int i = 0; i < numberOfConcurrentEvents; i++) {
+            final int index = i;
+            executor.submit(() -> {
+                try {
+                    startGun.await(); // Wait for the start signal
+
+                    LocalDateTime futureDate = LocalDateTime.now().plusDays(10 + index);
+                    LocalDateTime saleDate = LocalDateTime.now().plusDays(5);
+
+                    eventCompanyManageService.createEvent(
+                            validToken1,
+                            companyId,
+                            futureDate,
+                            "Massive Concurrent Event " + index,
+                            saleDate,
+                            false,
+                            GeographicalArea.CENTER,
+                            CategoryEvent.FESTIVAL
+                    );
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    finishLine.countDown();
+                }
+            });
+        }
+
+        // All 20 creations hit the service simultaneously
+        startGun.countDown();
+        finishLine.await(); // Wait for all threads and their respective retries to finish
+
+        // Assert: Verify that no event was lost due to concurrent overwrites on the company list
+        // We fetch all events for this company.
+        // We expect the 1 original event from setUp() + 20 new concurrent events = 21 total events.
+        List<Event> companyEvents = eventRepo.findByCompany(companyId);
+
+        assertEquals(numberOfConcurrentEvents + 1, companyEvents.size(),
+                "All concurrent events must be successfully saved without overwriting each other");
+
+        executor.shutdown();
+    }
 
 }

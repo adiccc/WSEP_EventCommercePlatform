@@ -62,7 +62,7 @@ public class ActiveOrderService {
        // this.capacity = MAX_ACTIVE_ORDERS_PER_EVENT;
     }
 
-    public Response<EventMapDTO> enterEventPurchase(String token, int companyId, String eventId) {
+    public Response<EventMapDTO> enterEventPurchase(String token, int companyId, int eventId) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "enterEventPurchase called");
@@ -151,7 +151,7 @@ public class ActiveOrderService {
         });
     }
 
-    public Response<Integer>guestSelectTickets(String identifier, String eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
+    public Response<Integer>guestSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return RetryHelper.executeWithRetry(()->{
         logger.log(Level.INFO, "guestSelectTickets called");
 
@@ -191,7 +191,7 @@ public class ActiveOrderService {
 
     //TODO : this implementation is for test only, this function should be implemented currectly
 
-    public Response<Boolean> placeOrder(String token, String eventId, int orderId) {
+    public Response<Boolean> placeOrder(String token, Integer eventId, int orderId) {
         Event event =eventRepo.findById(eventId);
         int userId=auth.getUserId(token).getValue();
         event.placeOrder(userId,orderId);

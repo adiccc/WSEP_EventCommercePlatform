@@ -10,12 +10,12 @@ public class OrderDTO {
     private OrderStatus status;
     private int orderId;
     private int userId;
-    private String eventId;
+    private Integer eventId;
     private List<Integer> tickets;
     private double totalSum;
     String paymentConfirmationId;
 
-    public OrderDTO(int orderId, int userId, String eventId, List<Integer> tickets,double totalSum, String paymentConfirmationId) {
+    public OrderDTO(int orderId, int userId, Integer eventId, List<Integer> tickets,double totalSum, String paymentConfirmationId) {
         this.orderId = orderId;
         this.userId = userId;
         this.eventId = eventId;

@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public class EventDTO {
-    private String eventID;
+    private Integer eventID;
     private String eventName;
     private String eventDate;
     private String eventLocation; //get Georgraphical area
@@ -21,7 +21,7 @@ public class EventDTO {
     private String saleStartDate;
     private String categoryEvent;
 
-    public EventDTO(String eventID, String eventName, LocalDateTime eventDate, LocalDateTime saleStartDate, CategoryEvent categoryEvent, GeographicalArea eventLocation, int creatorId) {
+    public EventDTO(Integer eventID, String eventName, LocalDateTime eventDate, LocalDateTime saleStartDate, CategoryEvent categoryEvent, GeographicalArea eventLocation, int creatorId) {
         this.eventID = eventID;
         this.eventName = eventName;
         this.eventDate = eventDate.toString();
@@ -41,7 +41,7 @@ public class EventDTO {
         this.creatorId = event.getCreatorId();
     }
 
-    public String getEventID() {
+    public Integer getEventID() {
         return eventID;
     }
 

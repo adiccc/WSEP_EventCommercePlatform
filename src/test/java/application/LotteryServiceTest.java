@@ -32,7 +32,7 @@ class LotteryServiceTest {
     private LotteryService lotteryService;
 
     private LocalDateTime saleStartDate_Y;
-    private String eventId;
+    private Integer eventId;
 
     private String validToken;
     private String validToken1;
@@ -114,7 +114,7 @@ class LotteryServiceTest {
 
         saleStartDate_Y = LocalDateTime.now().plusDays(14);
 
-        Response<String> eventResponse = eventCompanyManageService.createEvent(
+        Response<Integer> eventResponse = eventCompanyManageService.createEvent(
                 validToken,
                 companyId,
                 LocalDateTime.now().plusDays(30),
@@ -219,7 +219,7 @@ class LotteryServiceTest {
 
         // Act
         Response<Boolean> response = lotteryService.createLottery(
-                validToken, "non-existing-event-id", 50, lotteryDate_X, (long) 24.0
+                validToken, -1, 50, lotteryDate_X, (long) 24.0
         );
 
         // Assert
@@ -230,7 +230,7 @@ class LotteryServiceTest {
     @Test
     void GivenEventNotSupportingLottery_WhenCreateLottery_ThenLotteryNotSupportedErrorIsReturned() {
         // Arrange: Create an event that DOES NOT support lottery
-        String eventId=eventCompanyManageService.createEvent(validToken,companyId,LocalDateTime.now().plusDays(30),"test-event-no-lottery",saleStartDate_Y,false,GeographicalArea.CENTER,CategoryEvent.FESTIVAL).getValue();
+        Integer eventId=eventCompanyManageService.createEvent(validToken,companyId,LocalDateTime.now().plusDays(30),"test-event-no-lottery",saleStartDate_Y,false,GeographicalArea.CENTER,CategoryEvent.FESTIVAL).getValue();
         LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
 
         // Act
@@ -321,7 +321,7 @@ class LotteryServiceTest {
         // Act & Assert
         // We call the service with a fake ID. If it crashes the test fails.
         // It should just log the error internally as per our implementation.
-        assertDoesNotThrow(() -> lotteryService.drawLottery("non-existent-lottery-id"),
+        assertDoesNotThrow(() -> lotteryService.drawLottery(-1),
                 "The service should catch the exception and log it, not crash the system.");
     }
 
