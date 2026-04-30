@@ -105,13 +105,12 @@ public class ActiveOrderService {
     }
 
 
-    public Response<Integer>guestSelectTickets(String identifier, String eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
+    public Response<Integer>userSelectTickets(String identifier, String eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return RetryHelper.executeWithRetry(()->{
-        logger.log(Level.INFO, "guestSelectTickets called");
+        logger.log(Level.INFO, "userSelectTickets called");
 
         try {
             this.activeOrderRepo.alreadyHasActiveOrder(auth.getUserId(identifier).getValue(), eventId);
-
             int totalSeatingTickets = seatingZones.values().stream()
                     .mapToInt(List::size)
                     .sum();
@@ -125,7 +124,7 @@ public class ActiveOrderService {
             Response<UserDTO> userResponse = auth.getUserDTO(identifier);
             e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
             int orderId = idGenerator.getAndIncrement();
-            List<Integer> tickets = e.bookTickets(false,seatingZones,standingZones); // check here quantity and policy
+            List<Integer> tickets = e.bookTickets(seatingZones,standingZones); // check here quantity and policy
             this.eventRepo.store(e);
             ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(identifier).getValue(), eventId, tickets,orderExpireMinutes);
             activeOrderRepo.store(newActiveOrder);

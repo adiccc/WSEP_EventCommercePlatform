@@ -343,7 +343,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 1);
 
-        Response<Integer> response = service.guestSelectTickets(validToken, "bad-id", seating, standing);
+        Response<Integer> response = service.userSelectTickets(validToken, "bad-id", seating, standing);
 
         assertNull(response.getValue());
         assertEquals("Event not found", response.getMessage());
@@ -354,7 +354,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 3);
 
-        Response<Integer> response = service.guestSelectTickets(validToken, concurrentEventId, seating, standing);
+        Response<Integer> response = service.userSelectTickets(validToken, concurrentEventId, seating, standing);
 
         assertNotNull(response.getValue());
         assertEquals("Tickets selected successfully", response.getMessage());
@@ -366,7 +366,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 201);
 
-        Response<Integer> response = service.guestSelectTickets(validToken, concurrentEventId, seating, standing);
+        Response<Integer> response = service.userSelectTickets(validToken, concurrentEventId, seating, standing);
 
         assertNull(response.getValue());
         assertNotNull(response.getMessage());
@@ -377,7 +377,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("no-such-zone", 1);
 
-        Response<Integer> response = service.guestSelectTickets(validToken, concurrentEventId, seating, standing);
+        Response<Integer> response = service.userSelectTickets(validToken, concurrentEventId, seating, standing);
 
         assertNull(response.getValue());
     }
@@ -407,7 +407,7 @@ class ActiveOrderServiceTest {
                 start.await();
                 Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
                 Map<String, Integer> standing = Map.of("floor", ticketsPerUser);
-                return service.guestSelectTickets(t, concurrentEventId, seating, standing);
+                return service.userSelectTickets(t, concurrentEventId, seating, standing);
             }));
         }
 
@@ -454,7 +454,7 @@ class ActiveOrderServiceTest {
                 start.await();
                 Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
                 Map<String, Integer> standing = Map.of("floor", ticketsPerUser);
-                return service.guestSelectTickets(t, concurrentEventId, seating, standing);
+                return service.userSelectTickets(t, concurrentEventId, seating, standing);
             }));
         }
 

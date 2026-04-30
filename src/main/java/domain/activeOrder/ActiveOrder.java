@@ -59,4 +59,7 @@ public class ActiveOrder {
         public int getUserId() {
             return userId;
         }
+
+    public LocalDateTime getExpireTime() { return expireTime; }
+    public List<Integer> getTickets() { return new ArrayList<>(tickets); }
 }
