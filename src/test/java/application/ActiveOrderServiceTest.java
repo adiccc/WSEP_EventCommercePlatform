@@ -55,7 +55,6 @@ class ActiveOrderServiceTest {
     private List<SeatingZoneDTO> seatingZones;
 
     private final int companyId = 1;
-    // private final int capacity = MAX_ACTIVE_ORDERS_PER_EVENT;
     private final int capacity = 20;
 
     @BeforeEach
