@@ -3,6 +3,7 @@ package application;
 import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
+import Log.LoggerSetup;
 import domain.activeOrder.ActiveOrder;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
@@ -59,6 +60,7 @@ class ActiveOrderServiceTest {
 
     @BeforeEach
     void setUp() {
+        LoggerSetup.setup();
         tokenService = new TokenService();
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();

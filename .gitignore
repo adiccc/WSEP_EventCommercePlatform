@@ -4,6 +4,9 @@
 # maven
 target/
 
+#logs
+Logs/
+
 # Build files
 *.class
 *.jar

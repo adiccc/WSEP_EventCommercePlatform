@@ -3,6 +3,7 @@ package application;
 import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
+import Log.LoggerSetup;
 import domain.company.Company;
 import domain.dataType.*;
 import domain.dto.EventDTO;
@@ -48,6 +49,7 @@ class EventServiceTest {
 
     @BeforeEach
     void setUp() {
+        LoggerSetup.setup();
         eventRepo = new EventRepoImpl();
         tokenService = new TokenService();
         userRepo = new UserRepo();

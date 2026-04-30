@@ -1,5 +1,6 @@
 package application;
 
+import Log.LoggerSetup;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
@@ -34,6 +35,7 @@ class CompanyServiceUpdatedTest {
 
     @BeforeEach
     void setUp() {
+        LoggerSetup.setup();
         userRepo = new UserRepo();
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         TokenService tokenService = new TokenService();

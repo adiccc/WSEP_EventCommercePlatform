@@ -3,6 +3,7 @@ package application;
 import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
+import Log.LoggerSetup;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.CategoryEvent;
@@ -52,6 +53,7 @@ class AdminServiceTest {
 
     @BeforeEach
     void setUp() {
+        LoggerSetup.setup();
         WebQueue.resetForTesting();
         WebQueue.getInstance(100);
 

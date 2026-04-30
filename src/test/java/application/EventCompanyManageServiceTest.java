@@ -3,6 +3,7 @@ package application;
 import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
+import Log.LoggerSetup;
 import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.dataType.CategoryEvent;
@@ -68,6 +69,7 @@ class EventCompanyManageServiceTest {
 
     @BeforeEach
     void setUp() {
+        LoggerSetup.setup();
         userRepo=new UserRepo();
         passwordEncoder=new PasswordEncoderUtil();
         tokenService = new TokenService();
