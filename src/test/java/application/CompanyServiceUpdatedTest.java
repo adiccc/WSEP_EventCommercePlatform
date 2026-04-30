@@ -6,13 +6,17 @@ import Log.LoggerSetup;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
+<<<<<<< HEAD
+=======
+import domain.policy.*;
+import domain.user.IUserRepo;
+>>>>>>> 2f76235 (handeling all guest checks and logic, generationg guest token and update token service class, adding continueAsGuest function and leaveSite and adding tests, before rebase)
 import domain.dto.CompanyDTO;
 import domain.user.IUserRepo;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;

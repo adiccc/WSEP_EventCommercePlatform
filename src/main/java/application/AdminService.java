@@ -268,13 +268,12 @@ public class AdminService {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");
 
-            int userId = auth.getUserId(token).getValue();
+             int userId = auth.getUserId(token).getValue();
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
             }
-
-            try {
+            try{
                 Event event = eventRepo.findById(eventId);
                 Order order = event.findOrderById(orderId);
 

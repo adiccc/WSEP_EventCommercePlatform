@@ -8,6 +8,7 @@ public interface IAuth {
     Response<Boolean> isLoggedIn(String token);
     Response<Integer> getUserId(String token);
     Response<Boolean> isAdmin(String token);
-
+    Response<String> getRole(String token);
     Response<UserDTO> getUserDTO(String identifier);
+
 }

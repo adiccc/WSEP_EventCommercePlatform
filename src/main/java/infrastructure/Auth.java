@@ -19,7 +19,7 @@ public class Auth implements IAuth {
     private final TokenService tokenService;
     private final IUserRepo userRepo;
     private final IPasswordEncoder passwordEncoder;
-    private final Map<String, Date> tokensLoggedOut = new ConcurrentHashMap<>();
+    private final Map<String, Date> tokensLoggedOut = new ConcurrentHashMap<>(); //only for members
     private final Set<String> adminEmails;
 
     public Auth(TokenService tokenService, IUserRepo userRepo, IPasswordEncoder passwordEncoder, Set<String> adminEmails) {
@@ -34,7 +34,7 @@ public class Auth implements IAuth {
     }
 
     @Override
-    public Response<String> login(String username, String password) {
+    public Response<String> login(String username, String password) { //login only for members!
         logger.info("Login attempt for username: " + username);
         try {
             Member member = userRepo.findUserByEmail(username);
@@ -67,7 +67,6 @@ public class Auth implements IAuth {
                 tokensLoggedOut.put(token, date);
                 cleanExpiredLoggedOutTokens();
                 logger.info("Logout successful for username: " + userId);
-                //TODO after successful logout need to notify webQueue to insert
                 return new Response<>(true, "Logout successful");
             }
             catch(Exception e){
@@ -91,6 +90,24 @@ public class Auth implements IAuth {
         }
     }
 
+    @Override
+    public Response<String> getRole(String token) {
+        logger.info("trying to extract role");
+        if(token==null || token.isBlank()) {
+            logger.warning("token is missing or empty");
+            return new Response<>(null, "Token is missing or empty");
+        }
+        try{
+            String role = tokenService.extractRole(token);
+            logger.info("retrieved role: " + role);
+            return new Response<>(role, "retrieved role");
+        }
+        catch(Exception e){
+            logger.severe("getRole failed for token: " + token + ". Error: " + e.getMessage());
+            return new Response<>(null, "getRole failed due to server error");
+        }
+    }
+
     private void cleanExpiredLoggedOutTokens() {
         Date today = new Date();
         logger.info("Clean expired logged out tokens");
@@ -104,7 +121,7 @@ public class Auth implements IAuth {
 
     @Override
     public Response<Boolean> isLoggedIn(String token) {
-        if(token == null){
+        if(token == null || token.isBlank()){
             logger.warning("Token is null");
             return new Response<>(false, "Token is null");
         }
@@ -126,11 +143,20 @@ public class Auth implements IAuth {
 
     @Override
     public Response<Integer> getUserId(String token) {
-        if (!isLoggedIn(token).getValue()) {
-            logger.warning("User with token is not logged in");
-            return new Response<>(-1, "User with token is not logged in");
+        if (token == null || token.isBlank()) {
+            logger.warning("Token is missing");
+            return new Response<>(-1, "Token is missing");
         }
         try {
+            String role = tokenService.extractRole(token);
+            if (role.equals("GUEST")) {
+                logger.info("Token is belong to GUEST, returning -1");
+                return new Response<>(-1, "Guest token recognized");
+            }
+            if (!isLoggedIn(token).getValue()) {
+                logger.warning("User with token is not logged in");
+                return new Response<>(-1, "User with token is not logged in");
+            }
             String username = tokenService.extractUsername(token);
             if (username == null) {
                 logger.warning("User with token is not found");
