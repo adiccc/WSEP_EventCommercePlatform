@@ -331,4 +331,136 @@ class CompanyServiceUpdatedTest {
         Response<Boolean> response = service.removeDiscountFromCompany(OWNER_TOKEN, COMPANY_ID, discountDTO);
         assertTrue(response.isError());
     }
+
+    // ===================== II.3.2 Create Production Company =====================
+
+    @Test
+    void GivenValidInputs_WhenCreateProductionCompany_ThenReturnSuccessAndCompanyStored() {
+        Response<Company> response = service.createProductionCompany(
+                OWNER_TOKEN, 99, "NewCo", "new@co.com", "050-999-9999", "bank-99");
+
+        assertFalse(response.isError(), "Expected success but got: " + response.getMessage());
+        assertNotNull(response.getValue());
+        assertEquals("NewCo", response.getValue().getCompanyName());
+        assertEquals("NewCo", companyRepo.findById(99).getCompanyName());
+        assertTrue(companyRepo.findById(99).isOwner(OWNER_ID));
+    }
+
+    @Test
+    void GivenDuplicateCompanyId_WhenCreateProductionCompany_ThenReturnError() {
+        // COMPANY_ID=1 already created in setUp
+        Response<Company> response = service.createProductionCompany(
+                OWNER_TOKEN, COMPANY_ID, "Other", "o@o.com", "050-000-0001", "bank-x");
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("already exists"));
+    }
+
+    @Test
+    void GivenDuplicateCompanyName_WhenCreateProductionCompany_ThenReturnError() {
+        // "Test Company" already created in setUp
+        Response<Company> response = service.createProductionCompany(
+                OWNER_TOKEN, 98, "Test Company", "o@o.com", "050-000-0002", "bank-y");
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("already taken"));
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenCreateProductionCompany_ThenReturnError() {
+        auth.logout(OWNER_TOKEN);
+
+        Response<Company> response = service.createProductionCompany(
+                OWNER_TOKEN, 97, "LoggedOutCo", "lo@co.com", "050-000-0003", "bank-z");
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+    }
+
+    @Test
+    void GivenInvalidEmail_WhenCreateProductionCompany_ThenReturnError() {
+        Response<Company> response = service.createProductionCompany(
+                OWNER_TOKEN, 96, "BadEmailCo", "not-an-email", "050-000-0004", "bank-w");
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("Invalid contact"));
+    }
+
+    // ===================== II.4.15 View Roles and Permissions Tree =====================
+
+    @Test
+    void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenReturnsTree() {
+        Response<domain.dto.RolesPermissionsTreeDTO> response =
+                service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID);
+
+        assertFalse(response.isError(), "Expected success but got: " + response.getMessage());
+        assertNotNull(response.getValue());
+    }
+
+    @Test
+    void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenFounderIdIsCorrect() {
+        domain.dto.RolesPermissionsTreeDTO tree =
+                service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID).getValue();
+
+        assertEquals(OWNER_ID, tree.getFounderId(),
+                "Founder should be the user who created the company");
+    }
+
+    @Test
+    void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenOwnerSetContainsFounder() {
+        domain.dto.RolesPermissionsTreeDTO tree =
+                service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID).getValue();
+
+        assertTrue(tree.getOwnerIds().contains(OWNER_ID));
+    }
+
+    @Test
+    void GivenNewCompany_WhenViewRolesTree_ThenManagersMapIsEmpty() {
+        domain.dto.RolesPermissionsTreeDTO tree =
+                service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID).getValue();
+
+        assertTrue(tree.getManagersPermissions().isEmpty(),
+                "A brand-new company has no managers");
+    }
+
+    @Test
+    void GivenNonOwner_WhenViewRolesTree_ThenError() {
+        Response<domain.dto.RolesPermissionsTreeDTO> response =
+                service.viewRolesAndPermissionsTree(OTHER_TOKEN, COMPANY_ID);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+    }
+
+    @Test
+    void GivenUnknownCompanyId_WhenViewRolesTree_ThenError() {
+        Response<domain.dto.RolesPermissionsTreeDTO> response =
+                service.viewRolesAndPermissionsTree(OWNER_TOKEN, 9999);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenViewRolesTree_ThenError() {
+        Response<domain.dto.RolesPermissionsTreeDTO> response =
+                service.viewRolesAndPermissionsTree("not-a-real-token", COMPANY_ID);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenViewRolesTree_ThenError() {
+        auth.logout(OWNER_TOKEN);
+
+        Response<domain.dto.RolesPermissionsTreeDTO> response =
+                service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+    }
 }
