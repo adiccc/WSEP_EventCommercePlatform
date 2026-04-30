@@ -1,5 +1,7 @@
 package application;
 
+import DTO.TicketSupplyRequestDTO;
+import DTO.TicketSupplyResultDTO;
 import domain.activeOrder.IActiveOrderRepo;
 import DTO.PaymentDetailsDTO;
 import domain.activeOrder.ActiveOrder;
@@ -149,8 +151,6 @@ public class ActiveOrderService {
 //
 //                // TODO: replace with real total calculation according to selected tickets,
 //                // event zones, discounts, and company/event policies.
-//                // TODO: validate purchase policy before payment.
-//                // Should this be delegated to Event/Company policy according to the model?
 //                // TODO: implement Event.calculatePrice(...) using event/company discount policy.
 //                // double total = event.calculatePrice(activeOrder.getTickets());
 //
@@ -180,7 +180,7 @@ public class ActiveOrderService {
 //                // TODO: trigger Ticket Issuance UC using ticketSupply.issue(...)
 //                // Do not make checkout response depend on ticket issuance yet.
 //
-//                // TODO: notify queue/active-order manager that a purchase slot was released.
+//                // TODO: notify queue/active-order manager that a purchase slot (ao) was released.
 //
 //                logger.log(Level.INFO, "Purchase completed successfully");
 //                return new Response<>(order.getOrderId(), "Purchase completed successfully");
@@ -195,4 +195,24 @@ public class ActiveOrderService {
 //            }
 //        });
 //    }
+
+
+    public Response<TicketSupplyResultDTO> issueTickets(TicketSupplyRequestDTO request) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "issueTickets called");
+
+            if (request == null) {
+                return new Response<>(null, "Invalid ticket supply request");
+            }
+
+            TicketSupplyResultDTO result = ticketSupply.issue(request);
+
+            if (result == null || !result.isSuccess()) {
+
+                return new Response<>(result, "Ticket issuance failed");
+            }
+
+            return new Response<>(result, "Tickets issued successfully");
+        });
+    }
 }
