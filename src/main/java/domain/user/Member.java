@@ -3,7 +3,9 @@ package domain.user;
 import domain.activeOrder.ActiveOrder;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 public class Member extends User{
     protected Integer userId;
