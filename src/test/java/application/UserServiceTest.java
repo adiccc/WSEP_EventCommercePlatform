@@ -1,6 +1,7 @@
 package application;
 
 import DTO.QueueEntryResultDTO;
+import Log.LoggerSetup;
 import domain.dto.UserDTO;
 import domain.user.IUserRepo;
 import domain.user.Member;
@@ -26,6 +27,7 @@ class UserServiceTest {
 
     @BeforeEach
     void setUp() {
+        LoggerSetup.setup();
         WebQueue.resetForTesting();
         WebQueue.getInstance(100);
 

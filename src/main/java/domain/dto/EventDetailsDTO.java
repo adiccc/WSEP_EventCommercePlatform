@@ -55,4 +55,8 @@ public class EventDetailsDTO {
     public String getDate() {
         return eventDate;
     }
+
+    public String getName() {
+        return eventName;
+    }
 }

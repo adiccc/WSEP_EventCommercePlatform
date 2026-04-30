@@ -47,7 +47,12 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
             activeOrders.put(newEntry.getId(), newEntry);
             return;
         }
-
+        if (currentOrder.getVersion() != entity.getVersion()) {
+            throw new OptimisticLockingFailureException(
+                    "Event " + entity.getId() + " version mismatch. Expected: " +
+                            entity.getVersion() + ", but found: " + currentOrder.getVersion()
+            );
+        }
         ActiveOrder updatedOrder = new ActiveOrder(entity);
         updatedOrder.setVersion(entity.getVersion() + 1);
 
@@ -55,8 +60,7 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
 
         if (!replaced) {
             throw new OptimisticLockingFailureException(
-                    "ActiveOrder " + entity.getId() + " version mismatch. Expected: " +
-                            entity.getVersion() + ", but found: " + currentOrder.getVersion()
+                    "Event " + entity.getId() + " was modified concurrently"
             );
         }
     }

@@ -4,7 +4,7 @@ import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
-
+import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.NoSuchElementException;
@@ -75,6 +75,8 @@ public class LotteryService {
                 } catch (NoSuchElementException e) {
                     logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                     return new Response<>(false, "event not found");
+                } catch (OptimisticLockingFailureException e) {
+                    throw e;
                 } catch (Exception e) {
                     logger.log(Level.SEVERE, "failed creating lottery : " + e.getMessage());
                     return new Response<>(false, "failed to create lottery : " + e.getMessage());
@@ -110,11 +112,22 @@ public class LotteryService {
             //Save the updated lottery state (with the populated winners list) back to the database
             lotteryRepo.store(lottery);
             logger.log(Level.INFO, "Successfully drawn winners for lottery ID: " + lotteryId + ". Total winners: " + lottery.getWinners().size());
-            // TODO: notify winners (not in this version)
+            // notify winners (not in this version)
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Could not draw lottery, ID not found: " + lotteryId);
+        } catch (OptimisticLockingFailureException e) {
+            throw e;
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error during lottery draw for ID: " + lotteryId, e);
         }
+    }
+
+    // TODO: this implemetation is for test only, this function should be implemented
+    public Response<Boolean> registerUserToLottery(String token, String eventId) {
+        Lottery lottery=lotteryRepo.findById(eventId);
+        int userId = auth.getUserId(token).getValue();
+        lottery.registerUserToLottery(userId);
+        lotteryRepo.store(lottery);
+        return new Response<>(true, "User registered to lottery");
     }
 }

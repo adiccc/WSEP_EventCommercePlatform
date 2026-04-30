@@ -6,6 +6,7 @@ import domain.dto.UserDTO;
 import domain.user.Member;
 import domain.user.IUserRepo;
 import application.IAuth;
+import Exception.OptimisticLockingFailureException;
 import domain.user.User;
 import domain.webQueue.WebQueue;
 import java.time.DateTimeException;
@@ -132,6 +133,8 @@ public class UserService {
                 userRepo.store(member);
                 logger.info("Registration successful for email: " + email);
                 return Response.ok(true);
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Registration failed due to unexpected server error for email " + dto.getEmail() + ". Error: " + e.getMessage());
                 return Response.error(e.getMessage());
@@ -168,6 +171,8 @@ public class UserService {
                 WebQueue.getInstance().notifyUserLeft();
                 logger.info("Logout successful for token: " + token);
                 return response;
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("Logout failed due to unexpected server error for token: " + token);
                 return Response.error(e.getMessage());

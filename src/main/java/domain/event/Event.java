@@ -1,6 +1,7 @@
 package domain.event;
 
 import domain.dataType.CategoryEvent;
+import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
 import domain.policy.*;
 
@@ -8,6 +9,7 @@ import java.time.LocalDateTime;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Event {
     private String id;
@@ -26,7 +28,7 @@ public class Event {
     private CategoryEvent categoryEvent;
     private List<Order> orders;
     private long version;
-
+    private final AtomicInteger activePurchaseSessions = new AtomicInteger(0);
 
     public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent categoryEvent) {
         this.eventMap = null;
@@ -73,6 +75,7 @@ public class Event {
             this.orders.add(new Order(order));
         }
         this.version = event.version;
+        this.activePurchaseSessions.set(event.activePurchaseSessions.get());
     }
 
     public long getVersion() {
@@ -170,5 +173,81 @@ public class Event {
 
     public EventMap getEventMap() {
         return eventMap;
+    }
+
+    public boolean isFuture() {
+        return date.isAfter(LocalDateTime.now());
+    }
+
+    public boolean matches(EventSearchFilter filter) {
+        if (!isActive() || !isFuture()) return false;
+
+        if (filter.getKeyword() != null && !filter.getKeyword().isEmpty()) {
+            if (!name.toLowerCase().contains(filter.getKeyword().toLowerCase()))
+                return false;
+        }
+
+        if (filter.getStartDate() != null && date.isBefore(filter.getStartDate()))
+            return false;
+
+        if (filter.getEndDate() != null && date.isAfter(filter.getEndDate()))
+            return false;
+
+        if (filter.getCategory() != null && categoryEvent != filter.getCategory())
+            return false;
+
+        if (filter.getLocation() != null && location != filter.getLocation())
+            return false;
+
+        if (!matchesPrice(filter))
+            return false;
+
+        return true;
+    }
+
+
+    private boolean matchesPrice(EventSearchFilter filter) {
+        if (filter.getMinPrice() == null && filter.getMaxPrice() == null)
+            return true;
+
+        return eventMap.getZones().stream().anyMatch(z -> {
+            double price = z.getPrice();
+
+            if (filter.getMinPrice() != null && price < filter.getMinPrice())
+                return false;
+
+            if (filter.getMaxPrice() != null && price > filter.getMaxPrice())
+                return false;
+
+            return true;
+        });
+    }
+
+    public synchronized boolean tryAcquirePurchaseSlot(int capacity) {
+        if (activePurchaseSessions.get() >= capacity) {
+            return false;
+        }
+        activePurchaseSessions.incrementAndGet();
+        return true;
+    }
+
+    public void releasePurchaseSlot() {
+        if (activePurchaseSessions.get() > 0) {
+            activePurchaseSessions.decrementAndGet();
+        }
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+
+        Event other = (Event) obj;
+        return id.equals(other.id) && version == other.version;
+    }
+
+    //TODO : this implementation is for test only, this function should be implemented currectly
+    public void placeOrder(int userId,int orderId){
+        orders.add(new Order(orderId,userId," ",new ArrayList<>(),100.0,"order123"));
     }
 }

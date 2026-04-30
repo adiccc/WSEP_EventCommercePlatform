@@ -1,6 +1,7 @@
 package infrastructure;
 
 import domain.event.Event;
+import domain.event.EventQueue;
 import domain.event.IEventRepo;
 
 import java.util.*;
@@ -45,6 +46,13 @@ public class EventRepoImpl implements IEventRepo {
             return;
         }
 
+        if (currentEvent.getVersion() != entity.getVersion()) {
+            throw new OptimisticLockingFailureException(
+                    "Event " + entity.getId() + " version mismatch. Expected: " +
+                            entity.getVersion() + ", but found: " + currentEvent.getVersion()
+            );
+        }
+
         Event updatedEvent = new Event(entity);
         updatedEvent.setVersion(entity.getVersion() + 1);
 
@@ -52,11 +60,11 @@ public class EventRepoImpl implements IEventRepo {
 
         if (!replaced) {
             throw new OptimisticLockingFailureException(
-                    "Event " + entity.getId() + " version mismatch. Expected: " +
-                            entity.getVersion() + ", but found: " + currentEvent.getVersion()
+                    "Event " + entity.getId() + " was modified concurrently"
             );
         }
     }
+
     @Override
     public List<Event> findByCompany(int companyId) {
         return events.values().stream()

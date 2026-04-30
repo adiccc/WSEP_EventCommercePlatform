@@ -25,9 +25,9 @@ public class Order {
         this.paymentConfirmationId = paymentConfirmationId;
     }
     // TODO: fix Order constructor to require totalSum and paymentConfirmationId
-//    public Order(int orderId, int userId, String eventId, List<Integer> tickets) {
-//        this(orderId, userId, eventId, tickets, 0.0,"TEMP_PAYMENT_CONFIRMATION_ID");
-//    }
+    public Order(int orderId, int userId, String eventId, List<Integer> tickets) {
+        this(orderId, userId, eventId, tickets, 0.0,"TEMP_PAYMENT_CONFIRMATION_ID");
+    }
     public int getOrderId() {
         return orderId;
     }

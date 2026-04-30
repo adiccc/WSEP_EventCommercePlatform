@@ -20,7 +20,7 @@ import domain.lottery.ILotteryRepo;
 import domain.user.Member;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
+import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Set;
@@ -106,6 +106,8 @@ public class EventCompanyManageService {
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "failed creating a map : " + e.getMessage());
                 return new Response<>(false, "failed to create map : " + e.getMessage());
@@ -163,6 +165,8 @@ public class EventCompanyManageService {
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "company not found: " + e.getMessage());
                 return new Response<>(null, "Company not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
                 return new Response<>(null, "failed to create event : " + e.getMessage());
@@ -200,6 +204,8 @@ public class EventCompanyManageService {
                 eventRepo.store(event);
                 logger.log(Level.INFO, "Event updated successfully");
                 return new Response<>(true, "Event updated successfully");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
                 return new Response<>(false, "failed to create event : " + e.getMessage());
@@ -272,6 +278,8 @@ public class EventCompanyManageService {
                 logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
 
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "failed adding zones to event map : " + e.getMessage());
                 return new Response<>(false, "failed to add zones to event map : " + e.getMessage());
@@ -323,7 +331,9 @@ public class EventCompanyManageService {
                 }
                 logger.log(Level.INFO, "Orders deleted successfully");
                 return new Response<>(true, "Orders deleted successfully");
-            }catch(Exception e){
+            }catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch(Exception e){
                 logger.log(Level.SEVERE, "failed delete event : " + e.getMessage());
                 return new Response<>(false, "failed to detele event : " + e.getMessage());
             }
@@ -368,6 +378,8 @@ public class EventCompanyManageService {
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "company not found: " + e.getMessage());
                 return new Response<>(null, "company not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "failed getOrdersByCompany : " + e.getMessage());
                 return new Response<>(null, "failed getOrdersByCompany : " + e.getMessage());
@@ -419,6 +431,8 @@ public class EventCompanyManageService {
                 }
                 logger.log(Level.INFO, "Company details found: " + companyDetailsDTO);
                 return new Response<>(companyDetailsDTO, "Company details found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "failed getCompanyDetails : " + e.getMessage());
                 return new Response<>(null, "failed getCompanyDetails : " + e.getMessage());
@@ -473,7 +487,9 @@ public class EventCompanyManageService {
             logger.log(Level.INFO, "Sales Report generated successfully");
             return new Response<>(result, "Sales Report generated successfully");
         }
-        catch(Exception e){
+        catch (OptimisticLockingFailureException e) {
+            throw e;
+        } catch(Exception e){
             logger.log(Level.SEVERE, "failed generate sales report : " + e.getMessage());
             return new Response<>(null, "failed generate sales report : " + e.getMessage());
         }
@@ -525,6 +541,8 @@ public class EventCompanyManageService {
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
                 return new Response<>(false, "Failed to process refund: " + e.getMessage());
