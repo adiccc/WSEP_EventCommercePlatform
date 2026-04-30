@@ -201,6 +201,7 @@ class AuthTest {
         // Arrange
         String token = "valid.jwt.token";
         String expectedRole = "MEMBER";
+        when(tokenServiceMock.validateToken(token)).thenReturn(true);
         when(tokenServiceMock.extractRole(token)).thenReturn(expectedRole);
 
         // Act

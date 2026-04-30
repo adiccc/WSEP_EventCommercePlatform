@@ -391,9 +391,14 @@ public class EventCompanyManageService {
                     logger.log(Level.SEVERE, "company not found");
                     return new Response<>(null, "company not found");
                 }
+                String role = auth.getRole(token).getValue();
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid token");
+                    return new Response<>(null, "Invalid token");
+                }
                 int userId = auth.getUserId(token).getValue();
-                boolean isMember = userId != -1;
-                boolean isUserPermitted = company.isActive() || (isMember || company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES));
+                boolean isMember = "MEMBER".equals(role);
+                boolean isUserPermitted = company.isActive() || (isMember && company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES));
                 if (!isUserPermitted) {
                     logger.log(Level.SEVERE, "User is not permitted to view closed companies");
                     return new Response<>(null, "User is not permitted to view closed companies");

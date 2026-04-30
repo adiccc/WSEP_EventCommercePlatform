@@ -102,8 +102,19 @@ public class Auth implements IAuth {
             return new Response<>(null, "Token is missing or empty");
         }
         try{
+            if (!tokenService.validateToken(token)) {
+                logger.warning("Token validation failed");
+                return new Response<>(null, "Invalid or expired token");
+            }
             String role = tokenService.extractRole(token);
-            logger.info("retrieved role: " + role);
+            if ("MEMBER".equals(role)) {
+                if (!isLoggedIn(token).getValue()) {
+                    logger.warning("Token belongs to a logged-out member");
+                    return new Response<>(null, "Member is logged out");
+                }
+            }
+            //in guest extract if it's succesfull we check if the token is valid with expiration date
+            logger.info("retrieved and validate role: " + role);
             return new Response<>(role, "retrieved role");
         }
         catch(Exception e){

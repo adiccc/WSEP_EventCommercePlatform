@@ -44,9 +44,6 @@ public class CompanyService {
                 if (user == null) {
                     return new Response<>(null, "User not found.");
                 }
-//            if (!user.isConnected()) {
-//                return new Response<>(null, "User must be logged in to create a company.");
-//            }
                 if (!auth.isLoggedIn(sessionToken).getValue()) {
                     return new Response<>(null, "User must be logged in to create a company.");
                 }
@@ -107,13 +104,11 @@ public class CompanyService {
             logger.info("viewRolesAndPermissionsTree called for companyId: " + companyId);
             try {
                 // 1. Validate token
-                if (!auth.isLoggedIn(token).getValue()) {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
                     logger.warning("viewRolesAndPermissionsTree failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-
-                int userId = auth.getUserId(token).getValue();
-
                 // 2. Company must exist
                 Company company = companyRepo.findById(companyId);
 
@@ -153,12 +148,11 @@ public class CompanyService {
         {
             logger.info("addRuleToCompany called for companyId: " + companyId);
             try {
-                if (!auth.isLoggedIn(token).getValue()) {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
                     logger.warning("addRuleToCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-
-                int userId = auth.getUserId(token).getValue();
 
                 Company company = companyRepo.findById(companyId);
                 if (company == null) {
@@ -200,13 +194,11 @@ public class CompanyService {
         {
             logger.info("removeRuleFromCompany called for companyId: " + companyId);
             try {
-                if (!auth.isLoggedIn(token).getValue()) {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
                     logger.warning("removeRuleFromCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-
-                int userId = auth.getUserId(token).getValue();
-
                 Company company = companyRepo.findById(companyId);
                 if (company == null) {
                     logger.warning("removeRuleFromCompany failed: company not found, id: " + companyId);
@@ -251,12 +243,11 @@ public class CompanyService {
 
             try {
                 // 1. Validate token
-                if (!auth.isLoggedIn(token).getValue()) {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
                     logger.warning("addDiscountToCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-
-                int userId = auth.getUserId(token).getValue();
 
                 // 2. Company must exist
                 Company company = companyRepo.findById(companyId);
@@ -312,12 +303,11 @@ public class CompanyService {
 
             try {
                 // 1. Validate token
-                if (!auth.isLoggedIn(token).getValue()) {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
                     logger.warning("removeDiscountFromCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-
-                int userId = auth.getUserId(token).getValue();
 
                 // 2. Company must exist
                 Company company = companyRepo.findById(companyId);
@@ -366,25 +356,25 @@ public class CompanyService {
         });
     }
 
-    public Response<List<CompanyDTO>> getAvailableCompanies(String token) { //TODO taking care of guest part, additional input : String guestUuid
+    public Response<List<CompanyDTO>> getAvailableCompanies(String token) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.info("getAvailableCompanies called");
             try {
+                String role = auth.getRole(token).getValue();
+                if (role == null) {
+                    logger.warning("getAvailableCompanies failed: invalid or expired token");
+                    return new Response<>(null,"Invalid or expired token");
+                }
                 List<Company> allCompanies = companyRepo.getAll();
                 if (allCompanies == null || allCompanies.isEmpty()) {
                     logger.warning("No companies in the system");
                     return new Response<>(null, "No companies in the system");
                 }
                 List<CompanyDTO> filteredCompanies = new ArrayList<CompanyDTO>();
-                if (token != null && !token.isEmpty()) {
-                    if (!auth.isLoggedIn(token).getValue()) {
-                        return new Response<>(null, "Invalid or expired token");
-                    }
-                }
                 //it's a member or a guest
                 int userId = auth.getUserId(token).getValue(); //for guest returns -1
-                boolean isMember = userId != -1;
+                boolean isMember = "MEMBER".equals(role);
                 for (Company company : allCompanies) {
                     // isUserPermitted means or the company is active
                     // if the company isn't active only members who are owners and have the right permitting can access
@@ -404,7 +394,7 @@ public class CompanyService {
                 return new Response<>(filteredCompanies, "Companies retrieved successfully");
             } catch (SecurityException e) {
                 logger.warning("getAvailableCompanies unauthorized: " + e.getMessage());
-                return new Response<>(null, "Invalid or expired token");
+                return new Response<>(null, "System error occurred");
             }   catch (OptimisticLockingFailureException e) {
                 throw e;
             }

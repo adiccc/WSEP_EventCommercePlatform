@@ -264,11 +264,11 @@ public class AdminService {
         });
     }
 
-    public Response<Boolean> processRefundAdmin(String token, Integer eventId, int orderId) {
+    private Response<Boolean> processRefundAdmin(String token, Integer eventId, int orderId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");
 
-             int userId = auth.getUserId(token).getValue();
+            int userId = auth.getUserId(token).getValue();
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
