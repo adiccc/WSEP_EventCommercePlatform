@@ -12,22 +12,24 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class StandingZone extends Zone {
     private final int capacity;
     private final Queue<StandingTicket> availableTickets = new LinkedList<>(); //todo think about synchronization
-    private int ticketIdGenerator = 1;
+    private AtomicInteger ticketIdGenerator;
     private final List<StandingTicket> occupiedTickets = new LinkedList<>();
     private int available; // todo AtomicInteger
 
 
-    public StandingZone(String name, double price, int capacity, ElementPosition elementPosition) {
+    public StandingZone(String name, double price, int capacity, ElementPosition elementPosition, AtomicInteger ticketIdGenerator) {
         super(name,price,elementPosition);
         this.capacity = capacity;
+        this.ticketIdGenerator = ticketIdGenerator;
         for(int i=0;i<capacity;i++){
-            this.availableTickets.add(new StandingTicket(ticketIdGenerator++));
+            this.availableTickets.add(new StandingTicket(ticketIdGenerator.getAndIncrement()));
         }
         available=capacity;
     }
     public StandingZone(StandingZone zone){
         super(zone.getName(),zone.getPrice(),zone.getElementPosition());
         this.capacity = zone.capacity;
+        this.ticketIdGenerator = new AtomicInteger(zone.ticketIdGenerator.get());
         for (StandingTicket st : zone.availableTickets) {
             this.availableTickets.add(new StandingTicket(st));
         }
@@ -37,11 +39,12 @@ public class StandingZone extends Zone {
         this.available = zone.available;
     }
 
-    public StandingZone(StandingZoneDTO standingZoneDTO) {
+    public StandingZone(StandingZoneDTO standingZoneDTO, AtomicInteger generator) {
         super(standingZoneDTO.getName(),standingZoneDTO.getPrice(),standingZoneDTO.getPosition());
         this.capacity = standingZoneDTO.getCapacty();
+        this.ticketIdGenerator = generator;
         for(int i=0;i<capacity;i++){
-            this.availableTickets.add(new StandingTicket(ticketIdGenerator++));
+            this.availableTickets.add(new StandingTicket(ticketIdGenerator.getAndIncrement()));
         }
         available=capacity;
     }
@@ -78,5 +81,23 @@ public class StandingZone extends Zone {
             }
         }
         return false;
+    }
+
+    @Override
+    public void releaseTickets(List<Integer> ticketIds) {
+        for (Integer ticketId : ticketIds) {
+            for (StandingTicket ticket : occupiedTickets) {
+                if (ticket.getTicketId() == ticketId) {
+                    if (ticket.getStatus() == TicketStatus.LOCKED) {
+                        ticket.setStatus(TicketStatus.AVAILABLE);
+                        availableTickets.add(ticket); //add the released ticket back to the available queue
+                        available++; //increase the capacity by one
+                    }
+                }
+            }
+        }
+        for (Integer ticketId : ticketIds) {
+            occupiedTickets.removeIf(ticket -> ticket.getTicketId() == ticketId);
+        }
     }
 }

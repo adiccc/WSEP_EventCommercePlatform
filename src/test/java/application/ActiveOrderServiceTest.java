@@ -437,7 +437,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 1);
 
-        Response<Integer> response = service.userSelectTickets(validToken, "bad-id", seating, standing);
+        Response<Integer> response = service.userSelectTickets(validToken, -1, seating, standing);
 
         assertNull(response.getValue());
         assertEquals("Event not found", response.getMessage());

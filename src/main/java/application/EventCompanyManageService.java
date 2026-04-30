@@ -18,6 +18,7 @@ import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.*;
 
 import java.util.List;
@@ -32,6 +33,8 @@ public class EventCompanyManageService {
     private final Logger logger;
     private final IAuth auth;
     private final IPaymentSystem paymentSystem;
+    AtomicInteger ticketIdGenerator = new AtomicInteger(1);
+
 
     public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem) {
         this.companyRepo = companyRepo;
@@ -75,13 +78,12 @@ public class EventCompanyManageService {
                     logger.severe("Map element is null");
                     return new Response<>(false, "map element null");
                 }
-
                 List<Zone> zones = new ArrayList<>();
                 for (StandingZoneDTO standingZoneDTO : standingZone) {
-                    zones.add(new StandingZone(standingZoneDTO));
+                    zones.add(new StandingZone(standingZoneDTO,ticketIdGenerator));
                 }
                 for (SeatingZoneDTO seatingZoneDTO : seatingZone) {
-                    zones.add(new SeatingZone(seatingZoneDTO));
+                    zones.add(new SeatingZone(seatingZoneDTO,ticketIdGenerator));
                 }
                 List<ElementPosition> allEntries = new ArrayList<>();
                 for (ElementPositionDTO elementPositionDTO : entries) {
@@ -254,13 +256,13 @@ public class EventCompanyManageService {
                 List<Zone> zones = map.getZones();
                 if (hasStanding) {
                     for (StandingZoneDTO standingZoneDTO : standingZone) {
-                        zones.add(new StandingZone(standingZoneDTO));
+                        zones.add(new StandingZone(standingZoneDTO,ticketIdGenerator));
                     }
                 }
 
                 if (hasSeating) {
                     for (SeatingZoneDTO seatingZoneDTO : seatingZone) {
-                        zones.add(new SeatingZone(seatingZoneDTO));
+                        zones.add(new SeatingZone(seatingZoneDTO,ticketIdGenerator));
                     }
                 }
 

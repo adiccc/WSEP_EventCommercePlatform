@@ -35,11 +35,13 @@ public class SeatingZone extends Zone {
         }
             this.rows = seatingZone.rows;
             this.cols = seatingZone.cols;
+            this.ticketIdGenerator.set(seatingZone.ticketIdGenerator.get());
     }
-    public SeatingZone(SeatingZoneDTO seatingZoneDTO) {
+    public SeatingZone(SeatingZoneDTO seatingZoneDTO, AtomicInteger generator) {
         super(seatingZoneDTO.getName(), seatingZoneDTO.getPrice(), seatingZoneDTO.getPosition());
         int rows = seatingZoneDTO.getRows();
         int cols = seatingZoneDTO.getCols();
+        this.ticketIdGenerator = generator;
         this.ticketMap = new HashMap<>();
         for(int i=0; i<rows; i++) {
             for(int j=0; j<cols; j++) {
@@ -75,5 +77,20 @@ public class SeatingZone extends Zone {
     public int getCols() {
         return cols;
     }
+
+    @Override
+    public void releaseTickets(List<Integer> ticketIds) {
+        for (Integer ticketId : ticketIds) {
+            for (SeatingTicket ticket : ticketMap.values()) {
+                if (ticket.getTicketId() == ticketId) {
+                    if (ticket.getStatus() == TicketStatus.LOCKED) {
+                        ticket.setStatus(TicketStatus.AVAILABLE);
+                    }
+                }
+            }
+        }
+    }
+
+
 
 }

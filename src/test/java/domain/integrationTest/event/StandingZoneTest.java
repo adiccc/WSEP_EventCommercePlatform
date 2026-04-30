@@ -16,7 +16,7 @@ class StandingZoneTest {
 
     @BeforeEach
     void setUp() {
-        standingZone = new StandingZone("zone A", 50.0,5, new ElementPosition(0, 0));
+        standingZone = new StandingZone("zone A", 50.0,5, new ElementPosition(0, 0), new java.util.concurrent.atomic.AtomicInteger(1));
     }
 
     @Test

@@ -89,4 +89,10 @@ public class EventMap {
         }
         return bookedTicketsIds;
     }
+
+    public void releaseTickets(List<Integer> ticketIds) {
+        for (Zone z : zones) {
+            z.releaseTickets(ticketIds);
+        }
+    }
 }

@@ -66,6 +66,8 @@ public class ActiveOrderService {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "enterEventPurchase called");
+            cleanupExpiredOrders();
+
 
             // check valid token
             if (!auth.isLoggedIn(token).getValue()) {
@@ -151,8 +153,7 @@ public class ActiveOrderService {
         });
     }
 
-    public Response<Integer>guestSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
-    public Response<Integer>userSelectTickets(String identifier, String eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
+    public Response<Integer>userSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return RetryHelper.executeWithRetry(()->{
         logger.log(Level.INFO, "userSelectTickets called");
 
@@ -188,6 +189,33 @@ public class ActiveOrderService {
         }
 
     });}
+
+    public void cleanupExpiredOrders() {
+        logger.log(Level.INFO, "cleanupExpiredOrders running");
+        List<ActiveOrder> expired = activeOrderRepo.findExpired(LocalDateTime.now());
+
+        for (ActiveOrder expiredOrder : expired) {
+            try {
+                RetryHelper.executeWithRetry(() -> {
+                    try {
+                        // re-fetch fresh on each retry, state may have changed
+                        ActiveOrder current = activeOrderRepo.findById(expiredOrder.getId());
+                        Event event = eventRepo.findById(current.getEventId());
+                        event.releaseTickets(current.getTickets());
+                        eventRepo.store(event);                  // optimistic lock check
+                        activeOrderRepo.delete(current.getId());
+                        return new Response<>(true, "expired");
+                    } catch (NoSuchElementException e) {
+                        // order already gone — user placed it before cleanup hit. Fine.
+                        return new Response<>(true, "already removed");
+                    }
+                });
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to expire order " + expiredOrder.getId() + ": " + e.getMessage());
+                // swallow — keep processing other orders
+            }
+        }
+    }
 
     //TODO : this implementation is for test only, this function should be implemented currectly
 

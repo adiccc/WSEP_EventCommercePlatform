@@ -19,6 +19,7 @@ public class EventRepoImpl implements IEventRepo {
         events = new ConcurrentHashMap<>();
     }
 
+    @Override
     public Event findById(Integer id) {
         Event dbEvent = events.get(id);
         if (dbEvent != null) {
@@ -26,6 +27,9 @@ public class EventRepoImpl implements IEventRepo {
         }
         throw new NoSuchElementException("Event not found with ID: " + id);
     }
+
+
+
     @Override
     public List<Event> getAll() {
         List<Event> copies = new ArrayList<>();
