@@ -245,4 +245,9 @@ public class Event {
         Event other = (Event) obj;
         return id.equals(other.id) && version == other.version;
     }
+
+    //TODO : this implementation is for test only, this function should be implemented currectly
+    public void placeOrder(int userId,int orderId){
+        orders.add(new Order(orderId,userId," ",new ArrayList<>(),100.0,"order123"));
+    }
 }

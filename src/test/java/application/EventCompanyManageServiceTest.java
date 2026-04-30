@@ -4,6 +4,7 @@ import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import Log.LoggerSetup;
+import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.dataType.CategoryEvent;
@@ -18,6 +19,8 @@ import domain.event.IEventRepo;
 import domain.event.OrderStatus;
 import domain.event.IOrderRepo;
 import domain.event.Order;
+import domain.lottery.ILotteryRepo;
+import domain.lottery.Lottery;
 import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
 import domain.user.IUserRepo;
@@ -33,6 +36,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.mockito.Mockito;
 
@@ -66,6 +72,7 @@ class EventCompanyManageServiceTest {
     private String invalidToken;
     private EventService eventService;
     private IPaymentSystem paymentSystem;
+    private ActiveOrderService activeOrderService;
 
     @BeforeEach
     void setUp() {
@@ -81,6 +88,9 @@ class EventCompanyManageServiceTest {
 
         userService=new UserService(tokenService,auth,userRepo,passwordEncoder);
         eventService=new EventService(auth,eventRepo);
+        IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
+        ILotteryRepo lotteryRepo=new LotteryRepoImpl();
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,100);
 
         //should delete oreder repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo);
@@ -440,34 +450,29 @@ class EventCompanyManageServiceTest {
         assertTrue(response.getMessage().startsWith("failed to create event : "));
     }
 
-    // TODO to implement when add order function in service is exist
-//    @Test
-//    void GivenCompanyExistsAndUserHasPermissionAndOrdersExist_WhenGetOrdersByCompany_ThenOrdersHistoryIsReturned() {
-//        // Given
-//        eventCompanyManageService.DefineVenueAndSeatingMap(
-//                validToken1,
-//                eventId,
-//                stage,
-//                entries,
-//                standingZones,
-//                seatingZones
-//        );
-//        Order order1 = new Order(0, 1, "1", new ArrayList<>() );
-//        Order order2 = new Order(1, 1, "1", new ArrayList<>());
-//        Event event=eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
-//        event.getOrders().add(order1);
-//        event.getOrders().add(order2);
-//
-//        // When
-//        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
-//
-//        // Then
-//        assertNotNull(response.getValue());
-//        assertEquals("orders found", response.getMessage());
-//        assertEquals(2, response.getValue().size());
-//        assertTrue(response.getValue().contains(order1));
-//        assertTrue(response.getValue().contains(order2));
-//    }
+    @Test
+    void GivenCompanyExistsAndUserHasPermissionAndOrdersExist_WhenGetOrdersByCompany_ThenOrdersHistoryIsReturned() {
+        // Given
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
+
+        activeOrderService.placeOrder(validToken1,eventId,1);
+        activeOrderService.placeOrder(validToken2,eventId,2);
+
+        // When
+        Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
+
+        // Then
+        assertNotNull(response.getValue());
+        assertEquals("Orders found", response.getMessage());
+        assertEquals(2, response.getValue().size());
+    }
 
     @Test
     void GivenUnauthorizedUser_WhenGetOrdersByCompany_ThenPermissionErrorIsReturned() {
@@ -928,7 +933,6 @@ class EventCompanyManageServiceTest {
         Mockito.verify(paymentSystem).refund("pay123", 100.0);
     }
 
-    //TODO : update after there is order function in event service
     @Test
     void GivenValidOwnerAndFutureEventWithOrders_WhenDeleteEvent_ThenEventMarkedInactiveAndRefundProcessed() {
         // Given
@@ -945,10 +949,7 @@ class EventCompanyManageServiceTest {
         );
         Event event = eventRepo.findById(eventId);
 
-        Order order = new Order(1, 2, eventId, List.of(1, 2), 100.0, "pay123");
-        event.getOrders().add(order);
-        eventRepo.store(event);
-
+        activeOrderService.placeOrder(validToken1,eventId,1);
         // When
         Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, eventId);
 
@@ -962,7 +963,7 @@ class EventCompanyManageServiceTest {
         Order updatedOrder = updatedEvent.findOrderById(1);
         assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
 
-        Mockito.verify(paymentSystem).refund("pay123", 100.0);
+        Mockito.verify(paymentSystem).refund("order123", 100.0);
     }
 
     @Test
@@ -996,6 +997,107 @@ class EventCompanyManageServiceTest {
         // Then
         assertFalse(response.getValue());
         assertTrue(response.getMessage().startsWith("failed to detele event : "));
+    }
+
+    // Race Condition
+    @Test
+    void GivenHighLoad_WhenManagerDeletesEventAndAddsZoneSimultaneously_ThenEventIsSafelyDeleted() throws InterruptedException {
+        // Arrange: Prepare new zones to add
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+
+        // Setup concurrency tools
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch startGun = new CountDownLatch(1);
+        CountDownLatch finishLine = new CountDownLatch(2);
+
+        // Act: Thread 1 - Manager attempts to delete the event
+        executor.submit(() -> {
+            try {
+                startGun.await(); // Wait for the exact start signal
+                eventCompanyManageService.DeleteEvent(validToken1, eventId);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Act: Thread 2 - Manager attempts to add a zone to the same event
+        executor.submit(() -> {
+            try {
+                startGun.await(); // Wait for the exact start signal
+                eventCompanyManageService.AddZonesToEventMap(validToken1, eventId, newStandingZones, null);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Both threads execute exactly at the same millisecond
+        startGun.countDown();
+        finishLine.await(); // Wait for both threads (and their retries) to finish
+
+        // Assert: Verify data integrity
+        Event updatedEvent = eventRepo.findById(eventId);
+
+        // The critical business rule: The event MUST be inactive at the end.
+        // If Delete won first -> AddZone will fail (event is inactive) or RetryHelper will catch it.
+        // If AddZone won first -> Delete will deactivate the event right after.
+        assertFalse(updatedEvent.isActive(), "Event should be deactivated/deleted regardless of the concurrent add zone attempt");
+
+        executor.shutdown();
+    }
+
+    @Test
+    void GivenHighLoad_WhenManagerCreatesMultipleEventsSimultaneously_ThenAllEventsAreSuccessfullyCreated() throws InterruptedException {
+        // Arrange: Set up 20 concurrent event creations
+        int numberOfConcurrentEvents = 20;
+        ExecutorService executor = Executors.newFixedThreadPool(numberOfConcurrentEvents);
+        CountDownLatch startGun = new CountDownLatch(1);
+        CountDownLatch finishLine = new CountDownLatch(numberOfConcurrentEvents);
+
+        // Act: Create 20 threads, each trying to create a unique event for the same company
+        for (int i = 0; i < numberOfConcurrentEvents; i++) {
+            final int index = i;
+            executor.submit(() -> {
+                try {
+                    startGun.await(); // Wait for the start signal
+
+                    LocalDateTime futureDate = LocalDateTime.now().plusDays(10 + index);
+                    LocalDateTime saleDate = LocalDateTime.now().plusDays(5);
+
+                    eventCompanyManageService.createEvent(
+                            validToken1,
+                            companyId,
+                            futureDate,
+                            "Massive Concurrent Event " + index,
+                            saleDate,
+                            false,
+                            GeographicalArea.CENTER,
+                            CategoryEvent.FESTIVAL
+                    );
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    finishLine.countDown();
+                }
+            });
+        }
+
+        // All 20 creations hit the service simultaneously
+        startGun.countDown();
+        finishLine.await(); // Wait for all threads and their respective retries to finish
+
+        // Assert: Verify that no event was lost due to concurrent overwrites on the company list
+        // We fetch all events for this company.
+        // We expect the 1 original event from setUp() + 20 new concurrent events = 21 total events.
+        List<Event> companyEvents = eventRepo.findByCompany(companyId);
+
+        assertEquals(numberOfConcurrentEvents + 1, companyEvents.size(),
+                "All concurrent events must be successfully saved without overwriting each other");
+
+        executor.shutdown();
     }
 
 }

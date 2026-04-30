@@ -4,6 +4,7 @@ import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import Log.LoggerSetup;
+import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.CategoryEvent;
@@ -13,6 +14,8 @@ import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.OrderStatus;
 import domain.event.IEventRepo;
+import domain.lottery.ILotteryRepo;
+import domain.lottery.Lottery;
 import domain.user.IUserRepo;
 import domain.webQueue.WebQueue;
 import infrastructure.*;
@@ -24,6 +27,9 @@ import domain.event.Order;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -39,6 +45,7 @@ class AdminServiceTest {
     private IEventRepo eventRepo;
     private EventCompanyManageService eventCompanyManageService;
     private CompanyService companyService;
+    private ActiveOrderService activeOrderService;
     private final int companyId = 900;
     private LocalDateTime eventDate;
     private String eventId;
@@ -69,6 +76,10 @@ class AdminServiceTest {
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
 
         adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem);
+
+        IActiveOrderRepo activeOrderRepo =new ActiveOrderRepoImpl();
+        ILotteryRepo lotteryRepo = new LotteryRepoImpl();
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,100);
 
         eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
         companyService = new CompanyService(auth, companyRepo, userRepo);
@@ -221,9 +232,8 @@ class AdminServiceTest {
         // Arrange
         // To Do: use createOrder when implemented
         Event event = eventRepo.findById(eventId);
-        Order order = new Order(1, 999, eventId, List.of(1, 2), 300.0, "pay_123");
-        event.getOrders().add(order);
-        eventRepo.store(event);
+
+        activeOrderService.placeOrder(adminToken,eventId,1);
 
         // Mock the external payment system to simulate a successful refund process
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
@@ -274,9 +284,7 @@ class AdminServiceTest {
     @Test
     void GivenCloseAlreadyClosedCompany_WhenCloseCompany_ThenErrorAlreadyClosed() {
         // Arrange: Deactivate the pre-existing company first
-        Company company = companyRepo.findById(companyId);
-        company.deactivate();
-        companyRepo.store(company);
+        companyService.deactivateCompany(adminToken, companyId);
 
         // Act: Attempt to close it again
         Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
@@ -301,12 +309,9 @@ class AdminServiceTest {
     }
 
     @Test
-    void GivenAdminToken_WhenRefundFailsAfterClosure_ThenCompanyClosedAndFailureHandled() {
+    void GivenNotActivePaymentSystem_WhenCloseCompany_ThenCompanyClosedAndFailureHandled() {
         // Arrange: Add an order to the existing event to test the refund mechanism
-        Event event = eventRepo.findById(eventId);
-        Order order = new Order(1, 333, eventId, List.of(1, 2), 300.0, "pay_123");
-        event.getOrders().add(order);
-        eventRepo.store(event);
+        activeOrderService.placeOrder(adminToken,eventId,1);
 
         // Mock the external payment system to return false, simulating a refund failure
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(false);
@@ -331,5 +336,105 @@ class AdminServiceTest {
         Order updatedOrder = updatedEvent.findOrderById(1);
         assertEquals(domain.event.OrderStatus.REFUND_REQUIRED, updatedOrder.getStatus());
 
+    }
+
+
+    // Race Condition
+    @Test
+    void GivenHighLoad_WhenAdminClosesCompanyAndManagerUpdatesDateSimultaneously_ThenSystemRemainsConsistent() throws InterruptedException {
+        // Arrange: Prepare a new date for the manager to set
+        LocalDateTime newDate = eventDate.plusDays(10);
+
+        // Setup concurrency tools
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch startGun = new CountDownLatch(1);
+        CountDownLatch finishLine = new CountDownLatch(2);
+
+        // Act: Thread 1 - Admin attempts to close the company
+        executor.submit(() -> {
+            try {
+                startGun.await();
+                adminService.closeCompanyByAdmin(adminToken, companyId);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Act: Thread 2 - Manager attempts to update the event date
+        executor.submit(() -> {
+            try {
+                startGun.await();
+                eventCompanyManageService.UpdateEventDate(nonAdminToken, eventId, newDate);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Both threads execute exactly at the same millisecond
+        startGun.countDown();
+        finishLine.await(); // Wait for both threads to completely finish
+
+        // Assert: Verify system consistency
+        Company updatedCompany = companyRepo.findById(companyId);
+        Event updatedEvent = eventRepo.findById(eventId);
+
+        // Regardless of which thread finished first, the critical business rule is that a closed company means its events must be inactive.
+        assertFalse(updatedCompany.isActive(), "Company should be closed by the admin");
+        assertFalse(updatedEvent.isActive(), "Event should be deactivated due to company closure");
+
+        executor.shutdown();
+    }
+
+    @Test
+    void GivenHighLoad_WhenAdminClosesCompanyAndManagerAddsZoneSimultaneously_ThenSystemRemainsConsistent() throws InterruptedException {
+        // Arrange: Prepare new zones for the manager to add
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+
+        // Setup concurrency tools
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch startGun = new CountDownLatch(1);
+        CountDownLatch finishLine = new CountDownLatch(2);
+
+        // Act: Thread 1 - Admin attempts to close the company
+        executor.submit(() -> {
+            try {
+                startGun.await();
+                adminService.closeCompanyByAdmin(adminToken, companyId);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Act: Thread 2 - Manager attempts to add zones to the event map
+        executor.submit(() -> {
+            try {
+                startGun.await();
+                eventCompanyManageService.AddZonesToEventMap(nonAdminToken, eventId, newStandingZones, null);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Both threads execute exactly at the same millisecond
+        startGun.countDown();
+        finishLine.await();
+
+        // Assert: Verify data integrity
+        Company updatedCompany = companyRepo.findById(companyId);
+        Event updatedEvent = eventRepo.findById(eventId);
+
+        // The company and event MUST be inactive at the end of the process.
+        assertFalse(updatedCompany.isActive(), "Company should be closed");
+        assertFalse(updatedEvent.isActive(), "Event should be deactivated");
+
+        executor.shutdown();
     }
 }

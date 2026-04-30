@@ -87,4 +87,9 @@ public class Lottery {
         this.version = version;
     }
 
+    // TODO :this implemetation is for test only, this function should be implemented
+    public void registerUserToLottery(int userId) {
+        registered.add(userId);
+    }
+
 }
