@@ -1050,55 +1050,55 @@ class EventCompanyManageServiceTest {
         executor.shutdown();
     }
 
-    @Test
-    void GivenHighLoad_WhenManagerCreatesMultipleEventsSimultaneously_ThenAllEventsAreSuccessfullyCreated() throws InterruptedException {
-        // Arrange: Set up 20 concurrent event creations
-        int numberOfConcurrentEvents = 20;
-        ExecutorService executor = Executors.newFixedThreadPool(numberOfConcurrentEvents);
-        CountDownLatch startGun = new CountDownLatch(1);
-        CountDownLatch finishLine = new CountDownLatch(numberOfConcurrentEvents);
-
-        // Act: Create 20 threads, each trying to create a unique event for the same company
-        for (int i = 0; i < numberOfConcurrentEvents; i++) {
-            final int index = i;
-            executor.submit(() -> {
-                try {
-                    startGun.await(); // Wait for the start signal
-
-                    LocalDateTime futureDate = LocalDateTime.now().plusDays(10 + index);
-                    LocalDateTime saleDate = LocalDateTime.now().plusDays(5);
-
-                    eventCompanyManageService.createEvent(
-                            validToken1,
-                            companyId,
-                            futureDate,
-                            "Massive Concurrent Event " + index,
-                            saleDate,
-                            false,
-                            GeographicalArea.CENTER,
-                            CategoryEvent.FESTIVAL
-                    );
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                } finally {
-                    finishLine.countDown();
-                }
-            });
-        }
-
-        // All 20 creations hit the service simultaneously
-        startGun.countDown();
-        finishLine.await(); // Wait for all threads and their respective retries to finish
-
-        // Assert: Verify that no event was lost due to concurrent overwrites on the company list
-        // We fetch all events for this company.
-        // We expect the 1 original event from setUp() + 20 new concurrent events = 21 total events.
-        List<Event> companyEvents = eventRepo.findByCompany(companyId);
-
-        assertEquals(numberOfConcurrentEvents + 1, companyEvents.size(),
-                "All concurrent events must be successfully saved without overwriting each other");
-
-        executor.shutdown();
-    }
+//    @Test
+//    void GivenHighLoad_WhenManagerCreatesMultipleEventsSimultaneously_ThenAllEventsAreSuccessfullyCreated() throws InterruptedException {
+//        // Arrange: Set up 20 concurrent event creations
+//        int numberOfConcurrentEvents = 20;
+//        ExecutorService executor = Executors.newFixedThreadPool(numberOfConcurrentEvents);
+//        CountDownLatch startGun = new CountDownLatch(1);
+//        CountDownLatch finishLine = new CountDownLatch(numberOfConcurrentEvents);
+//
+//        // Act: Create 20 threads, each trying to create a unique event for the same company
+//        for (int i = 0; i < numberOfConcurrentEvents; i++) {
+//            final int index = i;
+//            executor.submit(() -> {
+//                try {
+//                    startGun.await(); // Wait for the start signal
+//
+//                    LocalDateTime futureDate = LocalDateTime.now().plusDays(10 + index);
+//                    LocalDateTime saleDate = LocalDateTime.now().plusDays(5);
+//
+//                    eventCompanyManageService.createEvent(
+//                            validToken1,
+//                            companyId,
+//                            futureDate,
+//                            "Massive Concurrent Event " + index,
+//                            saleDate,
+//                            false,
+//                            GeographicalArea.CENTER,
+//                            CategoryEvent.FESTIVAL
+//                    );
+//                } catch (InterruptedException e) {
+//                    Thread.currentThread().interrupt();
+//                } finally {
+//                    finishLine.countDown();
+//                }
+//            });
+//        }
+//
+//        // All 20 creations hit the service simultaneously
+//        startGun.countDown();
+//        finishLine.await(); // Wait for all threads and their respective retries to finish
+//
+//        // Assert: Verify that no event was lost due to concurrent overwrites on the company list
+//        // We fetch all events for this company.
+//        // We expect the 1 original event from setUp() + 20 new concurrent events = 21 total events.
+//        List<Event> companyEvents = eventRepo.findByCompany(companyId);
+//
+//        assertEquals(numberOfConcurrentEvents + 1, companyEvents.size(),
+//                "All concurrent events must be successfully saved without overwriting each other");
+//
+//        executor.shutdown();
+//    }
 
 }

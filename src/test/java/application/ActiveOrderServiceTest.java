@@ -419,4 +419,18 @@ class ActiveOrderServiceTest {
 
         Mockito.verify(ticketSupply).issue(request);
     }
+    @Test
+    void GivenValidTicketSupplyRequest_WhenIssueTicketsAndExternalServiceUnavailable_ThenTicketIssuanceFailed() {
+        TicketSupplyRequestDTO request = Mockito.mock(TicketSupplyRequestDTO.class);
+
+        Mockito.when(ticketSupply.issue(request))
+                .thenThrow(new RuntimeException("Ticket supply service unavailable"));
+
+        Response<TicketSupplyResultDTO> response = service.issueTickets(request);
+
+        assertNull(response.getValue());
+        assertEquals("Ticket issuance failed", response.getMessage());
+
+        Mockito.verify(ticketSupply).issue(request);
+    }
 }
