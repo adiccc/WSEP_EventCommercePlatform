@@ -3,6 +3,7 @@ package domain.event;
 import DTO.SeatingZoneDTO;
 import domain.dataType.ElementPosition;
 import domain.dataType.TicketStatus;
+import domain.dto.SeatingTicketDTO;
 
 
 import java.util.*;
@@ -50,19 +51,14 @@ public class SeatingZone extends Zone {
     }
 
 
-    public Collection<Integer> bookTickets(List<String> seats) {
+    public Collection<Integer> bookTickets(List<SeatingTicketDTO> seats) {
         List<Integer> bookedTicketIds = new ArrayList<>();
-        for(String seat : seats) {
-            String[] parts = seat.split("-");
-            int row = Integer.parseInt(parts[0]);
-            int col = Integer.parseInt(parts[1]);
-            String seatKey = row + "-" + col;
-            for (Map.Entry<String, SeatingTicket> entry : ticketMap.entrySet()) {
-                if (entry.getKey().equals(seatKey)) {
-                    SeatingTicket ticket = entry.getValue();
-                    if (ticket.getStatus() == TicketStatus.AVAILABLE) {
-                        ticket.setStatus(TicketStatus.LOCKED);
-                        bookedTicketIds.add(ticket.getTicketId());
+        for(SeatingTicketDTO seat : seats) {
+            for (SeatingTicket next : ticketMap.values()) {
+                if (next.getRow() == seat.getRow() && next.getCol() == seat.getCol()) {
+                    if (next.getStatus() == TicketStatus.AVAILABLE) {
+                        next.setStatus(TicketStatus.LOCKED);
+                        bookedTicketIds.add(next.getTicketId());
                     } else {
                         throw new IllegalArgumentException("Seat " + seat + " is not available.");
                     }

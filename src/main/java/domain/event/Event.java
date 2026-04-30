@@ -3,6 +3,8 @@ package domain.event;
 import domain.dataType.CategoryEvent;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
+import domain.dto.SeatingTicketDTO;
+import domain.dto.UserDTO;
 import domain.policy.*;
 
 import java.time.LocalDateTime;
@@ -248,12 +250,19 @@ public class Event {
         return id.equals(other.id) && version == other.version;
     }
 
-    public boolean quantityExceedsPolicy(int userId, int quantity) {
-        return false;
-        //todo
+    public void quantityExceedsPolicy(UserDTO user, int quantity) {
+        int ticketsBoughtForEvent =0;
+        for (Order order : orders) {
+            if (order.getUserId() == user.getUserId()) {
+                ticketsBoughtForEvent += order.getTickets().size();
+            }
+        }
+        if( !purchasePolicy.isSatisfied(user, quantity,ticketsBoughtForEvent)) {
+            throw new IllegalArgumentException("Purchase policy not satisfied for user " + user.getUserId() + " and quantity " + quantity);
+        }
     }
 
-    public List<Integer> bookTickets(boolean member, Map<String, List<String>> seatingZones, Map<String, Integer> standingZones) {
+    public List<Integer> bookTickets(boolean member, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return eventMap.bookTickets(seatingZones,standingZones);
     }
 }

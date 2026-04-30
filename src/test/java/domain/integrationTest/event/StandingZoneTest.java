@@ -50,6 +50,6 @@ class StandingZoneTest {
         );
 
         assertEquals("Not enough tickets available in this zone.", exception.getMessage());
-        assertEquals(5, standingZone.getAvaliable()); // מוודאים שהכמות לא השתנתה בעקבות הכישלון
+        assertEquals(5, standingZone.getAvaliable());
     }
 }

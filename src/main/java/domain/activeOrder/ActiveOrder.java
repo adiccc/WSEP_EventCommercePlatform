@@ -55,4 +55,8 @@ public class ActiveOrder {
         ActiveOrder other = (ActiveOrder) obj;
         return orderId==other.orderId && version == other.getVersion();
     }
+
+        public int getUserId() {
+            return userId;
+        }
 }

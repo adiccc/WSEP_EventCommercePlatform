@@ -4,6 +4,7 @@ import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
 import domain.dto.EventMapDTO;
+import domain.dto.SeatingTicketDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
@@ -101,12 +102,24 @@ public class ActiveOrderService {
     }
 
 
-    public Response<Integer>guestSelectTickets(String identifier, String eventId, Map<String, List<String>> seatingZones,Map<String, Integer> standingZones) {
+    public Response<Integer>guestSelectTickets(String identifier, String eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return RetryHelper.executeWithRetry(()->{
         logger.log(Level.INFO, "guestSelectTickets called");
 
         try {
+            this.activeOrderRepo.alreadyHasActiveOrder(auth.getUserId(identifier).getValue(), eventId);
+
+            int totalSeatingTickets = seatingZones.values().stream()
+                    .mapToInt(List::size)
+                    .sum();
+
+            int totalStandingTickets = standingZones.values().stream()
+                    .mapToInt(Integer::intValue)
+                    .sum();
+
+            int totalTickets = totalSeatingTickets + totalStandingTickets;
             Event e = this.eventRepo.findById(eventId);
+//            e.quantityExceedsPolicy(auth.getUserDTO(identifier), totalTickets);
             int orderId = idGenerator.getAndIncrement();
             List<Integer> tickets = e.bookTickets(false,seatingZones,standingZones); // check here quantity and policy
             this.eventRepo.store(e);

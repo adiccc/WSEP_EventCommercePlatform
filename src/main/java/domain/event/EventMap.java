@@ -1,5 +1,6 @@
 package domain.event;
 import domain.dataType.ElementPosition;
+import domain.dto.SeatingTicketDTO;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,15 +44,15 @@ public class EventMap {
     }
 
 
-    public List<Integer> bookTickets(Map<String, List<String>> seatingZones,
+    public List<Integer> bookTickets(Map<String, List<SeatingTicketDTO>> seatingZones,
                                      Map<String, Integer> standingZones) {
 
         List<Integer> bookedTicketsIds = new ArrayList<>();
 
         // --- Seating zones ---
-        for (Map.Entry<String, List<String>> entry : seatingZones.entrySet()) {
+        for (Map.Entry<String, List<SeatingTicketDTO>> entry : seatingZones.entrySet()) {
             String zoneName = entry.getKey();
-            List<String> seats = entry.getValue();
+            List<SeatingTicketDTO> seats = entry.getValue();
             Zone matchedZone = null;
             for (Zone z : zones) {
                 if (z.getName().equals(zoneName)) {
