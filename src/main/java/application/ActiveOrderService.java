@@ -232,7 +232,10 @@ public class ActiveOrderService {
                         eventRepo.store(event);                  // optimistic lock check
                         activeOrderRepo.delete(current.getId());
                         return new Response<>(true, "expired");
-                    } catch (NoSuchElementException e) {
+                    } catch (OptimisticLockingFailureException e) {
+                        throw e;
+                     }
+                    catch (NoSuchElementException e) {
                         // order already gone — user placed it before cleanup hit. Fine.
                         return new Response<>(true, "already removed");
                     }

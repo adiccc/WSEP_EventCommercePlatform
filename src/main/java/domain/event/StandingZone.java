@@ -9,10 +9,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class StandingZone extends Zone {
     private final int capacity;
-    private final Queue<StandingTicket> availableTickets = new LinkedList<>(); //todo think about synchronization
+    private final Queue<StandingTicket> availableTickets = new LinkedList<>();
     private AtomicInteger ticketIdGenerator;
     private final List<StandingTicket> occupiedTickets = new LinkedList<>();
-    private int available; // todo AtomicInteger
+    private int available;
 
 
     public StandingZone(String name, double price, int capacity, ElementPosition elementPosition, AtomicInteger ticketIdGenerator) {
