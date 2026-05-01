@@ -1,11 +1,12 @@
-package domain.dataType;
+package domain.event;
 
 import DTO.ElementPositionDTO;
+import domain.dataType.ElementPosition;
 
 public abstract class Zone {
-    private String name;
-    private double price;
-    private ElementPosition elementPosition;
+    private final String name;
+    private final double price;
+    private final ElementPosition elementPosition;
 
     public Zone(String name, double price, ElementPosition elementPosition) {
         this.name = name;

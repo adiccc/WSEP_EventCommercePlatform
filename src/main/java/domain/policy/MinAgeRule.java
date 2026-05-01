@@ -28,4 +28,10 @@ public class MinAgeRule extends PurchaseRule {
     }
 
     public int getMinAge() { return minAge; }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj instanceof MinAgeRule other) return this.minAge == other.minAge;
+        return false;
+    }
 }

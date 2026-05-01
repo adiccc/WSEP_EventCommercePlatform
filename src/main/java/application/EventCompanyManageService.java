@@ -9,17 +9,11 @@ import domain.dataType.*;
 import domain.dto.*;
 import domain.event.Event;
 import domain.event.EventMap;
-import domain.event.EventQueue;
 import domain.event.IEventRepo;
 import domain.dataType.ElementPosition;
-import domain.dataType.SeatingZone;
-import domain.dataType.StandingZone;
-import domain.dataType.Zone;
+import domain.event.Zone;
+
 import domain.event.*;
-import domain.lottery.ILotteryRepo;
-import domain.user.Member;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -47,7 +41,7 @@ public class EventCompanyManageService {
         this.paymentSystem = paymentSystem;
     }
 
-    public Response<Boolean> DefineVenueAndSeatingMap(String token, String eventId, ElementPositionDTO stage,
+    public Response<Boolean> DefineVenueAndSeatingMap(String token, Integer eventId, ElementPositionDTO stage,
             List<ElementPositionDTO> entries, List<StandingZoneDTO> standingZone, List<SeatingZoneDTO> seatingZone) {
         return RetryHelper.executeWithRetry(() ->
         {
@@ -116,7 +110,7 @@ public class EventCompanyManageService {
 
     }
 
-    public Response<String> createEvent(String token, int companyId, LocalDateTime date, String name,
+    public Response<Integer> createEvent(String token, int companyId, LocalDateTime date, String name,
             LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent category) {
         return RetryHelper.executeWithRetry(() ->
         {
@@ -174,7 +168,7 @@ public class EventCompanyManageService {
         });
     }
 
-    public Response<Boolean> UpdateEventDate(String token, String eventId, LocalDateTime date) {
+    public Response<Boolean> UpdateEventDate(String token, Integer eventId, LocalDateTime date) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "UpdateEventDate called");
@@ -215,7 +209,7 @@ public class EventCompanyManageService {
     }
 
     // adding new zones to an existing map of an event
-    public Response<Boolean> AddZonesToEventMap(String token, String eventId, List<StandingZoneDTO> standingZone,
+    public Response<Boolean> AddZonesToEventMap(String token, Integer eventId, List<StandingZoneDTO> standingZone,
             List<SeatingZoneDTO> seatingZone) {
         return RetryHelper.executeWithRetry(() ->
         {
@@ -287,7 +281,7 @@ public class EventCompanyManageService {
         });
     }
 
-    public Response<Boolean> DeleteEvent(String token, String eventId) {
+    public Response<Boolean> DeleteEvent(String token, Integer eventId) {
         return RetryHelper.executeWithRetry(()->{
             logger.log(Level.INFO, "DeleteEvent called");
             int userId = auth.getUserId(token).getValue();
@@ -397,9 +391,14 @@ public class EventCompanyManageService {
                     logger.log(Level.SEVERE, "company not found");
                     return new Response<>(null, "company not found");
                 }
+                String role = auth.getRole(token).getValue();
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid token");
+                    return new Response<>(null, "Invalid token");
+                }
                 int userId = auth.getUserId(token).getValue();
-                boolean isMember = userId != -1;
-                boolean isUserPermitted = company.isActive() || (isMember || company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES));
+                boolean isMember = "MEMBER".equals(role);
+                boolean isUserPermitted = company.isActive() || (isMember && company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES));
                 if (!isUserPermitted) {
                     logger.log(Level.SEVERE, "User is not permitted to view closed companies");
                     return new Response<>(null, "User is not permitted to view closed companies");
@@ -496,7 +495,7 @@ public class EventCompanyManageService {
         });
     }
 
-    public Response<Boolean> processRefund(String token, String eventId, int orderId) {
+    public Response<Boolean> processRefund(String token, Integer eventId, int orderId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");
 

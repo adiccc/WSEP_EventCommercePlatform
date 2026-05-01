@@ -254,7 +254,7 @@ public class AdminService {
         });
     }
 
-    public Response<Boolean> processRefundAdmin(String token, String eventId, int orderId) {
+    private Response<Boolean> processRefundAdmin(String token, Integer eventId, int orderId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");
 
@@ -263,8 +263,7 @@ public class AdminService {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
             }
-
-            try {
+            try{
                 Event event = eventRepo.findById(eventId);
                 Order order = event.findOrderById(orderId);
 

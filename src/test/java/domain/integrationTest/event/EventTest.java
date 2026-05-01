@@ -3,7 +3,7 @@ package domain.integrationTest.event;
 import domain.dataType.CategoryEvent;
 import domain.dataType.ElementPosition;
 import domain.dataType.GeographicalArea;
-import domain.dataType.SeatingZone;
+import domain.event.SeatingZone;
 import domain.event.Event;
 import domain.dataType.EventSearchFilter;
 import domain.event.EventMap;

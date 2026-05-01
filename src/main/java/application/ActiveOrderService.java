@@ -1,46 +1,79 @@
 package application;
 
+import DTO.TicketSupplyRequestDTO;
+import DTO.TicketSupplyResultDTO;
+
+import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
 import domain.dto.EventMapDTO;
+import domain.dto.SeatingTicketDTO;
+import domain.dto.UserDTO;
+import domain.event.Event;
+import domain.event.IEventRepo;
 import domain.event.*;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
+
 import java.util.List;
+import java.util.Map;
+
 import java.util.NoSuchElementException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+
+import static domain.config.PurchaseConfig.MAX_ACTIVE_ORDERS_PER_EVENT;
+
 public class ActiveOrderService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
-
+    private final AtomicInteger idGenerator = new AtomicInteger(1);
     private final IEventRepo eventRepo;
     private final IActiveOrderRepo activeOrderRepo;
     private final ICompanyRepo companyRepo;
     private final ILotteryRepo lotteryRepo;
     private final IAuth auth;
-    private final int capacity;
+    private final IPaymentSystem paymentSystem;
+    private final ITicketSupply ticketSupply;
+    private int capacity = 100;
+    private final int orderExpireMinutes = 10;
 
-    public ActiveOrderService(IAuth auth, IActiveOrderRepo activeOrderRepo, IEventRepo eventRepo, ICompanyRepo companyRepo, ILotteryRepo lotteryRepo, int capacity) {
+
+    public ActiveOrderService(
+            IAuth auth,
+            IActiveOrderRepo activeOrderRepo,
+            IEventRepo eventRepo,
+            ICompanyRepo companyRepo,
+            ILotteryRepo lotteryRepo,
+            IPaymentSystem paymentSystem,
+            ITicketSupply ticketSupply,
+            int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
         this.lotteryRepo = lotteryRepo;
         this.auth = auth;
+        this.paymentSystem = paymentSystem;
+        this.ticketSupply = ticketSupply;
         this.capacity = capacity;
+       // this.capacity = MAX_ACTIVE_ORDERS_PER_EVENT;
     }
 
-    public Response<EventMapDTO> enterEventPurchase(String token, int companyId, String eventId) {
+    public Response<EventMapDTO> enterEventPurchase(String token, int companyId, int eventId) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "enterEventPurchase called");
 
             // check valid token
-            if (!auth.isLoggedIn(token).getValue()) {
+            String role = auth.getRole(token).getValue();
+            if(role == null){
+                logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
             }
+
             try {
                 Event e = this.eventRepo.findById(eventId);
 
@@ -94,8 +127,78 @@ public class ActiveOrderService {
             }
         });
     }
+
+    public Response<TicketSupplyResultDTO> issueTickets(TicketSupplyRequestDTO request) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "issueTickets called");
+
+            if (request == null) {
+                return new Response<>(null, "Invalid ticket supply request");
+            }
+
+            try {
+                TicketSupplyResultDTO result = ticketSupply.issue(request);
+
+                if (result == null || !result.isSuccess()) {
+                    return new Response<>(result, "Ticket issuance failed");
+                }
+
+                return new Response<>(result, "Tickets issued successfully");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Ticket issuance failed: " + e.getMessage());
+                return new Response<>(null, "Ticket issuance failed");
+            }
+        });
+    }
+
+    public Response<Integer>guestSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) { //TODO::
+        return RetryHelper.executeWithRetry(()->{
+        logger.log(Level.INFO, "guestSelectTickets called");
+        if(identifier == null){
+            logger.log(Level.SEVERE, "identifier is null");
+            return new Response<>(null, "Invalid identifier supplied");
+        }
+        String role = auth.getRole(identifier).getValue();
+        try {
+            this.activeOrderRepo.alreadyHasActiveOrder(auth.getUserId(identifier).getValue(), eventId);
+
+            int totalSeatingTickets = seatingZones.values().stream()
+                    .mapToInt(List::size)
+                    .sum();
+
+            int totalStandingTickets = standingZones.values().stream()
+                    .mapToInt(Integer::intValue)
+                    .sum();
+
+            int totalTickets = totalSeatingTickets + totalStandingTickets;
+            Event e = this.eventRepo.findById(eventId);
+            Response<UserDTO> userResponse = auth.getUserDTO(identifier);
+            e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
+            int orderId = idGenerator.getAndIncrement();
+            List<Integer> tickets = e.bookTickets(false,seatingZones,standingZones); // check here quantity and policy
+            this.eventRepo.store(e);
+            ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(identifier).getValue(), eventId, tickets,orderExpireMinutes);
+            activeOrderRepo.store(newActiveOrder);
+            logger.log(Level.INFO, "Tickets selected successfully");
+            return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
+        } catch (NoSuchElementException e) {
+            logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
+            return new Response<>(null, "Event not found");
+        } catch (OptimisticLockingFailureException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Failed to select tickets : " + e.getMessage());
+            return new Response<>(null, "Failed to select tickets : " + e.getMessage());
+        }
+
+    });}
+
     //TODO : this implementation is for test only, this function should be implemented currectly
-    public Response<Boolean> placeOrder(String token, String eventId, int orderId) {
+
+    public Response<Boolean> placeOrder(String token, Integer eventId, int orderId) {
         Event event =eventRepo.findById(eventId);
         int userId=auth.getUserId(token).getValue();
         event.placeOrder(userId,orderId);
