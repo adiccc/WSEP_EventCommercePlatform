@@ -5,6 +5,7 @@ import Log.LoggerSetup;
 
 import java.util.*;
 
+import domain.activeOrder.ActiveOrder;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.EventMapDTO;
@@ -630,11 +631,16 @@ class ActiveOrderServiceTest {
     }
 
 
-    // todo: fix test
-    @Test
-    void GivenMixedExpiredAndActiveOrders_WhenCleanupExpiredOrders_ThenOnlyExpiredAreRemoved() {
-        ActiveOrderService expiredService = buildServiceWithExpireMinutes(-1);
+    private void backdateOrderExpireTime(int orderId) throws Exception {
+        ActiveOrder current = activeOrderRepo.findById(orderId);
+        java.lang.reflect.Field field = ActiveOrder.class.getDeclaredField("expireTime");
+        field.setAccessible(true);
+        field.set(current, LocalDateTime.now().minusMinutes(1));
+        activeOrderRepo.store(current);
+    }
 
+    @Test
+    void GivenMixedExpiredAndActiveOrders_WhenCleanupExpiredOrders_ThenOnlyExpiredAreRemoved() throws Exception {
         String emailA = "mix_a@mail.com";
         String emailB = "mix_b@mail.com";
         userService.registerUser("", new UserDTO(emailA, "a", "a", "pass", 1, 1, 2000, "Israel", "050-100-2000"));
@@ -642,32 +648,21 @@ class ActiveOrderServiceTest {
         String tokenA = userService.login(emailA, "pass").getValue();
         String tokenB = userService.login(emailB, "pass").getValue();
 
-        Response<Integer> respA = expiredService.userSelectTickets(
-                tokenA, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
-        System.out.println("[A] orderA value = " + respA.getValue() + " | msg = " + respA.getMessage());
-        assertNotNull(respA.getValue(), "Booking A failed: " + respA.getMessage());
-        int orderA = respA.getValue();
+        int orderA = service.userSelectTickets(
+                tokenA, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+        int orderB = service.userSelectTickets(
+                tokenB, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
 
-        Response<Integer> respB = service.userSelectTickets(
-                tokenB, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
-        System.out.println("[B] orderB value = " + respB.getValue() + " | msg = " + respB.getMessage());
-        assertNotNull(respB.getValue(), "Booking B failed: " + respB.getMessage());
-        int orderB = respB.getValue();
-
-        System.out.println("[C] orders before cleanup = " + activeOrderRepo.getAll().size());
+        backdateOrderExpireTime(orderA);   // only A is "expired"
 
         service.cleanupExpiredOrders();
-
-        System.out.println("[D] orders after cleanup = " + activeOrderRepo.getAll().size());
 
         assertThrows(NoSuchElementException.class,
                 () -> activeOrderRepo.findById(orderA),
                 "Expired order A must be removed");
-
         assertNotNull(activeOrderRepo.findById(orderB),
                 "Non-expired order B must remain after cleanup");
     }
-
     @Test
     void GivenMultipleExpiredOrders_WhenCleanupExpiredOrders_ThenAllExpiredAreRemoved() {
         ActiveOrderService expiredService = buildServiceWithExpireMinutes(-1);
