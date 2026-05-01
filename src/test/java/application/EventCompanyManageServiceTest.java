@@ -92,8 +92,6 @@ class EventCompanyManageServiceTest {
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
         activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,100,10);
-
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,100);
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete oreder repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo);
@@ -683,7 +681,7 @@ class EventCompanyManageServiceTest {
         eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
 
         // Act
-        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(invalidToken, companyId);
+        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(GUEST_TOKEN, companyId);
 
         // Assert
         assertNotNull(response.getValue());
@@ -757,7 +755,7 @@ class EventCompanyManageServiceTest {
         // Assert
         assertNull(response.getValue());
         assertTrue(response.getMessage().contains("failed getCompanyDetails"));    }
-         // ===================== Generate Sales Reports Tests =====================
+    // ===================== Generate Sales Reports Tests =====================
     @Test
     void GivenOwnerWithSalesData_WhenGenerateSalesReports_ThenReturnReportWithData() {
         // Arrange
@@ -823,7 +821,7 @@ class EventCompanyManageServiceTest {
         assertNull(response.getValue());
         assertTrue(response.getMessage().contains("not found"));
     }
-        @Test
+    @Test
     void GivenRefundRequiredOrder_WhenProcessRefundAndExternalPaymentApproves_ThenOrderMarkedRefunded() {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenReturn(true);
