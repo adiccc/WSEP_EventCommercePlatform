@@ -21,7 +21,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import static domain.config.PurchaseConfig.MAX_ACTIVE_ORDERS_PER_EVENT;
 import static org.junit.jupiter.api.Assertions.*;
 
 import org.mockito.Mockito;
