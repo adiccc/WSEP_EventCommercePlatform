@@ -262,7 +262,7 @@ public class Event {
         }
     }
 
-    public List<Integer> bookTickets(boolean member, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
+    public List<Integer> bookTickets(Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return eventMap.bookTickets(seatingZones,standingZones);
     }
 
@@ -273,5 +273,9 @@ public class Event {
 
     public void setId(int id) {
         this.id = id;
+    }
+
+    public void releaseTickets(List<Integer> ticketIds) {
+        eventMap.releaseTickets(ticketIds);
     }
 }

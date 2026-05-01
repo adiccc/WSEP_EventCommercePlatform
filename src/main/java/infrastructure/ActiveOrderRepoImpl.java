@@ -4,6 +4,7 @@ import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import Exception.OptimisticLockingFailureException;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -72,5 +73,18 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
             }
         }
     }
+
+    @Override
+    public List<ActiveOrder> findExpired(LocalDateTime now) {
+        List<ActiveOrder> result = new ArrayList<>();
+        for (ActiveOrder order : activeOrders.values()) {
+            if (order.getExpireTime().isBefore(now)) {
+                result.add(new ActiveOrder(order));
+            }
+        }
+        return result;
+    }
+
+
 
 }

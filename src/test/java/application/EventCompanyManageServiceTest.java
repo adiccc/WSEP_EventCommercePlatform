@@ -6,7 +6,6 @@ import DTO.StandingZoneDTO;
 import Log.LoggerSetup;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
-import domain.company.ContactInfo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.CompanyDetailsDTO;
@@ -17,24 +16,16 @@ import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.OrderStatus;
-import domain.event.IOrderRepo;
 import domain.event.Order;
 import domain.lottery.ILotteryRepo;
-import domain.lottery.Lottery;
-import domain.policy.DiscountPolicy;
-import domain.policy.PurchasePolicy;
 import domain.user.IUserRepo;
-import domain.user.Member;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.time.LocalDate;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -91,7 +82,7 @@ class EventCompanyManageServiceTest {
         eventService=new EventService(auth,eventRepo);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,100,10);
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete oreder repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo);
@@ -755,7 +746,7 @@ class EventCompanyManageServiceTest {
         // Assert
         assertNull(response.getValue());
         assertTrue(response.getMessage().contains("failed getCompanyDetails"));    }
-         // ===================== Generate Sales Reports Tests =====================
+    // ===================== Generate Sales Reports Tests =====================
     @Test
     void GivenOwnerWithSalesData_WhenGenerateSalesReports_ThenReturnReportWithData() {
         // Arrange
@@ -821,7 +812,7 @@ class EventCompanyManageServiceTest {
         assertNull(response.getValue());
         assertTrue(response.getMessage().contains("not found"));
     }
-        @Test
+    @Test
     void GivenRefundRequiredOrder_WhenProcessRefundAndExternalPaymentApproves_ThenOrderMarkedRefunded() {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenReturn(true);

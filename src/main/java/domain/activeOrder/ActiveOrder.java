@@ -66,7 +66,9 @@ public class ActiveOrder {
 
         ActiveOrder other = (ActiveOrder) obj;
         return orderId==other.orderId && version == other.getVersion();
-
     }
 
+
+
+    public LocalDateTime getExpireTime() { return expireTime; }
 }
