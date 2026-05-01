@@ -5,8 +5,6 @@ import domain.dataType.ElementPosition;
 import domain.dataType.TicketStatus;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class StandingZone extends Zone {
@@ -52,7 +50,7 @@ public class StandingZone extends Zone {
         return capacity;
     }
 
-    public int getAvaliable() {
+    public int getAvailable() {
         return available;
     }
 
@@ -67,7 +65,8 @@ public class StandingZone extends Zone {
                 throw new IllegalStateException("No more tickets available.");
             }
             int ticketId = ticket.getTicketId();
-            ticket.setStatus(TicketStatus.LOCKED);
+            ticket.setStatusFromAvailable(TicketStatus.LOCKED);
+            occupiedTickets.add(ticket); //add the ticket to the occupied list
             bookedTicketIds.add(ticketId);
         }
         available -= quantity; //decrease the capacity by the number of booked tickets
@@ -89,7 +88,7 @@ public class StandingZone extends Zone {
             for (StandingTicket ticket : occupiedTickets) {
                 if (ticket.getTicketId() == ticketId) {
                     if (ticket.getStatus() == TicketStatus.LOCKED) {
-                        ticket.setStatus(TicketStatus.AVAILABLE);
+                        ticket.setStatusFromAvailable(TicketStatus.AVAILABLE);
                         availableTickets.add(ticket); //add the released ticket back to the available queue
                         available++; //increase the capacity by one
                     }
@@ -99,5 +98,9 @@ public class StandingZone extends Zone {
         for (Integer ticketId : ticketIds) {
             occupiedTickets.removeIf(ticket -> ticket.getTicketId() == ticketId);
         }
+    }
+
+    public List<StandingTicket> getOccupiedTickets() {
+        return occupiedTickets;
     }
 }

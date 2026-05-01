@@ -5,6 +5,7 @@ import domain.dto.SeatingTicketDTO;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class EventMap {
     private final List<Zone> zones;
@@ -22,7 +23,7 @@ public class EventMap {
         this.zones = new ArrayList<>();
         for (Zone z : eventMap.zones) {
             if (z instanceof SeatingZone seatingZone) {
-                this.zones.add(new SeatingZone(seatingZone));
+                this.zones.add(new SeatingZone(seatingZone, new AtomicInteger(seatingZone.getTicketIdGenerator().get())));
             } else if (z instanceof StandingZone standingZone) {
                 this.zones.add(new StandingZone(standingZone));
             }
