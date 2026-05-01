@@ -3,7 +3,6 @@ package application;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.company.Permissions;
-import domain.dto.HierarchyDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.user.IUserRepo;
@@ -142,24 +141,15 @@ public class AdminService {
                     } else if (perms.isOwner(userIdToRemove)) {
                         // Owner removed → reassign any managers they appointed to the founder
                         perms.removeOwner(userIdToRemove);
-                        for (HierarchyDTO dto : perms.getCompanyTree().values()) {
-                            if (dto.getMyManager() == userIdToRemove)
-                                dto.setMyManager(perms.getFounderId());
+                        for (Integer managerId : perms.getCompanyTree().keySet()) {
+                            if (perms.getCompanyTree().get(managerId).getMyManager() == userIdToRemove)
+                                perms.changeAppointer(managerId, perms.getFounderId());
                         }
                         changed = true;
 
-                    } else if (perms.getCompanyTree().containsKey(userIdToRemove)) {
-                        // Manager removed → clean up appointer's list + reassign sub-managers to
-                        // founder
-                        HierarchyDTO removed = perms.getCompanyTree().remove(userIdToRemove);
-                        HierarchyDTO appointer = perms.getCompanyTree().get(removed.getMyManager());
-                        if (appointer != null)
-                            appointer.getMyAppointees().remove(Integer.valueOf(userIdToRemove));
-                        for (int subId : removed.getMyAppointees()) {
-                            HierarchyDTO sub = perms.getCompanyTree().get(subId);
-                            if (sub != null)
-                                sub.setMyManager(perms.getFounderId());
-                        }
+                    } else if (perms.isManager(userIdToRemove)) {
+                        // Manager removed → clean up appointer's list + reassign sub-managers to founder
+                        perms.removeManagerFromTree(userIdToRemove);
                         changed = true;
                     }
 
