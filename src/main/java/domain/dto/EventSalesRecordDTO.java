@@ -1,13 +1,13 @@
 package domain.dto;
 
 public class EventSalesRecordDTO {
-    private String eventId;
+    private Integer eventId;
     private String eventName;
     private int creatorId;
     private int numTicketsSold;
     private double revenue; //the income of each order done to that event
 
-    public EventSalesRecordDTO(String eventId, String eventName, int creatorId, int ticketsSold, double revenue) {
+    public EventSalesRecordDTO(Integer eventId, String eventName, int creatorId, int ticketsSold, double revenue) {
         this.eventId = eventId;
         this.eventName = eventName;
         this.creatorId = creatorId;
@@ -15,7 +15,7 @@ public class EventSalesRecordDTO {
         this.revenue = revenue;
     }
 
-    public String getEventId() { return eventId; }
+    public Integer getEventId() { return eventId; }
     public String getEventName() { return eventName; }
     public int getCreatorId() { return creatorId; }
     public int getNumTicketsSold() { return numTicketsSold; }

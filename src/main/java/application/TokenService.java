@@ -8,6 +8,7 @@ import io.jsonwebtoken.security.Keys;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
+import java.util.UUID;
 import java.util.function.Function;
 
 public class TokenService {
@@ -19,6 +20,18 @@ public class TokenService {
     public String generateToken(String username) {
         return Jwts.builder()
                 .setSubject(username)
+                .claim("role", "MEMBER")
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + expirationTime))
+                .signWith(key)
+                .compact();
+    }
+
+    public String generateGuestToken() {
+        String uuid = java.util.UUID.randomUUID().toString();
+        return Jwts.builder()
+                .setSubject("GUEST_" + uuid)
+                .claim("role", "GUEST")
                 .setIssuedAt(new Date(System.currentTimeMillis()))
                 .setExpiration(new Date(System.currentTimeMillis() + expirationTime))
                 .signWith(key)
@@ -37,7 +50,9 @@ public class TokenService {
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
-
+    public String extractRole(String token) {
+        return extractClaim(token, claims -> claims.get("role", String.class));
+    }
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = Jwts.parserBuilder()
                 .setSigningKey(key)

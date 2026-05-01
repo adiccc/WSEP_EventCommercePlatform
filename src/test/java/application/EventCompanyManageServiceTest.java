@@ -61,8 +61,7 @@ class EventCompanyManageServiceTest {
     private IEventRepo eventRepo;
 
     private LocalDateTime eventDate;
-    private String eventId;
-    private String pastEventId;
+    private Integer eventId;
 
 
     private UserService userService;
@@ -72,7 +71,9 @@ class EventCompanyManageServiceTest {
     private String invalidToken;
     private EventService eventService;
     private IPaymentSystem paymentSystem;
+    private ITicketSupply ticketSupply;
     private ActiveOrderService activeOrderService;
+    private String GUEST_TOKEN;
 
     @BeforeEach
     void setUp() {
@@ -90,8 +91,8 @@ class EventCompanyManageServiceTest {
         eventService=new EventService(auth,eventRepo);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,100);
-
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,100);
+        GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete oreder repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo);
         eventCompanyManageService = new EventCompanyManageService(
@@ -183,7 +184,7 @@ class EventCompanyManageServiceTest {
     void GivenMissingEventScenario_WhenDefineVenueAndSeatingMap_ThenEventNotFoundErrorIsShown() {
         Response<Boolean> response =eventCompanyManageService.DefineVenueAndSeatingMap(
                 validToken1,
-                "non-existing-event-id",
+                -1,
                 stage,
                 entries,
                 standingZones,
@@ -217,7 +218,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
         // Act: Standard sale (hasLottery = false)
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 validToken1, companyId, eventDate, "Standard Event", saleStartDate, false,GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -233,7 +234,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
         // Act: Lottery sale (hasLottery = true)
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 validToken1, companyId, eventDate, "Lottery Event", saleStartDate, false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -249,7 +250,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
         // Act
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 validToken2, companyId, eventDate, "Unauthorized Event", saleStartDate, false,GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -265,7 +266,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = pastEventDate.minusDays(1);
 
         // Act
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 validToken1, companyId, pastEventDate, "Past Event", saleStartDate, false,GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -281,7 +282,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
         // Act
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 null, companyId, eventDate, "No Token Event", saleStartDate, false,GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -441,7 +442,7 @@ class EventCompanyManageServiceTest {
         // When
         Response<Boolean> response =eventCompanyManageService.UpdateEventDate(
                 validToken1,
-                "non-existing-event-id",
+                -1,
                 requestedDate
         );
 
@@ -602,7 +603,7 @@ class EventCompanyManageServiceTest {
         // Act
         Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
                 validToken1,
-                "non-existing-event-id",
+                -1,
                 newStandingZones,
                 null
         );
@@ -651,7 +652,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenInactiveEvent_WhenAddZonesToEventMap_ThenEventNotActiveErrorIsReturned() {
         // Arrange: Create a Lottery Event. A lottery event does not become active immediately when a map is defined.
-        String lotteryEventId = eventCompanyManageService.createEvent(
+        Integer lotteryEventId = eventCompanyManageService.createEvent(
                 validToken1, companyId, LocalDateTime.now().plusDays(10), "Lottery Event",
                 LocalDateTime.now().plusDays(5), true, GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         ).getValue();
@@ -680,7 +681,7 @@ class EventCompanyManageServiceTest {
         eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
 
         // Act
-        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(invalidToken, companyId);
+        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(GUEST_TOKEN, companyId);
 
         // Assert
         assertNotNull(response.getValue());
@@ -712,7 +713,7 @@ class EventCompanyManageServiceTest {
         companyService.deactivateCompany(validToken1, closedCompanyId);
 
         // Act
-        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(invalidToken, closedCompanyId);
+        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(GUEST_TOKEN, closedCompanyId);
 
         // Assert
         assertNull(response.getValue());
@@ -759,7 +760,7 @@ class EventCompanyManageServiceTest {
     void GivenOwnerWithSalesData_WhenGenerateSalesReports_ThenReturnReportWithData() {
         // Arrange
         //TODO: make sure that when order is completed change the change to use only repo's and services!!!!
-        String event = eventCompanyManageService.createEvent(validToken1,companyId,eventDate,"event1",eventDate.minusDays(1), false,GeographicalArea.NORTH,CategoryEvent.SPORTS).getValue();
+        Integer event = eventCompanyManageService.createEvent(validToken1,companyId,eventDate,"event1",eventDate.minusDays(1), false,GeographicalArea.NORTH,CategoryEvent.SPORTS).getValue();
         List<Integer> purchasedTickets = new ArrayList<>();
         purchasedTickets.add(101);
         Event e =eventRepo.findById(event);
@@ -821,7 +822,7 @@ class EventCompanyManageServiceTest {
         assertTrue(response.getMessage().contains("not found"));
     }
         @Test
-    void SuccessfulRefund() {
+    void GivenRefundRequiredOrder_WhenProcessRefundAndExternalPaymentApproves_ThenOrderMarkedRefunded() {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenReturn(true);
 
@@ -847,7 +848,7 @@ class EventCompanyManageServiceTest {
     }
 
     @Test
-    void RefundTransactionNotFound() {
+    void GivenMissingOrder_WhenProcessRefund_ThenNoMatchingOrderReturned() {
         Response<Boolean> response = eventCompanyManageService.processRefund(
                 validToken1,
                 eventId,
@@ -862,7 +863,7 @@ class EventCompanyManageServiceTest {
     }
 
     @Test
-    void RefundRejected() {
+    void GivenRefundRequiredOrder_WhenProcessRefundAndExternalPaymentRejects_ThenOrderRemainsRefundRequired() {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenReturn(false);
 
@@ -887,7 +888,7 @@ class EventCompanyManageServiceTest {
     }
 
     @Test
-    void RefundWithoutValidReason() {
+    void GivenApprovedOrder_WhenProcessRefund_ThenOrderCannotBeRefunded() {
         Event event = eventRepo.findById(eventId);
 
         Order order = new Order(123, 900, eventId, List.of(1, 2), 100.0, "pay123");
@@ -910,7 +911,7 @@ class EventCompanyManageServiceTest {
                 .refund(Mockito.anyString(), Mockito.anyDouble());
     }
     @Test
-    void RefundServiceUnavailable() {
+    void GivenRefundRequiredOrder_WhenProcessRefundAndExternalPaymentServiceUnavailable_ThenOrderRemainsRefundRequired() {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenThrow(new RuntimeException("Payment service unavailable"));
 
@@ -989,7 +990,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenNonExistingEvent_WhenDeleteEvent_ThenEventNotFoundErrorReturned() {
         // Given
-        String nonExistingEventId = "333";
+        Integer nonExistingEventId = 333;
 
         // When
         Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, nonExistingEventId);

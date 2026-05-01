@@ -1,11 +1,15 @@
 package domain.company;
 
+import DTO.DiscountDTO;
+import DTO.PurchaseRuleDTO;
+import domain.dataType.PermissionType;
+import domain.policy.*;
 import domain.activeOrder.ActiveOrder;
 import domain.dataType.PermissionType;
 import domain.dto.HierarchyDTO;
-import domain.policy.Discount;
-import domain.policy.DiscountPolicy;
-import domain.policy.PurchasePolicy;
+
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -47,40 +51,6 @@ public class Company {
     public long getVersion() { return version; }
     public void setVersion(long version) { this.version = version; }
 
-    public void updatePurchasePolicy(int userId, PurchasePolicy newPolicy) {
-        if (!isActive)
-            throw new IllegalStateException("Company is not active");
-        if (!companyPermission.isOwner(userId))
-            throw new SecurityException("User does not have permission to update purchase policy");
-        if (!newPolicy.isValid())
-            throw new IllegalArgumentException("Invalid policy data");
-        this.purchasePolicy = newPolicy;
-    }
-
-    public void updateDiscountPolicy(int userId, DiscountPolicy newPolicy) {
-        if (!isActive)
-            throw new IllegalStateException("Company is not active");
-        if (!companyPermission.isOwner(userId))
-            throw new SecurityException("User does not have permission to update discount policy");
-        if (!newPolicy.isValid())
-            throw new IllegalArgumentException("Invalid discount policy data");
-        this.discountPolicy = newPolicy;
-    }
-
-    public void addDiscount(int userId, Discount discount) {
-        if (!companyPermission.checkPermission(userId, PermissionType.MANAGE_POLICIES)) {
-            throw new SecurityException("User does not have permission to add discount policy");
-        }
-        discountPolicy.addDiscount(discount);
-    }
-
-    public void removeDiscount(int userId, Discount discount) {
-        if (!companyPermission.checkPermission(userId, PermissionType.MANAGE_POLICIES)) {
-            throw new SecurityException("User does not have permission to remove discount policy");
-        }
-        discountPolicy.removeDiscount(discount);
-    }
-
     public void deactivate() { this.isActive = false; }
 
     // --- Getters ---
@@ -92,7 +62,36 @@ public class Company {
     public DiscountPolicy getDiscountPolicy() { return discountPolicy; }
     public Permissions getCompanyPermission() { return companyPermission; }
 
-    // --- Convenience delegates to Permissions ---
+    public void addDiscount(int userId, DiscountDTO discount) {
+        if (!companyPermission.checkPermission(userId, PermissionType.MANAGE_POLICIES)) {
+            throw new SecurityException("User does not have permission to add discount policy");
+        }
+        discountPolicy.addDiscount(DiscountPolicy.dtoToDiscount(discount));
+    }
+
+    public void removeDiscount(int userId, DiscountDTO discount) {
+        if (!companyPermission.checkPermission(userId, PermissionType.MANAGE_POLICIES)) {
+            throw new SecurityException("User does not have permission to remove discount policy");
+        }
+        discountPolicy.removeDiscount(DiscountPolicy.dtoToDiscount(discount));
+    }
+
+    public void addRule(int userId, PurchaseRuleDTO dto) {
+        if (!checkPermission(userId, PermissionType.MANAGE_POLICIES) && !isOwner(userId))
+            throw new SecurityException("User does not have permission to add purchase rule");
+        if (!isActive)
+            throw new IllegalStateException("Company is not active");
+        purchasePolicy.addRule(PurchasePolicy.dtoToPurchase(dto));
+    }
+
+    public void removeRule(int userId, PurchaseRuleDTO dto) {
+        if (!checkPermission(userId, PermissionType.MANAGE_POLICIES) && !isOwner(userId))
+            throw new SecurityException("User does not have permission to remove purchase rule");
+        if (!isActive)
+            throw new IllegalStateException("Company is not active");
+        purchasePolicy.removeRule(PurchasePolicy.dtoToPurchase(dto));
+    }
+
     public int getFounderId() { return companyPermission.getFounderId(); }
     public Set<Integer> getOwnerIds() { return companyPermission.getOwnerIds(); }
     public boolean isOwner(int userId) { return companyPermission.isOwner(userId); }

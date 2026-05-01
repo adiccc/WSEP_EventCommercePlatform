@@ -11,14 +11,14 @@ import Exception.OptimisticLockingFailureException;
 
 public class LotteryRepoImpl implements ILotteryRepo {
     // Thread-safe map for storing lotteries
-    private final ConcurrentHashMap<String, Lottery> lotteries;
+    private final ConcurrentHashMap<Integer, Lottery> lotteries;
 
     public LotteryRepoImpl() {
         lotteries = new ConcurrentHashMap<>();
     }
 
     @Override
-    public Lottery findById(String id) {
+    public Lottery findById(Integer id) {
         Lottery dbLottery = lotteries.get(id);
         if (dbLottery != null) {
             return new Lottery(dbLottery); // Return a detached copy
@@ -36,7 +36,7 @@ public class LotteryRepoImpl implements ILotteryRepo {
     }
 
     @Override
-    public void delete(String id) {
+    public void delete(Integer id) {
         lotteries.remove(id);
     }
 

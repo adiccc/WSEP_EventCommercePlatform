@@ -1,17 +1,15 @@
 package domain.event;
-import DTO.StandingZoneDTO;
 import domain.dataType.ElementPosition;
-import domain.dataType.SeatingZone;
-import domain.dataType.StandingZone;
-import domain.dataType.Zone;
+import domain.dto.SeatingTicketDTO;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class EventMap {
-    private List<Zone> zones;
-    private ElementPosition stage;
-    private List<ElementPosition> entries;
+    private final List<Zone> zones;
+    private final ElementPosition stage;
+    private final List<ElementPosition> entries;
 
 
     public EventMap(ElementPosition stage, List<ElementPosition> entries, List<Zone> zones) {
@@ -19,19 +17,18 @@ public class EventMap {
         this.stage = stage;
         this.entries = entries;
     }
+
     public EventMap(EventMap eventMap) {
-        this.zones=new ArrayList<>();
-        for(Zone zone : eventMap.zones) {
-            if(zone instanceof StandingZone)
-                zones.add(new StandingZone((StandingZone)zone));
-            if(zone instanceof SeatingZone)
-                zones.add(new SeatingZone((SeatingZone)zone ));
+        this.zones = new ArrayList<>();
+        for (Zone z : eventMap.zones) {
+            if (z instanceof SeatingZone seatingZone) {
+                this.zones.add(new SeatingZone(seatingZone));
+            } else if (z instanceof StandingZone standingZone) {
+                this.zones.add(new StandingZone(standingZone));
+            }
         }
-        this.entries=new ArrayList<>();
-        for(ElementPosition entry : eventMap.getEntries()) {
-            this.entries.add(new ElementPosition(entry));
-        }
-        this.stage=new ElementPosition(eventMap.getStage());
+        this.stage = eventMap.stage;
+        this.entries = eventMap.entries;
     }
 
     public List<Zone> getZones() {
@@ -46,4 +43,50 @@ public class EventMap {
         return entries;
     }
 
+
+    public List<Integer> bookTickets(Map<String, List<SeatingTicketDTO>> seatingZones,
+                                     Map<String, Integer> standingZones) {
+
+        List<Integer> bookedTicketsIds = new ArrayList<>();
+
+        // --- Seating zones ---
+        for (Map.Entry<String, List<SeatingTicketDTO>> entry : seatingZones.entrySet()) {
+            String zoneName = entry.getKey();
+            List<SeatingTicketDTO> seats = entry.getValue();
+            Zone matchedZone = null;
+            for (Zone z : zones) {
+                if (z.getName().equals(zoneName)) {
+                    matchedZone = z;
+                    break;
+                }
+            }
+            if (matchedZone == null) {
+                throw new IllegalArgumentException("Seating zone does not exist: " + zoneName);
+            }
+            if (!(matchedZone instanceof SeatingZone)) {
+                throw new IllegalArgumentException("Zone is not a seating zone: " + zoneName);
+            }
+            bookedTicketsIds.addAll(((SeatingZone) matchedZone).bookTickets(seats));
+        }
+        // --- Standing zones ---
+        for (Map.Entry<String, Integer> entry : standingZones.entrySet()) {
+            String zoneName = entry.getKey();
+            int quantity = entry.getValue();
+            Zone matchedZone = null;
+            for (Zone z : zones) {
+                if (z.getName().equals(zoneName)) {
+                    matchedZone = z;
+                    break;
+                }
+            }
+            if (matchedZone == null) {
+                throw new IllegalArgumentException("Standing zone does not exist: " + zoneName);
+            }
+            if (!(matchedZone instanceof StandingZone)) {
+                throw new IllegalArgumentException("Zone is not a standing zone: " + zoneName);
+            }
+            bookedTicketsIds.addAll(((StandingZone) matchedZone).bookTickets(quantity));
+        }
+        return bookedTicketsIds;
+    }
 }

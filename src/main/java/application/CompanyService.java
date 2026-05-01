@@ -10,7 +10,8 @@ import domain.dto.CompanyDTO;
 import domain.dto.HierarchyDTO;
 import domain.dto.RolesPermissionsTreeDTO;
 import domain.event.IOrderRepo;
-import domain.policy.Discount;
+import DTO.DiscountDTO;
+import DTO.PurchaseRuleDTO;
 import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
 import domain.user.Founder;
@@ -43,9 +44,6 @@ public class CompanyService {
                 if (user == null) {
                     return new Response<>(null, "User not found.");
                 }
-//            if (!user.isConnected()) {
-//                return new Response<>(null, "User must be logged in to create a company.");
-//            }
                 if (!auth.isLoggedIn(sessionToken).getValue()) {
                     return new Response<>(null, "User must be logged in to create a company.");
                 }
@@ -80,7 +78,7 @@ public class CompanyService {
                     userRepo.store(user);
 
                     logger.info("Company " + companyName + " created successfully");
-                    return new Response<>(newCompany, "Production company created successfully.");
+                    return Response.ok(newCompany);
                 }
 
             } catch (OptimisticLockingFailureException e) {
@@ -106,13 +104,11 @@ public class CompanyService {
             logger.info("viewRolesAndPermissionsTree called for companyId: " + companyId);
             try {
                 // 1. Validate token
-                if (auth.isLoggedIn(token).isError()) {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
                     logger.warning("viewRolesAndPermissionsTree failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-
-                int userId = auth.getUserId(token).getValue();
-
                 // 2. Company must exist
                 Company company = companyRepo.findById(companyId);
 
@@ -147,48 +143,111 @@ public class CompanyService {
         });
     }
 
-    public Response<Boolean> updatePurchasePolicy(String token, int companyId, PurchasePolicy policy) {
+    public Response<Boolean> addRuleToCompany(String token, int companyId, PurchaseRuleDTO ruleDTO) {
         return RetryHelper.executeWithRetry(() ->
         {
-            logger.info("Starting updatePurchasePolicy for companyId: " + companyId);
+            logger.info("addRuleToCompany called for companyId: " + companyId);
             try {
                 int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
+                    logger.warning("addRuleToCompany failed: invalid or expired token");
+                    return Response.error("Invalid or expired token");
+                }
+
                 Company company = companyRepo.findById(companyId);
-                company.updatePurchasePolicy(userId, policy);
+                if (company == null) {
+                    logger.warning("addRuleToCompany failed: company not found, id: " + companyId);
+                    return Response.error("Company not found");
+                }
+
+                if (ruleDTO == null) {
+                    logger.warning("addRuleToCompany failed: null rule DTO");
+                    return Response.error("Invalid rule data");
+                }
+
+                company.addRule(userId, ruleDTO);
                 companyRepo.store(company);
-                logger.info("Purchase policy updated successfully for companyId: " + companyId);
+
+                logger.info("addRuleToCompany succeeded for companyId: " + companyId);
                 return Response.ok(true);
+
             } catch (SecurityException e) {
-                logger.warning("updatePurchasePolicy unauthorized for companyId: " + companyId + ". " + e.getMessage());
+                logger.warning("addRuleToCompany unauthorized: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (IllegalArgumentException e) {
-                logger.warning("updatePurchasePolicy bad arguments for companyId: " + companyId + ". " + e.getMessage());
+                logger.warning("addRuleToCompany invalid data: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (IllegalStateException e) {
-                logger.warning("updatePurchasePolicy invalid state for companyId: " + companyId + ". " + e.getMessage());
+                logger.warning("addRuleToCompany invalid state: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (OptimisticLockingFailureException e) {
                 throw e;
             } catch (Exception e) {
-                logger.severe("Unexpected error in updatePurchasePolicy for companyId: " + companyId + ". Error: " + e.getMessage());
-                return Response.error("Unexpected error in updatePurchasePolicy for companyId: " + companyId);
+                logger.severe("Unexpected error in addRuleToCompany: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
             }
         });
     }
 
-    public Response<Boolean> addDiscountToCompany(String token, int companyId, Discount discount) {
+    public Response<Boolean> removeRuleFromCompany(String token, int companyId, PurchaseRuleDTO ruleDTO) {
+        return RetryHelper.executeWithRetry(() ->
+        {
+            logger.info("removeRuleFromCompany called for companyId: " + companyId);
+            try {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
+                    logger.warning("removeRuleFromCompany failed: invalid or expired token");
+                    return Response.error("Invalid or expired token");
+                }
+                Company company = companyRepo.findById(companyId);
+                if (company == null) {
+                    logger.warning("removeRuleFromCompany failed: company not found, id: " + companyId);
+                    return Response.error("Company not found");
+                }
+
+                if (ruleDTO == null) {
+                    logger.warning("removeRuleFromCompany failed: null rule DTO");
+                    return Response.error("Invalid rule data");
+                }
+
+                company.removeRule(userId, ruleDTO);
+                companyRepo.store(company);
+
+                logger.info("removeRuleFromCompany succeeded for companyId: " + companyId);
+                return Response.ok(true);
+
+            } catch (SecurityException e) {
+                logger.warning("removeRuleFromCompany unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalArgumentException e) {
+                logger.warning("removeRuleFromCompany invalid data: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalStateException e) {
+                logger.warning("removeRuleFromCompany invalid state: " + e.getMessage());
+                return Response.error(e.getMessage());
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            }
+            catch (Exception e) {
+                logger.severe("Unexpected error in removeRuleFromCompany: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Boolean> addDiscountToCompany(String token, int companyId, DiscountDTO discountDTO) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.info("addDiscountToCompany called for companyId: " + companyId);
 
             try {
                 // 1. Validate token
-                if (auth.isLoggedIn(token).isError()) {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
                     logger.warning("addDiscountToCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-
-                int userId = auth.getUserId(token).getValue();
 
                 // 2. Company must exist
                 Company company = companyRepo.findById(companyId);
@@ -203,14 +262,14 @@ public class CompanyService {
                     return Response.error("Company is not active");
                 }
 
-                // 4. Discount must be valid
-                if (discount == null || !discount.isValid()) {
-                    logger.warning("addDiscountToCompany failed: invalid discount");
+                // 4. DTO must be present
+                if (discountDTO == null) {
+                    logger.warning("addDiscountToCompany failed: null discount DTO");
                     return Response.error("Invalid discount data");
                 }
 
                 // 5. Apply (permissions + duplicates checked inside Company)
-                company.addDiscount(userId, discount);
+                company.addDiscount(userId, discountDTO);
                 companyRepo.store(company);
 
                 logger.info("addDiscountToCompany succeeded for companyId: " + companyId);
@@ -237,19 +296,18 @@ public class CompanyService {
         });
     }
 
-    public Response<Boolean> removeDiscountFromCompany(String token, int companyId, Discount discount) {
+    public Response<Boolean> removeDiscountFromCompany(String token, int companyId, DiscountDTO discountDTO) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.info("removeDiscountFromCompany called for companyId: " + companyId);
 
             try {
                 // 1. Validate token
-                if (auth.isLoggedIn(token).isError()) {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
                     logger.warning("removeDiscountFromCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-
-                int userId = auth.getUserId(token).getValue();
 
                 // 2. Company must exist
                 Company company = companyRepo.findById(companyId);
@@ -264,14 +322,14 @@ public class CompanyService {
                     return Response.error("Company is not active");
                 }
 
-                // 4. Discount must be valid
-                if (discount == null || !discount.isValid()) {
-                    logger.warning("removeDiscountFromCompany failed: invalid discount");
+                // 4. DTO must be present
+                if (discountDTO == null) {
+                    logger.warning("removeDiscountFromCompany failed: null discount DTO");
                     return Response.error("Invalid discount data");
                 }
 
                 // 5. Apply (permissions + existence checked inside Company)
-                company.removeDiscount(userId, discount);
+                company.removeDiscount(userId, discountDTO);
                 companyRepo.store(company);
 
                 logger.info("removeDiscountFromCompany succeeded for companyId: " + companyId);
@@ -298,25 +356,25 @@ public class CompanyService {
         });
     }
 
-    public Response<List<CompanyDTO>> getAvailableCompanies(String token) { //TODO taking care of guest part, additional input : String guestUuid
+    public Response<List<CompanyDTO>> getAvailableCompanies(String token) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.info("getAvailableCompanies called");
             try {
+                String role = auth.getRole(token).getValue();
+                if (role == null) {
+                    logger.warning("getAvailableCompanies failed: invalid or expired token");
+                    return new Response<>(null,"Invalid or expired token");
+                }
                 List<Company> allCompanies = companyRepo.getAll();
                 if (allCompanies == null || allCompanies.isEmpty()) {
                     logger.warning("No companies in the system");
                     return new Response<>(null, "No companies in the system");
                 }
                 List<CompanyDTO> filteredCompanies = new ArrayList<CompanyDTO>();
-                if (token != null && !token.isEmpty()) {
-                    if (!auth.isLoggedIn(token).getValue()) {
-                        return new Response<>(null, "Invalid or expired token");
-                    }
-                }
                 //it's a member or a guest
                 int userId = auth.getUserId(token).getValue(); //for guest returns -1
-                boolean isMember = userId != -1;
+                boolean isMember = "MEMBER".equals(role);
                 for (Company company : allCompanies) {
                     // isUserPermitted means or the company is active
                     // if the company isn't active only members who are owners and have the right permitting can access
@@ -336,7 +394,7 @@ public class CompanyService {
                 return new Response<>(filteredCompanies, "Companies retrieved successfully");
             } catch (SecurityException e) {
                 logger.warning("getAvailableCompanies unauthorized: " + e.getMessage());
-                return new Response<>(null, "Invalid or expired token");
+                return new Response<>(null, "System error occurred");
             }   catch (OptimisticLockingFailureException e) {
                 throw e;
             }

@@ -151,6 +151,25 @@ class UserServiceTest {
         assertEquals("Address cannot be null", response.getMessage());
     }
 
+    @Test
+    void GivenActiveGuestToken_WhenRegisterUser_ThenSuccessAndEncrypted() {
+        //Arrange
+        String guestToken = userService.continueAsGuest().getValue();
+
+        UserDTO dto = createValidDTO();
+
+        Response<Boolean> response = userService.registerUser(guestToken, dto);
+
+        // Assert
+        assertFalse(response.isError());
+        assertTrue(response.getValue());
+
+        Member savedUser = userRepo.findUserByEmail("yarin@bgu.ac.il");
+        assertNotNull(savedUser);
+        assertEquals("yarin@bgu.ac.il", savedUser.getIdentifier());
+        assertTrue(passwordEncoder.matches("Password123!", savedUser.getPassword()));
+    }
+
     // --- login ---
 
     @Test
@@ -201,13 +220,25 @@ class UserServiceTest {
 
     @Test
     void GivenGuest_WhenLogout_ThenErrorUserInGuestState() {
+        //Arrange
+        String guestToken = userService.continueAsGuest().getValue();
+        //Act
+        Response<Boolean> response = userService.logout(guestToken);
+        //Assert
+        assertTrue(response.isError());
+        assertFalse(response.getValue());
+        assertEquals("User is in guest state", response.getMessage());
+    }
+
+    @Test
+    void GivenNullOrBlankToken_WhenLogout_ThenErrorTokenEmpty() {
         Response<Boolean> responseNull = userService.logout(null);
         Response<Boolean> responseBlank = userService.logout("   ");
 
-        assertFalse(responseNull.getValue());
-        assertEquals("User is in guest state", responseNull.getMessage());
-        assertFalse(responseBlank.getValue());
-        assertEquals("User is in guest state", responseBlank.getMessage());
+        assertTrue(responseNull.isError());
+        assertEquals("token is empty or invalid", responseNull.getMessage());
+        assertTrue(responseBlank.isError());
+        assertEquals("token is empty or invalid", responseBlank.getMessage());
     }
 
     @Test
@@ -272,5 +303,53 @@ class UserServiceTest {
         assertFalse(status.isError());
         assertFalse(status.getValue().isAdmitted());
         assertEquals(1, status.getValue().getPosition());
+    }
+     //continue as guest
+     @Test
+     void GivenAdmittedUser_WhenContinueAsGuest_ThenReturnGuestToken() {
+         Response<String> response = userService.continueAsGuest();
+         assertNotNull(response.getValue());
+         assertEquals("Guest session created successfully.", response.getMessage());
+         assertEquals("GUEST", auth.getRole(response.getValue()).getValue());
+     }
+
+    // leaveStore
+    @Test
+    void GivenGuest_WhenLeaveStore_ThenSuccessAndQueueSlotFreed() {
+        int initialActive = WebQueue.getInstance().getActiveCount();
+        userService.enter();
+        assertEquals(initialActive + 1, WebQueue.getInstance().getActiveCount());
+
+        String guestToken = userService.continueAsGuest().getValue();
+
+        Response<Boolean> response = userService.leaveStore(guestToken);
+
+        assertNotNull(response.getValue());
+        assertEquals("Logout successful", response.getMessage());
+        assertEquals(initialActive, WebQueue.getInstance().getActiveCount());
+    }
+
+    @Test
+    void GivenMember_WhenLeaveStore_ThenErrorMustUseLogout() {
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String memberToken = userService.login(dto.getEmail(), dto.getPassword()).getValue();
+
+        Response<Boolean> response = userService.leaveStore(memberToken);
+
+        assertTrue(response.isError());
+        assertFalse(response.getValue());
+        assertEquals("Members should use logout, not leaveStore", response.getMessage());
+    }
+
+    @Test
+    void GivenNullOrBlankToken_WhenLeaveStore_ThenErrorInvalidToken() {
+        Response<Boolean> responseNull = userService.leaveStore(null);
+        Response<Boolean> responseBlank = userService.leaveStore("   ");
+
+        assertTrue(responseNull.isError());
+        assertEquals("Invalid token", responseNull.getMessage());
+        assertTrue(responseBlank.isError());
+        assertEquals("Invalid token", responseBlank.getMessage());
     }
 }

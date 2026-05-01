@@ -3,6 +3,8 @@ package domain.event;
 import domain.dataType.CategoryEvent;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
+import domain.dto.SeatingTicketDTO;
+import domain.dto.UserDTO;
 import domain.policy.*;
 
 import java.time.LocalDateTime;
@@ -10,9 +12,10 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Map;
 
 public class Event {
-    private String id;
+    private int id;
     private int companyId;
     private int creatorId;
     private EventMap eventMap;
@@ -30,6 +33,7 @@ public class Event {
     private long version;
     private final AtomicInteger activePurchaseSessions = new AtomicInteger(0);
 
+
     public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent categoryEvent) {
         this.eventMap = null;
         this.companyId=companyId;
@@ -42,7 +46,7 @@ public class Event {
         purchasePolicy.addRule(new MaxTicketsRule(20));
         discountPolicy = new DiscountPolicy();
         discountPolicy.addDiscount(new LimitedDiscount(0.1, 5));
-        this.id = LocalDateTime.now().hashCode() + String.valueOf(creatorId);
+        this.id = -1; // will be set when stored in repo
         active = false;
         this.location = location;
         this.categoryEvent = categoryEvent;
@@ -136,7 +140,7 @@ public class Event {
         return hasLottery;
     }
 
-    public String getId() {
+    public int getId() {
         return id;
     }
 
@@ -243,11 +247,31 @@ public class Event {
         if (obj == null || getClass() != obj.getClass()) return false;
 
         Event other = (Event) obj;
-        return id.equals(other.id) && version == other.version;
+        return id == (other.id) && version == other.version;
+    }
+
+    public void quantityExceedsPolicy(UserDTO user, int quantity) {
+        int ticketsBoughtForEvent =0;
+        for (Order order : orders) {
+            if (order.getUserId() == user.getUserId()) {
+                ticketsBoughtForEvent += order.getTickets().size();
+            }
+        }
+        if( !purchasePolicy.isSatisfied(user, quantity,ticketsBoughtForEvent)) {
+            throw new IllegalArgumentException("Purchase policy not satisfied for user " + user.getUserId() + " and quantity " + quantity);
+        }
+    }
+
+    public List<Integer> bookTickets(boolean member, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
+        return eventMap.bookTickets(seatingZones,standingZones);
     }
 
     //TODO : this implementation is for test only, this function should be implemented currectly
     public void placeOrder(int userId,int orderId){
-        orders.add(new Order(orderId,userId," ",new ArrayList<>(),100.0,"order123"));
+        orders.add(new Order(orderId,userId,-1,new ArrayList<>(),100.0,"order123"));
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 }

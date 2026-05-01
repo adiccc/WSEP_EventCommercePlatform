@@ -1,11 +1,13 @@
 package domain.user;
 
 import domain.activeOrder.ActiveOrder;
+import domain.dto.UserDTO;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 
 public class Member extends User{
     protected Integer userId;
@@ -27,9 +29,10 @@ public class Member extends User{
         this.dateOfBirth = dateOfBirth;
         this.address = address;
         this.version = 0;
+
     }
     public Member(Member member) {
-        super(member.getIdentifier());
+        super(member);
         this.userId = member.getUserId();
         this.password = member.getPassword();
         this.firstName=member.firstName;
@@ -38,6 +41,7 @@ public class Member extends User{
         this.dateOfBirth=member.dateOfBirth;
         this.address=member.address;
         this.version=member.version;
+        this.isActive = member.isActive;
     }
     public long getVersion() {
         return version;
@@ -61,10 +65,17 @@ public class Member extends User{
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
+        if (obj instanceof Member other) {
+            return Objects.equals(this.userId, other.userId) &&
+                    Objects.equals(this.getIdentifier(), other.getIdentifier());
+        }
+        return false;
+    }
 
-        Member other = (Member) obj;
-        return userId==other.userId && version == other.getVersion();
+    public UserDTO getUserDTO() {
+        return new UserDTO(this.getIdentifier(), this.firstName, this.lastName, this.password,
+                this.dateOfBirth.getDayOfMonth(), this.dateOfBirth.getMonthValue(), this.dateOfBirth.getYear(),
+                this.address, this.phoneNumber);
     }
 
 }

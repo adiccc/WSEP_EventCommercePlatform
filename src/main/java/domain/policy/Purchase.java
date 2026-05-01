@@ -7,4 +7,5 @@ public interface Purchase {
     boolean isValid();
     String describe();
     void addRule(Purchase rule);
+    boolean ruleExists(Purchase rule);
 }
