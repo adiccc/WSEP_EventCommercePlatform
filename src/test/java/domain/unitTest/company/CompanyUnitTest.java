@@ -1,104 +1,77 @@
 package domain.unitTest.company;
 
-import application.CompanyService;
-import application.IAuth;
-import application.Response;
 import domain.company.Company;
-import domain.company.ICompanyRepo;
-import domain.event.IOrderRepo;
-import domain.user.IUserRepo;
-import domain.user.Member;
+import domain.company.ContactInfo;
+import domain.company.Permissions;
+import domain.dataType.PermissionType;
+import domain.dto.HierarchyDTO;
+import domain.policy.DiscountPolicy;
+import domain.policy.PurchasePolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDate;
-import java.util.NoSuchElementException;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
 class CompanyUnitTest {
 
-    private ICompanyRepo companyRepoMock;
-    private IUserRepo userRepoMock;
-    private IAuth authMock;
-    private IOrderRepo orderRepoMock;
-    private CompanyService companyService;
-    private Member mockUser;
+    private static final int FOUNDER_ID  = 1;
+    private static final int MANAGER_ID  = 3;
+    private static final int STRANGER_ID = 99;
+    private static final int COMPANY_ID  = 10;
+
+    private Permissions permissions;
+    private Company     company;
 
     @BeforeEach
-    public void setUp() {
-        companyRepoMock = mock(ICompanyRepo.class);
-        userRepoMock = mock(IUserRepo.class);
-        authMock = mock(IAuth.class);
-        orderRepoMock = mock(IOrderRepo.class);
-
-        companyService = new CompanyService(authMock, companyRepoMock, userRepoMock);
-
-        mockUser = new Member("user123", "aa", "aa", "bb", "050-432-6677", LocalDate.of(2001, 5, 12), "ee");
-        mockUser.setConnected(true);
-
-        when(authMock.getUserId(anyString())).thenReturn(new Response<>(1, ""));
-        when(authMock.isLoggedIn("token123")).thenReturn(new Response<>(true, ""));
+    void setUp() {
+        permissions = new Permissions(FOUNDER_ID);
+        company = new Company(COMPANY_ID, "TestCo",
+                new ContactInfo("info@test.com", "050-000-0000", "bank-1"),
+                new PurchasePolicy(), new DiscountPolicy(), permissions);
     }
 
     @Test
-    public void GivenValidInputs_WhenCreateProductionCompany_ThenReturnSuccessAndCreateCompany() {
-        when(userRepoMock.findById(1)).thenReturn(mockUser);
-        when(companyRepoMock.findById(555)).thenThrow(new NoSuchElementException());
-        when(companyRepoMock.existsByName("LiveNation")).thenReturn(false);
-
-        Response<Company> response = companyService.createProductionCompany(
-                "token123", 555, "LiveNation", "admin@livenation.com", "0501234567", "bank-123"
-        );
-
-        assertNotNull(response.getValue(), "The company object should not be null on success");
-        assertEquals("LiveNation", response.getValue().getCompanyName());
-
-        verify(companyRepoMock, times(1)).store(any(Company.class));
-        verify(userRepoMock, times(1)).store(mockUser);
+    void GivenNewPermissions_WhenCreated_ThenFounderIsOwner() {
+        assertEquals(FOUNDER_ID, permissions.getFounderId());
+        assertTrue(permissions.isOwner(FOUNDER_ID));
     }
 
     @Test
-    public void GivenExistingCompanyId_WhenCreateProductionCompany_ThenReturnError() {
-        when(userRepoMock.findById(1)).thenReturn(mockUser);
-        when(companyRepoMock.findById(555)).thenReturn(mock(Company.class));
-
-        Response<Company> response = companyService.createProductionCompany(
-                "token123", 555, "LiveNation", "admin@livenation.com", "0501234567", "bank-123"
-        );
-
-        assertNull(response.getValue(), "Company object should be null when creation fails");
-        assertTrue(response.getMessage().contains("already exists"));
-
-        verify(companyRepoMock, never()).store(any(Company.class));
+    void GivenStranger_WhenIsOwnerCalled_ThenReturnsFalse() {
+        assertFalse(permissions.isOwner(STRANGER_ID));
     }
 
     @Test
-    public void GivenDisconnectedUser_WhenCreateProductionCompany_ThenReturnError() {
-        when(authMock.isLoggedIn("token123")).thenReturn(new Response<>(false, ""));
-
-        Response<Company> response = companyService.createProductionCompany(
-                "token123", 555, "LiveNation",
-                "admin@livenation.com", "0501234567", "bank-123"
-        );
-
-        assertNull(response.getValue());
-        assertFalse(response.getMessage().contains("logged in"));
-
-        verify(companyRepoMock, never()).store(any(Company.class));
-        verify(userRepoMock, never()).store(any(Member.class));
+    void GivenManagerWithPermission_WhenCheckPermission_ThenTrue() {
+        permissions.getCompanyTree().put(MANAGER_ID, new HierarchyDTO(
+                FOUNDER_ID, new ArrayList<>(),
+                EnumSet.of(PermissionType.MANAGE_EVENTS_INVENTORY)
+        ));
+        assertTrue(permissions.checkPermission(MANAGER_ID, PermissionType.MANAGE_EVENTS_INVENTORY));
     }
 
     @Test
-    public void GivenInvalidEmail_WhenCreateProductionCompany_ThenReturnError() {
-        when(userRepoMock.findById(1)).thenReturn(mockUser);
+    void GivenManagerWithoutPermission_WhenCheckPermission_ThenFalse() {
+        permissions.getCompanyTree().put(MANAGER_ID, new HierarchyDTO(
+                FOUNDER_ID, new ArrayList<>(),
+                EnumSet.of(PermissionType.MANAGE_EVENTS_INVENTORY)
+        ));
+        assertFalse(permissions.checkPermission(MANAGER_ID, PermissionType.VIEW_PURCHASE_HISTORY));
+    }
 
-        Response<Company> response = companyService.createProductionCompany(
-                "token123", 555, "LiveNation", "invalidEmailFormat", "0501234567", "bank-123"
-        );
+    @Test
+    void GivenNewCompany_WhenCreated_ThenFounderIsOwner() {
+        assertTrue(company.isOwner(FOUNDER_ID));
+        assertEquals(FOUNDER_ID, company.getFounderId());
+    }
 
-        assertNull(response.getValue());
-        assertTrue(response.getMessage().contains("Invalid contact"));
+    @Test
+    void GivenActiveCompany_WhenDeactivated_ThenIsActiveFalse() {
+        company.deactivate();
+        assertFalse(company.isActive());
     }
 }

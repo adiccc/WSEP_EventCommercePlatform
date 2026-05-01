@@ -73,6 +73,7 @@ class EventCompanyManageServiceTest {
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
     private ActiveOrderService activeOrderService;
+    private String GUEST_TOKEN;
 
     @BeforeEach
     void setUp() {
@@ -92,6 +93,8 @@ class EventCompanyManageServiceTest {
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
         activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,100,10);
 
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,100);
+        GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete oreder repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo);
         eventCompanyManageService = new EventCompanyManageService(
@@ -712,7 +715,7 @@ class EventCompanyManageServiceTest {
         companyService.deactivateCompany(validToken1, closedCompanyId);
 
         // Act
-        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(invalidToken, closedCompanyId);
+        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(GUEST_TOKEN, closedCompanyId);
 
         // Assert
         assertNull(response.getValue());

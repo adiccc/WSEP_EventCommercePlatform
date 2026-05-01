@@ -6,6 +6,9 @@ import Log.LoggerSetup;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
+
+import domain.policy.*;
+import domain.user.IUserRepo;
 import domain.dto.CompanyDTO;
 import domain.user.IUserRepo;
 import infrastructure.*;
@@ -14,6 +17,10 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -22,7 +29,7 @@ class CompanyServiceUpdatedTest {
     private int COMPANY_ID = 1;
     private int OWNER_ID;
     private int OTHER_USER_ID;
-
+    private String GUEST_TOKEN;
     private String OWNER_TOKEN;
     private String OTHER_TOKEN;
 
@@ -48,17 +55,13 @@ class CompanyServiceUpdatedTest {
         userService.registerUser(null, ownerDTO);
         OWNER_TOKEN = userService.login("owner@test.com", "Password123!").getValue();
         OWNER_ID = auth.getUserId(OWNER_TOKEN).getValue();
-
+        GUEST_TOKEN = userService.continueAsGuest().getValue();
         UserDTO otherDTO = new UserDTO("other@test.com", "Other", "Test", "Password123!", 1, 1, 2000, "City", "050-123-4567");
         userService.registerUser(null, otherDTO);
         OTHER_TOKEN = userService.login("other@test.com", "Password123!").getValue();
         OTHER_USER_ID = auth.getUserId(OTHER_TOKEN).getValue();
 
         service.createProductionCompany(OWNER_TOKEN,COMPANY_ID,"Test Company","test@test.com","0500000000","bank-1");
-//        company = new Company(COMPANY_ID, "Test Company", OWNER_ID,
-//                new ContactInfo("test@test.com", "0500000000", "bank-1"),
-//                new PurchasePolicy(), new DiscountPolicy());
-//        companyRepo.store(company);
     }
 
     // ===================== Get Available Companies =====================
@@ -73,7 +76,7 @@ class CompanyServiceUpdatedTest {
     @Test
     void GivenNoCompaniesInSystem_WhenGetAvailableCompanies_ThenError() {
         companyRepo.delete(COMPANY_ID);
-        Response<List<CompanyDTO>> response = service.getAvailableCompanies("valid-token");
+        Response<List<CompanyDTO>> response = service.getAvailableCompanies(OWNER_TOKEN);
         assertNull(response.getValue());
         assertEquals("No companies in the system", response.getMessage());
     }
@@ -82,7 +85,7 @@ class CompanyServiceUpdatedTest {
     void GivenGuest_WhenActiveAndInactiveCompaniesExist_ThenReturnOnlyActive() {
         service.createProductionCompany(OWNER_TOKEN,2,"Inactive Co","a@b.com","05034445897", "bank-b");
         Response<Boolean> response = service.deactivateCompany(OWNER_TOKEN,2);
-        Response<List<CompanyDTO>> response1 = service.getAvailableCompanies(null);
+        Response<List<CompanyDTO>> response1 = service.getAvailableCompanies(GUEST_TOKEN);
 
         assertNotNull(response.getValue());
         assertEquals(1, response1.getValue().size());
@@ -92,7 +95,7 @@ class CompanyServiceUpdatedTest {
     @Test
     void GivenGuest_WhenAllCompaniesAreInactive_ThenErrorNoCompanies() {
         service.deactivateCompany(OWNER_TOKEN,COMPANY_ID);
-        Response<List<CompanyDTO>> response = service.getAvailableCompanies(null);
+        Response<List<CompanyDTO>> response = service.getAvailableCompanies(GUEST_TOKEN);
         assertNull(response.getValue());
         assertEquals("No companies in the system", response.getMessage());
     }
@@ -330,5 +333,199 @@ class CompanyServiceUpdatedTest {
         DiscountDTO discountDTO = new DiscountDTO(10.0, LocalDate.now().plusDays(1));
         Response<Boolean> response = service.removeDiscountFromCompany(OWNER_TOKEN, COMPANY_ID, discountDTO);
         assertTrue(response.isError());
+    }
+
+    // ===================== II.3.2 Create Production Company =====================
+
+    @Test
+    void GivenValidInputs_WhenCreateProductionCompany_ThenReturnSuccessAndCompanyStored() {
+        Response<Company> response = service.createProductionCompany(
+                OWNER_TOKEN, 99, "NewCo", "new@co.com", "050-999-9999", "bank-99");
+
+        assertFalse(response.isError(), "Expected success but got: " + response.getMessage());
+        assertNotNull(response.getValue());
+        assertEquals("NewCo", response.getValue().getCompanyName());
+        assertEquals("NewCo", companyRepo.findById(99).getCompanyName());
+        assertTrue(companyRepo.findById(99).isOwner(OWNER_ID));
+    }
+
+    @Test
+    void GivenDuplicateCompanyId_WhenCreateProductionCompany_ThenReturnError() {
+        // COMPANY_ID=1 already created in setUp
+        Response<Company> response = service.createProductionCompany(
+                OWNER_TOKEN, COMPANY_ID, "Other", "o@o.com", "050-000-0001", "bank-x");
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("already exists"));
+    }
+
+    @Test
+    void GivenDuplicateCompanyName_WhenCreateProductionCompany_ThenReturnError() {
+        // "Test Company" already created in setUp
+        Response<Company> response = service.createProductionCompany(
+                OWNER_TOKEN, 98, "Test Company", "o@o.com", "050-000-0002", "bank-y");
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("already taken"));
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenCreateProductionCompany_ThenReturnError() {
+        auth.logout(OWNER_TOKEN);
+
+        Response<Company> response = service.createProductionCompany(
+                OWNER_TOKEN, 97, "LoggedOutCo", "lo@co.com", "050-000-0003", "bank-z");
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+    }
+
+    @Test
+    void GivenInvalidEmail_WhenCreateProductionCompany_ThenReturnError() {
+        Response<Company> response = service.createProductionCompany(
+                OWNER_TOKEN, 96, "BadEmailCo", "not-an-email", "050-000-0004", "bank-w");
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("Invalid contact"));
+    }
+
+    // ===================== II.4.15 View Roles and Permissions Tree =====================
+
+    @Test
+    void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenReturnsTree() {
+        Response<domain.dto.RolesPermissionsTreeDTO> response =
+                service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID);
+
+        assertFalse(response.isError(), "Expected success but got: " + response.getMessage());
+        assertNotNull(response.getValue());
+    }
+
+    @Test
+    void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenFounderIdIsCorrect() {
+        domain.dto.RolesPermissionsTreeDTO tree =
+                service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID).getValue();
+
+        assertEquals(OWNER_ID, tree.getFounderId(),
+                "Founder should be the user who created the company");
+    }
+
+    @Test
+    void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenOwnerSetContainsFounder() {
+        domain.dto.RolesPermissionsTreeDTO tree =
+                service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID).getValue();
+
+        assertTrue(tree.getOwnerIds().contains(OWNER_ID));
+    }
+
+    @Test
+    void GivenNewCompany_WhenViewRolesTree_ThenManagersMapIsEmpty() {
+        domain.dto.RolesPermissionsTreeDTO tree =
+                service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID).getValue();
+
+        assertTrue(tree.getManagersPermissions().isEmpty(),
+                "A brand-new company has no managers");
+    }
+
+    @Test
+    void GivenNonOwner_WhenViewRolesTree_ThenError() {
+        Response<domain.dto.RolesPermissionsTreeDTO> response =
+                service.viewRolesAndPermissionsTree(OTHER_TOKEN, COMPANY_ID);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+    }
+
+    @Test
+    void GivenUnknownCompanyId_WhenViewRolesTree_ThenError() {
+        Response<domain.dto.RolesPermissionsTreeDTO> response =
+                service.viewRolesAndPermissionsTree(OWNER_TOKEN, 9999);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenViewRolesTree_ThenError() {
+        Response<domain.dto.RolesPermissionsTreeDTO> response =
+                service.viewRolesAndPermissionsTree("not-a-real-token", COMPANY_ID);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenViewRolesTree_ThenError() {
+        auth.logout(OWNER_TOKEN);
+
+        Response<domain.dto.RolesPermissionsTreeDTO> response =
+                service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+    }
+
+    // ===================== Concurrency: Create Production Company =====================
+
+    @Test
+    void GivenTwoThreadsRaceWithSameCompanyId_WhenCreateProductionCompany_ThenOnlyOneSucceeds() throws Exception {
+        int racingId = 50;
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Company>> f1 = executor.submit(() -> {
+            start.await();
+            return service.createProductionCompany(OWNER_TOKEN, racingId, "CompanyA", "a@a.com", "050-111-0001", "bank-a");
+        });
+        Future<Response<Company>> f2 = executor.submit(() -> {
+            start.await();
+            return service.createProductionCompany(OTHER_TOKEN, racingId, "CompanyB", "b@b.com", "050-111-0002", "bank-b");
+        });
+
+        start.countDown();
+
+        Response<Company> r1 = f1.get();
+        Response<Company> r2 = f2.get();
+        executor.shutdown();
+
+        int success = 0;
+        int failed  = 0;
+        if (!r1.isError()) success++; else failed++;
+        if (!r2.isError()) success++; else failed++;
+
+        assertEquals(1, success, "Exactly one thread should successfully create the company");
+        assertEquals(1, failed,  "The losing thread should receive a duplicate-ID error");
+    }
+
+    @Test
+    void GivenTwoThreadsRaceWithSameCompanyName_WhenCreateProductionCompany_ThenOnlyOneSucceeds() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Company>> f1 = executor.submit(() -> {
+            start.await();
+            return service.createProductionCompany(OWNER_TOKEN, 60, "RacingName", "c@c.com", "050-222-0001", "bank-c");
+        });
+        Future<Response<Company>> f2 = executor.submit(() -> {
+            start.await();
+            return service.createProductionCompany(OTHER_TOKEN, 61, "RacingName", "d@d.com", "050-222-0002", "bank-d");
+        });
+
+        start.countDown();
+
+        Response<Company> r1 = f1.get();
+        Response<Company> r2 = f2.get();
+        executor.shutdown();
+
+        int success = 0;
+        int failed  = 0;
+        if (!r1.isError()) success++; else failed++;
+        if (!r2.isError()) success++; else failed++;
+
+        assertEquals(1, success, "Only one company with the same name should be created");
+        assertEquals(1, failed,  "The losing thread should receive a duplicate-name error");
     }
 }

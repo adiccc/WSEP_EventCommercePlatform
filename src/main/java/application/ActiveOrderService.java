@@ -90,9 +90,12 @@ public class ActiveOrderService {
 
 
             // check valid token
-            if (!auth.isLoggedIn(token).getValue()) {
+            String role = auth.getRole(token).getValue();
+            if(role == null){
+                logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
             }
+
             try {
                 Event e = this.eventRepo.findById(eventId);
 
@@ -176,6 +179,11 @@ public class ActiveOrderService {
     public Response<Integer>userSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return RetryHelper.executeWithRetry(()->{
         logger.log(Level.INFO, "userSelectTickets called");
+        if(identifier == null){
+            logger.log(Level.SEVERE, "identifier is null");
+            return new Response<>(null, "Invalid identifier supplied");
+        }
+        String role = auth.getRole(identifier).getValue();
         try {
             this.activeOrderRepo.alreadyHasActiveOrder(auth.getUserId(identifier).getValue(), eventId);
             int totalSeatingTickets = seatingZones.values().stream()
@@ -206,6 +214,7 @@ public class ActiveOrderService {
             logger.log(Level.SEVERE, "Failed to select tickets : " + e.getMessage());
             return new Response<>(null, "Failed to select tickets : " + e.getMessage());
         }
+
     });}
 
     public void cleanupExpiredOrders() {
