@@ -68,9 +68,12 @@ public class ActiveOrderService {
             logger.log(Level.INFO, "enterEventPurchase called");
 
             // check valid token
-            if (!auth.isLoggedIn(token).getValue()) {
+            String role = auth.getRole(token).getValue();
+            if(role == null){
+                logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
             }
+
             try {
                 Event e = this.eventRepo.findById(eventId);
 
@@ -151,10 +154,14 @@ public class ActiveOrderService {
         });
     }
 
-    public Response<Integer>guestSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
+    public Response<Integer>guestSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) { //TODO::
         return RetryHelper.executeWithRetry(()->{
         logger.log(Level.INFO, "guestSelectTickets called");
-
+        if(identifier == null){
+            logger.log(Level.SEVERE, "identifier is null");
+            return new Response<>(null, "Invalid identifier supplied");
+        }
+        String role = auth.getRole(identifier).getValue();
         try {
             this.activeOrderRepo.alreadyHasActiveOrder(auth.getUserId(identifier).getValue(), eventId);
 

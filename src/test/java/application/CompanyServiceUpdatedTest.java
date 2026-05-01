@@ -6,6 +6,9 @@ import Log.LoggerSetup;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
+
+import domain.policy.*;
+import domain.user.IUserRepo;
 import domain.dto.CompanyDTO;
 import domain.user.IUserRepo;
 import infrastructure.*;
@@ -26,7 +29,7 @@ class CompanyServiceUpdatedTest {
     private int COMPANY_ID = 1;
     private int OWNER_ID;
     private int OTHER_USER_ID;
-
+    private String GUEST_TOKEN;
     private String OWNER_TOKEN;
     private String OTHER_TOKEN;
 
@@ -52,7 +55,7 @@ class CompanyServiceUpdatedTest {
         userService.registerUser(null, ownerDTO);
         OWNER_TOKEN = userService.login("owner@test.com", "Password123!").getValue();
         OWNER_ID = auth.getUserId(OWNER_TOKEN).getValue();
-
+        GUEST_TOKEN = userService.continueAsGuest().getValue();
         UserDTO otherDTO = new UserDTO("other@test.com", "Other", "Test", "Password123!", 1, 1, 2000, "City", "050-123-4567");
         userService.registerUser(null, otherDTO);
         OTHER_TOKEN = userService.login("other@test.com", "Password123!").getValue();
@@ -73,7 +76,7 @@ class CompanyServiceUpdatedTest {
     @Test
     void GivenNoCompaniesInSystem_WhenGetAvailableCompanies_ThenError() {
         companyRepo.delete(COMPANY_ID);
-        Response<List<CompanyDTO>> response = service.getAvailableCompanies("valid-token");
+        Response<List<CompanyDTO>> response = service.getAvailableCompanies(OWNER_TOKEN);
         assertNull(response.getValue());
         assertEquals("No companies in the system", response.getMessage());
     }
@@ -82,7 +85,7 @@ class CompanyServiceUpdatedTest {
     void GivenGuest_WhenActiveAndInactiveCompaniesExist_ThenReturnOnlyActive() {
         service.createProductionCompany(OWNER_TOKEN,2,"Inactive Co","a@b.com","05034445897", "bank-b");
         Response<Boolean> response = service.deactivateCompany(OWNER_TOKEN,2);
-        Response<List<CompanyDTO>> response1 = service.getAvailableCompanies(null);
+        Response<List<CompanyDTO>> response1 = service.getAvailableCompanies(GUEST_TOKEN);
 
         assertNotNull(response.getValue());
         assertEquals(1, response1.getValue().size());
@@ -92,7 +95,7 @@ class CompanyServiceUpdatedTest {
     @Test
     void GivenGuest_WhenAllCompaniesAreInactive_ThenErrorNoCompanies() {
         service.deactivateCompany(OWNER_TOKEN,COMPANY_ID);
-        Response<List<CompanyDTO>> response = service.getAvailableCompanies(null);
+        Response<List<CompanyDTO>> response = service.getAvailableCompanies(GUEST_TOKEN);
         assertNull(response.getValue());
         assertEquals("No companies in the system", response.getMessage());
     }

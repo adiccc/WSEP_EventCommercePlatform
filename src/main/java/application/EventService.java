@@ -32,7 +32,9 @@ public class EventService {
             logger.log(Level.INFO, "ViewEventDetails called");
 
             // check valid token
-            if (!auth.isLoggedIn(token).getValue()) {
+            String role = auth.getRole(token).getValue();
+            if(role == null){
+                logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
             }
             if (eventId == null) {
@@ -64,7 +66,9 @@ public class EventService {
             logger.info("Search events called");
 
             // token validation
-            if (!auth.isLoggedIn(token).getValue()) {
+            String role = auth.getRole(token).getValue();
+            if(role == null){
+                logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
             }
 
@@ -100,7 +104,9 @@ public class EventService {
             logger.info("Search company events called");
 
             // token validation
-            if (!auth.isLoggedIn(token).getValue()) {
+            String role = auth.getRole(token).getValue();
+            if(role == null){
+                logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
             }
 

@@ -38,7 +38,7 @@ public class UserRepo implements IUserRepo {
         }
         if (currentMember.getVersion() != mem.getVersion()) {
             throw new OptimisticLockingFailureException(
-                    "Event " + mem.getUserId() + " version mismatch. Expected: " +
+                    "Member " + mem.getUserId() + " version mismatch. Expected: " +
                             mem.getVersion() + ", but found: " + currentMember.getVersion()
             );
         }
@@ -49,7 +49,7 @@ public class UserRepo implements IUserRepo {
 
         if (!replaced) {
             throw new OptimisticLockingFailureException(
-                    "Event " + mem.getUserId() + " was modified concurrently"
+                    "Member " + mem.getUserId() + " was modified concurrently"
             );
         }
 

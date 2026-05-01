@@ -48,7 +48,7 @@ class EventServiceTest {
     private List<ElementPositionDTO> entries;
     private List<StandingZoneDTO> standingZones;
     private List<SeatingZoneDTO> seatingZones;
-
+    private String GUEST_TOKEN;
     @BeforeEach
     void setUp() {
         LoggerSetup.setup();
@@ -66,7 +66,7 @@ class EventServiceTest {
         UserDTO userDTO = new UserDTO("user1@test.com","test1","t","mytest",1,1,2016,"user test address","054-555-6677");
         userService.registerUser(validToken,userDTO);
         validToken=userService.login("user1@test.com","mytest").getValue();
-
+        GUEST_TOKEN = userService.continueAsGuest().getValue();
         CompanyService companyService=new CompanyService(auth,companyRepo,userRepo);
         Response<Company> c1=companyService.createProductionCompany(validToken,company1,"test-company","testC@company.com","054-5556677","leumi");
 
@@ -642,6 +642,17 @@ class EventServiceTest {
 
         executor.shutdown();
         assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+    }
+    @Test
+    void GivenGuestToken_WhenSearchEvents_ThenMatchingEventsReturned() {
+        EventSearchFilter filter = new EventSearchFilter();
+        filter.setKeyword("active");
+
+        Response<List<EventDTO>> response = service.searchEvents(GUEST_TOKEN, filter);
+
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue().isEmpty());
+        assertEquals("Events retrieved successfully", response.getMessage());
     }
 
 }
