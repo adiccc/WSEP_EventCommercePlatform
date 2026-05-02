@@ -155,10 +155,9 @@ class CompanyIntegrationTest {
     void GivenCompanyWithManager_WhenPermissionsInspected_ThenManagerAppearsInTree() {
         int managerId = 200;
         Company stored = companyRepo.findById(COMPANY_ID);
-        stored.getCompanyPermission().getCompanyTree().put(managerId, new HierarchyDTO(
-                founder.getUserId(), new ArrayList<>(),
+        stored.getCompanyPermission().addToTree(managerId, founder.getUserId(),
                 EnumSet.of(PermissionType.MANAGE_EVENTS_INVENTORY, PermissionType.VIEW_PURCHASE_HISTORY)
-        ));
+        );
         companyRepo.store(stored);
 
         Company updated = companyRepo.findById(COMPANY_ID);
