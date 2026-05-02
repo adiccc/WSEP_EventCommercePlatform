@@ -20,6 +20,9 @@ public class UserRepo implements IUserRepo {
     @Override
     public synchronized void store(Member mem) {
         if (mem.getUserId() == null) {
+            if (emailById.containsKey(mem.getIdentifier())) {
+                throw new RuntimeException("User already exists");
+            }
             int id = userIdGenerator.getAndIncrement();
             mem.setUserId(id);
             Member newEntry = new Member(mem);

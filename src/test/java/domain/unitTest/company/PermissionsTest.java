@@ -237,4 +237,53 @@ class PermissionsTest {
         assertThrows(SecurityException.class, () ->
                 permissions.updateManagerPermissions(OWNER_ID, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT)));
     }
+
+    @Test
+    void GivenDeepHierarchy_WhenGetSubTree_ThenReturnsAllDescendants() {
+        int LEAF_MANAGER_ID = 5;
+        permissions.addToTree(MANAGER_ID, FOUNDER_ID, new HashSet<>());
+        permissions.addToTree(SUB_MANAGER_ID, MANAGER_ID, new HashSet<>());
+        permissions.addToTree(LEAF_MANAGER_ID, SUB_MANAGER_ID, new HashSet<>());
+
+        Set<Integer> subtree = permissions.getSubTreeAppointees(MANAGER_ID);
+        assertEquals(Set.of(MANAGER_ID, SUB_MANAGER_ID, LEAF_MANAGER_ID), subtree);
+    }
+
+    @Test
+    void GivenWideHierarchy_WhenGetSubTree_ThenReturnsAllDirectChildren() {
+        int CHILD1 = 5;
+        int CHILD2 = 6;
+        permissions.addToTree(MANAGER_ID, FOUNDER_ID, new HashSet<>());
+        permissions.addToTree(CHILD1, MANAGER_ID, new HashSet<>());
+        permissions.addToTree(CHILD2, MANAGER_ID, new HashSet<>());
+
+        Set<Integer> subtree = permissions.getSubTreeAppointees(MANAGER_ID);
+        assertEquals(Set.of(MANAGER_ID, CHILD1, CHILD2), subtree);
+    }
+
+    @Test
+    void GivenStranger_WhenGetSubTree_ThenReturnsOnlySelf() {
+        Set<Integer> subtree = permissions.getSubTreeAppointees(STRANGER_ID);
+        assertEquals(Set.of(STRANGER_ID), subtree);
+    }
+
+    @Test
+    void GivenComplexTree_WhenGetSubTreeOfChild_ThenDoesNotReturnParentOrSiblings() {
+        int SIBLING_ID = 5;
+        int CHILD_ID = 6;
+        permissions.addToTree(MANAGER_ID, FOUNDER_ID, new HashSet<>());
+        permissions.addToTree(SUB_MANAGER_ID, MANAGER_ID, new HashSet<>());
+        permissions.addToTree(SIBLING_ID, MANAGER_ID, new HashSet<>());
+        permissions.addToTree(CHILD_ID, SUB_MANAGER_ID, new HashSet<>());
+
+        Set<Integer> subtree = permissions.getSubTreeAppointees(SUB_MANAGER_ID);
+
+        assertTrue(subtree.contains(SUB_MANAGER_ID));
+        assertTrue(subtree.contains(CHILD_ID));
+
+        assertFalse(subtree.contains(MANAGER_ID), "Should not contain the parent");
+        assertFalse(subtree.contains(SIBLING_ID), "Should not contain siblings");
+
+        assertEquals(2, subtree.size());
+    }
 }

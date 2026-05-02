@@ -26,10 +26,13 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.mockito.Mockito;
 
@@ -65,6 +68,8 @@ class EventCompanyManageServiceTest {
     private ITicketSupply ticketSupply;
     private ActiveOrderService activeOrderService;
     private String GUEST_TOKEN;
+    private String ADMIN_TOKEN;
+    private AdminService adminService;
 
     @BeforeEach
     void setUp() {
@@ -116,6 +121,13 @@ class EventCompanyManageServiceTest {
         entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
         standingZones = List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1)));
         seatingZones = List.of(new SeatingZoneDTO(10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
+
+        String adminEmail = "admin_master@bgu.ac.il";
+        auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(adminEmail));
+        userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
+        userService.registerUser(null, new UserDTO(adminEmail, "Admin", "Sys", "Pass123!", 1, 1, 2000, "Address", "050-000-0000"));
+        ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem);
 
     }
 
@@ -796,7 +808,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenGuest_WhenGenerateSalesReports_ThenErrorNotPermitted() {
         // Act
-        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, invalidToken);
+        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, GUEST_TOKEN);
 
         // Assert
         assertNull(response.getValue());
@@ -1090,6 +1102,131 @@ class EventCompanyManageServiceTest {
                 "All concurrent events must be successfully saved without overwriting each other");
 
         executor.shutdown();
+    }
+    @Test
+    void GivenConcurrentAdminClose_WhenUserViewsCompanyDetails_ThenConsistentResult() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> adminFuture = executor.submit(() -> {
+            start.await();
+            return adminService.closeCompanyByAdmin(ADMIN_TOKEN, companyId);
+        });
+
+        Future<Response<CompanyDetailsDTO>> userFuture = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.getCompanyDetails(GUEST_TOKEN, companyId);
+        });
+
+        start.countDown();
+        adminFuture.get();
+        Response<CompanyDetailsDTO> userRes = userFuture.get();
+        executor.shutdown();
+
+        if (userRes.getValue() == null) {
+            assertTrue(userRes.getMessage().contains("User is not permitted to view closed companies"),
+                    "If closed, guest should get permission error, got: " + userRes.getMessage());
+        } else {
+            assertEquals(companyId, userRes.getValue().getCompanyId());
+        }
+
+    }
+
+    @Test
+    void GivenConcurrentEventDeletion_WhenUserViewsCompanyDetails_ThenConsistentEventList() throws Exception {
+        Response<Boolean> mapRes = eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1, eventId, stage, entries, standingZones, seatingZones);
+        assertTrue(mapRes.getValue(), "Map must be defined to activate the event");
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> deleteFuture = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.DeleteEvent(validToken1, eventId);
+        });
+
+        Future<Response<CompanyDetailsDTO>> viewFuture = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.getCompanyDetails(GUEST_TOKEN, companyId);
+        });
+
+        start.countDown();
+
+        Response<Boolean> deleteRes = deleteFuture.get();
+        Response<CompanyDetailsDTO> viewRes = viewFuture.get();
+        executor.shutdown();
+        assertTrue(deleteRes.getValue(), "Event deletion should succeed");
+        assertNotNull(viewRes.getValue(), "Company details should be retrieved successfully without crashing");
+
+        boolean eventFoundInView = viewRes.getValue().getFutureEvents().stream()
+                .anyMatch(e -> e.getEventID() == eventId);
+
+        if (eventFoundInView) {
+            System.out.println("The guest won the race and saw the event before it was deleted!");
+        } else {
+            System.out.println("The owner won the race, and the event was already hidden from the guest!");
+        }
+
+        Event deletedEvent = eventRepo.findById(eventId);
+        assertFalse(deletedEvent.isActive(), "Event must be inactive in the DB after deletion");
+    }
+
+    @Test
+    void GivenConcurrentPurchase_WhenGenerateSalesReport_ThenRevenueIsAccurate() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> purchaseFuture = executor.submit(() -> {
+            start.await();
+            return activeOrderService.placeOrder(validToken2, eventId, 999);
+        });
+
+        Future<Response<SalesReportDTO>> reportFuture = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.generateSalesReports(companyId, validToken1);
+        });
+
+        start.countDown();
+        purchaseFuture.get();
+        Response<SalesReportDTO> reportRes = reportFuture.get();
+        executor.shutdown();
+
+        assertNotNull(reportRes.getValue(), "Report must be generated successfully");
+        assertTrue(reportRes.getValue().getTotalRevenue() >= 0, "Revenue calculation must not fail or corrupt");
+    }
+    @Test
+    void GivenConcurrentAdminRemoveManager_WhenOwnerGeneratesReport_ThenReportIsConsistent() throws Exception {
+        String managerEmail = "manager_race" + System.currentTimeMillis() + "@test.com";
+        userService.registerUser(null, new UserDTO(managerEmail, "Man", "Ager", "Pass123!", 1, 1, 2000, "City", "050-999-9999"));
+        String managerToken = userService.login(managerEmail, "Pass123!").getValue();
+        int MANAGER_ID = auth.getUserId(managerToken).getValue();
+
+        Company company = companyRepo.findById(companyId);
+        int ownerId = auth.getUserId(validToken1).getValue();
+        company.getCompanyPermission().addToTree(MANAGER_ID, ownerId, new HashSet<>());
+        companyRepo.store(company);
+
+        eventCompanyManageService.createEvent(managerToken, companyId, LocalDateTime.now().plusDays(20),
+                "Manager's Event", LocalDateTime.now().plusDays(5), false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> removeFuture = executor.submit(() -> {
+            start.await();
+            return adminService.removeUser(ADMIN_TOKEN, MANAGER_ID);
+        });
+
+        Future<Response<SalesReportDTO>> reportFuture = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.generateSalesReports(companyId, validToken1);
+        });
+
+        start.countDown();
+        removeFuture.get();
+        Response<SalesReportDTO> reportRes = reportFuture.get();
+        executor.shutdown();
+
+        assertNotNull(reportRes.getValue(), "Report generation must survive concurrent tree modification");
     }
 
 }

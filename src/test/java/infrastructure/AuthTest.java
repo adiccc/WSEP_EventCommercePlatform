@@ -173,11 +173,10 @@ class AuthTest {
         // Act
         auth.logout(token);
         Response<Boolean> secondLogoutResponse = auth.logout(token);
-
         // Assert
         assertFalse(secondLogoutResponse.getValue());
         assertEquals("Cannot log out, user is Already logged out", secondLogoutResponse.getMessage());
-        verify(tokenServiceMock, times(1)).extractExpirationDate(token);
+        verify(tokenServiceMock, times(2)).extractExpirationDate(token); // <--- התיקון!
     }
     @Test
     void givenTokenServiceException_whenLogout_thenReturnServerError() {

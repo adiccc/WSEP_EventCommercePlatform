@@ -2,18 +2,23 @@ package application;
 
 import DTO.QueueEntryResultDTO;
 import Log.LoggerSetup;
+import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
+import domain.event.IEventRepo;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import domain.webQueue.WebQueue;
-import infrastructure.Auth;
-import infrastructure.PasswordEncoderUtil;
-import infrastructure.UserRepo;
+import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.time.LocalDate;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -24,6 +29,10 @@ class UserServiceTest {
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
     private IAuth auth;
+    private AdminService adminService;
+    private ICompanyRepo companyRepo;
+    private IEventRepo eventRepo;
+    private String ADMIN_TOKEN;
 
     @BeforeEach
     void setUp() {
@@ -34,8 +43,15 @@ class UserServiceTest {
         realTokenService = new TokenService();
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
-        auth = new Auth(realTokenService, userRepo, passwordEncoder, Set.of());
+        String adminEmail = "admin@admin.com";
+        auth = new Auth(realTokenService, userRepo, passwordEncoder, Set.of(adminEmail));
         userService = new UserService(realTokenService, auth, userRepo, passwordEncoder);
+        companyRepo = new CompanyRepoImpl();
+        IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
+        eventRepo = new EventRepoImpl();
+        adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem);
+        userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
+        ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
     }
 
     private UserDTO createValidDTO() {
@@ -279,7 +295,6 @@ class UserServiceTest {
         assertEquals(1, response.getValue().getPosition());
     }
 
-    // --- getQueueStatus ---
 
     @Test
     void GivenAdmittedUser_WhenGetQueueStatus_ThenReturnsAdmitted() {
@@ -352,4 +367,222 @@ class UserServiceTest {
         assertTrue(responseBlank.isError());
         assertEquals("Invalid token", responseBlank.getMessage());
     }
+    @Test
+    void GivenSameEmail_WhenConcurrentRegister_ThenOnlyOneSucceeds() throws Exception {
+        String email = "race_register@mail.com";
+        UserDTO dto1 = new UserDTO(email, "FirstA", "LastA", "Pass123!", 1, 1, 2000, "Address", "050-111-1111");
+        UserDTO dto2 = new UserDTO(email, "FirstB", "LastB", "Pass123!", 1, 1, 2000, "Address", "050-222-2222");
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        Future<Response<Boolean>> future1 = executor.submit(() -> {
+            start.await();
+            return userService.registerUser(null, dto1);
+        });
+        Future<Response<Boolean>> future2 = executor.submit(() -> {
+            start.await();
+            return userService.registerUser(null, dto2);
+        });
+        start.countDown();
+        Response<Boolean> res1 = future1.get();
+        Response<Boolean> res2 = future2.get();
+        executor.shutdown();
+
+        int success = 0;
+        int failed = 0;
+        if (!res1.isError() && res1.getValue()) success++; else failed++;
+        if (!res2.isError() && res2.getValue()) success++; else failed++;
+
+        assertEquals(1, success, "Exactly one registration should succeed for the same email");
+        assertEquals(1, failed, "The other registration must fail due to DB unique constraints");
+    }
+
+    @Test
+    void GivenMassiveTraffic_WhenConcurrentRegister_ThenAllSucceedWithoutBottleneck() throws Exception {
+        int usersCount = 50;
+        ExecutorService executor = Executors.newFixedThreadPool(usersCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<Boolean>>> futures = new ArrayList<>();
+
+        for (int i = 0; i < usersCount; i++) {
+            final int index = i;
+            futures.add(executor.submit(() -> {
+                start.await();
+                UserDTO dto = new UserDTO("mass" + index + "yarin@mail.com", "Yarin", "Levi", "Pass123!", 1, 1, 2000, "Add", "050-000-0000");
+                return userService.registerUser(null, dto);
+            }));
+        }
+
+        start.countDown();
+
+        int success = 0;
+        for (Future<Response<Boolean>> future : futures) {
+            if (!future.get().isError() && future.get().getValue()) success++;
+        }
+        executor.shutdown();
+
+        assertEquals(usersCount, success, "All independent registrations should succeed perfectly in parallel");
+    }
+    @Test
+    void GivenUsersInQueue_WhenActiveUserLogouts_ThenQueueAdvancesCorrectly() throws Exception {
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(1);
+
+        String email = "active@m.com";
+        userService.registerUser(null, new UserDTO(email, "F", "L", "Pass!", 1, 1, 2000, "A", "050-000-0000"));
+        userService.enter();
+        String activeToken = userService.login(email, "Pass!").getValue();
+
+        Response<QueueEntryResultDTO> guest1 = userService.enter();
+        Response<QueueEntryResultDTO> guest2 = userService.enter();
+        assertFalse(guest1.getValue().isAdmitted(), "Guest 1 should be waiting");
+        assertFalse(guest2.getValue().isAdmitted(), "Guest 2 should be waiting");
+
+        assertEquals(2, WebQueue.getInstance().getWaitingCount());
+
+        userService.logout(activeToken);
+
+        assertEquals(1, WebQueue.getInstance().getActiveCount(), "System should be full again");
+        assertEquals(1, WebQueue.getInstance().getWaitingCount(), "Only one guest should remain in the queue");
+    }
+
+    @Test
+    void GivenOneSpotLeft_WhenConcurrentEnter_ThenOneAdmittedOneQueued() throws Exception {
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(100);
+        int capacity = WebQueue.getInstance().getMaxCapacity();
+
+        for (int i = 0; i < capacity - 1; i++) {
+            userService.enter();
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<QueueEntryResultDTO>> future1 = executor.submit(() -> { start.await(); return userService.enter(); });
+        Future<Response<QueueEntryResultDTO>> future2 = executor.submit(() -> { start.await(); return userService.enter(); });
+
+        start.countDown();
+
+        Response<QueueEntryResultDTO> r1 = future1.get();
+        Response<QueueEntryResultDTO> r2 = future2.get();
+        executor.shutdown();
+
+        int admitted = 0;
+        int queued = 0;
+
+        if (r1.getValue() != null && r1.getValue().isAdmitted()) admitted++; else queued++;
+        if (r2.getValue() != null && r2.getValue().isAdmitted()) admitted++; else queued++;
+
+        assertEquals(1, admitted, "Only one user should get the last active spot");
+        assertEquals(1, queued, "The other user must be sent to the waiting queue");
+    }
+
+    @Test
+    void GivenConcurrentAdminRemove_WhenUserLogins_ThenUserBlocked() throws Exception {
+        String email = "removed_racer@mail.com";
+        userService.registerUser(null, new UserDTO(email, "F", "L", "Pass123!", 1, 1, 2000, "A", "050-000-0000"));
+        int userId = userRepo.findUserByEmail(email).getUserId();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> adminFuture = executor.submit(() -> {
+            start.await();
+            return adminService.removeUser(ADMIN_TOKEN, userId);
+        });
+        Future<Response<String>> loginFuture = executor.submit(() -> {
+            start.await();
+            return userService.login(email, "Pass123!");
+        });
+
+        start.countDown();
+        adminFuture.get();
+        Response<String> loginRes = loginFuture.get();
+        executor.shutdown();
+
+        if (loginRes.getValue() != null) {
+            assertFalse(userRepo.findById(userId).isActive(), "User managed to login but must be inactive immediately");
+        } else {
+            assertTrue(loginRes.isError(), "Login correctly blocked the removed user");
+        }
+    }
+    @Test
+    void GivenSameUser_WhenDoubleLoginSimultaneously_ThenBothShouldSucceedOrGracefullyFail() throws Exception {
+        String email = "double_login@mail.com";
+
+        Response<Boolean> regRes = userService.registerUser(null, new UserDTO(email, "F", "L", "Pass123!", 1, 1, 2000, "A", "050-000-0000"));
+        assertTrue(regRes.getValue() != null && regRes.getValue(), "Registration failed before login! Error: " + regRes.getMessage());
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<String>> f1 = executor.submit(() -> { start.await(); return userService.login(email, "Pass123!"); });
+        Future<Response<String>> f2 = executor.submit(() -> { start.await(); return userService.login(email, "Pass123!"); });
+
+        start.countDown();
+        Response<String> res1 = f1.get();
+        Response<String> res2 = f2.get();
+        executor.shutdown();
+        boolean atLeastOneSuccess = (res1.getValue() != null) || (res2.getValue() != null);
+
+        assertTrue(atLeastOneSuccess, "At least one login must succeed! Check the console output for the exact error.");
+    }
+    @Test
+    void GivenSameUser_WhenDoubleLogoutSimultaneously_ThenActiveCountDecreasesOnlyOnce() throws Exception {
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(10);
+
+        String email = "double_logout@mail.com";
+        userService.registerUser(null, new UserDTO(email, "F", "L", "Pass123!", 1, 1, 2000, "A", "050-000-0000"));
+
+        userService.enter();
+        String token = userService.login(email, "Pass123!").getValue();
+
+        int activeBefore = WebQueue.getInstance().getActiveCount();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> { start.await(); return userService.logout(token); });
+        Future<Response<Boolean>> f2 = executor.submit(() -> { start.await(); return userService.logout(token); });
+
+        start.countDown();
+        Response<Boolean> res1 = f1.get();
+        Response<Boolean> res2 = f2.get();
+        executor.shutdown();
+
+        int activeAfter = WebQueue.getInstance().getActiveCount();
+
+        assertTrue(res1.getValue() != null && res1.getValue() || res2.getValue() != null && res2.getValue(), "At least one logout must succeed");
+        assertEquals(activeBefore - 1, activeAfter, "Active count must decrement exactly once");
+    }
+    @Test
+    void GivenEmptySystem_WhenMassiveGuestEntry_ThenAllAdmittedSafely() throws Exception {
+        int guestCount = 100;
+        WebQueue.getInstance().setMaxCapacity(150);
+        int activeBefore = WebQueue.getInstance().getActiveCount();
+
+        ExecutorService executor = Executors.newFixedThreadPool(guestCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<String>>> futures = new ArrayList<>();
+
+        for (int i = 0; i < guestCount; i++) {
+            futures.add(executor.submit(() -> {
+                start.await();
+                return userService.continueAsGuest();
+            }));
+        }
+
+        start.countDown();
+
+        int success = 0;
+        for (Future<Response<String>> f : futures) {
+            if (f.get().getValue() != null) success++;
+        }
+        executor.shutdown();
+
+        assertEquals(guestCount, success, "All guests should receive unique tokens");
+    }
+
 }
