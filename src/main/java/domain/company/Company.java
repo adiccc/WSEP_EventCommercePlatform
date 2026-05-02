@@ -106,6 +106,8 @@ public class Company {
         companyPermission.updateManagerPermissions(ownerId, managerId, newPermissions);
     }
 
+    // ── Owner appointment ──────────────────────────────────────────────────
+
     public void requestAppointOwner(int appointerId, int appointeeId) {
         if (!companyPermission.isOwner(appointerId))
             throw new SecurityException("User does not have the required owner permissions");
@@ -123,6 +125,29 @@ public class Company {
     public void respondOwnerAppointment(int userId, boolean accept) {
         companyPermission.OwnerAppointeeRespond(userId, accept);
     }
+
+    // ── Manager appointment ────────────────────────────────────────────────
+
+    public void requestAppointManager(int appointerId, int appointeeId, Set<PermissionType> permissions) {
+        if (!companyPermission.isOwner(appointerId))
+            throw new SecurityException("User does not have the required owner permissions");
+        if (companyPermission.isManager(appointeeId))
+            throw new IllegalStateException("Subscriber is already appointed as manager in this company");
+        if (companyPermission.isPendingManager(appointeeId))
+            throw new IllegalStateException("Subscriber already has a pending manager appointment");
+        if (permissions == null || permissions.isEmpty())
+            throw new IllegalArgumentException("At least one permission must be selected for the representative");
+        companyPermission.addPendingManager(appointeeId, appointerId, permissions);
+    }
+
+    public boolean isPendingManager(int userId) {
+        return companyPermission.isPendingManager(userId);
+    }
+
+    public void respondManagerAppointment(int userId, boolean accept) {
+        companyPermission.respondManagerAppointment(userId, accept);
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
