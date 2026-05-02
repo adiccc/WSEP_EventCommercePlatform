@@ -6,6 +6,7 @@ import DTO.TicketSupplyResultDTO;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
+import domain.dto.ActiveOrderDTO;
 import domain.dto.EventMapDTO;
 import domain.dto.SeatingTicketDTO;
 import domain.dto.UserDTO;
@@ -245,6 +246,37 @@ public class ActiveOrderService {
                 // swallow — keep processing other orders
             }
         }
+    }
+
+
+    public Response<ActiveOrderDTO> memberProceedAnActiveOrder(String token) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "memberProceedActiveOrder called");
+            try {
+                int userId = auth.getUserId(token).getValue();
+                ActiveOrderDTO order = activeOrderRepo.findOrderByUserId(userId);
+                if (order.getUserId() != auth.getUserId(token).getValue()) {
+                    logger.log(Level.SEVERE, "Unauthorized access to active order");
+                    return new Response<>(null, "Unauthorized access to active order");
+                }
+                if (order.getExpireTime().isBefore(LocalDateTime.now())) {
+                    logger.log(Level.SEVERE, "Active order has expired");
+                    return new Response<>(null, "Active order has expired");
+                }
+                // Additional checks can be added here (e.g., event status)
+
+                logger.log(Level.INFO, "Active order retrieved successfully");
+                return new Response<>(order, "Active order retrieved successfully");
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "Active order not found: " + e.getMessage());
+                return new Response<>(null, "Active order not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to proceed active order: " + e.getMessage());
+                return new Response<>(null, "Failed to proceed active order: " + e.getMessage());
+            }
+        });
     }
 
     public void shutdown() {
