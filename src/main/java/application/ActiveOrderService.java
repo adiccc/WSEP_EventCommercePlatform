@@ -370,7 +370,6 @@ public class ActiveOrderService {
 
                 logger.log(Level.INFO, "Selection updated successfully");
                 return new Response<>(new ActiveOrderDTO(order), "Selection updated successfully");
-                // ^ assumes ActiveOrderDTO(ActiveOrder) constructor exists
 
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Order or event not found: " + e.getMessage());
