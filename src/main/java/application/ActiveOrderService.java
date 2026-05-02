@@ -41,6 +41,7 @@ public class ActiveOrderService {
     private int capacity = 100;
     private final int orderExpireMinutes;
     private final ScheduledExecutorService cleanupScheduler;
+    private final int mapViewExpireMinutes = 5;
 
 
     public ActiveOrderService(
