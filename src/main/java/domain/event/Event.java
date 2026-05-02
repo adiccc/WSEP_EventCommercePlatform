@@ -278,4 +278,48 @@ public class Event {
     public void releaseTickets(List<Integer> ticketIds) {
         eventMap.releaseTickets(ticketIds);
     }
+
+    public int countStandingInZone(String zone, List<Integer> currentTickets) {
+        return eventMap.countStandingInZone(zone,currentTickets);
+    }
+
+    public List<Integer> findSeatingTicketIds(Map<String, List<SeatingTicketDTO>> seatingToRemove) {
+        List<Integer> seatingTicketIds = new ArrayList<>();
+        for (Map.Entry<String, List<SeatingTicketDTO>> entry : seatingToRemove.entrySet()) {
+            String zoneName = entry.getKey();
+            List<SeatingTicketDTO> seats = entry.getValue();
+            Zone matchedZone = null;
+            for (Zone z : eventMap.getZones()) {
+                if (z.getName().equals(zoneName)) {
+                    matchedZone = z;
+                    break;
+                }
+            }
+            if (matchedZone == null) {
+                throw new IllegalArgumentException("Seating zone does not exist: " + zoneName);
+            }
+            if (!(matchedZone instanceof SeatingZone)) {
+                throw new IllegalArgumentException("Zone is not a seating zone: " + zoneName);
+            }
+            seatingTicketIds.addAll(((SeatingZone) matchedZone).findSeatingTicketIds(seats));
+        }
+        return seatingTicketIds;
+    }
+
+    public List<Integer> pickStandingFromZone(String zone, List<Integer> newTickets, int numToPick) {
+        Zone matchedZone = null;
+        for (Zone z : eventMap.getZones()) {
+            if (z.getName().equals(zone)) {
+                matchedZone = z;
+                break;
+            }
+        }
+        if (matchedZone == null) {
+            throw new IllegalArgumentException("Standing zone does not exist: " + zone);
+        }
+        if (!(matchedZone instanceof StandingZone)) {
+            throw new IllegalArgumentException("Zone is not a standing zone: " + zone);
+        }
+        return ((StandingZone) matchedZone).pickStandingFromZone(newTickets, numToPick);
+    }
 }

@@ -9,13 +9,15 @@ public class Permissions {
     private int founderId;//founder of the comapany
     private Set<Integer> ownerIds; // who are the owners of the company
     private HashMap<Integer, Hierarchy> companyTree; //the hash map with each manger and who assigned him and it's assignees
+    private List<Integer> pandingOwners;
     private HashMap<Integer, Hierarchy> pendingManagers; // pending manager appointments awaiting response
 
     public Permissions(int founderId) {
         this.founderId = founderId;
         this.ownerIds = new HashSet<>();
-        addOwner(founderId);
+        ownerIds.add(founderId);
         companyTree = new HashMap<>();
+        pandingOwners = new ArrayList<>();
         pendingManagers = new HashMap<>();
     }
 
@@ -32,6 +34,7 @@ public class Permissions {
                     new HashSet<>(orig.getAllPermissions())
             ));
         }
+        this.pandingOwners = new ArrayList<>(other.pandingOwners);
         this.pendingManagers = new HashMap<>();
         for (Map.Entry<Integer, Hierarchy> entry : other.pendingManagers.entrySet()) {
             Hierarchy orig = entry.getValue();
@@ -42,19 +45,43 @@ public class Permissions {
             ));
         }
     }
+
     public int getFounderId() {
         return founderId;
     }
+
+    // ── Owner appointment (two-step pending flow) ──────────────────────────
+
     public void addOwner(int ownerId) {
-        ownerIds.add(ownerId);
+        pandingOwners.add(ownerId);
+    }
+
+    public boolean isPendingOwner(int userId) {
+        return pandingOwners.contains(userId);
+    }
+
+    public void OwnerAppointeeRespond(int ownerId, boolean appointee) {
+        pandingOwners.remove(Integer.valueOf(ownerId));
+        if (appointee) {
+            ownerIds.add(ownerId);
+            if (isManager(ownerId)) {
+                removeManagerFromTree(ownerId);
+            }
+        }
     }
 
     public Set<Integer> getOwnerIds() {
         return ownerIds;
     }
+
+    public void removeOwner(int ownerId) {
+        ownerIds.remove(ownerId);
+    }
+
     public boolean isOwner(int ownerId) {
         return ownerIds.contains(ownerId);
     }
+
     public boolean checkPermission(int userId, PermissionType type) {
         if (isOwner(userId)) return true; //owner has allPermissions in the company
         if (companyTree.containsKey(userId)) {
@@ -64,25 +91,26 @@ public class Permissions {
     }
 
     public HashMap<Integer, HierarchyDTO> getCompanyTree() {
-                HashMap<Integer, HierarchyDTO> result = new HashMap<>();
-               for (Map.Entry<Integer, Hierarchy> entry : companyTree.entrySet()) {
-                   Hierarchy h = entry.getValue();
-                        result.put(entry.getKey(), new HierarchyDTO(
-                                        h.getMyManager(), h.getMyAppointees(), h.getAllPermissions()));
-                    }
-                return result;
+        HashMap<Integer, HierarchyDTO> result = new HashMap<>();
+        for (Map.Entry<Integer, Hierarchy> entry : companyTree.entrySet()) {
+            Hierarchy h = entry.getValue();
+            result.put(entry.getKey(), new HierarchyDTO(
+                    h.getMyManager(), h.getMyAppointees(), h.getAllPermissions()));
+        }
+        return result;
     }
-        public Set<Integer> getSubTreeAppointees(int rootUserId) { //function that gets all the subtree of some user
+
+    public Set<Integer> getSubTreeAppointees(int rootUserId) {
         Set<Integer> subTreeAppointees = new HashSet<>();
         Queue<Integer> queue = new LinkedList<>();
         queue.add(rootUserId);
         subTreeAppointees.add(rootUserId);
         while (!queue.isEmpty()) {
             int currentUserId = queue.poll();
-            if(companyTree.containsKey(currentUserId)) {
+            if (companyTree.containsKey(currentUserId)) {
                 List<Integer> directAppointees = companyTree.get(currentUserId).getMyAppointees();
                 for (Integer directAppointee : directAppointees) {
-                    if(!subTreeAppointees.contains(directAppointee)) {
+                    if (!subTreeAppointees.contains(directAppointee)) {
                         subTreeAppointees.add(directAppointee);
                         queue.add(directAppointee);
                     }
@@ -90,9 +118,6 @@ public class Permissions {
             }
         }
         return subTreeAppointees;
-    }
-        public void removeOwner(int ownerId) {
-        ownerIds.remove(ownerId);
     }
 
     public boolean isManager(int userId) {
@@ -139,6 +164,8 @@ public class Permissions {
         }
         h.setPermissions(ownerId, newPermissions);
     }
+
+    // ── Manager appointment (two-step pending flow) ────────────────────────
 
     public void addPendingManager(int managerId, int appointedBy, Set<PermissionType> permissions) {
         pendingManagers.put(managerId, new Hierarchy(appointedBy, new ArrayList<>(), new HashSet<>(permissions)));

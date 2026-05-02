@@ -881,4 +881,304 @@ class ActiveOrderServiceTest {
         pool.shutdown();
     }
 
+
+    @Test
+    void GivenInvalidToken_WhenEditTicketSelection_ThenInvalidToken() {
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                "garbage", new HashMap<>(), new HashMap<>(), new HashMap<>());
+        assertNull(r.getValue());
+        assertEquals("Invalid token", r.getMessage());
+    }
+
+    @Test
+    void GivenNoActiveOrder_WhenEditTicketSelection_ThenOrderNotFound() {
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                validToken, new HashMap<>(), new HashMap<>(), new HashMap<>());
+        assertNull(r.getValue());
+        assertEquals("Order or event not found", r.getMessage());
+    }
+
+    @Test
+    void GivenExpiredOrder_WhenEditTicketSelection_ThenExpiredError() throws Exception {
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+        backdateOrderExpireTime(orderId);
+
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 3));
+
+        assertNull(r.getValue());
+        assertEquals("Active order has expired", r.getMessage());
+    }
+
+    @Test
+    void GivenStandingDesiredEqualToCurrent_WhenEditTicketSelection_ThenNoChange() {
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+        int ticketCountBefore = activeOrderRepo.findById(orderId).getTickets().size();
+
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 5));
+
+        assertNotNull(r.getValue(), "msg=" + r.getMessage());
+        assertEquals(ticketCountBefore, activeOrderRepo.findById(orderId).getTickets().size());
+    }
+
+    @Test
+    void GivenStandingDesiredHigher_WhenEditTicketSelection_ThenMoreTicketsBooked() {
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 8));
+
+        assertNotNull(r.getValue(), "msg=" + r.getMessage());
+        assertEquals(8, activeOrderRepo.findById(orderId).getTickets().size());
+    }
+
+    @Test
+    void GivenStandingDesiredLower_WhenEditTicketSelection_ThenExtrasReleased() {
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 2));
+
+        assertNotNull(r.getValue(), "msg=" + r.getMessage());
+        assertEquals(2, activeOrderRepo.findById(orderId).getTickets().size());
+
+        String email = "leftover@mail.com";
+        userService.registerUser("", new UserDTO(
+                email, "x", "y", "pass", 1, 1, 2000, "Israel", "050-000-1111"));
+        String otherToken = userService.login(email, "pass").getValue();
+        Response<Integer> rebook = service.userSelectTickets(
+                otherToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3));
+        assertNotNull(rebook.getValue(), "released standing tickets must be available again");
+    }
+
+    @Test
+    void GivenSpecificSeatRemoved_WhenEditTicketSelection_ThenSeatReleasedAndRebookable() {
+        SeatingTicketDTO seat = new SeatingTicketDTO(0, 0);
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId,
+                Map.of("tribune", List.of(seat)), new HashMap<>()).getValue();
+
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                validToken,
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))),
+                new HashMap<>(),
+                new HashMap<>());
+
+        assertNotNull(r.getValue(), "msg=" + r.getMessage());
+        assertEquals(0, activeOrderRepo.findById(orderId).getTickets().size());
+
+        String email = "seatgrabber@mail.com";
+        userService.registerUser("", new UserDTO(
+                email, "s", "g", "pass", 1, 1, 2000, "Israel", "050-222-3333"));
+        String otherToken = userService.login(email, "pass").getValue();
+        Response<Integer> rebook = service.userSelectTickets(
+                otherToken, concurrentEventId,
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))),
+                new HashMap<>());
+        assertNotNull(rebook.getValue(), "released seat must be rebookable: " + rebook.getMessage());
+    }
+
+    @Test
+    void GivenSpecificSeatAdded_WhenEditTicketSelection_ThenSeatBookedToOrder() {
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 1)).getValue();
+
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                validToken,
+                new HashMap<>(),
+                Map.of("tribune", List.of(new SeatingTicketDTO(2, 3))),
+                new HashMap<>());
+
+        assertNotNull(r.getValue(), "msg=" + r.getMessage());
+        assertEquals(2, activeOrderRepo.findById(orderId).getTickets().size());
+
+        String email = "blocked@mail.com";
+        userService.registerUser("", new UserDTO(
+                email, "b", "k", "pass", 1, 1, 2000, "Israel", "050-444-7777"));
+        String otherToken = userService.login(email, "pass").getValue();
+        Response<Integer> conflict = service.userSelectTickets(
+                otherToken, concurrentEventId,
+                Map.of("tribune", List.of(new SeatingTicketDTO(2, 3))),
+                new HashMap<>());
+        assertNull(conflict.getValue(), "seat (2,3) should already be locked by user 1");
+    }
+
+    @Test
+    void GivenSwapSeats_WhenEditTicketSelection_ThenOldReleasedAndNewBooked() {
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId,
+                Map.of("tribune", List.of(new SeatingTicketDTO(1, 1))),
+                new HashMap<>()).getValue();
+
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                validToken,
+                Map.of("tribune", List.of(new SeatingTicketDTO(1, 1))),
+                Map.of("tribune", List.of(new SeatingTicketDTO(4, 4))),
+                new HashMap<>());
+
+        assertNotNull(r.getValue(), "msg=" + r.getMessage());
+        assertEquals(1, activeOrderRepo.findById(orderId).getTickets().size());
+
+        String email = "swap@mail.com";
+        userService.registerUser("", new UserDTO(
+                email, "s", "w", "pass", 1, 1, 2000, "Israel", "050-555-8888"));
+        String otherToken = userService.login(email, "pass").getValue();
+
+        Response<Integer> oldSeat = service.userSelectTickets(
+                otherToken, concurrentEventId,
+                Map.of("tribune", List.of(new SeatingTicketDTO(1, 1))),
+                new HashMap<>());
+        assertNotNull(oldSeat.getValue(), "old seat (1,1) should be free");
+    }
+
+    @Test
+    void GivenSameSeatInRemoveAndAdd_WhenEditTicketSelection_ThenRejected() {
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId,
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))),
+                new HashMap<>()).getValue();
+
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                validToken,
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))),
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))),
+                new HashMap<>());
+
+        assertNull(r.getValue());
+        assertTrue(r.getMessage().toLowerCase().contains("both"),
+                "expected overlap rejection, got: " + r.getMessage());
+    }
+
+    @Test
+    void GivenRemoveSeatNotInOrder_WhenEditTicketSelection_ThenError() {
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId,
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))),
+                new HashMap<>()).getValue();
+
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                validToken,
+                Map.of("tribune", List.of(new SeatingTicketDTO(9, 9))), // not theirs
+                new HashMap<>(),
+                new HashMap<>());
+
+        assertNull(r.getValue());
+        assertTrue(r.getMessage().toLowerCase().contains("not in your order")
+                        || r.getMessage().toLowerCase().contains("invalid"),
+                "got: " + r.getMessage());
+    }
+
+    @Test
+    void GivenNegativeStandingQuantity_WhenEditTicketSelection_ThenError() {
+        service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
+
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", -1));
+
+        assertNull(r.getValue());
+        assertTrue(r.getMessage().toLowerCase().contains("negative"));
+    }
+
+    @Test
+    void GivenEditFromCheckingOut_WhenEditTicketSelection_ThenStageReturnsToSelecting() {
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+
+        ActiveOrder o = activeOrderRepo.findById(orderId);
+        o.proceedToCheckout();
+        activeOrderRepo.store(o);
+        assertEquals(domain.activeOrder.STAGE.CHECKING_OUT,
+                activeOrderRepo.findById(orderId).getStage());
+
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 6));
+
+        assertNotNull(r.getValue(), "msg=" + r.getMessage());
+        assertEquals(domain.activeOrder.STAGE.SELECTING_TICKETS,
+                activeOrderRepo.findById(orderId).getStage());
+    }
+
+    @Test
+    void GivenTwoUsersAddingSameSeatConcurrently_WhenEditTicketSelection_ThenExactlyOneSucceeds() throws Exception {
+        String emailB = "race_b@mail.com";
+        userService.registerUser("", new UserDTO(
+                emailB, "r", "b", "pass", 1, 1, 2000, "Israel", "050-700-8000"));
+        String tokenB = userService.login(emailB, "pass").getValue();
+
+        service.userSelectTickets(validToken, concurrentEventId,
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))), new HashMap<>());
+        service.userSelectTickets(tokenB, concurrentEventId,
+                Map.of("tribune", List.of(new SeatingTicketDTO(1, 1))), new HashMap<>());
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<ActiveOrderDTO>> fA = pool.submit(() -> {
+            start.await();
+            return service.editTicketSelection(validToken,
+                    new HashMap<>(),
+                    Map.of("tribune", List.of(new SeatingTicketDTO(5, 5))),
+                    new HashMap<>());
+        });
+        Future<Response<ActiveOrderDTO>> fB = pool.submit(() -> {
+            start.await();
+            return service.editTicketSelection(tokenB,
+                    new HashMap<>(),
+                    Map.of("tribune", List.of(new SeatingTicketDTO(5, 5))),
+                    new HashMap<>());
+        });
+
+        start.countDown();
+        Response<ActiveOrderDTO> rA = fA.get();
+        Response<ActiveOrderDTO> rB = fB.get();
+        pool.shutdown();
+
+        int successes = (rA.getValue() != null ? 1 : 0) + (rB.getValue() != null ? 1 : 0);
+        assertEquals(1, successes,
+                "exactly one user should win the race for seat (5,5); rA=" + rA.getMessage()
+                        + " rB=" + rB.getMessage());
+
+        int sizeA = activeOrderRepo.findOrderByUserId(auth.getUserId(validToken).getValue()).getTickets().size();
+        int sizeB = activeOrderRepo.findOrderByUserId(auth.getUserId(tokenB).getValue()).getTickets().size();
+        assertEquals(3, sizeA + sizeB, "winner=2 tickets, loser=1 ticket");
+    }
+
+    @Test
+    void GivenTwoEditsToSameOrderConcurrently_WhenEditTicketSelection_ThenBothEventuallySucceed() throws Exception {
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<ActiveOrderDTO>> f1 = pool.submit(() -> {
+            start.await();
+            return service.editTicketSelection(validToken,
+                    new HashMap<>(), new HashMap<>(), Map.of("floor", 7));
+        });
+        Future<Response<ActiveOrderDTO>> f2 = pool.submit(() -> {
+            start.await();
+            return service.editTicketSelection(validToken,
+                    new HashMap<>(), new HashMap<>(), Map.of("floor", 3));
+        });
+
+        start.countDown();
+        Response<ActiveOrderDTO> r1 = f1.get();
+        Response<ActiveOrderDTO> r2 = f2.get();
+        pool.shutdown();
+
+        assertNotNull(r1.getValue(), "edit 1 unexpectedly failed: " + r1.getMessage());
+        assertNotNull(r2.getValue(), "edit 2 unexpectedly failed: " + r2.getMessage());
+
+        int finalSize = activeOrderRepo.findById(orderId).getTickets().size();
+        assertTrue(finalSize == 3 || finalSize == 7,
+                "final ticket count must be one of the two requested totals, got: " + finalSize);
+    }
+
 }

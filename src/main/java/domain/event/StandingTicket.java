@@ -5,6 +5,6 @@ public class StandingTicket extends Ticket{
         super(ticketId);
     }
     public StandingTicket(Ticket ticket){
-        super(ticket.getTicketId());
+        super(ticket.getTicketId(), ticket.getStatus());
     }
 }

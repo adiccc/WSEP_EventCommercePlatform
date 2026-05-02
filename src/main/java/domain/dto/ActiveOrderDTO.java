@@ -5,6 +5,7 @@ import domain.activeOrder.STAGE;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 public class ActiveOrderDTO {
     private final int orderId;
@@ -50,5 +51,9 @@ public class ActiveOrderDTO {
 
     public int getEventId() {
         return eventId;
+    }
+
+    public List<Integer> getTickets() {
+        return tickets;
     }
 }

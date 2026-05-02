@@ -33,6 +33,7 @@ class PermissionsTest {
     @Test
     void GivenAddedOwner_WhenIsOwnerCalled_ThenTrue() {
         permissions.addOwner(OWNER_ID);
+        permissions.OwnerAppointeeRespond(OWNER_ID, true);
         assertTrue(permissions.isOwner(OWNER_ID));
     }
 

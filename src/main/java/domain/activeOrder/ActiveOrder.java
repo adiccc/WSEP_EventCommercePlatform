@@ -91,4 +91,8 @@ public class ActiveOrder {
 
 
     public LocalDateTime getExpireTime() { return expireTime; }
+
+    public void setTickets(List<Integer> newTickets) {
+        this.tickets = new ArrayList<>(newTickets);
+    }
 }
