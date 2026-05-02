@@ -103,4 +103,37 @@ public class StandingZone extends Zone {
     public List<StandingTicket> getOccupiedTickets() {
         return occupiedTickets;
     }
+
+    public int countTickets(List<Integer> currentTickets) {
+        int count = 0;
+        for (Integer ticketId : currentTickets) {
+            for (StandingTicket ticket : occupiedTickets) {
+                if (ticket.getTicketId() == ticketId) {
+                    count++;
+                }
+            }
+            for(StandingTicket ticket : availableTickets) {
+                if (ticket.getTicketId() == ticketId) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    public List<Integer> pickStandingFromZone(List<Integer> newTickets, int numToPick) {
+        List<Integer> pickedTickets = new ArrayList<>();
+        for (Integer ticketId : newTickets) {
+            if (pickedTickets.size() >= numToPick) {
+                break;
+            }
+            for (StandingTicket ticket : occupiedTickets) {
+                if (ticket.getTicketId() == ticketId) {
+                    pickedTickets.add(ticketId);
+                    break;
+                }
+            }
+        }
+        return pickedTickets;
+    }
 }

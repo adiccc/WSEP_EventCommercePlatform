@@ -17,10 +17,8 @@ import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
-import java.util.NoSuchElementException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -274,6 +272,118 @@ public class ActiveOrderService {
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to proceed active order: " + e.getMessage());
                 return new Response<>(null, "Failed to proceed active order: " + e.getMessage());
+            }
+        });
+    }
+
+
+    public Response<ActiveOrderDTO> editTicketSelection(
+            String token,
+            Map<String, List<SeatingTicketDTO>> seatingToRemove,
+            Map<String, List<SeatingTicketDTO>> seatingToAdd,
+            Map<String, Integer> standingDesired) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "editTicketSelection called");
+            try {
+                String role = auth.getRole(token).getValue();
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid token");
+                    return new Response<>(null, "Invalid token");
+                }
+                int userId = auth.getUserId(token).getValue();
+                if (seatingToRemove != null && seatingToAdd != null) {
+                    Set<String> removeKeys = new HashSet<>();
+                    for (Map.Entry<String, List<SeatingTicketDTO>> e : seatingToRemove.entrySet())
+                        for (SeatingTicketDTO s : e.getValue())
+                            removeKeys.add(e.getKey() + ":" + s.getRow() + "-" + s.getCol());
+                    for (Map.Entry<String, List<SeatingTicketDTO>> e : seatingToAdd.entrySet())
+                        for (SeatingTicketDTO s : e.getValue())
+                            if (removeKeys.contains(e.getKey() + ":" + s.getRow() + "-" + s.getCol()))
+                                return new Response<>(null, "Seat cannot be both added and removed: zone="
+                                        + e.getKey() + " row=" + s.getRow() + " col=" + s.getCol());
+                }
+                ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(userId);
+                ActiveOrder order = activeOrderRepo.findById(dto.getId());
+
+                if (order.getExpireTime().isBefore(LocalDateTime.now())) {
+                    logger.log(Level.SEVERE, "Active order has expired");
+                    return new Response<>(null, "Active order has expired");
+                }
+
+                Event event = eventRepo.findById(order.getEventId());
+                List<Integer> currentTickets = order.getTickets();
+                List<Integer> newTickets = new ArrayList<>(currentTickets);
+
+                int projected = currentTickets.size();
+                if (seatingToRemove != null)
+                    for (List<SeatingTicketDTO> l : seatingToRemove.values()) projected -= l.size();
+                if (seatingToAdd != null)
+                    for (List<SeatingTicketDTO> l : seatingToAdd.values()) projected += l.size();
+                if (standingDesired != null) {
+                    for (Map.Entry<String, Integer> e : standingDesired.entrySet()) {
+                        if (e.getValue() < 0)
+                            return new Response<>(null, "Standing quantity cannot be negative");
+                        int cur = event.countStandingInZone(e.getKey(), currentTickets);
+                        projected += (e.getValue() - cur);
+                    }
+                }
+                if (projected < 0) {
+                    return new Response<>(null, "Edit would result in negative ticket count");
+                }
+                UserDTO userDTO = auth.getUserDTO(token).getValue();
+                event.quantityExceedsPolicy(userDTO, projected); // throws if exceeded
+
+                if (seatingToRemove != null && !seatingToRemove.isEmpty()) {
+                    List<Integer> ids = event.findSeatingTicketIds(seatingToRemove);
+                    if (!new HashSet<>(newTickets).containsAll(ids)) {
+                        return new Response<>(null, "Cannot remove tickets not in your order");
+                    }
+                    event.releaseTickets(ids);
+                    newTickets.removeAll(ids);
+                }
+
+                if (standingDesired != null) {
+                    for (Map.Entry<String, Integer> e : standingDesired.entrySet()) {
+                        String zone = e.getKey();
+                        int desired = e.getValue();
+                        int current = event.countStandingInZone(zone, newTickets);
+                        int delta = desired - current;
+                        if (delta > 0) {
+                            List<Integer> added = event.bookTickets(
+                                    Collections.emptyMap(), Map.of(zone, delta));
+                            newTickets.addAll(added);
+                        } else if (delta < 0) {
+                            List<Integer> ids = event.pickStandingFromZone(zone, newTickets, -delta);
+                            event.releaseTickets(ids);
+                            newTickets.removeAll(ids);
+                        }
+                    }
+                }
+                if (seatingToAdd != null && !seatingToAdd.isEmpty()) {
+                    List<Integer> added = event.bookTickets(seatingToAdd, Collections.emptyMap());
+                    newTickets.addAll(added);
+                }
+                order.setTickets(newTickets);
+                order.returnToSelecting();
+                eventRepo.store(event);
+                activeOrderRepo.store(order);
+
+                logger.log(Level.INFO, "Selection updated successfully");
+                return new Response<>(new ActiveOrderDTO(order), "Selection updated successfully");
+                // ^ assumes ActiveOrderDTO(ActiveOrder) constructor exists
+
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "Order or event not found: " + e.getMessage());
+                return new Response<>(null, "Order or event not found");
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                // thrown by quantityExceedsPolicy, bookTickets, etc.
+                logger.log(Level.SEVERE, "Invalid edit: " + e.getMessage());
+                return new Response<>(null, "Invalid edit: " + e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to edit selection: " + e.getMessage());
+                return new Response<>(null, "Failed to edit selection: " + e.getMessage());
             }
         });
     }
