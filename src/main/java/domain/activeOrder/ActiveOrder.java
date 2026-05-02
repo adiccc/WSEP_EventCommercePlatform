@@ -76,7 +76,6 @@ public class ActiveOrder {
     }
 
     public void proceedToCheckout() {
-        // todo: call when proceed to checkout
         if (stage == STAGE.SELECTING_TICKETS) {
             stage = STAGE.CHECKING_OUT;
         }
