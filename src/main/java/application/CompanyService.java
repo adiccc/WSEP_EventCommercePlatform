@@ -401,6 +401,56 @@ public class CompanyService {
         });
     }
 
+    public Response<Boolean> updateManagerPermissions(String token, int companyId, int managerId,
+                                                       Set<PermissionType> newPermissions) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("updateManagerPermissions called for companyId: " + companyId + ", managerId: " + managerId);
+            try {
+                if (!auth.isLoggedIn(token).getValue()) {
+                    logger.warning("updateManagerPermissions failed: user is not logged in");
+                    return Response.error("User is not logged in");
+                }
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
+                    logger.warning("updateManagerPermissions failed: invalid or expired token");
+                    return Response.error("Invalid or expired token");
+                }
+                if (newPermissions == null) {
+                    logger.warning("updateManagerPermissions failed: null permissions list");
+                    return Response.error("Permissions list cannot be null");
+                }
+                Company company = companyRepo.findById(companyId);
+                if (!company.isOwner(userId)) {
+                    logger.warning("updateManagerPermissions failed: user " + userId + " is not an owner of company " + companyId);
+                    return Response.error("User does not have the required owner permissions");
+                }
+                Member managerMember = userRepo.findById(managerId);
+                if (managerMember == null) {
+                    logger.warning("updateManagerPermissions failed: manager " + managerId + " not found");
+                    return Response.error("Manager not found");
+                }
+                company.updateManagerPermissions(userId, managerId, newPermissions);
+                companyRepo.store(company);
+                logger.info("updateManagerPermissions succeeded for managerId: " + managerId);
+                return Response.ok(true);
+            } catch (NoSuchElementException e) {
+                logger.warning("updateManagerPermissions failed: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (SecurityException e) {
+                logger.warning("updateManagerPermissions unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalArgumentException e) {
+                logger.warning("updateManagerPermissions invalid argument: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in updateManagerPermissions: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
     public Response<Boolean> deactivateCompany(String ownerToken, int companyId) {
         return RetryHelper.executeWithRetry(() ->
         {

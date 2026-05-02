@@ -47,10 +47,9 @@ class CompanyUnitTest {
 
     @Test
     void GivenManagerWithPermission_WhenCheckPermission_ThenTrue() {
-        permissions.getCompanyTree().put(MANAGER_ID, new HierarchyDTO(
-                FOUNDER_ID, new ArrayList<>(),
+        permissions.addToTree(MANAGER_ID, FOUNDER_ID,
                 EnumSet.of(PermissionType.MANAGE_EVENTS_INVENTORY)
-        ));
+        );
         assertTrue(permissions.checkPermission(MANAGER_ID, PermissionType.MANAGE_EVENTS_INVENTORY));
     }
 

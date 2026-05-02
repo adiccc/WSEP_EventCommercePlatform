@@ -101,6 +101,10 @@ public class Company {
     public Map<Integer, HierarchyDTO> getManagersPermissionsMap() {
         return companyPermission.getCompanyTree();
     }
+
+    public void updateManagerPermissions(int ownerId, int managerId, Set<PermissionType> newPermissions) {
+        companyPermission.updateManagerPermissions(ownerId, managerId, newPermissions);
+    }
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;

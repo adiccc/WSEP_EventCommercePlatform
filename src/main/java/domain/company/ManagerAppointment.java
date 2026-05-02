@@ -22,9 +22,14 @@ public class ManagerAppointment {
         this.appointedBy = appointedBy;
         this.permissions = permissions;
     }
+
+
     public ManagerAppointment(ManagerAppointment managerAppointment) {
         this.managerId = managerAppointment.getManagerId();
-        this.permissions = EnumSet.copyOf(managerAppointment.getPermissions());
+        this.appointedBy = managerAppointment.appointedBy;
+        this.permissions = managerAppointment.getPermissions().isEmpty()
+                ? EnumSet.noneOf(PermissionType.class)
+                : EnumSet.copyOf(managerAppointment.getPermissions());
     }
 
     public int getManagerId()    { return managerId; }
