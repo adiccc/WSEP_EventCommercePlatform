@@ -112,11 +112,6 @@ public class StandingZone extends Zone {
                     count++;
                 }
             }
-            for(StandingTicket ticket : availableTickets) {
-                if (ticket.getTicketId() == ticketId) {
-                    count++;
-                }
-            }
         }
         return count;
     }
@@ -124,15 +119,18 @@ public class StandingZone extends Zone {
     public List<Integer> pickStandingFromZone(List<Integer> newTickets, int numToPick) {
         List<Integer> pickedTickets = new ArrayList<>();
         for (Integer ticketId : newTickets) {
-            if (pickedTickets.size() >= numToPick) {
-                break;
-            }
+            if (pickedTickets.size() >= numToPick) break;
             for (StandingTicket ticket : occupiedTickets) {
                 if (ticket.getTicketId() == ticketId) {
                     pickedTickets.add(ticketId);
                     break;
                 }
             }
+        }
+        if (pickedTickets.size() < numToPick) {
+            throw new IllegalArgumentException(
+                    "Not enough tickets to pick: requested " + numToPick
+                            + ", user holds " + pickedTickets.size() + " in this zone");
         }
         return pickedTickets;
     }
