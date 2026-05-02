@@ -857,7 +857,7 @@ class CompanyServiceUpdatedTest {
         }
     }
     @Test
-    void GivenConcurrentAdminRemoveUser_WhenUserViewsCompanies_ThenFailsGracefully() throws Exception {
+    void GivenConcurrentAdminRemoveUser_WhenUserViewsAvailableCompanies_ThenFailsGracefully() throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
 
