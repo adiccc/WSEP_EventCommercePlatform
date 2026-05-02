@@ -263,7 +263,6 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "Active order has expired");
                     return new Response<>(null, "Active order has expired");
                 }
-                // Additional checks can be added here (e.g., event status)
 
                 logger.log(Level.INFO, "Active order retrieved successfully");
                 return new Response<>(order, "Active order retrieved successfully");
