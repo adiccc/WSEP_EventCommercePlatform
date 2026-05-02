@@ -31,8 +31,6 @@ public class Event {
     private CategoryEvent categoryEvent;
     private List<Order> orders;
     private long version;
-    private final AtomicInteger activePurchaseSessions = new AtomicInteger(0);
-
 
     public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent categoryEvent) {
         this.eventMap = null;
@@ -79,7 +77,6 @@ public class Event {
             this.orders.add(new Order(order));
         }
         this.version = event.version;
-        this.activePurchaseSessions.set(event.activePurchaseSessions.get());
     }
 
     public long getVersion() {
@@ -225,20 +222,6 @@ public class Event {
 
             return true;
         });
-    }
-
-    public synchronized boolean tryAcquirePurchaseSlot(int capacity) {
-        if (activePurchaseSessions.get() >= capacity) {
-            return false;
-        }
-        activePurchaseSessions.incrementAndGet();
-        return true;
-    }
-
-    public void releasePurchaseSlot() {
-        if (activePurchaseSessions.get() > 0) {
-            activePurchaseSessions.decrementAndGet();
-        }
     }
 
     @Override

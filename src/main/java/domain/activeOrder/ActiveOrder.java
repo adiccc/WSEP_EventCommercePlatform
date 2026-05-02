@@ -11,18 +11,20 @@ public class ActiveOrder {
     private final int userId;
     private final Integer eventId;
     private List<Integer> tickets;
-    private final LocalDateTime expireTime;
+    private final LocalDateTime createdAt;
+    private LocalDateTime checkoutStartedAt;
     private long version;
     private STAGE stage;
 
-    public ActiveOrder(int orderId, int userId, Integer eventId, List<Integer> tickets, int expireMinutes) {
+    public ActiveOrder(int orderId, int userId, Integer eventId, List<Integer> tickets) {
         this.orderId = orderId;
         this.userId = userId;
         this.eventId = eventId;
         this.tickets = tickets;
         this.version = 0;
-        this.expireTime = LocalDateTime.now().plusMinutes(expireMinutes);
-        this.stage = STAGE.SELECTING_TICKETS;
+        this.createdAt = LocalDateTime.now();
+        this.checkoutStartedAt = null;
+        this.stage = STAGE.VIEWING_MAP;
     }
 
     public ActiveOrder(ActiveOrder activeOrder) {
@@ -30,7 +32,8 @@ public class ActiveOrder {
         this.userId = activeOrder.userId;
         this.eventId = activeOrder.eventId;
         this.tickets = new ArrayList<>(activeOrder.tickets);
-        this.expireTime = activeOrder.expireTime;
+        this.createdAt = activeOrder.createdAt;
+        this.checkoutStartedAt = activeOrder.checkoutStartedAt;
         this.version = activeOrder.version;
         this.stage = activeOrder.stage;
 
@@ -81,6 +84,11 @@ public class ActiveOrder {
         }
     }
 
+    public void proceedToSelectingTickets() {
+        stage = STAGE.SELECTING_TICKETS;
+        this.checkoutStartedAt = LocalDateTime.now();
+    }
+
     public void returnToSelecting() {
         // todo: call when return to selecting tickets from checkout
         if (stage == STAGE.CHECKING_OUT) {
@@ -88,11 +96,27 @@ public class ActiveOrder {
         }
     }
 
+    public boolean isExpired(LocalDateTime now) {
+        if (stage == STAGE.VIEWING_MAP) {
+            return createdAt.plusMinutes(5).isBefore(now);
+        }
 
+        if (stage == STAGE.SELECTING_TICKETS) {
+            return checkoutStartedAt.plusMinutes(10).isBefore(now);
+        }
 
-    public LocalDateTime getExpireTime() { return expireTime; }
+        return false;
+    }
 
     public void setTickets(List<Integer> newTickets) {
         this.tickets = new ArrayList<>(newTickets);
+    }
+
+    public LocalDateTime getCheckoutStartedAt() {
+        return checkoutStartedAt;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
     }
 }

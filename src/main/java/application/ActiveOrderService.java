@@ -26,8 +26,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-
-
 public class ActiveOrderService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
     private final AtomicInteger idGenerator = new AtomicInteger(1);
@@ -38,11 +36,8 @@ public class ActiveOrderService {
     private final IAuth auth;
     private final IPaymentSystem paymentSystem;
     private final ITicketSupply ticketSupply;
-    private int capacity = 100;
-    private final int orderExpireMinutes;
+    private int capacity;
     private final ScheduledExecutorService cleanupScheduler;
-    private final int mapViewExpireMinutes = 5;
-
 
     public ActiveOrderService(
             IAuth auth,
@@ -52,8 +47,7 @@ public class ActiveOrderService {
             ILotteryRepo lotteryRepo,
             IPaymentSystem paymentSystem,
             ITicketSupply ticketSupply,
-            int capacity,
-            int orderExpireMinutes) {
+            int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
@@ -62,7 +56,6 @@ public class ActiveOrderService {
         this.paymentSystem = paymentSystem;
         this.ticketSupply = ticketSupply;
         this.capacity = capacity;
-        this.orderExpireMinutes = orderExpireMinutes;
         this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "active-order-cleanup");
             t.setDaemon(true);
@@ -120,20 +113,24 @@ public class ActiveOrderService {
                             return new Response<>(null, "User is not a lottery winner and lottery registration is still open");
                     }
                 }
-                boolean acquired = e.tryAcquirePurchaseSlot(capacity);
-                if (!acquired) {
+
+                if (capacity <= activeOrderRepo.countActiveOrdersForEvent(eventId)) {
+                     // capacity check before allowing to enter the purchase flow
                     if (e.getEventQueue().contains(token)) {
                         int position = e.getEventQueue().position(token);
                         return new Response<>(null,
                                 "User is still waiting in queue. Position: " + position);
                     }
                     e.getEventQueue().enqueue(token);
-                    int position = e.getEventQueue().position(token);
                     eventRepo.store(e); // persist the updated event with the new queue state
+                    int position = e.getEventQueue().position(token);
                     return new Response<>(null,
                             "Event is full, user added to waiting queue. Position: " + position);
                 }
-                eventRepo.store(e); // persist the updated event with the new queue state
+
+                int orderId = idGenerator.getAndIncrement();
+                ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(token).getValue(), eventId, new ArrayList<>());
+                activeOrderRepo.store(newActiveOrder);
 
                 logger.log(Level.INFO, "Event map retrieved successfully");
                 return new Response<>(new EventMapDTO(e.getMap()), "Event map retrieved successfully");
@@ -197,10 +194,11 @@ public class ActiveOrderService {
             //todo: handle user/ guest
             Response<UserDTO> userResponse = auth.getUserDTO(identifier);
             e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
-            int orderId = idGenerator.getAndIncrement();
             List<Integer> tickets = e.bookTickets(seatingZones,standingZones); // check here quantity and policy
             this.eventRepo.store(e);
-            ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(identifier).getValue(), eventId, tickets,orderExpireMinutes);
+            ActiveOrder newActiveOrder = activeOrderRepo.findById(activeOrderRepo.findOrderByUserId(auth.getUserId(identifier).getValue()).getId());
+            newActiveOrder.proceedToSelectingTickets();
+            newActiveOrder.setTickets(tickets);
             activeOrderRepo.store(newActiveOrder);
             logger.log(Level.INFO, "Tickets selected successfully");
             newActiveOrder.proceedToCheckout();
@@ -231,6 +229,7 @@ public class ActiveOrderService {
                         event.releaseTickets(current.getTickets());
                         eventRepo.store(event);                  // optimistic lock check
                         activeOrderRepo.delete(current.getId());
+                        promoteNextInQueue(event);
                         return new Response<>(true, "expired");
                     } catch (OptimisticLockingFailureException e) {
                         throw e;
@@ -258,7 +257,8 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "Unauthorized access to active order");
                     return new Response<>(null, "Unauthorized access to active order");
                 }
-                if (order.getExpireTime().isBefore(LocalDateTime.now())) {
+                ActiveOrder activeOrder = activeOrderRepo.findById(order.getId());
+                if (activeOrder.isExpired(LocalDateTime.now())) {
                     logger.log(Level.SEVERE, "Active order has expired");
                     return new Response<>(null, "Active order has expired");
                 }
@@ -306,7 +306,7 @@ public class ActiveOrderService {
                 ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(userId);
                 ActiveOrder order = activeOrderRepo.findById(dto.getId());
 
-                if (order.getExpireTime().isBefore(LocalDateTime.now())) {
+                if (order.isExpired(LocalDateTime.now())) {
                     logger.log(Level.SEVERE, "Active order has expired");
                     return new Response<>(null, "Active order has expired");
                 }
@@ -400,5 +400,24 @@ public class ActiveOrderService {
         event.placeOrder(userId,orderId);
         eventRepo.store(event);
         return new Response<>(true, "Order placed successfully");
+    }
+
+    private void promoteNextInQueue(Event event) {
+        if (!event.getEventQueue().isEmpty()
+                && activeOrderRepo.countActiveOrdersForEvent(event.getId()) < capacity) {
+
+            String nextToken = event.getEventQueue().dequeue();
+            int orderId = idGenerator.getAndIncrement();
+
+            ActiveOrder nextOrder = new ActiveOrder(
+                    orderId,
+                    auth.getUserId(nextToken).getValue(),
+                    event.getId(),
+                    new ArrayList<>()
+            );
+
+            activeOrderRepo.store(nextOrder);
+            eventRepo.store(event);
+        }
     }
 }

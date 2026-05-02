@@ -12,17 +12,19 @@ public class ActiveOrderDTO {
     private final int userId;
     private final Integer eventId;
     private final List<Integer> tickets;
-    private final LocalDateTime expireTime;
+    private final LocalDateTime createdAt;
+    private LocalDateTime checkoutStartedAt;
     private final long version;
     private final STAGE stage;
 
 
-    public ActiveOrderDTO(int orderId, int userId, Integer eventId, List<Integer> tickets, LocalDateTime expireTime, long version, STAGE stage) {
+    public ActiveOrderDTO(int orderId, int userId, Integer eventId, List<Integer> tickets, LocalDateTime createdAt, LocalDateTime checkoutStartedAt, long version, STAGE stage) {
         this.orderId = orderId;
         this.userId = userId;
         this.eventId = eventId;
         this.tickets = tickets;
-        this.expireTime = expireTime;
+        this.createdAt = createdAt;
+        this.checkoutStartedAt = checkoutStartedAt;
         this.version = version;
         this.stage = stage;
     }
@@ -32,17 +34,14 @@ public class ActiveOrderDTO {
         this.userId = activeOrder.getUserId();
         this.eventId = activeOrder.getEventId();
         this.tickets = activeOrder.getTickets();
-        this.expireTime = activeOrder.getExpireTime();
+        this.createdAt = activeOrder.getCreatedAt();
+        this.checkoutStartedAt = activeOrder.getCheckoutStartedAt();
         this.version = activeOrder.getVersion();
         this.stage = activeOrder.getStage();
     }
 
     public int getUserId() {
         return userId;
-    }
-
-    public LocalDateTime getExpireTime() {
-        return expireTime;
     }
 
     public int getId() {

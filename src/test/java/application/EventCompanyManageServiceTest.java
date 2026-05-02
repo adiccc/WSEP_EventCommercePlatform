@@ -87,7 +87,7 @@ class EventCompanyManageServiceTest {
         eventService=new EventService(auth,eventRepo);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,100,10);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,100);
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete order repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo);
