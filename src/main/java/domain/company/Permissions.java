@@ -9,12 +9,14 @@ public class Permissions {
     private int founderId;//founder of the comapany
     private Set<Integer> ownerIds; // who are the owners of the company
     private HashMap<Integer, Hierarchy> companyTree; //the hash map with each manger and who assigned him and it's assignees
+    private List<Integer> pandingOwners;
 
     public Permissions(int founderId) {
         this.founderId = founderId;
         this.ownerIds = new HashSet<>();
-        addOwner(founderId);
+        ownerIds.add(founderId);
         companyTree = new HashMap<>();
+        pandingOwners = new ArrayList<>();
     }
 
     /** Deep-copy constructor used by Company's copy constructor */
@@ -30,13 +32,30 @@ public class Permissions {
                     new HashSet<>(orig.getAllPermissions())
             ));
         }
+        this.pandingOwners = new ArrayList<>(other.pandingOwners);
     }
     public int getFounderId() {
         return founderId;
     }
     public void addOwner(int ownerId) {
-        ownerIds.add(ownerId);
+        pandingOwners.add(ownerId);
     }
+
+    public boolean isPendingOwner(int userId) {
+        return pandingOwners.contains(userId);
+    }
+
+    public void OwnerAppointeeRespond(int ownerId, boolean appointee) {
+        pandingOwners.remove(Integer.valueOf(ownerId));
+        if(appointee) {
+            ownerIds.add(ownerId);
+            if(isManager(ownerId)){
+                removeManagerFromTree(ownerId);
+            }
+        }
+    }
+
+    
 
     public Set<Integer> getOwnerIds() {
         return ownerIds;

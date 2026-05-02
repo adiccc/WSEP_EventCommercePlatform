@@ -4,15 +4,12 @@ import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.company.Permissions;
 import domain.dataType.PermissionType;
-import domain.dto.HierarchyDTO;
 import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -55,10 +52,8 @@ class CompanyUnitTest {
 
     @Test
     void GivenManagerWithoutPermission_WhenCheckPermission_ThenFalse() {
-        permissions.getCompanyTree().put(MANAGER_ID, new HierarchyDTO(
-                FOUNDER_ID, new ArrayList<>(),
-                EnumSet.of(PermissionType.MANAGE_EVENTS_INVENTORY)
-        ));
+        permissions.addToTree(MANAGER_ID, FOUNDER_ID,
+                EnumSet.of(PermissionType.MANAGE_EVENTS_INVENTORY));
         assertFalse(permissions.checkPermission(MANAGER_ID, PermissionType.VIEW_PURCHASE_HISTORY));
     }
 
