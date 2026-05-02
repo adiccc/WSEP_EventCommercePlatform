@@ -216,12 +216,11 @@ class PermissionsTest {
     }
 
     @Test
-    void GivenValidUpdate_WhenUpdateWithEmptySet_ThenAllPermissionsCleared() {
+    void GivenEmptyPermissionSet_WhenUpdatePermissions_ThenIllegalArgumentException() {
         permissions.addToTree(MANAGER_ID, FOUNDER_ID, EnumSet.of(PermissionType.CREATE_EVENT, PermissionType.DELETE_EVENT));
 
-        permissions.updateManagerPermissions(FOUNDER_ID, MANAGER_ID, new HashSet<>());
-
-        assertTrue(permissions.getCompanyTree().get(MANAGER_ID).getAllPermissions().isEmpty());
+        assertThrows(IllegalArgumentException.class, () ->
+                permissions.updateManagerPermissions(FOUNDER_ID, MANAGER_ID, new HashSet<>()));
     }
 
     @Test

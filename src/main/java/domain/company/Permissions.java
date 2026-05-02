@@ -9,12 +9,14 @@ public class Permissions {
     private int founderId;//founder of the comapany
     private Set<Integer> ownerIds; // who are the owners of the company
     private HashMap<Integer, Hierarchy> companyTree; //the hash map with each manger and who assigned him and it's assignees
+    private HashMap<Integer, Hierarchy> pendingManagers; // pending manager appointments awaiting response
 
     public Permissions(int founderId) {
         this.founderId = founderId;
         this.ownerIds = new HashSet<>();
         addOwner(founderId);
         companyTree = new HashMap<>();
+        pendingManagers = new HashMap<>();
     }
 
     /** Deep-copy constructor used by Company's copy constructor */
@@ -25,6 +27,15 @@ public class Permissions {
         for (Map.Entry<Integer, Hierarchy> entry : other.companyTree.entrySet()) {
             Hierarchy orig = entry.getValue();
             this.companyTree.put(entry.getKey(), new Hierarchy(
+                    orig.getMyManager(),
+                    new ArrayList<>(orig.getMyAppointees()),
+                    new HashSet<>(orig.getAllPermissions())
+            ));
+        }
+        this.pendingManagers = new HashMap<>();
+        for (Map.Entry<Integer, Hierarchy> entry : other.pendingManagers.entrySet()) {
+            Hierarchy orig = entry.getValue();
+            this.pendingManagers.put(entry.getKey(), new Hierarchy(
                     orig.getMyManager(),
                     new ArrayList<>(orig.getMyAppointees()),
                     new HashSet<>(orig.getAllPermissions())
@@ -120,11 +131,31 @@ public class Permissions {
     }
 
     public void updateManagerPermissions(int ownerId, int managerId, Set<PermissionType> newPermissions) {
+        if (newPermissions == null || newPermissions.isEmpty())
+            throw new IllegalArgumentException("At least one permission must be selected for the representative");
         Hierarchy h = companyTree.get(managerId);
         if (h == null) {
             throw new IllegalArgumentException("Manager is not assigned to this company");
         }
         h.setPermissions(ownerId, newPermissions);
+    }
+
+    public void addPendingManager(int managerId, int appointedBy, Set<PermissionType> permissions) {
+        pendingManagers.put(managerId, new Hierarchy(appointedBy, new ArrayList<>(), new HashSet<>(permissions)));
+    }
+
+    public boolean isPendingManager(int managerId) {
+        return pendingManagers.containsKey(managerId);
+    }
+
+    public void respondManagerAppointment(int managerId, boolean accept) {
+        Hierarchy pending = pendingManagers.remove(managerId);
+        if (pending != null && accept) {
+            companyTree.put(managerId, pending);
+            if (companyTree.containsKey(pending.getMyManager())) {
+                companyTree.get(pending.getMyManager()).addAppointee(managerId);
+            }
+        }
     }
 
 }

@@ -16,6 +16,7 @@ import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
 import domain.user.Founder;
 import domain.user.IUserRepo;
+import domain.user.Manager;
 import domain.user.Member;
 import domain.user.User;
 
@@ -446,6 +447,107 @@ public class CompanyService {
                 throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in updateManagerPermissions: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Boolean> requestAppointManager(String token, int companyId, int appointeeId,
+                                                    Set<PermissionType> permissions) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("requestAppointManager called for companyId: " + companyId + ", appointeeId: " + appointeeId);
+            try {
+                if (!auth.isLoggedIn(token).getValue()) {
+                    logger.warning("requestAppointManager failed: user is not logged in");
+                    return Response.error("User is not logged in");
+                }
+                int appointerId = auth.getUserId(token).getValue();
+                if (appointerId == -1) {
+                    logger.warning("requestAppointManager failed: invalid or expired token");
+                    return Response.error("Invalid or expired token");
+                }
+
+                Company company;
+                try {
+                    company = companyRepo.findById(companyId);
+                } catch (NoSuchElementException e) {
+                    logger.warning("requestAppointManager failed: company not found, id: " + companyId);
+                    return Response.error("Company not found");
+                }
+
+                try {
+                    userRepo.findById(appointeeId);
+                } catch (NoSuchElementException e) {
+                    logger.warning("requestAppointManager failed: appointee not found, id: " + appointeeId);
+                    return Response.error("Only a registered subscriber can be appointed");
+                }
+
+                company.requestAppointManager(appointerId, appointeeId, permissions);
+                companyRepo.store(company);
+                logger.info("requestAppointManager succeeded for appointeeId: " + appointeeId);
+                return Response.ok(true);
+
+            } catch (SecurityException e) {
+                logger.warning("requestAppointManager unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalStateException e) {
+                logger.warning("requestAppointManager invalid state: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalArgumentException e) {
+                logger.warning("requestAppointManager invalid argument: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in requestAppointManager: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Boolean> respondToManagerAppointment(String token, int companyId, boolean accept) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("respondToManagerAppointment called for companyId: " + companyId + ", accept: " + accept);
+            try {
+                if (!auth.isLoggedIn(token).getValue()) {
+                    logger.warning("respondToManagerAppointment failed: user is not logged in");
+                    return Response.error("User is not logged in");
+                }
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
+                    logger.warning("respondToManagerAppointment failed: invalid or expired token");
+                    return Response.error("Invalid or expired token");
+                }
+
+                Company company;
+                try {
+                    company = companyRepo.findById(companyId);
+                } catch (NoSuchElementException e) {
+                    logger.warning("respondToManagerAppointment failed: company not found, id: " + companyId);
+                    return Response.error("Company not found");
+                }
+
+                if (!company.isPendingManager(userId)) {
+                    logger.warning("respondToManagerAppointment failed: no pending appointment for user " + userId);
+                    return Response.error("No pending manager appointment found for this user");
+                }
+
+                company.respondManagerAppointment(userId, accept);
+
+                if (accept) {
+                    Member member = userRepo.findById(userId);
+                    member.addRole(new Manager(companyId));
+                    userRepo.store(member);
+                }
+
+                companyRepo.store(company);
+                logger.info("respondToManagerAppointment succeeded for userId: " + userId + ", accepted: " + accept);
+                return Response.ok(accept);
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in respondToManagerAppointment: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
         });

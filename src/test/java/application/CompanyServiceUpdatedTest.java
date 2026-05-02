@@ -493,14 +493,13 @@ class CompanyServiceUpdatedTest {
     }
 
     @Test
-    void GivenOwnerAndEmptyPermissions_WhenUpdateManagerPermissions_ThenPermissionsClearedSuccessfully() {
+    void GivenOwnerAndEmptyPermissions_WhenUpdateManagerPermissions_ThenError() {
         service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
 
         Response<Boolean> response = service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, new HashSet<>());
 
-        assertFalse(response.isError(), response.getMessage());
-        Company updated = companyRepo.findById(COMPANY_ID);
-        assertTrue(updated.getCompanyPermission().getCompanyTree().get(MANAGER_ID).getAllPermissions().isEmpty());
+        assertTrue(response.isError());
+        assertNull(response.getValue());
     }
 
     @Test
@@ -660,5 +659,196 @@ class CompanyServiceUpdatedTest {
 
         assertEquals(1, success, "Only one company with the same name should be created");
         assertEquals(1, failed,  "The losing thread should receive a duplicate-name error");
+    }
+
+    // ===================== II.4.X Request Appoint Manager =====================
+
+    @Test
+    void GivenOwnerAndValidSubscriber_WhenRequestAppointManager_ThenSuccess() {
+        Set<PermissionType> perms = EnumSet.of(PermissionType.CREATE_EVENT);
+
+        Response<Boolean> response = service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, perms);
+
+        assertFalse(response.isError(), response.getMessage());
+        assertTrue(response.getValue());
+        assertTrue(companyRepo.findById(COMPANY_ID).isPendingManager(OTHER_USER_ID));
+    }
+
+    @Test
+    void GivenNonOwner_WhenRequestAppointManager_ThenUnauthorizedError() {
+        Set<PermissionType> perms = EnumSet.of(PermissionType.CREATE_EVENT);
+
+        Response<Boolean> response = service.requestAppointManager(OTHER_TOKEN, COMPANY_ID, OTHER_OWNER_ID, perms);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertEquals("User does not have the required owner permissions", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistentCompany_WhenRequestAppointManager_ThenCompanyNotFoundError() {
+        Set<PermissionType> perms = EnumSet.of(PermissionType.CREATE_EVENT);
+
+        Response<Boolean> response = service.requestAppointManager(OWNER_TOKEN, 9999, OTHER_USER_ID, perms);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertEquals("Company not found", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistentAppointee_WhenRequestAppointManager_ThenSubscriberNotFoundError() {
+        Set<PermissionType> perms = EnumSet.of(PermissionType.CREATE_EVENT);
+
+        Response<Boolean> response = service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, 99999, perms);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertEquals("Only a registered subscriber can be appointed", response.getMessage());
+    }
+
+    @Test
+    void GivenAlreadyManagerAppointee_WhenRequestAppointManager_ThenAlreadyManagerError() {
+        Set<PermissionType> perms = EnumSet.of(PermissionType.CREATE_EVENT);
+
+        Response<Boolean> response = service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, perms);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertEquals("Subscriber is already appointed as manager in this company", response.getMessage());
+    }
+
+    @Test
+    void GivenAlreadyPendingAppointee_WhenRequestAppointManager_ThenAlreadyPendingError() {
+        Set<PermissionType> perms = EnumSet.of(PermissionType.CREATE_EVENT);
+        service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, perms);
+
+        Response<Boolean> response = service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, perms);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertEquals("Subscriber already has a pending manager appointment", response.getMessage());
+    }
+
+    @Test
+    void GivenEmptyPermissions_WhenRequestAppointManager_ThenPermissionsRequiredError() {
+        Response<Boolean> response = service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, new HashSet<>());
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertEquals("At least one permission must be selected for the representative", response.getMessage());
+    }
+
+    @Test
+    void GivenLoggedOutOwner_WhenRequestAppointManager_ThenNotLoggedInError() {
+        auth.logout(OWNER_TOKEN);
+        Set<PermissionType> perms = EnumSet.of(PermissionType.CREATE_EVENT);
+
+        Response<Boolean> response = service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, perms);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertEquals("User is not logged in", response.getMessage());
+    }
+
+    // ===================== II.4.X Respond To Manager Appointment =====================
+
+    @Test
+    void GivenPendingAppointment_WhenAcceptManagerAppointment_ThenUserBecomesManager() {
+        Set<PermissionType> perms = EnumSet.of(PermissionType.CREATE_EVENT, PermissionType.VIEW_PURCHASE_HISTORY);
+        service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, perms);
+
+        Response<Boolean> response = service.respondToManagerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+
+        assertFalse(response.isError(), response.getMessage());
+        assertEquals(Boolean.TRUE, response.getValue());
+        Company updated = companyRepo.findById(COMPANY_ID);
+        assertTrue(updated.getCompanyPermission().isManager(OTHER_USER_ID));
+        assertFalse(updated.isPendingManager(OTHER_USER_ID));
+        assertEquals(perms, updated.getCompanyPermission().getCompanyTree().get(OTHER_USER_ID).getAllPermissions());
+    }
+
+    @Test
+    void GivenPendingAppointment_WhenRejectManagerAppointment_ThenAppointmentCancelled() {
+        Set<PermissionType> perms = EnumSet.of(PermissionType.CREATE_EVENT);
+        service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, perms);
+
+        Response<Boolean> response = service.respondToManagerAppointment(OTHER_TOKEN, COMPANY_ID, false);
+
+        assertFalse(response.isError(), response.getMessage());
+        assertEquals(Boolean.FALSE, response.getValue());
+        Company updated = companyRepo.findById(COMPANY_ID);
+        assertFalse(updated.getCompanyPermission().isManager(OTHER_USER_ID));
+        assertFalse(updated.isPendingManager(OTHER_USER_ID));
+    }
+
+    @Test
+    void GivenNoPendingAppointment_WhenRespondToManagerAppointment_ThenNoPendingError() {
+        Response<Boolean> response = service.respondToManagerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertEquals("No pending manager appointment found for this user", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistentCompany_WhenRespondToManagerAppointment_ThenCompanyNotFoundError() {
+        Response<Boolean> response = service.respondToManagerAppointment(OTHER_TOKEN, 9999, true);
+
+        assertTrue(response.isError());
+        assertNull(response.getValue());
+        assertEquals("Company not found", response.getMessage());
+    }
+
+    // ===================== Concurrency: Appoint Manager =====================
+
+    @Test
+    void GivenTwoThreadsRaceToAppointSameSubscriber_WhenRequestAppointManager_ThenOnlyOneSucceeds() throws Exception {
+        Set<PermissionType> perms = EnumSet.of(PermissionType.CREATE_EVENT);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, perms);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, perms);
+        });
+
+        start.countDown();
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = (!r1.isError() ? 1 : 0) + (!r2.isError() ? 1 : 0);
+        assertEquals(1, success, "Only one thread should successfully create the pending appointment");
+    }
+
+    @Test
+    void GivenTwoThreadsRaceToRespondToSamePendingAppointment_WhenRespondToManagerAppointment_ThenOnlyOneSucceeds() throws Exception {
+        Set<PermissionType> perms = EnumSet.of(PermissionType.CREATE_EVENT);
+        service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, perms);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return service.respondToManagerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return service.respondToManagerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+        });
+
+        start.countDown();
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = (!r1.isError() ? 1 : 0) + (!r2.isError() ? 1 : 0);
+        assertEquals(1, success, "Only one response to a pending appointment should succeed");
     }
 }
