@@ -6,12 +6,12 @@ import DTO.TicketSupplyResultDTO;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
+import domain.dto.ActiveOrderDTO;
 import domain.dto.EventMapDTO;
 import domain.dto.SeatingTicketDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
-import domain.event.*;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
@@ -21,12 +21,14 @@ import java.util.List;
 import java.util.Map;
 
 import java.util.NoSuchElementException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 
-import static domain.config.PurchaseConfig.MAX_ACTIVE_ORDERS_PER_EVENT;
 
 public class ActiveOrderService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
@@ -39,7 +41,8 @@ public class ActiveOrderService {
     private final IPaymentSystem paymentSystem;
     private final ITicketSupply ticketSupply;
     private int capacity = 100;
-    private final int orderExpireMinutes = 10;
+    private final int orderExpireMinutes;
+    private final ScheduledExecutorService cleanupScheduler;
 
 
     public ActiveOrderService(
@@ -50,7 +53,8 @@ public class ActiveOrderService {
             ILotteryRepo lotteryRepo,
             IPaymentSystem paymentSystem,
             ITicketSupply ticketSupply,
-            int capacity) {
+            int capacity,
+            int orderExpireMinutes) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
@@ -59,13 +63,31 @@ public class ActiveOrderService {
         this.paymentSystem = paymentSystem;
         this.ticketSupply = ticketSupply;
         this.capacity = capacity;
-       // this.capacity = MAX_ACTIVE_ORDERS_PER_EVENT;
+        this.orderExpireMinutes = orderExpireMinutes;
+        this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "active-order-cleanup");
+            t.setDaemon(true);
+            return t;
+        });
+
+        cleanupScheduler.scheduleAtFixedRate(
+                () -> {
+                    try {
+                        cleanupExpiredOrders();
+                    } catch (Throwable ex) {
+                        logger.log(Level.SEVERE, "Cleanup failed: " + ex.getMessage());
+                    }
+                },
+                30, 30, TimeUnit.SECONDS
+        );
     }
 
     public Response<EventMapDTO> enterEventPurchase(String token, int companyId, int eventId) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "enterEventPurchase called");
+            cleanupExpiredOrders();
+
 
             // check valid token
             String role = auth.getRole(token).getValue();
@@ -154,9 +176,9 @@ public class ActiveOrderService {
         });
     }
 
-    public Response<Integer>guestSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) { //TODO::
+    public Response<Integer>userSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return RetryHelper.executeWithRetry(()->{
-        logger.log(Level.INFO, "guestSelectTickets called");
+        logger.log(Level.INFO, "userSelectTickets called");
         if(identifier == null){
             logger.log(Level.SEVERE, "identifier is null");
             return new Response<>(null, "Invalid identifier supplied");
@@ -164,7 +186,6 @@ public class ActiveOrderService {
         String role = auth.getRole(identifier).getValue();
         try {
             this.activeOrderRepo.alreadyHasActiveOrder(auth.getUserId(identifier).getValue(), eventId);
-
             int totalSeatingTickets = seatingZones.values().stream()
                     .mapToInt(List::size)
                     .sum();
@@ -172,17 +193,18 @@ public class ActiveOrderService {
             int totalStandingTickets = standingZones.values().stream()
                     .mapToInt(Integer::intValue)
                     .sum();
-
             int totalTickets = totalSeatingTickets + totalStandingTickets;
             Event e = this.eventRepo.findById(eventId);
+            //todo: handle user/ guest
             Response<UserDTO> userResponse = auth.getUserDTO(identifier);
             e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
             int orderId = idGenerator.getAndIncrement();
-            List<Integer> tickets = e.bookTickets(false,seatingZones,standingZones); // check here quantity and policy
+            List<Integer> tickets = e.bookTickets(seatingZones,standingZones); // check here quantity and policy
             this.eventRepo.store(e);
             ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(identifier).getValue(), eventId, tickets,orderExpireMinutes);
             activeOrderRepo.store(newActiveOrder);
             logger.log(Level.INFO, "Tickets selected successfully");
+            newActiveOrder.proceedToCheckout();
             return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
@@ -195,6 +217,70 @@ public class ActiveOrderService {
         }
 
     });}
+
+    public void cleanupExpiredOrders() {
+        logger.log(Level.INFO, "cleanupExpiredOrders running");
+        List<ActiveOrder> expired = activeOrderRepo.findExpired(LocalDateTime.now());
+
+        for (ActiveOrder expiredOrder : expired) {
+            try {
+                RetryHelper.executeWithRetry(() -> {
+                    try {
+                        // re-fetch fresh on each retry, state may have changed
+                        ActiveOrder current = activeOrderRepo.findById(expiredOrder.getId());
+                        Event event = eventRepo.findById(current.getEventId());
+                        event.releaseTickets(current.getTickets());
+                        eventRepo.store(event);                  // optimistic lock check
+                        activeOrderRepo.delete(current.getId());
+                        return new Response<>(true, "expired");
+                    } catch (OptimisticLockingFailureException e) {
+                        throw e;
+                     }
+                    catch (NoSuchElementException e) {
+                        // order already gone — user placed it before cleanup hit. Fine.
+                        return new Response<>(true, "already removed");
+                    }
+                });
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to expire order " + expiredOrder.getId() + ": " + e.getMessage());
+                // swallow — keep processing other orders
+            }
+        }
+    }
+
+
+    public Response<ActiveOrderDTO> memberProceedAnActiveOrder(String token) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "memberProceedActiveOrder called");
+            try {
+                int userId = auth.getUserId(token).getValue();
+                ActiveOrderDTO order = activeOrderRepo.findOrderByUserId(userId);
+                if (order.getUserId() != auth.getUserId(token).getValue()) {
+                    logger.log(Level.SEVERE, "Unauthorized access to active order");
+                    return new Response<>(null, "Unauthorized access to active order");
+                }
+                if (order.getExpireTime().isBefore(LocalDateTime.now())) {
+                    logger.log(Level.SEVERE, "Active order has expired");
+                    return new Response<>(null, "Active order has expired");
+                }
+
+                logger.log(Level.INFO, "Active order retrieved successfully");
+                return new Response<>(order, "Active order retrieved successfully");
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "Active order not found: " + e.getMessage());
+                return new Response<>(null, "Active order not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to proceed active order: " + e.getMessage());
+                return new Response<>(null, "Failed to proceed active order: " + e.getMessage());
+            }
+        });
+    }
+
+    public void shutdown() {
+        cleanupScheduler.shutdown();
+    }
 
     //TODO : this implementation is for test only, this function should be implemented currectly
 

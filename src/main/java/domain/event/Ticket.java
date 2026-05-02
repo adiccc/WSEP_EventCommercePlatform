@@ -17,7 +17,7 @@ public abstract class Ticket {
         return ticketId;
     }
 
-    public boolean setStatus(TicketStatus newStatus) {
+    public boolean setStatusFromAvailable(TicketStatus newStatus) {
         if (this.status == AVAILABLE) {
             this.status = newStatus;
             return true;
@@ -27,5 +27,11 @@ public abstract class Ticket {
 
     public TicketStatus getStatus() {
         return status;
+    }
+
+    public void makeAvailableFromLocked() {
+        if (this.status == TicketStatus.LOCKED) {
+            this.status = AVAILABLE;
+        }
     }
 }

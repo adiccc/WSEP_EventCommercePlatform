@@ -81,17 +81,12 @@ class CompanyServiceUpdatedTest {
         userService.registerUser(null, otherOwnerDTO);
         OTHER_OWNER_TOKEN = userService.login("otherowner@test.com", "Password123!").getValue();
         OTHER_OWNER_ID = auth.getUserId(OTHER_OWNER_TOKEN).getValue();
+
+        Company company = companyRepo.findById(COMPANY_ID);
+        company.getCompanyPermission().addToTree(MANAGER_ID, OWNER_ID, new HashSet<>());
+        companyRepo.store(company);
     }
 
-    private void appointManager(int managerId, int appointedBy) {
-        Company company = companyRepo.findById(COMPANY_ID);
-        company.getCompanyPermission().addToTree(managerId, appointedBy, new HashSet<>());
-        companyRepo.store(company);
-//        company = new Company(COMPANY_ID, "Test Company", OWNER_ID,
-//                new ContactInfo("test@test.com", "0500000000", "bank-1"),
-//                new PurchasePolicy(), new DiscountPolicy());
-//        companyRepo.store(company);
-    }
 
     // ===================== Get Available Companies =====================
 
@@ -290,8 +285,7 @@ class CompanyServiceUpdatedTest {
     // ===================== II.4.X Update Manager Permissions =====================
 
     @Test
-    void SuccessfulManagerPermissionsUpdate() {
-        appointManager(MANAGER_ID, OWNER_ID);
+    void GivenOwnerAppointedManager_WhenUpdateManagerPermissions_ThenSuccess() {
         Set<PermissionType> newPerms = EnumSet.of(PermissionType.CREATE_EVENT, PermissionType.VIEW_ORDERS_HISTORY);
 
         Response<Boolean> response = service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, newPerms);
@@ -303,8 +297,7 @@ class CompanyServiceUpdatedTest {
     }
 
     @Test
-    void UnauthorizedPermissionsUpdate() {
-        appointManager(MANAGER_ID, OWNER_ID);
+    void GivenNonOwner_WhenUpdateManagerPermissions_ThenUnauthorizedError() {
 
         Response<Boolean> response = service.updateManagerPermissions(
                 OTHER_TOKEN, COMPANY_ID, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
@@ -314,9 +307,8 @@ class CompanyServiceUpdatedTest {
     }
 
     @Test
-    void CompanyNotFound() {
-        appointManager(MANAGER_ID, OWNER_ID);
 
+    void GivenNonExistentCompany_WhenUpdateManagerPermissions_ThenCompanyNotFoundError() {
         Response<Boolean> response = service.updateManagerPermissions(
                 OWNER_TOKEN, 999, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
 
@@ -325,7 +317,7 @@ class CompanyServiceUpdatedTest {
     }
 
     @Test
-    void ManagerNotFound() {
+    void GivenNonExistentManager_WhenUpdateManagerPermissions_ThenManagerNotFoundError() {
         int nonExistentManagerId = 99999;
 
         Response<Boolean> response = service.updateManagerPermissions(
@@ -336,7 +328,7 @@ class CompanyServiceUpdatedTest {
     }
 
     @Test
-    void ManagerNotAssignedToCompany() {
+    void GivenManagerNotInCompany_WhenUpdateManagerPermissions_ThenNotAssignedError() {
         // OTHER_USER_ID is a registered user but has no manager role in this company
         Response<Boolean> response = service.updateManagerPermissions(
                 OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
@@ -346,7 +338,7 @@ class CompanyServiceUpdatedTest {
     }
 
     @Test
-    void OwnerDidNotAppointManager() {
+    void GivenManagerAppointedByDifferentOwner_WhenUpdateManagerPermissions_ThenUnauthorizedError() {
         // Add OTHER_OWNER as an owner and appoint MANAGER under them, not under OWNER
         Company company = companyRepo.findById(COMPANY_ID);
         company.getCompanyPermission().addOwner(OTHER_OWNER_ID);
@@ -361,8 +353,7 @@ class CompanyServiceUpdatedTest {
     }
 
     @Test
-    void InvalidPermissionsUpdate() {
-        appointManager(MANAGER_ID, OWNER_ID);
+    void GivenNullPermissions_WhenUpdateManagerPermissions_ThenInvalidPermissionsError() {
 
         Response<Boolean> response = service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, null);
 
@@ -371,8 +362,7 @@ class CompanyServiceUpdatedTest {
     }
 
     @Test
-    void LoggedOutUserAccess() {
-        appointManager(MANAGER_ID, OWNER_ID);
+    void GivenLoggedOutOwner_WhenUpdateManagerPermissions_ThenNotAuthenticatedError() {
         auth.logout(OWNER_TOKEN);
 
         Response<Boolean> response = service.updateManagerPermissions(
@@ -503,7 +493,6 @@ class CompanyServiceUpdatedTest {
 
     @Test
     void GivenOwnerAndEmptyPermissions_WhenUpdateManagerPermissions_ThenPermissionsClearedSuccessfully() {
-        appointManager(MANAGER_ID, OWNER_ID);
         service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
 
         Response<Boolean> response = service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, new HashSet<>());
@@ -515,7 +504,6 @@ class CompanyServiceUpdatedTest {
 
     @Test
     void GivenOwnerUpdatesPermissionsTwice_WhenUpdateManagerPermissions_ThenLatestPermissionsApplied() {
-        appointManager(MANAGER_ID, OWNER_ID);
         service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
         service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, EnumSet.of(PermissionType.DELETE_EVENT));
 
@@ -563,8 +551,11 @@ class CompanyServiceUpdatedTest {
 
     @Test
     void GivenNewCompany_WhenViewRolesTree_ThenManagersMapIsEmpty() {
+        int freshCompanyId = 99;
+        service.createProductionCompany(OWNER_TOKEN, freshCompanyId, "Fresh Co", "fresh@co.com", "050-999-9999", "bank-99");
+
         domain.dto.RolesPermissionsTreeDTO tree =
-                service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID).getValue();
+                service.viewRolesAndPermissionsTree(OWNER_TOKEN, freshCompanyId).getValue();
 
         assertTrue(tree.getManagersPermissions().isEmpty(),
                 "A brand-new company has no managers");

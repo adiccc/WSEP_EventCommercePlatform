@@ -7,12 +7,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ActiveOrder {
-    private int orderId;
-    private int userId;
-    private Integer eventId;
+    private final int orderId;
+    private final int userId;
+    private final Integer eventId;
     private List<Integer> tickets;
-    private LocalDateTime expireTime;
+    private final LocalDateTime expireTime;
     private long version;
+    private STAGE stage;
 
     public ActiveOrder(int orderId, int userId, Integer eventId, List<Integer> tickets, int expireMinutes) {
         this.orderId = orderId;
@@ -21,6 +22,7 @@ public class ActiveOrder {
         this.tickets = tickets;
         this.version = 0;
         this.expireTime = LocalDateTime.now().plusMinutes(expireMinutes);
+        this.stage = STAGE.SELECTING_TICKETS;
     }
 
     public ActiveOrder(ActiveOrder activeOrder) {
@@ -30,6 +32,7 @@ public class ActiveOrder {
         this.tickets = new ArrayList<>(activeOrder.tickets);
         this.expireTime = activeOrder.expireTime;
         this.version = activeOrder.version;
+        this.stage = activeOrder.stage;
 
     }
 
@@ -66,7 +69,26 @@ public class ActiveOrder {
 
         ActiveOrder other = (ActiveOrder) obj;
         return orderId==other.orderId && version == other.getVersion();
-
     }
 
+    public STAGE getStage() {
+        return stage;
+    }
+
+    public void proceedToCheckout() {
+        if (stage == STAGE.SELECTING_TICKETS) {
+            stage = STAGE.CHECKING_OUT;
+        }
+    }
+
+    public void returnToSelecting() {
+        // todo: call when return to selecting tickets from checkout
+        if (stage == STAGE.CHECKING_OUT) {
+            stage = STAGE.SELECTING_TICKETS;
+        }
+    }
+
+
+
+    public LocalDateTime getExpireTime() { return expireTime; }
 }

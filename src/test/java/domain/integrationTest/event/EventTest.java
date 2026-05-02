@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -25,10 +26,11 @@ class EventTest {
     private Event event;
     @BeforeEach
     void setUp() {
+        AtomicInteger ticketIdGenerator = new AtomicInteger(1);
         ElementPosition stage = new ElementPosition(10, 20);
         ElementPosition entry = new ElementPosition(5, 5);
         ElementPosition posZone = new ElementPosition(15, 15);
-        SeatingZone vipZone = new SeatingZone("VIP", 100, 50,50, posZone);
+        SeatingZone vipZone = new SeatingZone("VIP", 100, 50,50, posZone,ticketIdGenerator);
         map1 = new EventMap(stage, List.of(entry), List.of(vipZone));
         event = new Event(
                 companyId,
@@ -40,7 +42,7 @@ class EventTest {
                 GeographicalArea.CENTER,
                 CategoryEvent.SPORTS
         );
-        SeatingZone zone = new SeatingZone("Zone", 50, 10, 10, new ElementPosition(1,1));
+        SeatingZone zone = new SeatingZone("Zone", 50, 10, 10, new ElementPosition(1,1),ticketIdGenerator);
 
         map2 = new EventMap(
                 new ElementPosition(0,0),
@@ -132,8 +134,8 @@ class EventTest {
 
     @Test
     void GivenMultipleZones_OneMatchesPrice_WhenMatches_ThenReturnTrue() {
-        SeatingZone cheapZone = new SeatingZone("Cheap", 50, 10, 10, new ElementPosition(1,1));
-        SeatingZone vipZone = new SeatingZone("VIP", 100, 10, 10, new ElementPosition(2,2));
+        SeatingZone cheapZone = new SeatingZone("Cheap", 50, 10, 10, new ElementPosition(1,1),new AtomicInteger(1));
+        SeatingZone vipZone = new SeatingZone("VIP", 100, 10, 10, new ElementPosition(2,2),new AtomicInteger(1));
 
         EventMap customMap = new EventMap(
                 new ElementPosition(0,0),
