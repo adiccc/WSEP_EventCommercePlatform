@@ -3,6 +3,7 @@ package infrastructure;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import Exception.OptimisticLockingFailureException;
+import domain.dto.ActiveOrderDTO;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -83,6 +84,16 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
             }
         }
         return result;
+    }
+
+    public ActiveOrderDTO findOrderByUserId(Integer userId) {
+        for (ActiveOrder order : activeOrders.values()) {
+            if (order.getUserId() == userId) {
+                return new ActiveOrderDTO(order);
+                // a member can have up to one active order.
+            }
+        }
+        throw new NoSuchElementException("No active order found for user ID: " + userId);
     }
 
 

@@ -8,6 +8,7 @@ import java.util.*;
 import domain.activeOrder.ActiveOrder;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
+import domain.dto.ActiveOrderDTO;
 import domain.dto.EventMapDTO;
 import domain.dto.SeatingTicketDTO;
 import domain.dto.UserDTO;
@@ -37,7 +38,6 @@ class ActiveOrderServiceTest {
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
 
-    private int userId1;
     private String validToken;
     private Integer eventId;
     private Integer concurrentEventId;
@@ -733,6 +733,152 @@ class ActiveOrderServiceTest {
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
         assertNotNull(second.getValue(),
                 "After cleanup removed the expired order, same user must be able to create a new order");
+    }
+
+
+    @Test
+    void GivenInvalidToken_WhenMemberProceedActiveOrder_ThenErrorReturned() {
+        Response<ActiveOrderDTO> response = service.memberProceedAnActiveOrder("not-a-real-token");
+
+        assertNull(response.getValue());
+    }
+
+    @Test
+    void GivenNoActiveOrderForUser_WhenMemberProceedActiveOrder_ThenNotFound() {
+        Response<ActiveOrderDTO> response = service.memberProceedAnActiveOrder(validToken);
+
+        assertNull(response.getValue());
+        assertEquals("Active order not found", response.getMessage());
+    }
+
+    @Test
+    void GivenValidActiveOrder_WhenMemberProceedActiveOrder_ThenReturnsDTO() {
+        Response<Integer> created = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
+        assertNotNull(created.getValue(), "setup failed: " + created.getMessage());
+        int orderId = created.getValue();
+
+        Response<ActiveOrderDTO> response = service.memberProceedAnActiveOrder(validToken);
+
+        assertNotNull(response.getValue(), "expected DTO, got null. msg=" + response.getMessage());
+        assertEquals(orderId, response.getValue().getId());
+        assertEquals(concurrentEventId, response.getValue().getEventId());
+        assertEquals("Active order retrieved successfully", response.getMessage());
+    }
+
+    @Test
+    void GivenExpiredActiveOrder_WhenMemberProceedActiveOrder_ThenExpiredError() throws Exception {
+        Response<Integer> created = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
+        assertNotNull(created.getValue());
+        backdateOrderExpireTime(created.getValue());
+
+        Response<ActiveOrderDTO> response = service.memberProceedAnActiveOrder(validToken);
+
+        assertNull(response.getValue());
+        assertEquals("Active order has expired", response.getMessage());
+    }
+
+    @Test
+    void GivenTwoUsersEachWithOrder_WhenMemberProceedActiveOrder_ThenEachUserSeesOnlyTheirOwn() {
+        String emailB = "isolation_b@mail.com";
+        userService.registerUser("", new UserDTO(
+                emailB, "iso", "b", "pass", 1, 1, 2000, "Israel", "050-111-2222"));
+        String tokenB = userService.login(emailB, "pass").getValue();
+        int userIdA = auth.getUserId(validToken).getValue();
+        int userIdB = auth.getUserId(tokenB).getValue();
+
+        int orderA = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+        int orderB = service.userSelectTickets(
+                tokenB, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+
+        Response<ActiveOrderDTO> respA = service.memberProceedAnActiveOrder(validToken);
+        Response<ActiveOrderDTO> respB = service.memberProceedAnActiveOrder(tokenB);
+
+        assertEquals(orderA, respA.getValue().getId());
+        assertEquals(userIdA, respA.getValue().getUserId());
+        assertEquals(orderB, respB.getValue().getId());
+        assertEquals(userIdB, respB.getValue().getUserId());
+        assertNotEquals(orderA, orderB);
+    }
+
+    @Test
+    void GivenSingleUserWithOrder_WhenManyConcurrentProceedCalls_ThenAllReturnSameOrder() throws Exception {
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+
+        int threadCount = 30;
+        ExecutorService pool = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<ActiveOrderDTO>>> futures = new ArrayList<>();
+
+        for (int i = 0; i < threadCount; i++) {
+            futures.add(pool.submit(() -> {
+                start.await();
+                return service.memberProceedAnActiveOrder(validToken);
+            }));
+        }
+        start.countDown();
+
+        Set<Integer> seenOrderIds = new HashSet<>();
+        int successes = 0;
+        for (Future<Response<ActiveOrderDTO>> f : futures) {
+            Response<ActiveOrderDTO> r = f.get();
+            if (r.getValue() != null) {
+                successes++;
+                seenOrderIds.add(r.getValue().getId());
+            }
+        }
+        pool.shutdown();
+
+        assertEquals(threadCount, successes, "every concurrent read should succeed");
+        assertEquals(Set.of(orderId), seenOrderIds, "all threads must see the same order");
+    }
+
+    @Test
+    void GivenMultipleUsersWithOrders_WhenAllProceedConcurrently_ThenEachGetsOwnOrder() throws Exception {
+        int usersCount = 10;
+        List<String> tokens = new ArrayList<>();
+        List<Integer> userIds = new ArrayList<>();
+        Map<String, Integer> tokenToOrderId = new HashMap<>();
+
+        for (int i = 0; i < usersCount; i++) {
+            String email = "conc_proceed_" + i + "@mail.com";
+            userService.registerUser("", new UserDTO(
+                    email, "f" + i, "l" + i, "pass",
+                    1, 1, 2000, "Israel", "050-555-6677"));
+            String t = userService.login(email, "pass").getValue();
+            tokens.add(t);
+            userIds.add(auth.getUserId(t).getValue());
+
+            int oid = service.userSelectTickets(
+                    t, concurrentEventId, new HashMap<>(), Map.of("floor", 2)).getValue();
+            tokenToOrderId.put(t, oid);
+        }
+
+        ExecutorService pool = Executors.newFixedThreadPool(usersCount);
+        CountDownLatch start = new CountDownLatch(1);
+        Map<String, Future<Response<ActiveOrderDTO>>> futures = new HashMap<>();
+
+        for (String t : tokens) {
+            futures.put(t, pool.submit(() -> {
+                start.await();
+                return service.memberProceedAnActiveOrder(t);
+            }));
+        }
+        start.countDown();
+
+        for (int i = 0; i < usersCount; i++) {
+            String t = tokens.get(i);
+            Response<ActiveOrderDTO> r = futures.get(t).get();
+            assertNotNull(r.getValue(), "user " + i + " got null: " + r.getMessage());
+            assertEquals(tokenToOrderId.get(t), r.getValue().getId(),
+                    "user " + i + " saw a different order than their own");
+            assertEquals(userIds.get(i), r.getValue().getUserId(),
+                    "user " + i + " saw another user's userId — leakage between threads");
+        }
+        pool.shutdown();
     }
 
 }
