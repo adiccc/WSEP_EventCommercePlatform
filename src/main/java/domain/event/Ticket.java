@@ -13,6 +13,11 @@ public abstract class Ticket {
         this.status = AVAILABLE;
     }
 
+    public Ticket(int ticketId, TicketStatus status) {
+        this.ticketId = ticketId;
+        this.status = status;
+    }
+
     public int getTicketId() {
         return ticketId;
     }

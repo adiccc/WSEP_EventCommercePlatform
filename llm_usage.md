@@ -8,8 +8,6 @@
 
 ---
 
-
-
 ## Feature / Component: Acceptance Tests and Test Naming
 
 - Purpose of LLM use:
@@ -131,4 +129,44 @@
 - Final understanding (brief explanation in your own words):
   - A good domain model delegates responsibilities appropriately: The `Event` manages the overall lifecycle, the `EventMap` orchestrates the layout, and individual `Zones` enforce their specific capacity and seating rules. Furthermore, from a performance perspective, tracking numerical capacity is far more scalable than instantiating thousands of idle `Ticket` objects in memory before they are even sold.
 
+---
+
+## Feature / Component: Venue Map Architecture and Ticket Management
+
+- Purpose of LLM use:
+  - Design assistance and discussion of architectural trade-offs regarding entity relationships (Map, Zone, Ticket) and memory management.
+- Summary of prompt(s):
+  - Asked about the best Object-Oriented way to model the venue map. Discussed whether a dedicated `Zone` class is needed, the differences between seating and standing areas, and who should be responsible for holding the tickets (the Event, the Map, or the Zone).
+  - Asked about the performance implications of pre-generating all tickets versus creating them dynamically.
+- Output received (short description):
+  - Discussed Domain-Driven Design (DDD) principles. Suggested a hierarchy where an `EventMap` aggregates `Zone` objects, with inheritance for specific types like `SeatingZone` and `StandingZone`.
+  - Highlighted the trade-off between pre-allocating thousands of `Ticket` objects in memory (heavy and inefficient) versus tracking `capacity` at the `Zone` level and generating `Ticket` entities only upon a successful purchase.
+- Files / components affected:
+  - Domain layer classes related to mapping: `EventMap`, `Zone`, `SeatingZone`, `StandingZone`, `Ticket`.
+- Modifications made:
+  - Implemented a polymorphic `Zone` hierarchy. Decided that `Zones` will manage their own capacity and occupancy rules, and `Tickets` will be generated during the Zone flow, pre-initialized in a list.
+- Initial gaps in understanding (if any):
+  - How to effectively translate real-world stadium structures into software models without violating the Single Responsibility Principle, and how to manage the memory footprint of large-scale events (e.g., 50,000 attendees).
+- Final understanding (brief explanation in your own words):
+  - A good domain model delegates responsibilities appropriately: The `Event` manages the overall lifecycle, the `EventMap` orchestrates the layout, and individual `Zones` enforce their specific capacity and seating rules. Furthermore, from a performance perspective, tracking numerical capacity is far more scalable than instantiating thousands of idle `Ticket` objects in memory before they are even sold.
+
+---
+
+## Feature / Component: Multi-Zone Ticket Selection Architecture
+
+- Purpose of LLM use:
+  - Design assistance in evaluating the trade-offs between single-zone and multi-zone ticket selection within a single order.
+- Summary of prompt(s):
+  - Discussed whether to allow users to select tickets from multiple zones (e.g., seating and standing) in one transaction and how to manage the data retrieval and validation for such a flow.
+- Output received (short description):
+ - Analysis of how multi-zone selection improves user experience by avoiding multiple checkout processes, while requiring a more robust coordination between different zone types.
+- Files / components affected:
+  - ActiveOrderService, Event, EventMap, StandingZone, SeatingZone.
+- Modifications made:
+  - Implemented logic in ActiveOrderService to aggregate selections from different Zone implementations within a single EventMap context.
+- Initial gaps in understanding (if any):
+  - How to structure the EventMap to efficiently delegate availability checks to both SeatingZone and StandingZone simultaneously.
+- Final understanding (brief explanation in your own words):
+  - Supporting multi-zone selection requires the EventMap to act as an orchestrator. By allowing a single ActiveOrder to reference multiple zones, we reduce friction for the user, even though it requires more careful validation to ensure capacity is correctly deducted across different zone types.
+  
 ---

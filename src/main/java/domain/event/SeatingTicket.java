@@ -11,7 +11,7 @@ public class SeatingTicket extends Ticket {
         this.col = col;
     }
     public SeatingTicket(SeatingTicket seatingTicket) {
-        super(seatingTicket.getTicketId());
+        super(seatingTicket.getTicketId(), seatingTicket.getStatus());
         this.col = seatingTicket.col;
         this.row = seatingTicket.row;
     }

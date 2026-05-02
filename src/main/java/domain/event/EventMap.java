@@ -96,4 +96,17 @@ public class EventMap {
             z.releaseTickets(ticketIds);
         }
     }
+
+    public int countStandingInZone(String zone, List<Integer> currentTickets) {
+        for (Zone z : zones) {
+            if (z.getName().equals(zone)) {
+                if (z instanceof StandingZone) {
+                    return ((StandingZone) z).countTickets(currentTickets);
+                } else {
+                    throw new IllegalArgumentException("Zone is not a standing zone: " + zone);
+                }
+            }
+        }
+        throw new IllegalArgumentException("Zone does not exist: " + zone);
+    }
 }

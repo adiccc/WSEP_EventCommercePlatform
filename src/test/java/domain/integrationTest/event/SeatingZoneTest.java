@@ -7,10 +7,7 @@ import domain.dto.SeatingTicketDTO; // ייבוא ה-DTO הנכון
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -190,5 +187,100 @@ class SeatingZoneTest {
         Collection<Integer> secondLock = seatingZone.bookTickets(firstBatch);
         assertEquals(2, secondLock.size(),
                 "After release, exactly the same seats must be lockable again");
+    }
+
+    @Test
+    void GivenSingleSeat_WhenFindSeatingTicketIds_ThenReturnsOneId() {
+        Collection<Integer> result = seatingZone.findSeatingTicketIds(
+                List.of(new SeatingTicketDTO(0, 0)));
+
+        assertEquals(1, result.size());
+    }
+
+    @Test
+    void GivenAllSeatsRequested_WhenFindSeatingTicketIds_ThenReturnsAllSixDistinct() {
+        List<SeatingTicketDTO> all = new ArrayList<>();
+        for (int r = 0; r < 2; r++)
+            for (int c = 0; c < 3; c++)
+                all.add(new SeatingTicketDTO(r, c));
+
+        Collection<Integer> result = seatingZone.findSeatingTicketIds(all);
+
+        assertEquals(6, result.size());
+        assertEquals(6, new HashSet<>(result).size(), "ticket IDs must be unique across all seats");
+    }
+
+    @Test
+    void GivenMultipleValidSeats_WhenFindSeatingTicketIds_ThenReturnsMatchingIds() {
+        Collection<Integer> result = seatingZone.findSeatingTicketIds(List.of(
+                new SeatingTicketDTO(0, 1),
+                new SeatingTicketDTO(1, 2)));
+
+        assertEquals(2, result.size());
+        assertEquals(2, new HashSet<>(result).size());
+    }
+
+    @Test
+    void GivenReturnedIdsMatchTicketMap_WhenFindSeatingTicketIds_ThenIdsCorrespondToCorrectSeats() {
+        // Stronger assertion: the returned IDs must equal what the ticketMap holds for those seats.
+        int expectedId00 = seatingZone.getTicketMap().get("0-0").getTicketId();
+        int expectedId12 = seatingZone.getTicketMap().get("1-2").getTicketId();
+
+        Collection<Integer> result = seatingZone.findSeatingTicketIds(List.of(
+                new SeatingTicketDTO(0, 0),
+                new SeatingTicketDTO(1, 2)));
+
+        assertTrue(result.contains(expectedId00));
+        assertTrue(result.contains(expectedId12));
+    }
+
+    @Test
+    void GivenEmptyInput_WhenFindSeatingTicketIds_ThenReturnsEmpty() {
+        Collection<Integer> result = seatingZone.findSeatingTicketIds(List.of());
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void GivenSeatOutsideRows_WhenFindSeatingTicketIds_ThenThrows() {
+        // zone is 2 rows (0,1), so row 2 doesn't exist
+        assertThrows(IllegalArgumentException.class,
+                () -> seatingZone.findSeatingTicketIds(List.of(new SeatingTicketDTO(2, 0))));
+    }
+
+    @Test
+    void GivenSeatOutsideCols_WhenFindSeatingTicketIds_ThenThrows() {
+        // zone is 3 cols (0,1,2), so col 3 doesn't exist
+        assertThrows(IllegalArgumentException.class,
+                () -> seatingZone.findSeatingTicketIds(List.of(new SeatingTicketDTO(0, 3))));
+    }
+
+    @Test
+    void GivenNegativeCoordinates_WhenFindSeatingTicketIds_ThenThrows() {
+        assertThrows(IllegalArgumentException.class,
+                () -> seatingZone.findSeatingTicketIds(List.of(new SeatingTicketDTO(-1, 0))));
+    }
+
+    @Test
+    void GivenMixOfValidAndInvalid_WhenFindSeatingTicketIds_ThenThrowsAndReportsAll() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> seatingZone.findSeatingTicketIds(List.of(
+                        new SeatingTicketDTO(0, 0),    // valid
+                        new SeatingTicketDTO(99, 99))));// invalid
+        assertTrue(ex.getMessage().toLowerCase().contains("not found"),
+                "got: " + ex.getMessage());
+    }
+
+    @Test
+    void GivenDuplicateSeats_WhenFindSeatingTicketIds_ThenReturnsDuplicateIds() {
+        // Honest test of current behavior: the method does not de-duplicate.
+        // Asking for the same seat twice returns its ID twice, and size matches input size,
+        // so no exception is thrown. If you decide that's a bug, change to assertThrows.
+        Collection<Integer> result = seatingZone.findSeatingTicketIds(List.of(
+                new SeatingTicketDTO(0, 0),
+                new SeatingTicketDTO(0, 0)));
+
+        assertEquals(2, result.size());
+        assertEquals(1, new HashSet<>(result).size(), "both entries should resolve to the same ID");
     }
 }

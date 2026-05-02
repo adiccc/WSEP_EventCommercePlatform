@@ -58,7 +58,7 @@ public class SeatingZone extends Zone {
 
     public Collection<Integer> bookTickets(List<SeatingTicketDTO> seats) {
         List<Integer> bookedTicketIds = new ArrayList<>();
-        for(SeatingTicketDTO seat : seats) {
+        for (SeatingTicketDTO seat : seats) {
             for (SeatingTicket next : ticketMap.values()) {
                 if (next.getRow() == seat.getRow() && next.getCol() == seat.getCol()) {
                     if (next.getStatus() == TicketStatus.AVAILABLE) {
@@ -100,5 +100,20 @@ public class SeatingZone extends Zone {
 
     public AtomicInteger getTicketIdGenerator() {
         return ticketIdGenerator;
+    }
+
+    public Collection<Integer> findSeatingTicketIds(List<SeatingTicketDTO> seats) {
+        List<Integer> seatingTicketIds = new ArrayList<>();
+        for (SeatingTicketDTO seat : seats) {
+            for (SeatingTicket next : ticketMap.values()) {
+                if (next.getRow() == seat.getRow() && next.getCol() == seat.getCol()) {
+                    seatingTicketIds.add(next.getTicketId());
+                }
+            }
+        }
+        if (seatingTicketIds.size() != seats.size()) {
+            throw new IllegalArgumentException("Some seats were not found in the zone.");
+        }
+        return seatingTicketIds;
     }
 }
