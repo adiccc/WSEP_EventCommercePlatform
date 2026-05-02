@@ -17,6 +17,7 @@ import domain.policy.PurchasePolicy;
 import domain.user.Founder;
 import domain.user.IUserRepo;
 import domain.user.Member;
+import domain.user.Owner;
 import domain.user.User;
 
 public class CompanyService {
@@ -446,6 +447,97 @@ public class CompanyService {
                 throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in updateManagerPermissions: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Boolean> requestAppointOwner(String token, int companyId, int appointeeId) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("requestAppointOwner called for companyId: " + companyId + ", appointeeId: " + appointeeId);
+            try {
+                if (!auth.isLoggedIn(token).getValue()) {
+                    logger.warning("requestAppointOwner failed: user is not logged in");
+                    return Response.error("User is not logged in");
+                }
+                int appointerId = auth.getUserId(token).getValue();
+                if (appointerId == -1) {
+                    logger.warning("requestAppointOwner failed: invalid or expired token");
+                    return Response.error("Invalid or expired token");
+                }
+                Company company;
+                try {
+                    company = companyRepo.findById(companyId);
+                } catch (NoSuchElementException e) {
+                    logger.warning("requestAppointOwner failed: company not found, id: " + companyId);
+                    return Response.error("Company not found");
+                }
+                Member appointee = null;
+                try {
+                    appointee = userRepo.findById(appointeeId);
+                } catch (NoSuchElementException ignored) {}
+                if (appointee == null) {
+                    logger.warning("requestAppointOwner failed: appointee " + appointeeId + " not found");
+                    return Response.error("Only a registered subscriber can be appointed");
+                }
+                company.requestAppointOwner(appointerId, appointeeId);
+                companyRepo.store(company);
+                logger.info("requestAppointOwner succeeded: pending appointment created for " + appointeeId);
+                return Response.ok(true);
+            } catch (NoSuchElementException e) {
+                logger.warning("requestAppointOwner failed: unexpected element not found: " + e.getMessage());
+                return Response.error("Company not found");
+            } catch (SecurityException e) {
+                logger.warning("requestAppointOwner unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalStateException e) {
+                logger.warning("requestAppointOwner invalid state: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in requestAppointOwner: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Boolean> respondToOwnerAppointment(String token, int companyId, boolean accept) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("respondToOwnerAppointment called for companyId: " + companyId + ", accept: " + accept);
+            try {
+                if (!auth.isLoggedIn(token).getValue()) {
+                    logger.warning("respondToOwnerAppointment failed: user is not logged in");
+                    return Response.error("User is not logged in");
+                }
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
+                    logger.warning("respondToOwnerAppointment failed: invalid or expired token");
+                    return Response.error("Invalid or expired token");
+                }
+                Company company = companyRepo.findById(companyId);
+                if (!company.isPendingOwner(userId)) {
+                    logger.warning("respondToOwnerAppointment failed: no pending appointment for user " + userId);
+                    return Response.error("No pending owner appointment found for this user");
+                }
+                company.respondOwnerAppointment(userId, accept);
+                if (accept) {
+                    Member member = userRepo.findById(userId);
+                    member.addRole(new Owner(companyId));
+                    userRepo.store(member);
+                    logger.info("respondToOwnerAppointment: user " + userId + " accepted and became owner of company " + companyId);
+                } else {
+                    logger.info("respondToOwnerAppointment: user " + userId + " rejected appointment for company " + companyId);
+                }
+                companyRepo.store(company);
+                return Response.ok(accept);
+            } catch (NoSuchElementException e) {
+                logger.warning("respondToOwnerAppointment failed: company not found, id: " + companyId);
+                return Response.error("Company not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in respondToOwnerAppointment: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
         });

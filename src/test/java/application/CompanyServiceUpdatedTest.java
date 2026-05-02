@@ -599,6 +599,164 @@ class CompanyServiceUpdatedTest {
         assertNull(response.getValue());
     }
 
+    // ===================== II.4.X Request Appoint Owner =====================
+
+    @Test
+    void GivenLoggedOutOwner_WhenRequestAppointOwner_ThenNotLoggedInError() {
+        auth.logout(OWNER_TOKEN);
+        Response<Boolean> response = service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+        assertTrue(response.isError());
+        assertEquals("User is not logged in", response.getMessage());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenRequestAppointOwner_ThenInvalidTokenError() {
+        Response<Boolean> response = service.requestAppointOwner("invalid-token", COMPANY_ID, OTHER_USER_ID);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNonExistentCompany_WhenRequestAppointOwner_ThenCompanyNotFoundError() {
+        Response<Boolean> response = service.requestAppointOwner(OWNER_TOKEN, 9999, OTHER_USER_ID);
+        assertTrue(response.isError());
+        assertEquals("Company not found", response.getMessage());
+    }
+
+    @Test
+    void GivenNonOwner_WhenRequestAppointOwner_ThenUnauthorizedError() {
+        Response<Boolean> response = service.requestAppointOwner(OTHER_TOKEN, COMPANY_ID, MANAGER_ID);
+        assertTrue(response.isError());
+        assertEquals("User does not have the required owner permissions", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistentAppointee_WhenRequestAppointOwner_ThenSubscriberNotFoundError() {
+        Response<Boolean> response = service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, 99999);
+        assertTrue(response.isError());
+        assertEquals("Only a registered subscriber can be appointed", response.getMessage());
+    }
+
+    @Test
+    void GivenAlreadyOwnerAppointee_WhenRequestAppointOwner_ThenAlreadyOwnerError() {
+        Response<Boolean> response = service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OWNER_ID);
+        assertTrue(response.isError());
+        assertEquals("Subscriber is already appointed as owner in this company", response.getMessage());
+    }
+
+    @Test
+    void GivenAlreadyPendingAppointee_WhenRequestAppointOwner_ThenAlreadyPendingError() {
+        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+        Response<Boolean> response = service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+        assertTrue(response.isError());
+        assertEquals("Subscriber already has a pending owner appointment", response.getMessage());
+    }
+
+    @Test
+    void GivenValidOwnerAndSubscriber_WhenRequestAppointOwner_ThenPendingAppointmentCreated() {
+        Response<Boolean> response = service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+        assertFalse(response.isError(), response.getMessage());
+        assertTrue(response.getValue());
+        assertTrue(companyRepo.findById(COMPANY_ID).isPendingOwner(OTHER_USER_ID));
+    }
+
+    // ===================== II.4.X Respond to Owner Appointment =====================
+
+    @Test
+    void GivenLoggedOutUser_WhenRespondToOwnerAppointment_ThenNotLoggedInError() {
+        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+        auth.logout(OTHER_TOKEN);
+        Response<Boolean> response = service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+        assertTrue(response.isError());
+        assertEquals("User is not logged in", response.getMessage());
+    }
+
+    @Test
+    void GivenNoPendingAppointment_WhenRespondToOwnerAppointment_ThenNoPendingError() {
+        Response<Boolean> response = service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+        assertTrue(response.isError());
+        assertEquals("No pending owner appointment found for this user", response.getMessage());
+    }
+
+    @Test
+    void GivenPendingAppointment_WhenAcceptOwnerAppointment_ThenUserBecomesOwner() {
+        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+        Response<Boolean> response = service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+        assertFalse(response.isError(), response.getMessage());
+        assertTrue(companyRepo.findById(COMPANY_ID).isOwner(OTHER_USER_ID));
+        assertFalse(companyRepo.findById(COMPANY_ID).isPendingOwner(OTHER_USER_ID));
+    }
+
+    @Test
+    void GivenPendingAppointment_WhenRejectOwnerAppointment_ThenAppointmentCancelled() {
+        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+        Response<Boolean> response = service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, false);
+        assertFalse(response.isError(), response.getMessage());
+        assertFalse(companyRepo.findById(COMPANY_ID).isOwner(OTHER_USER_ID));
+        assertFalse(companyRepo.findById(COMPANY_ID).isPendingOwner(OTHER_USER_ID));
+    }
+
+    // ===================== Concurrency: Appoint Owner =====================
+
+    @Test
+    void GivenTwoThreadsRaceToAppointSameSubscriber_WhenRequestAppointOwner_ThenOnlyOneSucceeds() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+        });
+
+        start.countDown();
+
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = 0;
+        int failed  = 0;
+        if (!r1.isError()) success++; else failed++;
+        if (!r2.isError()) success++; else failed++;
+
+        assertEquals(1, success, "Only one appointment request for the same subscriber should succeed");
+        assertEquals(1, failed,  "The second request should fail with already-pending error");
+    }
+
+    @Test
+    void GivenTwoThreadsRaceToRespondToSamePendingAppointment_WhenRespondToOwnerAppointment_ThenOnlyOneSucceeds() throws Exception {
+        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+        });
+
+        start.countDown();
+
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = 0;
+        int failed  = 0;
+        if (!r1.isError()) success++; else failed++;
+        if (!r2.isError()) success++; else failed++;
+
+        assertEquals(1, success, "Only one response to a pending appointment should succeed");
+        assertEquals(1, failed,  "The second response should fail — no pending appointment remains");
+    }
+
     // ===================== Concurrency: Create Production Company =====================
 
     @Test

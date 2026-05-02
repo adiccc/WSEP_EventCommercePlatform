@@ -194,6 +194,7 @@ class CompanyIntegrationTest {
         int newOwnerId = 500;
         Company stored = companyRepo.findById(COMPANY_ID);
         stored.getCompanyPermission().addOwner(newOwnerId);
+        stored.getCompanyPermission().OwnerAppointeeRespond(newOwnerId, true);
         companyRepo.store(stored);
 
         Company updated = companyRepo.findById(COMPANY_ID);

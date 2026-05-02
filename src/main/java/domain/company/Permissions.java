@@ -41,10 +41,17 @@ public class Permissions {
         pandingOwners.add(ownerId);
     }
 
+    public boolean isPendingOwner(int userId) {
+        return pandingOwners.contains(userId);
+    }
+
     public void OwnerAppointeeRespond(int ownerId, boolean appointee) {
-        pandingOwners.remove(ownerId);
+        pandingOwners.remove(Integer.valueOf(ownerId));
         if(appointee) {
             ownerIds.add(ownerId);
+            if(isManager(ownerId)){
+                removeManagerFromTree(ownerId);
+            }
         }
     }
 
