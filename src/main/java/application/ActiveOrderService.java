@@ -12,7 +12,6 @@ import domain.dto.SeatingTicketDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
-import domain.event.*;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
@@ -205,6 +204,7 @@ public class ActiveOrderService {
             ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(identifier).getValue(), eventId, tickets,orderExpireMinutes);
             activeOrderRepo.store(newActiveOrder);
             logger.log(Level.INFO, "Tickets selected successfully");
+            newActiveOrder.proceedToCheckout();
             return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Event not found: " + e.getMessage());

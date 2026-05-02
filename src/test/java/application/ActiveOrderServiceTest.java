@@ -38,7 +38,6 @@ class ActiveOrderServiceTest {
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
 
-    private int userId1;
     private String validToken;
     private Integer eventId;
     private Integer concurrentEventId;

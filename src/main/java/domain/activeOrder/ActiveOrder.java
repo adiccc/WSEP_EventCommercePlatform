@@ -7,11 +7,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ActiveOrder {
-    private int orderId;
-    private int userId;
-    private Integer eventId;
+    private final int orderId;
+    private final int userId;
+    private final Integer eventId;
     private List<Integer> tickets;
-    private LocalDateTime expireTime;
+    private final LocalDateTime expireTime;
     private long version;
     private STAGE stage;
 
@@ -76,12 +76,14 @@ public class ActiveOrder {
     }
 
     public void proceedToCheckout() {
+        // todo: call when proceed to checkout
         if (stage == STAGE.SELECTING_TICKETS) {
             stage = STAGE.CHECKING_OUT;
         }
     }
 
     public void returnToSelecting() {
+        // todo: call when return to selecting tickets from checkout
         if (stage == STAGE.CHECKING_OUT) {
             stage = STAGE.SELECTING_TICKETS;
         }

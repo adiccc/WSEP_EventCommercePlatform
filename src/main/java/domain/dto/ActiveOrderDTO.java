@@ -3,18 +3,17 @@ package domain.dto;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.STAGE;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 
 public class ActiveOrderDTO {
-    private int orderId;
-    private int userId;
-    private Integer eventId;
-    private List<Integer> tickets;
-    private LocalDateTime expireTime;
-    private long version;
-    private STAGE stage;
+    private final int orderId;
+    private final int userId;
+    private final Integer eventId;
+    private final List<Integer> tickets;
+    private final LocalDateTime expireTime;
+    private final long version;
+    private final STAGE stage;
 
 
     public ActiveOrderDTO(int orderId, int userId, Integer eventId, List<Integer> tickets, LocalDateTime expireTime, long version, STAGE stage) {
