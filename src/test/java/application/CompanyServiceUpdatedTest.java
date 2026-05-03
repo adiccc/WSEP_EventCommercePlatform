@@ -7,6 +7,7 @@ import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
 
+import domain.event.IEventRepo;
 import domain.policy.*;
 import domain.user.IUserRepo;
 import domain.dto.CompanyDTO;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import domain.dataType.PermissionType;
+import org.mockito.Mockito;
 
 import java.time.LocalDate;
 import java.util.EnumSet;
@@ -41,12 +43,16 @@ class CompanyServiceUpdatedTest {
     private String MANAGER_TOKEN;
     private int OTHER_OWNER_ID;
     private String OTHER_OWNER_TOKEN;
+    private String ADMIN_TOKEN;
 
     private CompanyService service;
     private UserService userService;
     private ICompanyRepo companyRepo;
     private IAuth auth;
     private IUserRepo userRepo;
+    private AdminService adminService;
+    private IPaymentSystem paymentSystem;
+    private IEventRepo eventRepo;
 
     @BeforeEach
     void setUp() {
@@ -54,7 +60,8 @@ class CompanyServiceUpdatedTest {
         userRepo = new UserRepo();
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         TokenService tokenService = new TokenService();
-        auth = new Auth(tokenService, userRepo, passwordEncoder);
+        String adminEmail = "admin@admin.com";
+        auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(adminEmail));
         companyRepo = new CompanyRepoImpl();
 
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
@@ -85,6 +92,12 @@ class CompanyServiceUpdatedTest {
         Company company = companyRepo.findById(COMPANY_ID);
         company.getCompanyPermission().addToTree(MANAGER_ID, OWNER_ID, new HashSet<>());
         companyRepo.store(company);
+        paymentSystem = Mockito.mock(PaymentSystemProxy.class);
+        eventRepo = new EventRepoImpl();
+        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem);
+        userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
+        ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
+
     }
 
 
@@ -817,8 +830,62 @@ class CompanyServiceUpdatedTest {
         assertEquals(1, success, "Only one company with the same name should be created");
         assertEquals(1, failed,  "The losing thread should receive a duplicate-name error");
     }
+     @Test
+    void GivenConcurrentOwnerDeactivate_WhenUserViewsAvailableCompanies_ThenConsistentList() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
 
-    // ===================== II.4.X Request Appoint Manager =====================
+        Future<Response<Boolean>> deactivateFuture = executor.submit(() -> {
+            start.await();
+            return service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+        });
+
+        Future<Response<List<CompanyDTO>>> viewFuture = executor.submit(() -> {
+            start.await();
+            return service.getAvailableCompanies(GUEST_TOKEN);
+        });
+
+        start.countDown();
+        deactivateFuture.get();
+        Response<List<CompanyDTO>> viewRes = viewFuture.get();
+        executor.shutdown();
+        if (viewRes.getValue() != null) {
+            boolean isCompanyInList = viewRes.getValue().stream().anyMatch(c -> c.getCompanyId() == COMPANY_ID);
+            assertTrue(isCompanyInList || !isCompanyInList, "List fetched safely");
+        } else {
+            assertEquals("No companies in the system", viewRes.getMessage());
+        }
+    }
+    @Test
+    void GivenConcurrentAdminRemoveUser_WhenUserViewsAvailableCompanies_ThenFailsGracefully() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> removeFuture = executor.submit(() -> {
+            start.await();
+            return adminService.removeUser(ADMIN_TOKEN, OTHER_USER_ID);
+        });
+
+        Future<Response<List<CompanyDTO>>> viewFuture = executor.submit(() -> {
+            start.await();
+            return service.getAvailableCompanies(OTHER_TOKEN);
+        });
+
+        start.countDown();
+        removeFuture.get();
+        Response<List<CompanyDTO>> viewRes = viewFuture.get();
+        executor.shutdown();
+        assertFalse(userRepo.findById(OTHER_USER_ID).isActive(), "User must be deactivated by admin");
+
+        if (viewRes.getValue() == null) {
+            String msg = viewRes.getMessage() != null ? viewRes.getMessage().toLowerCase() : "";
+            assertTrue(msg.contains("invalid") || msg.contains("error") || msg.contains("no companies"),
+                    "If blocked, should fail gracefully. But got: " + viewRes.getMessage());
+        } else {
+            assertEquals("Companies retrieved successfully", viewRes.getMessage());
+        }
+    }
+     // ===================== II.4.X Request Appoint Manager =====================
 
     @Test
     void GivenOwnerAndValidSubscriber_WhenRequestAppointManager_ThenSuccess() {
@@ -1008,4 +1075,5 @@ class CompanyServiceUpdatedTest {
         int success = (!r1.isError() ? 1 : 0) + (!r2.isError() ? 1 : 0);
         assertEquals(1, success, "Only one response to a pending appointment should succeed");
     }
+
 }

@@ -61,14 +61,13 @@ public class Auth implements IAuth {
         if (token == null || token.isBlank()) {
             return new Response<>(false, "Token is missing or empty");
         }
-        if(tokensLoggedOut.containsKey(token)) {
-            logger.warning("Logout attempt failed: member is in the logged out tokens list") ;
-            return new Response<>(false, "Cannot log out, user is Already logged out");
-        }
             try{
                 Date date = tokenService.extractExpirationDate(token);
                 int userId = getUserId(token).getValue();
-                tokensLoggedOut.put(token, date);
+                if (tokensLoggedOut.putIfAbsent(token, date) != null) {
+                    logger.warning("Logout attempt failed: member is in the logged out tokens list") ;
+                    return new Response<>(false, "Cannot log out, user is Already logged out");
+                }
                 cleanExpiredLoggedOutTokens();
                 logger.info("Logout successful for username: " + userId);
                 return new Response<>(true, "Logout successful");
@@ -221,4 +220,6 @@ public class Auth implements IAuth {
             logger.severe("User is not found");
             return new Response<>(null, "User is not found");
         }
-}}
+    }
+
+}

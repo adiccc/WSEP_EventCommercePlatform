@@ -56,4 +56,5 @@ public class EventDTO {
     public String getName() {
         return eventName;
     }
+
 }
