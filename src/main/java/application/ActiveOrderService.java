@@ -80,7 +80,6 @@ public class ActiveOrderService {
             logger.log(Level.INFO, "enterEventPurchase called");
             cleanupExpiredOrders();
 
-
             // check valid token
             String role = auth.getRole(token).getValue();
             if(role == null){
@@ -90,7 +89,7 @@ public class ActiveOrderService {
 
             try {
                 Event e = this.eventRepo.findById(eventId);
-
+                this.activeOrderRepo.alreadyHasActiveOrder(auth.getUserId(token).getValue(), eventId);
                 if (e.getCompanyId() != companyId) {
                     logger.log(Level.SEVERE, "The selected event does not belong to the company");
                     return new Response<>(null, "The selected event does not belong to the company");
@@ -127,9 +126,10 @@ public class ActiveOrderService {
                     return new Response<>(null,
                             "Event is full, user added to waiting queue. Position: " + position);
                 }
-
                 int orderId = idGenerator.getAndIncrement();
                 ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(token).getValue(), eventId, new ArrayList<>());
+                logger.log(Level.SEVERE, "Creating active order with ID: " + newActiveOrder.getId() + " for user ID: " + newActiveOrder.getUserId() + " and event ID: " + newActiveOrder.getEventId());
+                eventRepo.store(e);
                 activeOrderRepo.store(newActiveOrder);
 
                 logger.log(Level.INFO, "Event map retrieved successfully");
@@ -137,7 +137,10 @@ public class ActiveOrderService {
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(null, "Event not found");
-            } catch (OptimisticLockingFailureException e) {
+            } catch (IllegalStateException e) {
+                logger.log(Level.SEVERE, e.getMessage());
+                return new Response<>(null, e.getMessage());
+            }catch (OptimisticLockingFailureException e) {
                 throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to enter event purchase : " + e.getMessage());
@@ -175,13 +178,13 @@ public class ActiveOrderService {
     public Response<Integer>userSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return RetryHelper.executeWithRetry(()->{
         logger.log(Level.INFO, "userSelectTickets called");
-        if(identifier == null){
+        String role = auth.getRole(identifier).getValue();
+        if(role == null){
             logger.log(Level.SEVERE, "identifier is null");
             return new Response<>(null, "Invalid identifier supplied");
         }
-        String role = auth.getRole(identifier).getValue();
+
         try {
-            this.activeOrderRepo.alreadyHasActiveOrder(auth.getUserId(identifier).getValue(), eventId);
             int totalSeatingTickets = seatingZones.values().stream()
                     .mapToInt(List::size)
                     .sum();
@@ -201,7 +204,6 @@ public class ActiveOrderService {
             newActiveOrder.setTickets(tickets);
             activeOrderRepo.store(newActiveOrder);
             logger.log(Level.INFO, "Tickets selected successfully");
-            newActiveOrder.proceedToCheckout();
             return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Event not found: " + e.getMessage());

@@ -11,7 +11,7 @@ public class ActiveOrder {
     private final int userId;
     private final Integer eventId;
     private List<Integer> tickets;
-    private final LocalDateTime createdAt;
+    private LocalDateTime createdAt;
     private LocalDateTime checkoutStartedAt;
     private long version;
     private STAGE stage;
@@ -118,5 +118,13 @@ public class ActiveOrder {
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public void forceExpireForTest(LocalDateTime now) {
+        if (stage == STAGE.VIEWING_MAP) {
+            this.createdAt = now.minusMinutes(6);
+        } else if (stage == STAGE.SELECTING_TICKETS) {
+            this.checkoutStartedAt = now.minusMinutes(11);
+        }
     }
 }

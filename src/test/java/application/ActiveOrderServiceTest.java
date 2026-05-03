@@ -270,7 +270,8 @@ class ActiveOrderServiceTest {
         }
 
         executor.shutdown();
-
+        assertEquals(activeOrderRepo.countActiveOrdersForEvent(concurrentEventId), capacity,
+                "Active orders in repo should match successful map retrievals");
         assertEquals(capacity, success, "Exactly capacity users should receive the event map");
         assertEquals(overflow, queued, "All overflow users should be added to the waiting queue");
         assertEquals(usersCount, success + queued, "Every request must result in either a map or a queue position");
@@ -498,7 +499,7 @@ class ActiveOrderServiceTest {
                 start.await();
                 Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
                 Map<String, Integer> standing = Map.of("floor", ticketsPerUser);
-                service.enterEventPurchase(validToken, companyId, concurrentEventId);
+                service.enterEventPurchase(t, companyId, concurrentEventId);
                 return service.userSelectTickets(t, concurrentEventId, seating, standing);
             }));
         }
@@ -546,7 +547,7 @@ class ActiveOrderServiceTest {
                 start.await();
                 Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
                 Map<String, Integer> standing = Map.of("floor", ticketsPerUser);
-                service.enterEventPurchase(validToken, companyId, concurrentEventId);
+                service.enterEventPurchase(t, companyId, concurrentEventId);
                 return service.userSelectTickets(t, concurrentEventId, seating, standing);
             }));
         }
@@ -595,7 +596,7 @@ class ActiveOrderServiceTest {
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 20));
         assertNotNull(initial.getValue(), "Booking failed: " + initial.getMessage());
         int orderId = initial.getValue();
-
+        forceExpireOrder(orderId);
         service.cleanupExpiredOrders();
 
         assertThrows(NoSuchElementException.class,
@@ -616,19 +617,9 @@ class ActiveOrderServiceTest {
     }
 
 
-    private void forceExpireOrder(int orderId) throws Exception {
+    private void forceExpireOrder(int orderId) {
         ActiveOrder order = activeOrderRepo.findById(orderId);
-
-        if (order.getTickets().isEmpty()) {
-            java.lang.reflect.Field createdAt = ActiveOrder.class.getDeclaredField("createdAt");
-            createdAt.setAccessible(true);
-            createdAt.set(order, LocalDateTime.now().minusMinutes(6));
-        } else {
-            java.lang.reflect.Field checkoutStartedAt = ActiveOrder.class.getDeclaredField("checkoutStartedAt");
-            checkoutStartedAt.setAccessible(true);
-            checkoutStartedAt.set(order, LocalDateTime.now().minusMinutes(11));
-        }
-
+        order.forceExpireForTest(LocalDateTime.now());
         activeOrderRepo.store(order);
     }
 
@@ -657,6 +648,7 @@ class ActiveOrderServiceTest {
         assertNotNull(activeOrderRepo.findById(orderB),
                 "Non-expired order B must remain after cleanup");
     }
+
     @Test
     void GivenMultipleExpiredOrders_WhenCleanupExpiredOrders_ThenAllExpiredAreRemoved() {
         int users = 5;
@@ -671,6 +663,7 @@ class ActiveOrderServiceTest {
             int id = service.userSelectTickets(
                     token, concurrentEventId, new HashMap<>(), Map.of("floor", 10)).getValue();
             orderIds.add(id);
+            forceExpireOrder(id);
         }
 
         service.cleanupExpiredOrders();
@@ -690,7 +683,7 @@ class ActiveOrderServiceTest {
                 validToken, concurrentEventId, seating, standing);
         assertNotNull(initial.getValue());
         int orderId = initial.getValue();
-
+        forceExpireOrder(orderId);
         service.cleanupExpiredOrders();
 
         assertThrows(NoSuchElementException.class,
@@ -765,7 +758,10 @@ class ActiveOrderServiceTest {
         Response<Integer> created = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
         assertNotNull(created.getValue());
+
         forceExpireOrder(created.getValue());
+        ActiveOrder reloaded = activeOrderRepo.findById(created.getValue());
+        assertTrue(reloaded.isExpired(LocalDateTime.now()));
 
         Response<ActiveOrderDTO> response = service.memberProceedAnActiveOrder(validToken);
 
@@ -896,6 +892,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenExpiredOrder_WhenEditTicketSelection_ThenExpiredError() throws Exception {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
         forceExpireOrder(orderId);
