@@ -24,7 +24,7 @@ public class ActiveOrder {
         this.version = 0;
         this.createdAt = LocalDateTime.now();
         this.checkoutStartedAt = null;
-        this.stage = STAGE.VIEWING_MAP;
+        this.stage = STAGE.SELECTING_TICKETS;
     }
 
     public ActiveOrder(ActiveOrder activeOrder) {
@@ -81,12 +81,8 @@ public class ActiveOrder {
     public void proceedToCheckout() {
         if (stage == STAGE.SELECTING_TICKETS) {
             stage = STAGE.CHECKING_OUT;
+            this.checkoutStartedAt = LocalDateTime.now();
         }
-    }
-
-    public void proceedToSelectingTickets() {
-        stage = STAGE.SELECTING_TICKETS;
-        this.checkoutStartedAt = LocalDateTime.now();
     }
 
     public void returnToSelecting() {
@@ -97,14 +93,12 @@ public class ActiveOrder {
     }
 
     public boolean isExpired(LocalDateTime now) {
-        if (stage == STAGE.VIEWING_MAP) {
+        if (stage == STAGE.SELECTING_TICKETS) {
             return createdAt.plusMinutes(5).isBefore(now);
         }
-
-        if (stage == STAGE.SELECTING_TICKETS) {
+        if (stage == STAGE.CHECKING_OUT) {
             return checkoutStartedAt.plusMinutes(10).isBefore(now);
         }
-
         return false;
     }
 
@@ -121,9 +115,9 @@ public class ActiveOrder {
     }
 
     public void forceExpireForTest(LocalDateTime now) {
-        if (stage == STAGE.VIEWING_MAP) {
+        if (stage == STAGE.SELECTING_TICKETS) {
             this.createdAt = now.minusMinutes(6);
-        } else if (stage == STAGE.SELECTING_TICKETS) {
+        } else if (stage == STAGE.CHECKING_OUT) {
             this.checkoutStartedAt = now.minusMinutes(11);
         }
     }

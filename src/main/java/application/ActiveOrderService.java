@@ -207,8 +207,8 @@ public class ActiveOrderService {
                 logger.log(Level.SEVERE, "Active order not found for user: " + auth.getUserId(identifier).getValue());
                 return new Response<>(null, "Active order not found for user");
             }
-            newActiveOrder.proceedToSelectingTickets();
             newActiveOrder.setTickets(tickets);
+            newActiveOrder.proceedToCheckout();
             activeOrderRepo.store(newActiveOrder);
             logger.log(Level.INFO, "Tickets selected successfully");
             return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");

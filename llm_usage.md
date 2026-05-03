@@ -172,6 +172,7 @@
 ---
 
 ## Feature / Component: Active Order Lifecycle and TTL Management
+
 - Purpose of LLM use:
   - Design assistance and validation of timeout behavior for active orders, including cleanup timing, and lifecycle transitions between reservation stages.
 - Summary of prompt(s):
@@ -194,6 +195,7 @@
 ---
 
 ## Feature / Component: Event Search Consistency Under Concurrent Updates
+
 - Purpose of LLM use:
   - Validate search behavior under concurrent modifications and design reliable test coverage for event visibility during simultaneous reads and writes.
 - Summary of prompt(s):
@@ -215,3 +217,23 @@
   - In concurrent systems, consistency does not always mean identical results across runs. A correct concurrent search guarantees valid states: results may differ depending on timing, but they must never be partially corrupted, stale in impossible ways, or internally inconsistent.
 
 ---
+
+## Feature / Component: DTO and Filtering Design for Event Search
+
+- Purpose of LLM use:
+  - Design assistance for structuring DTOs used in event search and transferring category/location data across layers.
+- Summary of prompt(s):
+  - Asked how to model event filtering, including category, location, and search criteria.
+  - Asked how to represent category and geographical filtering as fields in DTO.
+- Output received (short description):
+  - Recommended keeping DTOs flat and purpose-specific, with filtering objects encapsulating category, location, and optional search constraints.
+  - Clarified the boundary between domain models and DTOs so filtering remains flexible without coupling external requests to internal structures.
+- Files / components affected:
+  - EventSearchFilter, Category and Geographical area DTOs, Event search flow in EventService.
+- Modifications made:
+  - Introduced dedicated Data Type for filtering input, Category and Geographical area.
+  - Refined service interfaces to accept explicit filter objects instead of overloaded parameter sets.
+- Initial gaps in understanding (if any):
+  - How much filtering logic should be encoded in DTOs versus domain services.
+- Final understanding (brief explanation in your own words):
+  - DTOs should model request intent. A good filtering DTO captures what the client wants to search by (category, area, constraints), while the domain remains responsible for interpreting and applying those filters. This keeps boundaries clean and makes the API easier to evolve.
