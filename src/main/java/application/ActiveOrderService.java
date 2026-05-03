@@ -199,7 +199,14 @@ public class ActiveOrderService {
             e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
             List<Integer> tickets = e.bookTickets(seatingZones,standingZones); // check here quantity and policy
             this.eventRepo.store(e);
-            ActiveOrder newActiveOrder = activeOrderRepo.findById(activeOrderRepo.findOrderByUserId(auth.getUserId(identifier).getValue()).getId());
+            ActiveOrder newActiveOrder;
+            try {
+                newActiveOrder = activeOrderRepo.findById(activeOrderRepo.findOrderByUserId(auth.getUserId(identifier).getValue()).getId());
+            }
+            catch (NoSuchElementException ex) {
+                logger.log(Level.SEVERE, "Active order not found for user: " + auth.getUserId(identifier).getValue());
+                return new Response<>(null, "Active order not found for user");
+            }
             newActiveOrder.proceedToSelectingTickets();
             newActiveOrder.setTickets(tickets);
             activeOrderRepo.store(newActiveOrder);

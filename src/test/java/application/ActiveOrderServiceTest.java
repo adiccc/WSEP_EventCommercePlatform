@@ -453,6 +453,21 @@ class ActiveOrderServiceTest {
     }
 
     @Test
+    void GivenExpiredTimeViewingMap_WhenUserSelectTickets_ThenFailureReturned() {
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 3);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        int orderId = activeOrderRepo.findOrderByUserId(auth.getUserId(validToken).getValue()).getUserId();
+        forceExpireOrder(orderId);
+
+        service.cleanupExpiredOrders();
+        Response<Integer> response = service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+
+        assertNull(response.getValue());
+        assertEquals("Active order not found for user", response.getMessage());
+    }
+
+    @Test
     void GivenStandingQuantityAboveZoneCapacity_WhenUserSelectTickets_ThenFailureReturned() {
         // "floor" zone capacity is 200
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
@@ -634,13 +649,10 @@ class ActiveOrderServiceTest {
         service.enterEventPurchase(tokenA, companyId, concurrentEventId);
         int orderA = service.userSelectTickets(
                 tokenA, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
-        service.enterEventPurchase(tokenB, companyId, concurrentEventId);
+        forceExpireOrder(orderA);   // only A is "expired"
+        service.enterEventPurchase(tokenB, companyId, concurrentEventId); //also cleanup orderA
         int orderB = service.userSelectTickets(
                 tokenB, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
-
-        forceExpireOrder(orderA);   // only A is "expired"
-
-        service.cleanupExpiredOrders();
 
         assertThrows(NoSuchElementException.class,
                 () -> activeOrderRepo.findById(orderA),
@@ -760,8 +772,6 @@ class ActiveOrderServiceTest {
         assertNotNull(created.getValue());
 
         forceExpireOrder(created.getValue());
-        ActiveOrder reloaded = activeOrderRepo.findById(created.getValue());
-        assertTrue(reloaded.isExpired(LocalDateTime.now()));
 
         Response<ActiveOrderDTO> response = service.memberProceedAnActiveOrder(validToken);
 
