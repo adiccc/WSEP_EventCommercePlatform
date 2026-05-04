@@ -236,7 +236,7 @@ public class Event {
     public void quantityExceedsPolicy(UserDTO user, int quantity) {
         int ticketsBoughtForEvent =0;
         for (Order order : orders) {
-            if (order.getUserId() == user.getUserId()) {
+            if (order.getUserIdentifier().equals(user.getEmail())) {
                 ticketsBoughtForEvent += order.getTickets().size();
             }
         }
@@ -263,7 +263,7 @@ public class Event {
     }
 
     //TODO : this implementation is for test only, this function should be implemented currectly
-    public void placeOrder(int userId,int orderId){
+    public void placeOrder(String userId,int orderId){
         orders.add(new Order(orderId,userId,-1,new ArrayList<>(),100.0,"order123"));
     }
 

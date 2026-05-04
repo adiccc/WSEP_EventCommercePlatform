@@ -9,7 +9,7 @@ import java.util.Map;
 
 public class ActiveOrderDTO {
     private final int orderId;
-    private final int userId;
+    private final String userIdentifier;
     private final Integer eventId;
     private final List<Integer> tickets;
     private final LocalDateTime createdAt;
@@ -18,9 +18,9 @@ public class ActiveOrderDTO {
     private final STAGE stage;
 
 
-    public ActiveOrderDTO(int orderId, int userId, Integer eventId, List<Integer> tickets, LocalDateTime createdAt, LocalDateTime checkoutStartedAt, long version, STAGE stage) {
+    public ActiveOrderDTO(int orderId, String userIdentifier, Integer eventId, List<Integer> tickets, LocalDateTime createdAt, LocalDateTime checkoutStartedAt, long version, STAGE stage) {
         this.orderId = orderId;
-        this.userId = userId;
+        this.userIdentifier = userIdentifier;
         this.eventId = eventId;
         this.tickets = tickets;
         this.createdAt = createdAt;
@@ -31,17 +31,13 @@ public class ActiveOrderDTO {
 
     public ActiveOrderDTO(ActiveOrder activeOrder) {
         this.orderId = activeOrder.getId();
-        this.userId = activeOrder.getUserId();
+        this.userIdentifier = activeOrder.getUserIdentifier();
         this.eventId = activeOrder.getEventId();
         this.tickets = activeOrder.getTickets();
         this.createdAt = activeOrder.getCreatedAt();
         this.checkoutStartedAt = activeOrder.getCheckoutStartedAt();
         this.version = activeOrder.getVersion();
         this.stage = activeOrder.getStage();
-    }
-
-    public int getUserId() {
-        return userId;
     }
 
     public int getId() {
@@ -55,4 +51,8 @@ public class ActiveOrderDTO {
     public List<Integer> getTickets() {
         return tickets;
     }
+    public String getUserIdentifier() {
+        return userIdentifier;
+    }
+
 }

@@ -9,15 +9,15 @@ import java.util.List;
 public class OrderDTO {
     private OrderStatus status;
     private int orderId;
-    private int userId;
+    private String userIdentifier;
     private Integer eventId;
     private List<Integer> tickets;
     private double totalSum;
     String paymentConfirmationId;
 
-    public OrderDTO(int orderId, int userId, Integer eventId, List<Integer> tickets,double totalSum, String paymentConfirmationId) {
+    public OrderDTO(int orderId, String userIdentifier, Integer eventId, List<Integer> tickets,double totalSum, String paymentConfirmationId) {
         this.orderId = orderId;
-        this.userId = userId;
+        this.userIdentifier = userIdentifier;
         this.eventId = eventId;
         this.tickets = tickets;
         this.status = OrderStatus.APPROVED;
@@ -27,7 +27,7 @@ public class OrderDTO {
 
     public OrderDTO(Order order){
         this.orderId = order.getOrderId();
-        this.userId = order.getUserId();
+        this.userIdentifier = order.getUserIdentifier();
         this.eventId = order.getEventId();
         this.tickets = new ArrayList<>(order.getTickets());
         this.status = order.getStatus();
@@ -35,9 +35,8 @@ public class OrderDTO {
         this.paymentConfirmationId = order.getPaymentConfirmationId();
 
     }
-
-    public int getUserId() {
-        return userId;
+    public String getUserIdentifier() {
+        return userIdentifier;
     }
 
     public int getOrderId() {

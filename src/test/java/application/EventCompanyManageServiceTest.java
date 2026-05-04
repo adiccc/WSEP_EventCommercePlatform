@@ -767,7 +767,7 @@ class EventCompanyManageServiceTest {
         List<Integer> purchasedTickets = new ArrayList<>();
         purchasedTickets.add(101);
         Event e =eventRepo.findById(event);
-        Order order = new Order(1, 1, eventId, purchasedTickets);
+        Order order = new Order(1, "1", eventId, purchasedTickets);
         e.getOrders().add(order);
         eventRepo.store(e);
         Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, validToken1);
@@ -831,7 +831,7 @@ class EventCompanyManageServiceTest {
 
         Event event = eventRepo.findById(eventId);
 
-        Order order = new Order(1, 1, eventId, List.of(1, 2), 100.0, "pay123");
+        Order order = new Order(1, "1", eventId, List.of(1, 2), 100.0, "pay123");
         order.markRefundRequired();
         event.getOrders().add(order);
         eventRepo.store(event);
@@ -872,7 +872,7 @@ class EventCompanyManageServiceTest {
 
         Event event = eventRepo.findById(eventId);
 
-        Order order = new Order(123, 900, eventId, List.of(1, 2), 100.0, "pay123");
+        Order order = new Order(123, "900", eventId, List.of(1, 2), 100.0, "pay123");
         order.markRefundRequired();
         event.getOrders().add(order);
         eventRepo.store(event);
@@ -894,8 +894,7 @@ class EventCompanyManageServiceTest {
     void GivenApprovedOrder_WhenProcessRefund_ThenOrderCannotBeRefunded() {
         Event event = eventRepo.findById(eventId);
 
-        Order order = new Order(123, 900, eventId, List.of(1, 2), 100.0, "pay123");
-        // markRefundRequired not called
+        Order order = new Order(123, "900", eventId, List.of(1, 2), 100.0, "pay123");        // markRefundRequired not called
 
         event.getOrders().add(order);
         eventRepo.store(event);
@@ -920,8 +919,7 @@ class EventCompanyManageServiceTest {
 
         Event event = eventRepo.findById(eventId);
 
-        Order order = new Order(123, 900, eventId, List.of(1, 2), 100.0, "pay123");
-        order.markRefundRequired();
+        Order order = new Order(123, "900", eventId, List.of(1, 2), 100.0, "pay123");        order.markRefundRequired();
         event.getOrders().add(order);
         eventRepo.store(event);
         Response<Boolean> response = eventCompanyManageService.processRefund(
@@ -1157,15 +1155,6 @@ class EventCompanyManageServiceTest {
         executor.shutdown();
         assertTrue(deleteRes.getValue(), "Event deletion should succeed");
         assertNotNull(viewRes.getValue(), "Company details should be retrieved successfully without crashing");
-
-        boolean eventFoundInView = viewRes.getValue().getFutureEvents().stream()
-                .anyMatch(e -> e.getEventID() == eventId);
-
-        if (eventFoundInView) {
-            System.out.println("The guest won the race and saw the event before it was deleted!");
-        } else {
-            System.out.println("The owner won the race, and the event was already hidden from the guest!");
-        }
 
         Event deletedEvent = eventRepo.findById(eventId);
         assertFalse(deletedEvent.isActive(), "Event must be inactive in the DB after deletion");

@@ -91,7 +91,7 @@ public class ActiveOrderService {
 
             try {
                 Event e = this.eventRepo.findById(eventId);
-                this.activeOrderRepo.alreadyHasActiveOrder(auth.getUserId(token).getValue(), eventId);
+                this.activeOrderRepo.alreadyHasActiveOrder(auth.getUserEmail(token).getValue(), eventId);
                 if (e.getCompanyId() != companyId) {
                     logger.log(Level.SEVERE, "The selected event does not belong to the company");
                     return new Response<>(null, "The selected event does not belong to the company");
@@ -129,10 +129,18 @@ public class ActiveOrderService {
                             "Event is full, user added to waiting queue. Position: " + position);
                 }
                 int orderId = idGenerator.getAndIncrement();
-                ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserId(token).getValue(), eventId, new ArrayList<>());
-                logger.log(Level.SEVERE, "Creating active order with ID: " + newActiveOrder.getId() + " for user ID: " + newActiveOrder.getUserId() + " and event ID: " + newActiveOrder.getEventId());
-                eventRepo.store(e);
-                activeOrderRepo.store(newActiveOrder);
+                if(role.equals("MEMBER")) {
+                    ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserEmail(token).getValue(), eventId, new ArrayList<>()); //for member the user identifier is email
+                    logger.log(Level.SEVERE, "Creating active order with ID: " + newActiveOrder.getId() + " for user ID: " + newActiveOrder.getUserIdentifier() + " and event ID: " + newActiveOrder.getEventId());
+                    eventRepo.store(e);
+                    activeOrderRepo.store(newActiveOrder);
+                }
+                else if(role.equals("GUEST")) {
+                    ActiveOrder newActiveOrder = new ActiveOrder(orderId,token, eventId, new ArrayList<>()); //for guest user identifier is token
+                    logger.log(Level.SEVERE, "Creating active order with ID: " + newActiveOrder.getId() + " for user ID: " + newActiveOrder.getUserIdentifier() + " and event ID: " + newActiveOrder.getEventId());
+                    eventRepo.store(e);
+                    activeOrderRepo.store(newActiveOrder);
+                }
 
                 logger.log(Level.INFO, "Event map retrieved successfully");
                 return new Response<>(new EventMapDTO(e.getMap()), "Event map retrieved successfully");
@@ -203,7 +211,7 @@ public class ActiveOrderService {
             this.eventRepo.store(e);
             ActiveOrder newActiveOrder;
             try {
-                newActiveOrder = activeOrderRepo.findById(activeOrderRepo.findOrderByUserId(auth.getUserId(identifier).getValue()).getId());
+                newActiveOrder = activeOrderRepo.findById(activeOrderRepo.findOrderByUserId(auth.getUserEmail(identifier).getValue()).getId());
             }
             catch (NoSuchElementException ex) {
                 logger.log(Level.SEVERE, "Active order not found for user: " + auth.getUserId(identifier).getValue());
@@ -444,8 +452,13 @@ public class ActiveOrderService {
             logger.log(Level.INFO, "memberProceedActiveOrder called");
             try {
                 int userId = auth.getUserId(token).getValue();
-                ActiveOrderDTO order = activeOrderRepo.findOrderByUserId(userId);
-                if (order.getUserId() != auth.getUserId(token).getValue()) {
+                if(userId == -1){
+                    logger.log(Level.SEVERE, "user not logged in");
+                    return new Response<>(null, "user not logged in");
+                }
+                String userEmail = auth.getUserEmail(token).getValue();
+                ActiveOrderDTO order = activeOrderRepo.findOrderByUserId(userEmail);
+                if (!order.getUserIdentifier().equals(auth.getUserEmail(token).getValue())) { //email for member
                     logger.log(Level.SEVERE, "Unauthorized access to active order");
                     return new Response<>(null, "Unauthorized access to active order");
                 }
@@ -483,7 +496,7 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
-                int userId = auth.getUserId(token).getValue();
+                String email = auth.getUserEmail(token).getValue();
                 if (seatingToRemove != null && seatingToAdd != null) {
                     Set<String> removeKeys = new HashSet<>();
                     for (Map.Entry<String, List<SeatingTicketDTO>> e : seatingToRemove.entrySet())
@@ -495,7 +508,7 @@ public class ActiveOrderService {
                                 return new Response<>(null, "Seat cannot be both added and removed: zone="
                                         + e.getKey() + " row=" + s.getRow() + " col=" + s.getCol());
                 }
-                ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(userId);
+                ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(email);
                 ActiveOrder order = activeOrderRepo.findById(dto.getId());
 
                 if (order.isExpired(LocalDateTime.now())) {
@@ -588,8 +601,9 @@ public class ActiveOrderService {
 
     public Response<Boolean> placeOrder(String token, Integer eventId, int orderId) {
         Event event =eventRepo.findById(eventId);
-        int userId=auth.getUserId(token).getValue();
-        event.placeOrder(userId,orderId);
+      //  int userId=auth.getUserId(token).getValue();
+        String email = auth.getUserEmail(token).getValue(); //need to change to String
+        event.placeOrder(email,orderId);
         eventRepo.store(event);
         return new Response<>(true, "Order placed successfully");
     }
@@ -602,12 +616,12 @@ public class ActiveOrderService {
                 String nextToken = event.getEventQueue().dequeue();
                 int orderId = idGenerator.getAndIncrement();
 
-                ActiveOrder nextOrder = new ActiveOrder(
-                        orderId,
-                        auth.getUserId(nextToken).getValue(),
-                        event.getId(),
-                        new ArrayList<>()
-                );
+            ActiveOrder nextOrder = new ActiveOrder(
+                    orderId,
+                    auth.getUserEmail(nextToken).getValue(), //TODO:: CHECK!!
+                    event.getId(),
+                    new ArrayList<>()
+            );
 
                 activeOrderRepo.store(nextOrder);
                 eventRepo.store(event);

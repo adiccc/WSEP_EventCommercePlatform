@@ -461,7 +461,8 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 3);
         service.enterEventPurchase(validToken, companyId, concurrentEventId);
-        int orderId = activeOrderRepo.findOrderByUserId(auth.getUserId(validToken).getValue()).getUserId();
+        String userEmail = auth.getUserEmail(validToken).getValue();
+        int orderId = activeOrderRepo.findOrderByUserId(userEmail).getId();
         forceExpireOrder(orderId);
 
         service.cleanupExpiredOrders();
@@ -789,8 +790,8 @@ class ActiveOrderServiceTest {
         userService.registerUser("", new UserDTO(
                 emailB, "iso", "b", "pass", 1, 1, 2000, "Israel", "050-111-2222"));
         String tokenB = userService.login(emailB, "pass").getValue();
-        int userIdA = auth.getUserId(validToken).getValue();
-        int userIdB = auth.getUserId(tokenB).getValue();
+        String userIdA = auth.getUserEmail(validToken).getValue();
+        String userIdB = auth.getUserEmail(tokenB).getValue();
         service.enterEventPurchase(validToken, companyId, concurrentEventId);
         int orderA = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
@@ -802,9 +803,9 @@ class ActiveOrderServiceTest {
         Response<ActiveOrderDTO> respB = service.memberProceedAnActiveOrder(tokenB);
 
         assertEquals(orderA, respA.getValue().getId());
-        assertEquals(userIdA, respA.getValue().getUserId());
+        assertEquals(userIdA, respA.getValue().getUserIdentifier());
         assertEquals(orderB, respB.getValue().getId());
-        assertEquals(userIdB, respB.getValue().getUserId());
+        assertEquals(userIdB, respB.getValue().getUserIdentifier());
         assertNotEquals(orderA, orderB);
     }
 
@@ -846,7 +847,7 @@ class ActiveOrderServiceTest {
     void GivenMultipleUsersWithOrders_WhenAllProceedConcurrently_ThenEachGetsOwnOrder() throws Exception {
         int usersCount = 10;
         List<String> tokens = new ArrayList<>();
-        List<Integer> userIds = new ArrayList<>();
+        List<String> userIds = new ArrayList<>();
         Map<String, Integer> tokenToOrderId = new HashMap<>();
 
         for (int i = 0; i < usersCount; i++) {
@@ -856,7 +857,7 @@ class ActiveOrderServiceTest {
                     1, 1, 2000, "Israel", "050-555-6677"));
             String t = userService.login(email, "pass").getValue();
             tokens.add(t);
-            userIds.add(auth.getUserId(t).getValue());
+            userIds.add(auth.getUserEmail(t).getValue());
             service.enterEventPurchase(t, companyId, concurrentEventId);
             int oid = service.userSelectTickets(
                     t, concurrentEventId, new HashMap<>(), Map.of("floor", 2)).getValue();
@@ -881,7 +882,7 @@ class ActiveOrderServiceTest {
             assertNotNull(r.getValue(), "user " + i + " got null: " + r.getMessage());
             assertEquals(tokenToOrderId.get(t), r.getValue().getId(),
                     "user " + i + " saw a different order than their own");
-            assertEquals(userIds.get(i), r.getValue().getUserId(),
+            assertEquals(userIds.get(i), r.getValue().getUserIdentifier(),
                     "user " + i + " saw another user's userId — leakage between threads");
         }
         pool.shutdown();
@@ -1165,8 +1166,8 @@ class ActiveOrderServiceTest {
                 "exactly one user should win the race for seat (5,5); rA=" + rA.getMessage()
                         + " rB=" + rB.getMessage());
 
-        int sizeA = activeOrderRepo.findOrderByUserId(auth.getUserId(validToken).getValue()).getTickets().size();
-        int sizeB = activeOrderRepo.findOrderByUserId(auth.getUserId(tokenB).getValue()).getTickets().size();
+        int sizeA = activeOrderRepo.findOrderByUserId(auth.getUserEmail(validToken).getValue()).getTickets().size();
+        int sizeB = activeOrderRepo.findOrderByUserId(auth.getUserEmail(tokenB).getValue()).getTickets().size();
         assertEquals(3, sizeA + sizeB, "winner=2 tickets, loser=1 ticket");
     }
 

@@ -67,9 +67,9 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
         }
     }
 
-    public void alreadyHasActiveOrder(Integer userId, Integer eventId) {
+    public void alreadyHasActiveOrder(String userId, Integer eventId) {
         for (ActiveOrder order : activeOrders.values()) {
-            if (order.getUserId() == userId && order.getEventId().equals(eventId)) {
+            if (order.getUserIdentifier().equals(userId) && order.getEventId().equals(eventId)) {
                 throw new IllegalStateException("User already has an active order for this event");
             }
         }
@@ -88,9 +88,9 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
         return result;
     }
 
-    public ActiveOrderDTO findOrderByUserId(Integer userId) {
+    public ActiveOrderDTO findOrderByUserId(String userId) {
         for (ActiveOrder order : activeOrders.values()) {
-            if (order.getUserId() == userId) {
+            if (order.getUserIdentifier().equals(userId)) {
                 return new ActiveOrderDTO(order);
                 // a member can have up to one active order.
             }
