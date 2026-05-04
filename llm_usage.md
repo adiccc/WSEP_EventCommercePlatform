@@ -170,3 +170,70 @@
   - Supporting multi-zone selection requires the EventMap to act as an orchestrator. By allowing a single ActiveOrder to reference multiple zones, we reduce friction for the user, even though it requires more careful validation to ensure capacity is correctly deducted across different zone types.
   
 ---
+
+## Feature / Component: Active Order Lifecycle and TTL Management
+
+- Purpose of LLM use:
+  - Design assistance and validation of timeout behavior for active orders, including cleanup timing, and lifecycle transitions between reservation stages.
+- Summary of prompt(s):
+  - Asked how to model the lifecycle of an ActiveOrder while supporting temporary reservation, checkout initiation, and automatic expiration.
+  - Discussed how to distinguish between the several TTL.
+- Output received (short description):
+  - Helped separate the lifecycle into explicit stages of active order and define expiration rules per stage.
+  - Clarified that timeout logic should be derived from timestamps (createdAt, checkoutStartedAt) rather than mutable counters.
+- Files / components affected:
+  - ActiveOrder, ActiveOrderRepository,Cleanup / expiration handling logic, Concurrency tests for TTL behavior
+- Modifications made:
+  - Using the current stage as stage-aware TTL handling to ActiveOrder.
+  - Introduced separate expiration logic for viewing map time vs. selecting tickets time.
+  - Updated and add tests validating stage transitions and expiration under the new TTL model.
+- Initial gaps in understanding (if any):
+  - Whether expiration should be enforced only by scheduled cleanup or also immediately when an order is accessed, and how to avoid inconsistent behavior between the two mechanisms.
+- Final understanding (brief explanation in your own words):
+  - Using the object’s current status as the source of truth makes it possible to derive different behaviors and properties directly from its lifecycle stage. In the case of ActiveOrder, the current status determines which timestamp is relevant, how expiration is calculated, and what the effective end time should be.
+
+---
+
+## Feature / Component: Event Search Consistency Under Concurrent Updates
+
+- Purpose of LLM use:
+  - Validate search behavior under concurrent modifications and design reliable test coverage for event visibility during simultaneous reads and writes.
+- Summary of prompt(s):
+  - Asked how to implement and test searchCompanyEvents while events may be updated or deleted concurrently.
+  - Discussed expected behavior when a search occurs at the same time as a deletion or modification.
+  - Asked how to structure concurrency tests so search remains consistent without over constraining valid outcomes.
+- Output received (short description):
+  - Suggested treating concurrent search outcomes as eventually consistent: an event being modified concurrently may be visible or absent, but should never appear in an invalid or corrupted state.
+  - Helped define acceptable test assertions for concurrent search (e.g. event is either returned correctly or omitted entirely).
+  - Clarified how retry-aware search logic and repository-level synchronization can preserve consistency without forcing strict serialization.
+- Files / components affected:
+  EventService, EventServiceTest, EventRepository, Concurrency tests for search behavior under concurrent modifications.
+- Modifications made:
+  - Added concurrency tests validating that search results remain consistent during simultaneous reads and writes.
+  - Adjusted expectations so tests validate correctness under concurrency rather than assuming deterministic ordering.
+- Initial gaps in understanding (if any):
+  - How to define correct validate behavior for search under concurrent writes, especially when I don't know which result I will get
+- Final understanding (brief explanation in your own words):
+  - In concurrent systems, consistency does not always mean identical results across runs. A correct concurrent search guarantees valid states: results may differ depending on timing, but they must never be partially corrupted, stale in impossible ways, or internally inconsistent.
+
+---
+
+## Feature / Component: DTO and Filtering Design for Event Search
+
+- Purpose of LLM use:
+  - Design assistance for structuring DTOs used in event search and transferring category/location data across layers.
+- Summary of prompt(s):
+  - Asked how to model event filtering, including category, location, and search criteria.
+  - Asked how to represent category and geographical filtering as fields in DTO.
+- Output received (short description):
+  - Recommended keeping DTOs flat and purpose-specific, with filtering objects encapsulating category, location, and optional search constraints.
+  - Clarified the boundary between domain models and DTOs so filtering remains flexible without coupling external requests to internal structures.
+- Files / components affected:
+  - EventSearchFilter, Category and Geographical area DTOs, Event search flow in EventService.
+- Modifications made:
+  - Introduced dedicated Data Type for filtering input, Category and Geographical area.
+  - Refined service interfaces to accept explicit filter objects instead of overloaded parameter sets.
+- Initial gaps in understanding (if any):
+  - How much filtering logic should be encoded in DTOs versus domain services.
+- Final understanding (brief explanation in your own words):
+  - DTOs should model request intent. A good filtering DTO captures what the client wants to search by (category, area, constraints), while the domain remains responsible for interpreting and applying those filters. This keeps boundaries clean and makes the API easier to evolve.

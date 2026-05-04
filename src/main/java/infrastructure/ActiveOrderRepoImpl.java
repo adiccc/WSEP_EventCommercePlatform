@@ -78,11 +78,13 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
     @Override
     public List<ActiveOrder> findExpired(LocalDateTime now) {
         List<ActiveOrder> result = new ArrayList<>();
+
         for (ActiveOrder order : activeOrders.values()) {
-            if (order.getExpireTime().isBefore(now)) {
+            if (order.isExpired(now)) {
                 result.add(new ActiveOrder(order));
             }
         }
+
         return result;
     }
 
@@ -94,6 +96,17 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
             }
         }
         throw new NoSuchElementException("No active order found for user ID: " + userId);
+    }
+
+    @Override
+    public int countActiveOrdersForEvent(int eventId) {
+        int count = 0;
+        for (ActiveOrder order : activeOrders.values()) {
+            if (order.getEventId() != null && order.getEventId().equals(eventId)) {
+                count++;
+            }
+        }
+        return count;
     }
 
 

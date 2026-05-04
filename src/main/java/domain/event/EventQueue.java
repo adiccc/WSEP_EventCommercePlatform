@@ -22,10 +22,8 @@ public class EventQueue {
         }
     }
 
-    public void dequeue() {
-        if (!waitingUsers.isEmpty()) {
-            waitingUsers.poll();
-        }
+    public String dequeue() {
+        return waitingUsers.poll();
     }
 
     public int position(String token) {
