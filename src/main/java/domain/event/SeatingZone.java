@@ -75,5 +75,15 @@ public class SeatingZone extends Zone {
     public int getCols() {
         return cols;
     }
+    @Override
+    public boolean containsTicketId(int ticketId) {
+        for (SeatingTicket ticket : ticketMap.values()) {
+            if (ticket.getTicketId() == ticketId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
 }

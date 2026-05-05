@@ -57,17 +57,22 @@ public class StandingZone extends Zone {
         if (quantity > available) {
             throw new IllegalArgumentException("Not enough tickets available in this zone.");
         }
+
         List<Integer> bookedTicketIds = new ArrayList<>();
+
         for (int i = 0; i < quantity; i++) {
-            StandingTicket ticket = availableTickets.poll(); //get a ticket from the available queue
+            StandingTicket ticket = availableTickets.poll();
+
             if (ticket == null) {
                 throw new IllegalStateException("No more tickets available.");
             }
-            int ticketId = ticket.getTicketId();
+
             ticket.setStatus(TicketStatus.LOCKED);
-            bookedTicketIds.add(ticketId);
+            occupiedTickets.add(ticket);
+            bookedTicketIds.add(ticket.getTicketId());
         }
-        available -= quantity; //decrease the capacity by the number of booked tickets
+
+        available -= quantity;
         return bookedTicketIds;
     }
 
@@ -77,6 +82,22 @@ public class StandingZone extends Zone {
                 return true;
             }
         }
+        return false;
+    }
+    @Override
+    public boolean containsTicketId(int ticketId) {
+        for (StandingTicket ticket : availableTickets) {
+            if (ticket.getTicketId() == ticketId) {
+                return true;
+            }
+        }
+
+        for (StandingTicket ticket : occupiedTickets) {
+            if (ticket.getTicketId() == ticketId) {
+                return true;
+            }
+        }
+
         return false;
     }
 }

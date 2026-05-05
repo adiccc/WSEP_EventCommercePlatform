@@ -265,9 +265,26 @@ public class Event {
     public List<Integer> bookTickets(boolean member, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return eventMap.bookTickets(seatingZones,standingZones);
     }
+    public double calculateFinalTotalPrice(List<Integer> ticketIds, String couponCode) {
+        if (eventMap == null) {
+            throw new IllegalStateException("Event map is not defined");
+        }
+
+        double priceBeforeDiscount = eventMap.calculateTotalPriceBeforeDiscount(ticketIds);
+
+        if (discountPolicy == null) {
+            return priceBeforeDiscount;
+        }
+
+        return discountPolicy.apply(priceBeforeDiscount, ticketIds.size(), couponCode);
+    }
 
     //TODO : this implementation is for test only, this function should be implemented currectly
     public void placeOrder(int userId,int orderId){
         orders.add(new Order(orderId,userId," ",new ArrayList<>(),100.0,"order123"));
+    }
+
+    public String getEventId() {
+        return this.id;
     }
 }

@@ -68,5 +68,8 @@ public class ActiveOrder {
         return orderId==other.orderId && version == other.getVersion();
 
     }
+    public boolean isExpired() {
+        return LocalDateTime.now().isAfter(expireTime);
+    }
 
 }

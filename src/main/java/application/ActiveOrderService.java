@@ -1,5 +1,6 @@
 package application;
 
+import DTO.PaymentDetailsDTO;
 import DTO.TicketSupplyRequestDTO;
 import DTO.TicketSupplyResultDTO;
 
@@ -188,6 +189,124 @@ public class ActiveOrderService {
         }
 
     });}
+    public Response<Integer> checkoutAndPayment(
+            String token,
+            int activeOrderId,
+            PaymentDetailsDTO paymentDetails) {
+
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "checkoutAndPayment called");
+
+            boolean shouldCleanupActiveOrder = false;
+            Event event = null;
+
+            int userId = auth.getUserId(token).getValue();
+            if (userId == -1) {
+                return new Response<>(null, "Invalid token");
+            }
+
+            try {
+                ActiveOrder activeOrder = activeOrderRepo.findById(activeOrderId);
+
+                if (activeOrder.getUserId() != userId) {
+                    return new Response<>(null, "Active order does not belong to user");
+                }
+
+                event = eventRepo.findById(activeOrder.getEventId());
+
+                if (!event.isActive()) {
+                    return new Response<>(null, "Event is not active");
+                }
+
+                if (!activeOrder.hasTickets()) {
+                    return new Response<>(null, "Active order has no selected tickets");
+                }
+
+                if (activeOrder.isExpired()) {
+                    activeOrderRepo.delete(activeOrderId);
+                    event.releasePurchaseSlot();
+                    eventRepo.store(event);
+                    return new Response<>(null, "Active order expired");
+                }
+
+                double total = event.calculateFinalTotalPrice(
+                        activeOrder.getTickets(),
+                        paymentDetails.getCouponCode()
+                );
+
+                String paymentConfirmationId = paymentSystem.pay(total, paymentDetails);
+
+                if (paymentConfirmationId == null || paymentConfirmationId.isBlank()) {
+                    return new Response<>(null, "Payment rejected");
+                }
+
+                Order order = new Order(
+                        activeOrder.getId(),
+                        userId,
+                        event.getEventId(),
+                        activeOrder.getTickets(),
+                        total,
+                        paymentConfirmationId
+                );
+
+                event.getOrders().add(order);
+                shouldCleanupActiveOrder = true;
+
+                TicketSupplyResultDTO issueResult;
+
+                try {
+                    issueResult = ticketSupply.issue(
+                            new TicketSupplyRequestDTO(activeOrder.getTickets()));
+                } catch (Exception e) {
+                    boolean refundApproved = paymentSystem.refund(paymentConfirmationId, total);
+
+                    if (refundApproved) {
+                        order.markRefunded();
+                    } else {
+                        order.markRefundRequired();
+                    }
+
+                    eventRepo.store(event);
+                    return new Response<>(null, "Ticket issuance failed");
+                }
+
+                if (issueResult == null || !issueResult.isSuccess()) {
+                    boolean refundApproved = paymentSystem.refund(paymentConfirmationId, total);
+
+                    if (refundApproved) {
+                        order.markRefunded();
+                    } else {
+                        order.markRefundRequired();
+                    }
+
+                    eventRepo.store(event);
+                    return new Response<>(null, "Ticket issuance failed");
+                }
+
+                eventRepo.store(event);
+                return new Response<>(order.getOrderId(), "Purchase completed successfully");
+
+            } catch (NoSuchElementException e) {
+                return new Response<>(null, "Event or active order not found");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                return new Response<>(null, "Failed to complete purchase");
+
+            } finally {
+                if (shouldCleanupActiveOrder) {
+                    activeOrderRepo.delete(activeOrderId);
+
+                    if (event != null) {
+                        event.releasePurchaseSlot();
+                        eventRepo.store(event);
+                    }
+                }
+            }
+        });
+    }
 
     //TODO : this implementation is for test only, this function should be implemented currectly
 
