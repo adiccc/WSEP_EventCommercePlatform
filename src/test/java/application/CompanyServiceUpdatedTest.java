@@ -1076,4 +1076,142 @@ class CompanyServiceUpdatedTest {
         assertEquals(1, success, "Only one response to a pending appointment should succeed");
     }
 
+    // ===================== II.4.X Remove Manager Appointment =====================
+
+    private int addSecondManager() {
+        UserDTO dto = new UserDTO("manager2@test.com", "Manager2", "Test", "Password123!", 1, 1, 2000, "City", "050-777-7777");
+        userService.registerUser(null, dto);
+        String token = userService.login("manager2@test.com", "Password123!").getValue();
+        int id = auth.getUserId(token).getValue();
+        Company company = companyRepo.findById(COMPANY_ID);
+        company.getCompanyPermission().addToTree(id, OWNER_ID, new HashSet<>());
+        companyRepo.store(company);
+        return id;
+    }
+
+    @Test
+    void GivenOwnerWhoAppointed_WhenRemoveManager_ThenSuccess() {
+        addSecondManager();
+        Response<Boolean> response = service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        assertFalse(response.isError(), response.getMessage());
+        assertTrue(response.getValue());
+        assertFalse(companyRepo.findById(COMPANY_ID).getCompanyPermission().isManager(MANAGER_ID));
+    }
+
+    @Test
+    void GivenOwnerWhoAppointed_WhenRemoveManager_ThenManagerRoleRemovedFromUser() {
+        addSecondManager();
+        service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        boolean hasRole = userRepo.findById(MANAGER_ID).getRoles().stream()
+                .anyMatch(r -> r instanceof domain.user.Manager && ((domain.user.Manager) r).getCompanyId() == COMPANY_ID);
+        assertFalse(hasRole);
+    }
+
+    @Test
+    void GivenCompanyDoesNotExist_WhenRemoveManager_ThenCompanyNotFoundError() {
+        Response<Boolean> response = service.removeManagerAppointment(OWNER_TOKEN, 9999, MANAGER_ID);
+        assertTrue(response.isError());
+        assertEquals("Company not found", response.getMessage());
+    }
+
+    @Test
+    void GivenUserNotLoggedIn_WhenRemoveManager_ThenNotLoggedInError() {
+        addSecondManager();
+        auth.logout(OWNER_TOKEN);
+        Response<Boolean> response = service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        assertTrue(response.isError());
+        assertEquals("User is not logged in", response.getMessage());
+    }
+
+    @Test
+    void GivenNonOwner_WhenRemoveManager_ThenUnauthorizedError() {
+        Response<Boolean> response = service.removeManagerAppointment(OTHER_TOKEN, COMPANY_ID, MANAGER_ID);
+        assertTrue(response.isError());
+        assertEquals("User does not have the required owner permissions", response.getMessage());
+    }
+
+    @Test
+    void GivenTargetIsNotManager_WhenRemoveManager_ThenNotManagerError() {
+        Response<Boolean> response = service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+        assertTrue(response.isError());
+        assertEquals("User is not defined as a company manager", response.getMessage());
+    }
+
+    @Test
+    void GivenOwnerDidNotAppointManager_WhenRemoveManager_ThenCannotRemoveError() {
+        addSecondManager();
+        Company company = companyRepo.findById(COMPANY_ID);
+        company.getCompanyPermission().OwnerAppointeeRespond(OTHER_OWNER_ID, true);
+        UserDTO dto = new UserDTO("manager3@test.com", "Manager3", "Test", "Password123!", 1, 1, 2000, "City", "050-888-8888");
+        userService.registerUser(null, dto);
+        String tok = userService.login("manager3@test.com", "Password123!").getValue();
+        int manager3Id = auth.getUserId(tok).getValue();
+        company.getCompanyPermission().addToTree(manager3Id, OTHER_OWNER_ID, new HashSet<>());
+        companyRepo.store(company);
+
+        Response<Boolean> response = service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, manager3Id);
+        assertTrue(response.isError());
+        assertEquals("You cannot remove a manager you did not appoint", response.getMessage());
+    }
+
+    @Test
+    void GivenOnlyOneManager_WhenRemoveManager_ThenOnlyManagerError() {
+        Response<Boolean> response = service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        assertTrue(response.isError());
+        assertEquals("This manager is the only manager in the company and cannot be removed", response.getMessage());
+    }
+
+    @Test
+    void GivenInactiveCompany_WhenRemoveManager_ThenError() {
+        addSecondManager();
+        service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+        Response<Boolean> response = service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        assertTrue(response.isError());
+        assertEquals("Company is not active", response.getMessage());
+    }
+
+    @Test
+    void GivenManagerWithSubAppointees_WhenRemoveManager_ThenSubManagersReassignedToAppointer() {
+        addSecondManager();
+        UserDTO dto = new UserDTO("manager3@test.com", "Manager3", "Test", "Password123!", 1, 1, 2000, "City", "050-888-8888");
+        userService.registerUser(null, dto);
+        String tok = userService.login("manager3@test.com", "Password123!").getValue();
+        int subManagerId = auth.getUserId(tok).getValue();
+        Company company = companyRepo.findById(COMPANY_ID);
+        company.getCompanyPermission().addToTree(subManagerId, MANAGER_ID, new HashSet<>());
+        companyRepo.store(company);
+
+        service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+
+        int newAppointer = companyRepo.findById(COMPANY_ID).getCompanyPermission().getManagerAppointerId(subManagerId);
+        assertEquals(OWNER_ID, newAppointer);
+    }
+
+    // ===================== Concurrency: Remove Manager =====================
+
+    @Test
+    void GivenTwoThreadsRaceToRemoveSameManager_WhenRemoveManager_ThenOnlyOneSucceeds() throws Exception {
+        addSecondManager();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        });
+
+        start.countDown();
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = (!r1.isError() ? 1 : 0) + (!r2.isError() ? 1 : 0);
+        assertEquals(1, success, "Only one concurrent removal should succeed");
+        assertFalse(companyRepo.findById(COMPANY_ID).getCompanyPermission().isManager(MANAGER_ID));
+    }
+
 }

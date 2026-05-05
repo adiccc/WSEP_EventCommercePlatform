@@ -30,6 +30,10 @@ public class User {
         roles.add(role);
     }
 
+    public void removeManagerRole(int companyId) {
+        roles.removeIf(r -> r instanceof Manager && ((Manager) r).getCompanyId() == companyId);
+    }
+
     public List<Role> getRoles() {
         return roles;
     }
