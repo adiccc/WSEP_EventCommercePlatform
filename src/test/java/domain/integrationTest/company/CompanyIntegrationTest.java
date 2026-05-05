@@ -8,6 +8,7 @@ import domain.dto.HierarchyDTO;
 import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
 import domain.user.Founder;
+import domain.user.Manager;
 import domain.user.Member;
 import infrastructure.CompanyRepoImpl;
 import infrastructure.UserRepo;
@@ -200,5 +201,100 @@ class CompanyIntegrationTest {
         Company updated = companyRepo.findById(COMPANY_ID);
         assertTrue(updated.getCompanyPermission().isOwner(newOwnerId),
                 "Added owner should persist after store+retrieve");
+    }
+
+    // ============================================================
+    // II.4.X  Remove Manager Appointment — User role integration
+    // ============================================================
+
+    /** Helper: creates a manager member, adds a Manager role, stores them, and adds them to the company tree. */
+    private Member createAndAddManager(int managerId, String email) {
+        Member manager = new Member(email, "hashedpw", "Manager", "User",
+                "050-222-2222", LocalDate.of(1995, 6, 15), "Haifa");
+        manager.addRole(new Manager(COMPANY_ID));
+        userRepo.store(manager);
+
+        Company stored = companyRepo.findById(COMPANY_ID);
+        stored.getCompanyPermission().addToTree(manager.getUserId(), founder.getUserId(),
+                EnumSet.of(PermissionType.CREATE_EVENT));
+        companyRepo.store(stored);
+        return userRepo.findById(manager.getUserId());
+    }
+
+    @Test
+    void GivenManagerWithRole_WhenRemovedFromCompany_ThenManagerRoleStrippedFromUser() {
+        Member manager = createAndAddManager(200, "mgr1@test.com");
+        // Add a second manager so removal is allowed
+        Member manager2 = new Member("mgr2@test.com", "hashedpw", "Manager2", "User",
+                "050-333-3333", LocalDate.of(1996, 1, 1), "Beer Sheva");
+        manager2.addRole(new Manager(COMPANY_ID));
+        userRepo.store(manager2);
+        Company stored = companyRepo.findById(COMPANY_ID);
+        stored.getCompanyPermission().addToTree(manager2.getUserId(), founder.getUserId(),
+                EnumSet.of(PermissionType.CREATE_EVENT));
+        companyRepo.store(stored);
+
+        // Perform removal: update company tree and strip role from user
+        Company company = companyRepo.findById(COMPANY_ID);
+        company.removeManagerAppointment(founder.getUserId(), manager.getUserId());
+        companyRepo.store(company);
+        manager.removeManagerRole(COMPANY_ID);
+        userRepo.store(manager);
+
+        Member updatedUser = userRepo.findById(manager.getUserId());
+        boolean hasRole = updatedUser.getRoles().stream()
+                .anyMatch(r -> r instanceof Manager && ((Manager) r).getCompanyId() == COMPANY_ID);
+        assertFalse(hasRole, "Manager role should be removed from the user after appointment removal");
+    }
+
+    @Test
+    void GivenManagerWithRole_WhenRemovedFromCompany_ThenCompanyTreeNoLongerContainsManager() {
+        Member manager = createAndAddManager(200, "mgr1@test.com");
+        Member manager2 = new Member("mgr2@test.com", "hashedpw", "Manager2", "User",
+                "050-333-3333", LocalDate.of(1996, 1, 1), "Beer Sheva");
+        manager2.addRole(new Manager(COMPANY_ID));
+        userRepo.store(manager2);
+        Company stored = companyRepo.findById(COMPANY_ID);
+        stored.getCompanyPermission().addToTree(manager2.getUserId(), founder.getUserId(),
+                EnumSet.of(PermissionType.CREATE_EVENT));
+        companyRepo.store(stored);
+
+        Company company = companyRepo.findById(COMPANY_ID);
+        company.removeManagerAppointment(founder.getUserId(), manager.getUserId());
+        companyRepo.store(company);
+
+        Company updated = companyRepo.findById(COMPANY_ID);
+        assertFalse(updated.getCompanyPermission().isManager(manager.getUserId()),
+                "Manager should no longer appear in the company tree after removal");
+    }
+
+    @Test
+    void GivenManagerWithSubAppointee_WhenRemovedFromCompany_ThenSubAppointeeReassignedToFounder() {
+        Member manager = createAndAddManager(200, "mgr1@test.com");
+        // Add a second top-level manager so removal is not blocked
+        Member manager2 = new Member("mgr2@test.com", "hashedpw", "Manager2", "User",
+                "050-333-3333", LocalDate.of(1996, 1, 1), "Beer Sheva");
+        userRepo.store(manager2);
+        // Add a sub-manager under manager
+        Member subManager = new Member("sub@test.com", "hashedpw", "Sub", "Manager",
+                "050-444-4444", LocalDate.of(1997, 3, 10), "Eilat");
+        subManager.addRole(new Manager(COMPANY_ID));
+        userRepo.store(subManager);
+
+        Company stored = companyRepo.findById(COMPANY_ID);
+        stored.getCompanyPermission().addToTree(manager2.getUserId(), founder.getUserId(),
+                EnumSet.of(PermissionType.CREATE_EVENT));
+        stored.getCompanyPermission().addToTree(subManager.getUserId(), manager.getUserId(),
+                EnumSet.of(PermissionType.VIEW_PURCHASE_HISTORY));
+        companyRepo.store(stored);
+
+        Company company = companyRepo.findById(COMPANY_ID);
+        company.removeManagerAppointment(founder.getUserId(), manager.getUserId());
+        companyRepo.store(company);
+
+        Company updated = companyRepo.findById(COMPANY_ID);
+        int newAppointer = updated.getCompanyPermission().getManagerAppointerId(subManager.getUserId());
+        assertEquals(founder.getUserId(), newAppointer,
+                "Sub-manager's appointer should be reassigned to the founder after their manager is removed");
     }
 }

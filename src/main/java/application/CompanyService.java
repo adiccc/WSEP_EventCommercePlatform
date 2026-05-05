@@ -638,6 +638,54 @@ public class CompanyService {
         });
     }
 
+    public Response<Boolean> removeManagerAppointment(String token, int companyId, int managerId) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("removeManagerAppointment called for companyId: " + companyId + ", managerId: " + managerId);
+            try {
+                if (!auth.isLoggedIn(token).getValue()) {
+                    logger.warning("removeManagerAppointment failed: user is not logged in");
+                    return Response.error("User is not logged in");
+                }
+                int actingOwnerId = auth.getUserId(token).getValue();
+                if (actingOwnerId == -1) {
+                    logger.warning("removeManagerAppointment failed: invalid or expired token");
+                    return Response.error("Invalid or expired token");
+                }
+                Company company;
+                try {
+                    company = companyRepo.findById(companyId);
+                } catch (NoSuchElementException e) {
+                    logger.warning("removeManagerAppointment failed: company not found, id: " + companyId);
+                    return Response.error("Company not found");
+                }
+                company.removeManagerAppointment(actingOwnerId, managerId);
+                Member managerMember;
+                try {
+                    managerMember = userRepo.findById(managerId);
+                } catch (NoSuchElementException e) {
+                    logger.warning("removeManagerAppointment failed: manager user not found, id: " + managerId);
+                    return Response.error("Manager user not found");
+                }
+                managerMember.removeManagerRole(companyId);
+                userRepo.store(managerMember);
+                companyRepo.store(company);
+                logger.info("removeManagerAppointment succeeded for managerId: " + managerId);
+                return Response.ok(true);
+            } catch (SecurityException e) {
+                logger.warning("removeManagerAppointment unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalStateException e) {
+                logger.warning("removeManagerAppointment invalid state: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in removeManagerAppointment: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
     public Response<Boolean> deactivateCompany(String ownerToken, int companyId) {
         return RetryHelper.executeWithRetry(() ->
         {

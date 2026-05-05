@@ -148,6 +148,20 @@ public class Company {
         companyPermission.respondManagerAppointment(userId, accept);
     }
 
+    public void removeManagerAppointment(int actingOwnerId, int managerId) {
+        if (!isActive)
+            throw new IllegalStateException("Company is not active");
+        if (!companyPermission.isOwner(actingOwnerId))
+            throw new SecurityException("User does not have the required owner permissions");
+        if (!companyPermission.isManager(managerId))
+            throw new IllegalStateException("User is not defined as a company manager");
+        if (companyPermission.getManagerAppointerId(managerId) != actingOwnerId)
+            throw new SecurityException("You cannot remove a manager you did not appoint");
+        if (companyPermission.getManagerCount() == 1)
+            throw new IllegalStateException("This manager is the only manager in the company and cannot be removed");
+        companyPermission.removeManagerFromTree(managerId);
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;

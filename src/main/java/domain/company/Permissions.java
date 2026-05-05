@@ -124,6 +124,15 @@ public class Permissions {
         return companyTree.containsKey(userId);
     }
 
+    public int getManagerAppointerId(int managerId) {
+        Hierarchy h = companyTree.get(managerId);
+        return h != null ? h.getMyManager() : -1;
+    }
+
+    public int getManagerCount() {
+        return companyTree.size();
+    }
+
     /** Adds a manager to the tree and registers them as an appointee of their appointer. */
     public void addToTree(int managerId, int appointedBy, Set<PermissionType> permissions) {
         companyTree.put(managerId, new Hierarchy(appointedBy, new ArrayList<>(), new HashSet<>(permissions)));
@@ -135,17 +144,20 @@ public class Permissions {
     /**
      * Removes a manager from the tree and cascades:
      * - removes them from their appointer's appointee list
-     * - reassigns their direct sub-managers to the founder
+     * - reassigns their direct sub-managers to the removed manager's appointer
      */
     public void removeManagerFromTree(int managerId) {
         Hierarchy removed = companyTree.remove(managerId);
         if (removed == null) return;
-        Hierarchy appointer = companyTree.get(removed.getMyManager());
-        if (appointer != null)
+        int appointerId = removed.getMyManager();
+        Hierarchy appointer = companyTree.get(appointerId);
+        if (appointer != null) {
             appointer.getMyAppointees().remove(Integer.valueOf(managerId));
+            appointer.getMyAppointees().addAll(removed.getMyAppointees());
+        }
         for (int subId : removed.getMyAppointees()) {
             Hierarchy sub = companyTree.get(subId);
-            if (sub != null) sub.setMyManager(founderId);
+            if (sub != null) sub.setMyManager(appointerId);
         }
     }
 
