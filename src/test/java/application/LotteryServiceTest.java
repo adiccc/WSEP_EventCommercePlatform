@@ -40,7 +40,6 @@ class LotteryServiceTest {
     private Integer eventId;
 
     private String validToken;
-    private String validToken1;
     private String validToken2;
     private String validToken3;
     private IAuth auth;
@@ -285,7 +284,7 @@ class LotteryServiceTest {
         lotteryService.createLottery(validToken, eventId, 2, lotteryDate_X, (long) 24.0);
 
         lotteryService.registerUserToLottery(validToken, eventId);
-        lotteryService.registerUserToLottery(validToken1, eventId);
+        lotteryService.registerUserToLottery(notPermission, eventId);
         lotteryService.registerUserToLottery(validToken2, eventId);
         lotteryService.registerUserToLottery(validToken3, eventId);
         // Retrieve the newly created lottery to simulate users registering
@@ -310,7 +309,7 @@ class LotteryServiceTest {
 
         Lottery lottery = lotteryRepo.getAll().get(0);
         lotteryService.registerUserToLottery(validToken, eventId);
-        lotteryService.registerUserToLottery(validToken1, eventId);
+        lotteryService.registerUserToLottery(notPermission, eventId);
         lotteryService.registerUserToLottery(validToken2, eventId);
 
         // Act: Manually trigger the draw
