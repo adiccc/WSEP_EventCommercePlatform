@@ -6,23 +6,30 @@ import domain.event.IEventRepo;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import Exception.OptimisticLockingFailureException;
 
 public class EventRepoImpl implements IEventRepo {
-    Map<String,Event> events; // key: eventId, value: event
+    Map<Integer,Event> events; // key: eventId, value: event
+    private final AtomicInteger eventIdGenerator = new AtomicInteger(1);
+
 
     public EventRepoImpl() {
         events = new ConcurrentHashMap<>();
     }
 
-    public Event findById(String id) {
+    @Override
+    public Event findById(Integer id) {
         Event dbEvent = events.get(id);
         if (dbEvent != null) {
             return new Event(dbEvent);
         }
         throw new NoSuchElementException("Event not found with ID: " + id);
     }
+
+
+
     @Override
     public List<Event> getAll() {
         List<Event> copies = new ArrayList<>();
@@ -32,7 +39,7 @@ public class EventRepoImpl implements IEventRepo {
         return copies;
     }
     @Override
-    public void delete(String id) {
+    public void delete(Integer id) {
         events.remove(id);
     }
 
@@ -40,6 +47,8 @@ public class EventRepoImpl implements IEventRepo {
     public synchronized void store(Event entity) {
         Event currentEvent = events.get(entity.getId());
         if (currentEvent == null) {
+            int id = eventIdGenerator.getAndIncrement();
+            entity.setId(id);
             Event newEntry = new Event(entity);
             events.put(newEntry.getId(), newEntry);
             return;

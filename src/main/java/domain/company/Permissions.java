@@ -8,13 +8,17 @@ import java.util.*;
 public class Permissions {
     private int founderId;//founder of the comapany
     private Set<Integer> ownerIds; // who are the owners of the company
-    private HashMap<Integer, HierarchyDTO> companyTree; //the hash map with each manger and who assigned him and it's assignees
+    private HashMap<Integer, Hierarchy> companyTree; //the hash map with each manger and who assigned him and it's assignees
+    private List<Integer> pandingOwners;
+    private HashMap<Integer, Hierarchy> pendingManagers; // pending manager appointments awaiting response
 
     public Permissions(int founderId) {
         this.founderId = founderId;
         this.ownerIds = new HashSet<>();
-        addOwner(founderId);
+        ownerIds.add(founderId);
         companyTree = new HashMap<>();
+        pandingOwners = new ArrayList<>();
+        pendingManagers = new HashMap<>();
     }
 
     /** Deep-copy constructor used by Company's copy constructor */
@@ -22,28 +26,62 @@ public class Permissions {
         this.founderId = other.founderId;
         this.ownerIds = new HashSet<>(other.ownerIds);
         this.companyTree = new HashMap<>();
-        for (Map.Entry<Integer, HierarchyDTO> entry : other.companyTree.entrySet()) {
-            HierarchyDTO orig = entry.getValue();
-            this.companyTree.put(entry.getKey(), new HierarchyDTO(
+        for (Map.Entry<Integer, Hierarchy> entry : other.companyTree.entrySet()) {
+            Hierarchy orig = entry.getValue();
+            this.companyTree.put(entry.getKey(), new Hierarchy(
+                    orig.getMyManager(),
+                    new ArrayList<>(orig.getMyAppointees()),
+                    new HashSet<>(orig.getAllPermissions())
+            ));
+        }
+        this.pandingOwners = new ArrayList<>(other.pandingOwners);
+        this.pendingManagers = new HashMap<>();
+        for (Map.Entry<Integer, Hierarchy> entry : other.pendingManagers.entrySet()) {
+            Hierarchy orig = entry.getValue();
+            this.pendingManagers.put(entry.getKey(), new Hierarchy(
                     orig.getMyManager(),
                     new ArrayList<>(orig.getMyAppointees()),
                     new HashSet<>(orig.getAllPermissions())
             ));
         }
     }
+
     public int getFounderId() {
         return founderId;
     }
+
+    // ── Owner appointment (two-step pending flow) ──────────────────────────
+
     public void addOwner(int ownerId) {
-        ownerIds.add(ownerId);
+        pandingOwners.add(ownerId);
+    }
+
+    public boolean isPendingOwner(int userId) {
+        return pandingOwners.contains(userId);
+    }
+
+    public void OwnerAppointeeRespond(int ownerId, boolean appointee) {
+        pandingOwners.remove(Integer.valueOf(ownerId));
+        if (appointee) {
+            ownerIds.add(ownerId);
+            if (isManager(ownerId)) {
+                removeManagerFromTree(ownerId);
+            }
+        }
     }
 
     public Set<Integer> getOwnerIds() {
         return ownerIds;
     }
+
+    public void removeOwner(int ownerId) {
+        ownerIds.remove(ownerId);
+    }
+
     public boolean isOwner(int ownerId) {
         return ownerIds.contains(ownerId);
     }
+
     public boolean checkPermission(int userId, PermissionType type) {
         if (isOwner(userId)) return true; //owner has allPermissions in the company
         if (companyTree.containsKey(userId)) {
@@ -53,19 +91,26 @@ public class Permissions {
     }
 
     public HashMap<Integer, HierarchyDTO> getCompanyTree() {
-        return companyTree;
+        HashMap<Integer, HierarchyDTO> result = new HashMap<>();
+        for (Map.Entry<Integer, Hierarchy> entry : companyTree.entrySet()) {
+            Hierarchy h = entry.getValue();
+            result.put(entry.getKey(), new HierarchyDTO(
+                    h.getMyManager(), h.getMyAppointees(), h.getAllPermissions()));
+        }
+        return result;
     }
-        public Set<Integer> getSubTreeAppointees(int rootUserId) { //function that gets all the subtree of some user
+
+    public Set<Integer> getSubTreeAppointees(int rootUserId) {
         Set<Integer> subTreeAppointees = new HashSet<>();
         Queue<Integer> queue = new LinkedList<>();
         queue.add(rootUserId);
         subTreeAppointees.add(rootUserId);
         while (!queue.isEmpty()) {
             int currentUserId = queue.poll();
-            if(companyTree.containsKey(currentUserId)) {
+            if (companyTree.containsKey(currentUserId)) {
                 List<Integer> directAppointees = companyTree.get(currentUserId).getMyAppointees();
                 for (Integer directAppointee : directAppointees) {
-                    if(!subTreeAppointees.contains(directAppointee)) {
+                    if (!subTreeAppointees.contains(directAppointee)) {
                         subTreeAppointees.add(directAppointee);
                         queue.add(directAppointee);
                     }
@@ -74,8 +119,82 @@ public class Permissions {
         }
         return subTreeAppointees;
     }
-        public void removeOwner(int ownerId) {
-        ownerIds.remove(ownerId);
+
+    public boolean isManager(int userId) {
+        return companyTree.containsKey(userId);
+    }
+
+    public int getManagerAppointerId(int managerId) {
+        Hierarchy h = companyTree.get(managerId);
+        return h != null ? h.getMyManager() : -1;
+    }
+
+    public int getManagerCount() {
+        return companyTree.size();
+    }
+
+    /** Adds a manager to the tree and registers them as an appointee of their appointer. */
+    public void addToTree(int managerId, int appointedBy, Set<PermissionType> permissions) {
+        companyTree.put(managerId, new Hierarchy(appointedBy, new ArrayList<>(), new HashSet<>(permissions)));
+        if (companyTree.containsKey(appointedBy)) {
+            companyTree.get(appointedBy).addAppointee(managerId);
+        }
+    }
+
+    /**
+     * Removes a manager from the tree and cascades:
+     * - removes them from their appointer's appointee list
+     * - reassigns their direct sub-managers to the removed manager's appointer
+     */
+    public void removeManagerFromTree(int managerId) {
+        Hierarchy removed = companyTree.remove(managerId);
+        if (removed == null) return;
+        int appointerId = removed.getMyManager();
+        Hierarchy appointer = companyTree.get(appointerId);
+        if (appointer != null) {
+            appointer.getMyAppointees().remove(Integer.valueOf(managerId));
+            appointer.getMyAppointees().addAll(removed.getMyAppointees());
+        }
+        for (int subId : removed.getMyAppointees()) {
+            Hierarchy sub = companyTree.get(subId);
+            if (sub != null) sub.setMyManager(appointerId);
+        }
+    }
+
+    /** Changes a manager's appointer — used when the original appointer is removed from the company. */
+    public void changeAppointer(int managerId, int newAppointer) {
+        Hierarchy h = companyTree.get(managerId);
+        if (h != null) h.setMyManager(newAppointer);
+    }
+
+    public void updateManagerPermissions(int ownerId, int managerId, Set<PermissionType> newPermissions) {
+        if (newPermissions == null || newPermissions.isEmpty())
+            throw new IllegalArgumentException("At least one permission must be selected for the representative");
+        Hierarchy h = companyTree.get(managerId);
+        if (h == null) {
+            throw new IllegalArgumentException("Manager is not assigned to this company");
+        }
+        h.setPermissions(ownerId, newPermissions);
+    }
+
+    // ── Manager appointment (two-step pending flow) ────────────────────────
+
+    public void addPendingManager(int managerId, int appointedBy, Set<PermissionType> permissions) {
+        pendingManagers.put(managerId, new Hierarchy(appointedBy, new ArrayList<>(), new HashSet<>(permissions)));
+    }
+
+    public boolean isPendingManager(int managerId) {
+        return pendingManagers.containsKey(managerId);
+    }
+
+    public void respondManagerAppointment(int managerId, boolean accept) {
+        Hierarchy pending = pendingManagers.remove(managerId);
+        if (pending != null && accept) {
+            companyTree.put(managerId, pending);
+            if (companyTree.containsKey(pending.getMyManager())) {
+                companyTree.get(pending.getMyManager()).addAppointee(managerId);
+            }
+        }
     }
 
 }

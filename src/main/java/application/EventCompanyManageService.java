@@ -18,6 +18,7 @@ import Exception.OptimisticLockingFailureException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.*;
 
 import java.util.List;
@@ -32,6 +33,8 @@ public class EventCompanyManageService {
     private final Logger logger;
     private final IAuth auth;
     private final IPaymentSystem paymentSystem;
+    AtomicInteger ticketIdGenerator = new AtomicInteger(1);
+
 
     public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem) {
         this.companyRepo = companyRepo;
@@ -41,7 +44,7 @@ public class EventCompanyManageService {
         this.paymentSystem = paymentSystem;
     }
 
-    public Response<Boolean> DefineVenueAndSeatingMap(String token, String eventId, ElementPositionDTO stage,
+    public Response<Boolean> DefineVenueAndSeatingMap(String token, Integer eventId, ElementPositionDTO stage,
             List<ElementPositionDTO> entries, List<StandingZoneDTO> standingZone, List<SeatingZoneDTO> seatingZone) {
         return RetryHelper.executeWithRetry(() ->
         {
@@ -75,13 +78,12 @@ public class EventCompanyManageService {
                     logger.severe("Map element is null");
                     return new Response<>(false, "map element null");
                 }
-
                 List<Zone> zones = new ArrayList<>();
                 for (StandingZoneDTO standingZoneDTO : standingZone) {
-                    zones.add(new StandingZone(standingZoneDTO));
+                    zones.add(new StandingZone(standingZoneDTO,ticketIdGenerator));
                 }
                 for (SeatingZoneDTO seatingZoneDTO : seatingZone) {
-                    zones.add(new SeatingZone(seatingZoneDTO));
+                    zones.add(new SeatingZone(seatingZoneDTO,ticketIdGenerator));
                 }
                 List<ElementPosition> allEntries = new ArrayList<>();
                 for (ElementPositionDTO elementPositionDTO : entries) {
@@ -110,7 +112,7 @@ public class EventCompanyManageService {
 
     }
 
-    public Response<String> createEvent(String token, int companyId, LocalDateTime date, String name,
+    public Response<Integer> createEvent(String token, int companyId, LocalDateTime date, String name,
             LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent category) {
         return RetryHelper.executeWithRetry(() ->
         {
@@ -168,7 +170,7 @@ public class EventCompanyManageService {
         });
     }
 
-    public Response<Boolean> UpdateEventDate(String token, String eventId, LocalDateTime date) {
+    public Response<Boolean> UpdateEventDate(String token, Integer eventId, LocalDateTime date) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "UpdateEventDate called");
@@ -209,7 +211,7 @@ public class EventCompanyManageService {
     }
 
     // adding new zones to an existing map of an event
-    public Response<Boolean> AddZonesToEventMap(String token, String eventId, List<StandingZoneDTO> standingZone,
+    public Response<Boolean> AddZonesToEventMap(String token, Integer eventId, List<StandingZoneDTO> standingZone,
             List<SeatingZoneDTO> seatingZone) {
         return RetryHelper.executeWithRetry(() ->
         {
@@ -254,13 +256,13 @@ public class EventCompanyManageService {
                 List<Zone> zones = map.getZones();
                 if (hasStanding) {
                     for (StandingZoneDTO standingZoneDTO : standingZone) {
-                        zones.add(new StandingZone(standingZoneDTO));
+                        zones.add(new StandingZone(standingZoneDTO,ticketIdGenerator));
                     }
                 }
 
                 if (hasSeating) {
                     for (SeatingZoneDTO seatingZoneDTO : seatingZone) {
-                        zones.add(new SeatingZone(seatingZoneDTO));
+                        zones.add(new SeatingZone(seatingZoneDTO,ticketIdGenerator));
                     }
                 }
 
@@ -281,7 +283,7 @@ public class EventCompanyManageService {
         });
     }
 
-    public Response<Boolean> DeleteEvent(String token, String eventId) {
+    public Response<Boolean> DeleteEvent(String token, Integer eventId) {
         return RetryHelper.executeWithRetry(()->{
             logger.log(Level.INFO, "DeleteEvent called");
             int userId = auth.getUserId(token).getValue();
@@ -391,9 +393,14 @@ public class EventCompanyManageService {
                     logger.log(Level.SEVERE, "company not found");
                     return new Response<>(null, "company not found");
                 }
+                String role = auth.getRole(token).getValue();
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid token");
+                    return new Response<>(null, "Invalid token");
+                }
                 int userId = auth.getUserId(token).getValue();
-                boolean isMember = userId != -1;
-                boolean isUserPermitted = company.isActive() || (isMember || company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES));
+                boolean isMember = "MEMBER".equals(role);
+                boolean isUserPermitted = company.isActive() || (isMember && company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES));
                 if (!isUserPermitted) {
                     logger.log(Level.SEVERE, "User is not permitted to view closed companies");
                     return new Response<>(null, "User is not permitted to view closed companies");
@@ -490,7 +497,7 @@ public class EventCompanyManageService {
         });
     }
 
-    public Response<Boolean> processRefund(String token, String eventId, int orderId) {
+    public Response<Boolean> processRefund(String token, Integer eventId, int orderId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");
 

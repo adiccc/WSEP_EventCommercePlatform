@@ -1,26 +1,30 @@
 package domain.activeOrder;
 
 import java.time.LocalDateTime;
-import domain.event.Event;
-
 import java.util.ArrayList;
 import java.util.List;
 
 public class ActiveOrder {
-    private int orderId;
-    private int userId;
-    private String eventId;
+    private final int orderId;
+    private final int userId;
+    private final Integer eventId;
     private List<Integer> tickets;
-    private LocalDateTime expireTime;
+    private LocalDateTime createdAt;
+    private LocalDateTime checkoutStartedAt;
     private long version;
+    private STAGE stage;
+    private static final int SELECTING_TICKETS_TIMEOUT_MINUTES = 5;
+    private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
 
-    public ActiveOrder(int orderId, int userId, String eventId, List<Integer> tickets, int expireMinutes) {
+    public ActiveOrder(int orderId, int userId, Integer eventId, List<Integer> tickets) {
         this.orderId = orderId;
         this.userId = userId;
         this.eventId = eventId;
         this.tickets = tickets;
         this.version = 0;
-        this.expireTime = LocalDateTime.now().plusMinutes(expireMinutes);
+        this.createdAt = LocalDateTime.now();
+        this.checkoutStartedAt = null;
+        this.stage = STAGE.SELECTING_TICKETS;
     }
 
     public ActiveOrder(ActiveOrder activeOrder) {
@@ -28,8 +32,10 @@ public class ActiveOrder {
         this.userId = activeOrder.userId;
         this.eventId = activeOrder.eventId;
         this.tickets = new ArrayList<>(activeOrder.tickets);
-        this.expireTime = activeOrder.expireTime;
+        this.createdAt = activeOrder.createdAt;
+        this.checkoutStartedAt = activeOrder.checkoutStartedAt;
         this.version = activeOrder.version;
+        this.stage = activeOrder.stage;
 
     }
 
@@ -44,7 +50,7 @@ public class ActiveOrder {
         return orderId;
     }
 
-    public String getEventId() {
+    public Integer getEventId() {
         return eventId;
     }
 
@@ -66,10 +72,56 @@ public class ActiveOrder {
 
         ActiveOrder other = (ActiveOrder) obj;
         return orderId==other.orderId && version == other.getVersion();
-
     }
     public boolean isExpired() {
-        return LocalDateTime.now().isAfter(expireTime);
+        return isExpired(LocalDateTime.now());
     }
 
+    public STAGE getStage() {
+        return stage;
+    }
+
+    public void proceedToCheckout() {
+        if (stage == STAGE.SELECTING_TICKETS) {
+            stage = STAGE.CHECKING_OUT;
+            this.checkoutStartedAt = LocalDateTime.now();
+        }
+    }
+
+    public void returnToSelecting() {
+        // todo: call when return to selecting tickets from checkout
+        if (stage == STAGE.CHECKING_OUT) {
+            stage = STAGE.SELECTING_TICKETS;
+        }
+    }
+
+    public boolean isExpired(LocalDateTime now) {
+        if (stage == STAGE.SELECTING_TICKETS) {
+            return createdAt.plusMinutes(SELECTING_TICKETS_TIMEOUT_MINUTES).isBefore(now);
+        }
+        if (stage == STAGE.CHECKING_OUT) {
+            return checkoutStartedAt.plusMinutes(CHECKOUT_TIMEOUT_MINUTES).isBefore(now);
+        }
+        return false;
+    }
+
+    public void setTickets(List<Integer> newTickets) {
+        this.tickets = new ArrayList<>(newTickets);
+    }
+
+    public LocalDateTime getCheckoutStartedAt() {
+        return checkoutStartedAt;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void forceExpireForTest(LocalDateTime now) {
+        if (stage == STAGE.SELECTING_TICKETS) {
+            this.createdAt = now.minusMinutes(6);
+        } else if (stage == STAGE.CHECKING_OUT) {
+            this.checkoutStartedAt = now.minusMinutes(11);
+        }
+    }
 }

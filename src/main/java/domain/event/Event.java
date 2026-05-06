@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Map;
 
 public class Event {
-    private String id;
+    private int id;
     private int companyId;
     private int creatorId;
     private EventMap eventMap;
@@ -31,8 +31,6 @@ public class Event {
     private CategoryEvent categoryEvent;
     private List<Order> orders;
     private long version;
-    private final AtomicInteger activePurchaseSessions = new AtomicInteger(0);
-
 
     public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent categoryEvent) {
         this.eventMap = null;
@@ -46,7 +44,7 @@ public class Event {
         purchasePolicy.addRule(new MaxTicketsRule(20));
         discountPolicy = new DiscountPolicy();
         discountPolicy.addDiscount(new LimitedDiscount(0.1, 5));
-        this.id = LocalDateTime.now().hashCode() + String.valueOf(creatorId);
+        this.id = -1; // will be set when stored in repo
         active = false;
         this.location = location;
         this.categoryEvent = categoryEvent;
@@ -79,7 +77,6 @@ public class Event {
             this.orders.add(new Order(order));
         }
         this.version = event.version;
-        this.activePurchaseSessions.set(event.activePurchaseSessions.get());
     }
 
     public long getVersion() {
@@ -140,7 +137,7 @@ public class Event {
         return hasLottery;
     }
 
-    public String getId() {
+    public int getId() {
         return id;
     }
 
@@ -227,27 +224,13 @@ public class Event {
         });
     }
 
-    public synchronized boolean tryAcquirePurchaseSlot(int capacity) {
-        if (activePurchaseSessions.get() >= capacity) {
-            return false;
-        }
-        activePurchaseSessions.incrementAndGet();
-        return true;
-    }
-
-    public void releasePurchaseSlot() {
-        if (activePurchaseSessions.get() > 0) {
-            activePurchaseSessions.decrementAndGet();
-        }
-    }
-
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
 
         Event other = (Event) obj;
-        return id.equals(other.id) && version == other.version;
+        return id == (other.id) && version == other.version;
     }
 
     public void quantityExceedsPolicy(UserDTO user, int quantity) {
@@ -262,7 +245,7 @@ public class Event {
         }
     }
 
-    public List<Integer> bookTickets(boolean member, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
+    public List<Integer> bookTickets(Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return eventMap.bookTickets(seatingZones,standingZones);
     }
     public double calculateFinalTotalPrice(List<Integer> ticketIds, String couponCode) {
@@ -281,10 +264,62 @@ public class Event {
 
     //TODO : this implementation is for test only, this function should be implemented currectly
     public void placeOrder(int userId,int orderId){
-        orders.add(new Order(orderId,userId," ",new ArrayList<>(),100.0,"order123"));
+        orders.add(new Order(orderId,userId,-1,new ArrayList<>(),100.0,"order123"));
     }
 
-    public String getEventId() {
-        return this.id;
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public void releaseTickets(List<Integer> ticketIds) {
+        eventMap.releaseTickets(ticketIds);
+    }
+
+    public int countStandingInZone(String zone, List<Integer> currentTickets) {
+        return eventMap.countStandingInZone(zone,currentTickets);
+    }
+
+    public List<Integer> findSeatingTicketIds(Map<String, List<SeatingTicketDTO>> seatingToRemove) {
+        List<Integer> seatingTicketIds = new ArrayList<>();
+        for (Map.Entry<String, List<SeatingTicketDTO>> entry : seatingToRemove.entrySet()) {
+            String zoneName = entry.getKey();
+            List<SeatingTicketDTO> seats = entry.getValue();
+            Zone matchedZone = null;
+            for (Zone z : eventMap.getZones()) {
+                if (z.getName().equals(zoneName)) {
+                    matchedZone = z;
+                    break;
+                }
+            }
+            if (matchedZone == null) {
+                throw new IllegalArgumentException("Seating zone does not exist: " + zoneName);
+            }
+            if (!(matchedZone instanceof SeatingZone)) {
+                throw new IllegalArgumentException("Zone is not a seating zone: " + zoneName);
+            }
+            seatingTicketIds.addAll(((SeatingZone) matchedZone).findSeatingTicketIds(seats));
+        }
+        return seatingTicketIds;
+    }
+
+    public List<Integer> pickStandingFromZone(String zone, List<Integer> newTickets, int numToPick) {
+        Zone matchedZone = null;
+        for (Zone z : eventMap.getZones()) {
+            if (z.getName().equals(zone)) {
+                matchedZone = z;
+                break;
+            }
+        }
+        if (matchedZone == null) {
+            throw new IllegalArgumentException("Standing zone does not exist: " + zone);
+        }
+        if (!(matchedZone instanceof StandingZone)) {
+            throw new IllegalArgumentException("Zone is not a standing zone: " + zone);
+        }
+        return ((StandingZone) matchedZone).pickStandingFromZone(newTickets, numToPick);
+    }
+
+    public void markTicketsAsSold(List<Integer> ticketIds) {
+        eventMap.markTicketsAsSold(ticketIds);
     }
 }

@@ -26,16 +26,18 @@ public class EventService {
         this.auth = auth;
     }
 
-    public Response<EventDetailsDTO> ViewEventDetails(String token, int companyId, String eventId) {
+    public Response<EventDetailsDTO> ViewEventDetails(String token, int companyId, Integer eventId) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "ViewEventDetails called");
 
             // check valid token
-            if (!auth.isLoggedIn(token).getValue()) {
+            String role = auth.getRole(token).getValue();
+            if(role == null){
+                logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
             }
-            if (eventId == null || eventId.isEmpty()) {
+            if (eventId == null) {
                 return new Response<>(null, "Invalid event ID");
             }
             try {
@@ -64,7 +66,9 @@ public class EventService {
             logger.info("Search events called");
 
             // token validation
-            if (!auth.isLoggedIn(token).getValue()) {
+            String role = auth.getRole(token).getValue();
+            if(role == null){
+                logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
             }
 
@@ -100,7 +104,9 @@ public class EventService {
             logger.info("Search company events called");
 
             // token validation
-            if (!auth.isLoggedIn(token).getValue()) {
+            String role = auth.getRole(token).getValue();
+            if(role == null){
+                logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
             }
 

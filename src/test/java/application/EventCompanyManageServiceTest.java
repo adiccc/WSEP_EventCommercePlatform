@@ -6,7 +6,6 @@ import DTO.StandingZoneDTO;
 import Log.LoggerSetup;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
-import domain.company.ContactInfo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.CompanyDetailsDTO;
@@ -17,28 +16,23 @@ import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.OrderStatus;
-import domain.event.IOrderRepo;
 import domain.event.Order;
 import domain.lottery.ILotteryRepo;
-import domain.lottery.Lottery;
-import domain.policy.DiscountPolicy;
-import domain.policy.PurchasePolicy;
 import domain.user.IUserRepo;
-import domain.user.Member;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.time.LocalDate;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.mockito.Mockito;
 
@@ -61,8 +55,7 @@ class EventCompanyManageServiceTest {
     private IEventRepo eventRepo;
 
     private LocalDateTime eventDate;
-    private String eventId;
-    private String pastEventId;
+    private Integer eventId;
 
 
     private UserService userService;
@@ -74,6 +67,9 @@ class EventCompanyManageServiceTest {
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
     private ActiveOrderService activeOrderService;
+    private String GUEST_TOKEN;
+    private String ADMIN_TOKEN;
+    private AdminService adminService;
 
     @BeforeEach
     void setUp() {
@@ -92,8 +88,8 @@ class EventCompanyManageServiceTest {
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
         activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,100);
-
-        //should delete oreder repo from company service construture
+        GUEST_TOKEN= userService.continueAsGuest().getValue();
+        //should delete order repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo);
         eventCompanyManageService = new EventCompanyManageService(
                 companyRepo,
@@ -125,6 +121,13 @@ class EventCompanyManageServiceTest {
         entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
         standingZones = List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1)));
         seatingZones = List.of(new SeatingZoneDTO(10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
+
+        String adminEmail = "admin_master@bgu.ac.il";
+        auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(adminEmail));
+        userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
+        userService.registerUser(null, new UserDTO(adminEmail, "Admin", "Sys", "Pass123!", 1, 1, 2000, "Address", "050-000-0000"));
+        ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem);
 
     }
 
@@ -184,7 +187,7 @@ class EventCompanyManageServiceTest {
     void GivenMissingEventScenario_WhenDefineVenueAndSeatingMap_ThenEventNotFoundErrorIsShown() {
         Response<Boolean> response =eventCompanyManageService.DefineVenueAndSeatingMap(
                 validToken1,
-                "non-existing-event-id",
+                -1,
                 stage,
                 entries,
                 standingZones,
@@ -218,7 +221,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
         // Act: Standard sale (hasLottery = false)
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 validToken1, companyId, eventDate, "Standard Event", saleStartDate, false,GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -234,7 +237,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
         // Act: Lottery sale (hasLottery = true)
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 validToken1, companyId, eventDate, "Lottery Event", saleStartDate, false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -250,7 +253,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
         // Act
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 validToken2, companyId, eventDate, "Unauthorized Event", saleStartDate, false,GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -266,7 +269,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = pastEventDate.minusDays(1);
 
         // Act
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 validToken1, companyId, pastEventDate, "Past Event", saleStartDate, false,GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -282,7 +285,7 @@ class EventCompanyManageServiceTest {
         LocalDateTime saleStartDate = LocalDateTime.now().plusDays(1);
 
         // Act
-        Response<String> response =eventCompanyManageService.createEvent(
+        Response<Integer> response =eventCompanyManageService.createEvent(
                 null, companyId, eventDate, "No Token Event", saleStartDate, false,GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         );
 
@@ -442,7 +445,7 @@ class EventCompanyManageServiceTest {
         // When
         Response<Boolean> response =eventCompanyManageService.UpdateEventDate(
                 validToken1,
-                "non-existing-event-id",
+                -1,
                 requestedDate
         );
 
@@ -603,7 +606,7 @@ class EventCompanyManageServiceTest {
         // Act
         Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
                 validToken1,
-                "non-existing-event-id",
+                -1,
                 newStandingZones,
                 null
         );
@@ -652,7 +655,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenInactiveEvent_WhenAddZonesToEventMap_ThenEventNotActiveErrorIsReturned() {
         // Arrange: Create a Lottery Event. A lottery event does not become active immediately when a map is defined.
-        String lotteryEventId = eventCompanyManageService.createEvent(
+        Integer lotteryEventId = eventCompanyManageService.createEvent(
                 validToken1, companyId, LocalDateTime.now().plusDays(10), "Lottery Event",
                 LocalDateTime.now().plusDays(5), true, GeographicalArea.CENTER, CategoryEvent.FESTIVAL
         ).getValue();
@@ -681,7 +684,7 @@ class EventCompanyManageServiceTest {
         eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
 
         // Act
-        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(invalidToken, companyId);
+        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(GUEST_TOKEN, companyId);
 
         // Assert
         assertNotNull(response.getValue());
@@ -713,7 +716,7 @@ class EventCompanyManageServiceTest {
         companyService.deactivateCompany(validToken1, closedCompanyId);
 
         // Act
-        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(invalidToken, closedCompanyId);
+        Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(GUEST_TOKEN, closedCompanyId);
 
         // Assert
         assertNull(response.getValue());
@@ -755,12 +758,12 @@ class EventCompanyManageServiceTest {
         // Assert
         assertNull(response.getValue());
         assertTrue(response.getMessage().contains("failed getCompanyDetails"));    }
-         // ===================== Generate Sales Reports Tests =====================
+    // ===================== Generate Sales Reports Tests =====================
     @Test
     void GivenOwnerWithSalesData_WhenGenerateSalesReports_ThenReturnReportWithData() {
         // Arrange
         //TODO: make sure that when order is completed change the change to use only repo's and services!!!!
-        String event = eventCompanyManageService.createEvent(validToken1,companyId,eventDate,"event1",eventDate.minusDays(1), false,GeographicalArea.NORTH,CategoryEvent.SPORTS).getValue();
+        Integer event = eventCompanyManageService.createEvent(validToken1,companyId,eventDate,"event1",eventDate.minusDays(1), false,GeographicalArea.NORTH,CategoryEvent.SPORTS).getValue();
         List<Integer> purchasedTickets = new ArrayList<>();
         purchasedTickets.add(101);
         Event e =eventRepo.findById(event);
@@ -805,7 +808,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenGuest_WhenGenerateSalesReports_ThenErrorNotPermitted() {
         // Act
-        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, invalidToken);
+        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, GUEST_TOKEN);
 
         // Assert
         assertNull(response.getValue());
@@ -821,7 +824,7 @@ class EventCompanyManageServiceTest {
         assertNull(response.getValue());
         assertTrue(response.getMessage().contains("not found"));
     }
-        @Test
+    @Test
     void GivenRefundRequiredOrder_WhenProcessRefundAndExternalPaymentApproves_ThenOrderMarkedRefunded() {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenReturn(true);
@@ -990,7 +993,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenNonExistingEvent_WhenDeleteEvent_ThenEventNotFoundErrorReturned() {
         // Given
-        String nonExistingEventId = "333";
+        Integer nonExistingEventId = 333;
 
         // When
         Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, nonExistingEventId);
@@ -1050,55 +1053,180 @@ class EventCompanyManageServiceTest {
         executor.shutdown();
     }
 
-//    @Test
-//    void GivenHighLoad_WhenManagerCreatesMultipleEventsSimultaneously_ThenAllEventsAreSuccessfullyCreated() throws InterruptedException {
-//        // Arrange: Set up 20 concurrent event creations
-//        int numberOfConcurrentEvents = 20;
-//        ExecutorService executor = Executors.newFixedThreadPool(numberOfConcurrentEvents);
-//        CountDownLatch startGun = new CountDownLatch(1);
-//        CountDownLatch finishLine = new CountDownLatch(numberOfConcurrentEvents);
-//
-//        // Act: Create 20 threads, each trying to create a unique event for the same company
-//        for (int i = 0; i < numberOfConcurrentEvents; i++) {
-//            final int index = i;
-//            executor.submit(() -> {
-//                try {
-//                    startGun.await(); // Wait for the start signal
-//
-//                    LocalDateTime futureDate = LocalDateTime.now().plusDays(10 + index);
-//                    LocalDateTime saleDate = LocalDateTime.now().plusDays(5);
-//
-//                    eventCompanyManageService.createEvent(
-//                            validToken1,
-//                            companyId,
-//                            futureDate,
-//                            "Massive Concurrent Event " + index,
-//                            saleDate,
-//                            false,
-//                            GeographicalArea.CENTER,
-//                            CategoryEvent.FESTIVAL
-//                    );
-//                } catch (InterruptedException e) {
-//                    Thread.currentThread().interrupt();
-//                } finally {
-//                    finishLine.countDown();
-//                }
-//            });
-//        }
-//
-//        // All 20 creations hit the service simultaneously
-//        startGun.countDown();
-//        finishLine.await(); // Wait for all threads and their respective retries to finish
-//
-//        // Assert: Verify that no event was lost due to concurrent overwrites on the company list
-//        // We fetch all events for this company.
-//        // We expect the 1 original event from setUp() + 20 new concurrent events = 21 total events.
-//        List<Event> companyEvents = eventRepo.findByCompany(companyId);
-//
-//        assertEquals(numberOfConcurrentEvents + 1, companyEvents.size(),
-//                "All concurrent events must be successfully saved without overwriting each other");
-//
-//        executor.shutdown();
-//    }
+    @Test
+    void GivenHighLoad_WhenManagerCreatesMultipleEventsSimultaneously_ThenAllEventsAreSuccessfullyCreated() throws InterruptedException {
+        // Arrange: Set up 20 concurrent event creations
+        int numberOfConcurrentEvents = 20;
+        ExecutorService executor = Executors.newFixedThreadPool(numberOfConcurrentEvents);
+        CountDownLatch startGun = new CountDownLatch(1);
+        CountDownLatch finishLine = new CountDownLatch(numberOfConcurrentEvents);
+
+        // Act: Create 20 threads, each trying to create a unique event for the same company
+        for (int i = 0; i < numberOfConcurrentEvents; i++) {
+            final int index = i;
+            executor.submit(() -> {
+                try {
+                    startGun.await(); // Wait for the start signal
+
+                    LocalDateTime futureDate = LocalDateTime.now().plusDays(10 + index);
+                    LocalDateTime saleDate = LocalDateTime.now().plusDays(5);
+
+                    eventCompanyManageService.createEvent(
+                            validToken1,
+                            companyId,
+                            futureDate,
+                            "Massive Concurrent Event " + index,
+                            saleDate,
+                            false,
+                            GeographicalArea.CENTER,
+                            CategoryEvent.FESTIVAL
+                    );
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    finishLine.countDown();
+                }
+            });
+        }
+
+        // All 20 creations hit the service simultaneously
+        startGun.countDown();
+        finishLine.await(); // Wait for all threads and their respective retries to finish
+
+        // Assert: Verify that no event was lost due to concurrent overwrites on the company list
+        // We fetch all events for this company.
+        // We expect the 1 original event from setUp() + 20 new concurrent events = 21 total events.
+        List<Event> companyEvents = eventRepo.findByCompany(companyId);
+
+        assertEquals(numberOfConcurrentEvents + 1, companyEvents.size(),
+                "All concurrent events must be successfully saved without overwriting each other");
+
+        executor.shutdown();
+    }
+    @Test
+    void GivenConcurrentAdminClose_WhenUserViewsCompanyDetails_ThenConsistentResult() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> adminFuture = executor.submit(() -> {
+            start.await();
+            return adminService.closeCompanyByAdmin(ADMIN_TOKEN, companyId);
+        });
+
+        Future<Response<CompanyDetailsDTO>> userFuture = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.getCompanyDetails(GUEST_TOKEN, companyId);
+        });
+
+        start.countDown();
+        adminFuture.get();
+        Response<CompanyDetailsDTO> userRes = userFuture.get();
+        executor.shutdown();
+
+        if (userRes.getValue() == null) {
+            assertTrue(userRes.getMessage().contains("User is not permitted to view closed companies"),
+                    "If closed, guest should get permission error, got: " + userRes.getMessage());
+        } else {
+            assertEquals(companyId, userRes.getValue().getCompanyId());
+        }
+
+    }
+
+    @Test
+    void GivenConcurrentEventDeletion_WhenUserViewsCompanyDetails_ThenConsistentEventList() throws Exception {
+        Response<Boolean> mapRes = eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1, eventId, stage, entries, standingZones, seatingZones);
+        assertTrue(mapRes.getValue(), "Map must be defined to activate the event");
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> deleteFuture = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.DeleteEvent(validToken1, eventId);
+        });
+
+        Future<Response<CompanyDetailsDTO>> viewFuture = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.getCompanyDetails(GUEST_TOKEN, companyId);
+        });
+
+        start.countDown();
+
+        Response<Boolean> deleteRes = deleteFuture.get();
+        Response<CompanyDetailsDTO> viewRes = viewFuture.get();
+        executor.shutdown();
+        assertTrue(deleteRes.getValue(), "Event deletion should succeed");
+        assertNotNull(viewRes.getValue(), "Company details should be retrieved successfully without crashing");
+
+        boolean eventFoundInView = viewRes.getValue().getFutureEvents().stream()
+                .anyMatch(e -> e.getEventID() == eventId);
+
+        if (eventFoundInView) {
+            System.out.println("The guest won the race and saw the event before it was deleted!");
+        } else {
+            System.out.println("The owner won the race, and the event was already hidden from the guest!");
+        }
+
+        Event deletedEvent = eventRepo.findById(eventId);
+        assertFalse(deletedEvent.isActive(), "Event must be inactive in the DB after deletion");
+    }
+
+    @Test
+    void GivenConcurrentPurchase_WhenGenerateSalesReport_ThenRevenueIsAccurate() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> purchaseFuture = executor.submit(() -> {
+            start.await();
+            return activeOrderService.placeOrder(validToken2, eventId, 999);
+        });
+
+        Future<Response<SalesReportDTO>> reportFuture = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.generateSalesReports(companyId, validToken1);
+        });
+
+        start.countDown();
+        purchaseFuture.get();
+        Response<SalesReportDTO> reportRes = reportFuture.get();
+        executor.shutdown();
+
+        assertNotNull(reportRes.getValue(), "Report must be generated successfully");
+        assertTrue(reportRes.getValue().getTotalRevenue() >= 0, "Revenue calculation must not fail or corrupt");
+    }
+    @Test
+    void GivenConcurrentAdminRemoveManager_WhenOwnerGeneratesReport_ThenReportIsConsistent() throws Exception {
+        String managerEmail = "manager_race" + System.currentTimeMillis() + "@test.com";
+        userService.registerUser(null, new UserDTO(managerEmail, "Man", "Ager", "Pass123!", 1, 1, 2000, "City", "050-999-9999"));
+        String managerToken = userService.login(managerEmail, "Pass123!").getValue();
+        int MANAGER_ID = auth.getUserId(managerToken).getValue();
+
+        Company company = companyRepo.findById(companyId);
+        int ownerId = auth.getUserId(validToken1).getValue();
+        company.getCompanyPermission().addToTree(MANAGER_ID, ownerId, new HashSet<>());
+        companyRepo.store(company);
+
+        eventCompanyManageService.createEvent(managerToken, companyId, LocalDateTime.now().plusDays(20),
+                "Manager's Event", LocalDateTime.now().plusDays(5), false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> removeFuture = executor.submit(() -> {
+            start.await();
+            return adminService.removeUser(ADMIN_TOKEN, MANAGER_ID);
+        });
+
+        Future<Response<SalesReportDTO>> reportFuture = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.generateSalesReports(companyId, validToken1);
+        });
+
+        start.countDown();
+        removeFuture.get();
+        Response<SalesReportDTO> reportRes = reportFuture.get();
+        executor.shutdown();
+
+        assertNotNull(reportRes.getValue(), "Report generation must survive concurrent tree modification");
+    }
 
 }

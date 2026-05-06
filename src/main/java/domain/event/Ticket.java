@@ -13,11 +13,16 @@ public abstract class Ticket {
         this.status = AVAILABLE;
     }
 
+    public Ticket(int ticketId, TicketStatus status) {
+        this.ticketId = ticketId;
+        this.status = status;
+    }
+
     public int getTicketId() {
         return ticketId;
     }
 
-    public boolean setStatus(TicketStatus newStatus) {
+    public boolean setStatusFromAvailable(TicketStatus newStatus) {
         if (this.status == AVAILABLE) {
             this.status = newStatus;
             return true;
@@ -27,5 +32,11 @@ public abstract class Ticket {
 
     public TicketStatus getStatus() {
         return status;
+    }
+
+    public void makeAvailableFromLocked() {
+        if (this.status == TicketStatus.LOCKED) {
+            this.status = AVAILABLE;
+        }
     }
 }

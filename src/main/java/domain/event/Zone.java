@@ -3,6 +3,8 @@ package domain.event;
 import DTO.ElementPositionDTO;
 import domain.dataType.ElementPosition;
 
+import java.util.List;
+
 public abstract class Zone {
     private final String name;
     private final double price;
@@ -30,4 +32,6 @@ public abstract class Zone {
         return price;
     }
     public abstract boolean containsTicketId(int ticketId);
+    abstract void releaseTickets(List<Integer> ticketIds) ;
+    public abstract void markTicketsAsSold(List<Integer> ticketIds);
 }

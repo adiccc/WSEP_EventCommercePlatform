@@ -5,6 +5,7 @@ import domain.dto.SeatingTicketDTO;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class EventMap {
     private final List<Zone> zones;
@@ -22,7 +23,7 @@ public class EventMap {
         this.zones = new ArrayList<>();
         for (Zone z : eventMap.zones) {
             if (z instanceof SeatingZone seatingZone) {
-                this.zones.add(new SeatingZone(seatingZone));
+                this.zones.add(new SeatingZone(seatingZone, new AtomicInteger(seatingZone.getTicketIdGenerator().get())));
             } else if (z instanceof StandingZone standingZone) {
                 this.zones.add(new StandingZone(standingZone));
             }
@@ -89,6 +90,7 @@ public class EventMap {
         }
         return bookedTicketsIds;
     }
+
     public double calculateTotalPriceBeforeDiscount(List<Integer> ticketIds) {
         double total = 0.0;
 
@@ -109,5 +111,30 @@ public class EventMap {
         }
 
         return total;
+    }
+
+    public void releaseTickets(List<Integer> ticketIds) {
+        for (Zone z : zones) {
+            z.releaseTickets(ticketIds);
+        }
+    }
+
+    public int countStandingInZone(String zone, List<Integer> currentTickets) {
+        for (Zone z : zones) {
+            if (z.getName().equals(zone)) {
+                if (z instanceof StandingZone) {
+                    return ((StandingZone) z).countTickets(currentTickets);
+                } else {
+                    throw new IllegalArgumentException("Zone is not a standing zone: " + zone);
+                }
+            }
+        }
+        throw new IllegalArgumentException("Zone does not exist: " + zone);
+    }
+
+    public void markTicketsAsSold(List<Integer> ticketIds) {
+        for (Zone zone : zones) {
+            zone.markTicketsAsSold(ticketIds);
+        }
     }
 }

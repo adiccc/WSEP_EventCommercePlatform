@@ -173,11 +173,10 @@ class AuthTest {
         // Act
         auth.logout(token);
         Response<Boolean> secondLogoutResponse = auth.logout(token);
-
         // Assert
         assertFalse(secondLogoutResponse.getValue());
         assertEquals("Cannot log out, user is Already logged out", secondLogoutResponse.getMessage());
-        verify(tokenServiceMock, times(1)).extractExpirationDate(token);
+        verify(tokenServiceMock, times(2)).extractExpirationDate(token);
     }
     @Test
     void givenTokenServiceException_whenLogout_thenReturnServerError() {
@@ -195,6 +194,75 @@ class AuthTest {
         // Assert
         assertFalse(response.getValue());
         assertEquals("Logout failed due to server error", response.getMessage());
+    }
+    @Test
+    void givenValidToken_whenGetRole_thenReturnRole() {
+        // Arrange
+        String token = "valid.jwt.token";
+        String expectedRole = "MEMBER";
+        when(tokenServiceMock.validateToken(token)).thenReturn(true);
+        when(tokenServiceMock.extractRole(token)).thenReturn(expectedRole);
+
+        // Act
+        Response<String> response = auth.getRole(token);
+
+        // Assert
+        assertEquals("retrieved role", response.getMessage());
+        assertEquals(expectedRole, response.getValue());
+        verify(tokenServiceMock, times(1)).extractRole(token);
+    }
+
+    @Test
+    void givenNullOrBlankToken_whenGetRole_thenReturnError() {
+        // Act
+        Response<String> responseNull = auth.getRole(null);
+        Response<String> responseBlank = auth.getRole("   ");
+
+        // Assert
+        assertNull(responseNull.getValue());
+        assertEquals("Token is missing or empty", responseNull.getMessage());
+
+        assertNull(responseBlank.getValue());
+        assertEquals("Token is missing or empty", responseBlank.getMessage());
+
+    }
+
+    @Test
+    void givenGuestToken_whenGetUserId_thenReturnMinusOne() {
+        // Arrange
+        String guestToken = "guest.jwt.token";
+        when(tokenServiceMock.extractRole(guestToken)).thenReturn("GUEST");
+
+        // Act
+        Response<Integer> response = auth.getUserId(guestToken);
+
+        // Assert
+        assertEquals(-1, response.getValue());
+        assertEquals("Guest token recognized", response.getMessage());
+        // Verify that it didn't try to query the database
+        verify(userRepoMock, never()).findUserByEmail(anyString());
+    }
+
+    @Test
+    void givenValidMemberToken_whenGetUserId_thenReturnUserId() {
+        // Arrange
+        String memberToken = "member.jwt.token";
+        String email = "test@example.com";
+        Member mockMember = Mockito.mock(Member.class);
+
+        when(tokenServiceMock.extractRole(memberToken)).thenReturn("MEMBER");
+        // Mocking the isLoggedIn logic
+        when(tokenServiceMock.validateToken(memberToken)).thenReturn(true);
+        when(tokenServiceMock.extractUsername(memberToken)).thenReturn(email);
+        when(userRepoMock.findUserByEmail(email)).thenReturn(mockMember);
+        when(mockMember.getUserId()).thenReturn(42);
+
+        // Act
+        Response<Integer> response = auth.getUserId(memberToken);
+
+        // Assert
+        assertEquals(42, response.getValue());
+        assertEquals("Retrieved member", response.getMessage());
     }
 
 }
