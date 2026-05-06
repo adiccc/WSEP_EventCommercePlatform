@@ -163,7 +163,7 @@ public class StandingZone extends Zone {
             for (StandingTicket ticket : occupiedTickets) {
                 if (ticket.getTicketId() == ticketId) {
                     if (ticket.getStatus() == TicketStatus.LOCKED) {
-                        ticket.setStatusFromAvailable(TicketStatus.SOLD);
+                        ticket.setStatusFromLocked(TicketStatus.SOLD);
                     }
                 }
             }

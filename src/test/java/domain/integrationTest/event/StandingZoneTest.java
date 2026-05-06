@@ -1,6 +1,7 @@
 package domain.integrationTest.event;
 
 import domain.dataType.ElementPosition;
+import domain.event.StandingTicket;
 import domain.event.StandingZone;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -296,5 +297,64 @@ class StandingZoneTest {
                 () -> standingZone.pickStandingFromZone(List.of(1, 2, 3), 1));
     }
 
+    @Test
+    void GivenLockedTickets_WhenMarkTicketsAsSold_ThenTicketsBecomeSold() {
+        List<Integer> lockedIds = standingZone.bookTickets(2);
 
+        standingZone.markTicketsAsSold(lockedIds);
+
+        // was 5 booked 2
+        assertEquals(3, standingZone.getAvailable(),
+                "Selling locked tickets must not make them available again");
+
+        assertEquals(2, standingZone.getOccupiedTickets().size(),
+                "Sold standing tickets should remain in occupied tickets");
+
+        for (Integer ticketId : lockedIds) {
+
+            boolean foundSoldTicket = false;
+
+            for (StandingTicket ticket : standingZone.getOccupiedTickets()) {
+                if (ticket.getTicketId() == ticketId &&
+                        ticket.getStatus() == domain.dataType.TicketStatus.SOLD) {
+                    foundSoldTicket = true;
+                    break;
+                }
+            }
+
+            assertTrue(foundSoldTicket,
+                    "Locked ticket " + ticketId + " should become SOLD");
+        }
+    }
+
+    @Test
+    void GivenSoldTickets_WhenReleaseTickets_ThenTicketsStaySoldAndNotAvailable() {
+        List<Integer> lockedIds = standingZone.bookTickets(2);
+
+        standingZone.markTicketsAsSold(lockedIds);
+
+        standingZone.releaseTickets(lockedIds);
+
+        // was 5 booked 2
+        assertEquals(3, standingZone.getAvailable(),
+                "Releasing SOLD tickets must not increase available tickets");
+
+        assertEquals(2, standingZone.getOccupiedTickets().size(),
+                "SOLD tickets must remain occupied and not return to available tickets");
+
+        for (Integer ticketId : lockedIds) {
+            boolean foundSoldTicket = false;
+
+            for (StandingTicket ticket : standingZone.getOccupiedTickets()) {
+                if (ticket.getTicketId() == ticketId &&
+                        ticket.getStatus() == domain.dataType.TicketStatus.SOLD) {
+                    foundSoldTicket = true;
+                    break;
+                }
+            }
+
+            assertTrue(foundSoldTicket,
+                    "Sold ticket " + ticketId + " must stay SOLD after releaseTickets");
+        }
+    }
 }

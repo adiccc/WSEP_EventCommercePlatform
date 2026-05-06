@@ -225,6 +225,7 @@ public class ActiveOrderService {
         }
 
     });}
+
     public Response<Integer> checkoutAndPayment(
             String token,
             int activeOrderId,
@@ -239,6 +240,7 @@ public class ActiveOrderService {
 
             boolean shouldDeleteActiveOrder = false;
             boolean shouldReleaseTickets = false;
+            boolean paymentStageAcquired = false;
 
             try {
                 int userId = auth.getUserId(token).getValue();
@@ -268,6 +270,16 @@ public class ActiveOrderService {
                     return new Response<>(null, "Active order expired");
                 }
 
+                try {
+                    activeOrder.startPayment();
+                    activeOrderRepo.store(activeOrder);
+                    paymentStageAcquired = true;
+                } catch (IllegalStateException e) {
+                    return new Response<>(null, e.getMessage());
+                } catch (OptimisticLockingFailureException e) {
+                    throw e;
+                }
+
                 double total = event.calculateFinalTotalPrice(
                         activeOrder.getTickets(),
                         paymentDetails.getCouponCode()
@@ -276,6 +288,10 @@ public class ActiveOrderService {
                 String paymentConfirmationId = paymentSystem.pay(total, paymentDetails);
 
                 if (paymentConfirmationId == null || paymentConfirmationId.isBlank()) {
+                    ActiveOrder freshOrder = activeOrderRepo.findById(activeOrderId);
+                    freshOrder.returnToCheckout();
+                    activeOrderRepo.store(freshOrder);
+                    paymentStageAcquired = false;
                     return new Response<>(null, "Payment rejected");
                 }
 
@@ -288,7 +304,6 @@ public class ActiveOrderService {
                         paymentConfirmationId
                 );
 
-                event.getOrders().add(order);
                 shouldDeleteActiveOrder = true;
 
                 boolean issuanceFailed = false;
@@ -320,38 +335,77 @@ public class ActiveOrderService {
                     return new Response<>(null, "Ticket issuance failed");
                 }
 
-                event.markTicketsAsSold(activeOrder.getTickets());
-
                 return new Response<>(order.getOrderId(), "Purchase completed successfully");
 
             } catch (NoSuchElementException e) {
                 return new Response<>(null, "Event or active order not found");
 
             } catch (OptimisticLockingFailureException e) {
+                if (paymentStageAcquired && activeOrder != null && order == null) {
+                    try {
+                        ActiveOrder freshOrder = activeOrderRepo.findById(activeOrderId);
+                        freshOrder.returnToCheckout();
+                        activeOrderRepo.store(freshOrder);
+                    } catch (Exception resetException) {
+                        logger.log(Level.SEVERE, "Failed to reset active order stage: " + resetException.getMessage());
+                    }
+                }
                 throw e;
 
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to complete purchase: " + e.getMessage());
+
+                if (paymentStageAcquired && activeOrder != null && order == null) {
+                    try {
+                        ActiveOrder freshOrder = activeOrderRepo.findById(activeOrderId);
+                        freshOrder.returnToCheckout();
+                        activeOrderRepo.store(freshOrder);
+                    } catch (Exception resetException) {
+                        logger.log(Level.SEVERE, "Failed to reset active order stage: " + resetException.getMessage());
+                    }
+                }
+
                 return new Response<>(null, "Failed to complete purchase");
 
             } finally {
                 if (event != null && activeOrder != null) {
-                    if (shouldReleaseTickets) {
-                        event.releaseTickets(activeOrder.getTickets());
+                    if (shouldReleaseTickets || order != null) {
+                        boolean stored = false;
+
+                        while (!stored) {
+                            try {
+                                Event freshEvent = eventRepo.findById(event.getId());
+
+                                if (shouldReleaseTickets) {
+                                    freshEvent.releaseTickets(activeOrder.getTickets());
+                                }
+
+                                if (order != null && freshEvent.findOrderById(order.getOrderId()) == null) {
+                                    freshEvent.getOrders().add(order);
+                                }
+
+                                if (order != null && !shouldReleaseTickets) {
+                                    freshEvent.markTicketsAsSold(activeOrder.getTickets());
+                                }
+
+                                eventRepo.store(freshEvent);
+                                stored = true;
+
+                            } catch (OptimisticLockingFailureException e) {
+                                logger.log(Level.INFO, "Retrying event update after optimistic locking failure");
+                            }
+                        }
                     }
 
                     if (shouldDeleteActiveOrder) {
                         activeOrderRepo.delete(activeOrderId);
                         promoteNextInQueue(event);
                     }
-
-                    if (shouldReleaseTickets || order != null) {
-                        eventRepo.store(event);
-                    }
                 }
             }
         });
     }
+
 
     public void cleanupExpiredOrders() {
         logger.log(Level.INFO, "cleanupExpiredOrders running");

@@ -124,4 +124,22 @@ public class ActiveOrder {
             this.checkoutStartedAt = now.minusMinutes(11);
         }
     }
+
+    public void startPayment() {
+        if (stage == STAGE.PAYMENT_IN_PROGRESS) {
+            throw new IllegalStateException("Payment already in progress");
+        }
+
+        if (stage != STAGE.CHECKING_OUT) {
+            throw new IllegalStateException("Active order is not ready for payment");
+        }
+
+        stage = STAGE.PAYMENT_IN_PROGRESS;
+    }
+
+    public void returnToCheckout() {
+        if (stage == STAGE.PAYMENT_IN_PROGRESS) {
+            stage = STAGE.CHECKING_OUT;
+        }
+    }
 }

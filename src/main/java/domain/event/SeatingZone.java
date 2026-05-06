@@ -133,7 +133,7 @@ public class SeatingZone extends Zone {
             for (SeatingTicket ticket : ticketMap.values()) {
                 if (ticket.getTicketId() == ticketId) {
                     if (ticket.getStatus() == TicketStatus.LOCKED) {
-                        ticket.setStatusFromAvailable(TicketStatus.SOLD);
+                        ticket.setStatusFromLocked(TicketStatus.SOLD);
                     }
                 }
             }
