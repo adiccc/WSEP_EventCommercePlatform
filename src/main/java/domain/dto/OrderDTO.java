@@ -36,4 +36,11 @@ public class OrderDTO {
 
     }
 
+    public int getUserId() {
+        return userId;
+    }
+
+    public int getOrderId() {
+        return orderId;
+    }
 }
