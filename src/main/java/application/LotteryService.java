@@ -122,12 +122,60 @@ public class LotteryService {
         }
     }
 
-    // TODO: this implemetation is for test only, this function should be implemented
     public Response<Boolean> registerUserToLottery(String token, int eventId) {
-        Lottery lottery=lotteryRepo.findById(eventId);
-        int userId = auth.getUserId(token).getValue();
-        lottery.registerUserToLottery(userId);
-        lotteryRepo.store(lottery);
-        return new Response<>(true, "User registered to lottery");
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "registerUserToLottery called");
+
+            int userId = auth.getUserId(token).getValue();
+            if (userId == -1) {
+                logger.severe("User is not logged in");
+                return new Response<>(false, "User is not logged in");
+            }
+
+            try {
+                Event event = eventRepo.findById(eventId);
+
+                if (!event.hasLottery()) {
+                    logger.severe("This event does not support lottery");
+                    return new Response<>(false, "This event does not support lottery");
+                }
+
+                Lottery lottery;
+                try {
+                    lottery = lotteryRepo.findById(eventId);
+                } catch (NoSuchElementException e) {
+                    logger.log(Level.SEVERE, "Lottery not found: " + e.getMessage());
+                    return new Response<>(false, "Lottery not found");
+                }
+
+                if (LocalDateTime.now().isAfter(lottery.getRegisterWindow())) {
+                    logger.severe("Lottery registration period has expired");
+                    return new Response<>(false, "Lottery registration period has expired");
+                }
+
+                if (lottery.getRegistered().contains(userId)) {
+                    logger.severe("User is already registered to this lottery");
+                    return new Response<>(false, "User is already registered to this lottery");
+                }
+
+                lottery.registerUserToLottery(userId);
+                lotteryRepo.store(lottery);
+
+                logger.log(Level.INFO, "User registered to lottery successfully");
+                return new Response<>(true, "User registered to lottery successfully");
+
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
+                return new Response<>(false, "Event not found");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to register user to lottery: " + e.getMessage());
+                return new Response<>(false, "Failed to register user to lottery: " + e.getMessage());
+            }
+        });
     }
+
 }

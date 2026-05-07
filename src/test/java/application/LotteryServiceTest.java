@@ -14,11 +14,16 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 import org.mockito.Mockito;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
 
 class LotteryServiceTest {
 
@@ -35,7 +40,6 @@ class LotteryServiceTest {
     private Integer eventId;
 
     private String validToken;
-    private String validToken1;
     private String validToken2;
     private String validToken3;
     private IAuth auth;
@@ -280,7 +284,7 @@ class LotteryServiceTest {
         lotteryService.createLottery(validToken, eventId, 2, lotteryDate_X, (long) 24.0);
 
         lotteryService.registerUserToLottery(validToken, eventId);
-        lotteryService.registerUserToLottery(validToken1, eventId);
+        lotteryService.registerUserToLottery(notPermission, eventId);
         lotteryService.registerUserToLottery(validToken2, eventId);
         lotteryService.registerUserToLottery(validToken3, eventId);
         // Retrieve the newly created lottery to simulate users registering
@@ -305,7 +309,7 @@ class LotteryServiceTest {
 
         Lottery lottery = lotteryRepo.getAll().get(0);
         lotteryService.registerUserToLottery(validToken, eventId);
-        lotteryService.registerUserToLottery(validToken1, eventId);
+        lotteryService.registerUserToLottery(notPermission, eventId);
         lotteryService.registerUserToLottery(validToken2, eventId);
 
         // Act: Manually trigger the draw
@@ -324,5 +328,206 @@ class LotteryServiceTest {
         assertDoesNotThrow(() -> lotteryService.drawLottery(-1),
                 "The service should catch the exception and log it, not crash the system.");
     }
+
+    @Test
+    void GivenLoggedInMemberAndLotteryEvent_WhenRegisterUserToLottery_ThenUserRegistered() {
+        // Arrange
+        LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+
+        lotteryService.createLottery(validToken, eventId, 5, lotteryDate_X, 24L);
+
+        int userId = auth.getUserId(validToken).getValue();
+
+        // Act
+        Response<Boolean> response =
+                lotteryService.registerUserToLottery(validToken, eventId);
+
+        // Assert
+        assertTrue(response.getValue());
+        assertEquals("User registered to lottery successfully", response.getMessage());
+
+        Lottery lottery = lotteryRepo.findById(eventId);
+        assertTrue(lottery.getRegistered().contains(userId));
+    }
+
+    @Test
+    void GivenNonExistingEvent_WhenRegisterUserToLottery_ThenEventNotFound() {
+        // Arrange
+        int nonExistingEventId = -1;
+
+        // Act
+        Response<Boolean> response =
+                lotteryService.registerUserToLottery(validToken, nonExistingEventId);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Event not found", response.getMessage());
+    }
+
+    @Test
+    void GivenRegularEvent_WhenRegisterUserToLottery_ThenLotteryNotSupported() {
+        // Arrange
+        Integer noLotteryEventId = eventCompanyManageService.createEvent(
+                validToken,
+                companyId,
+                LocalDateTime.now().plusDays(30),
+                "No Lottery Event",
+                saleStartDate_Y,
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.FESTIVAL
+        ).getValue();
+
+        // Act
+        Response<Boolean> response =
+                lotteryService.registerUserToLottery(validToken, noLotteryEventId);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("This event does not support lottery", response.getMessage());
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenRegisterUserToLottery_ThenErrorReturned() {
+        // Arrange
+        LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+        lotteryService.createLottery(validToken, eventId, 5, lotteryDate_X, 24L);
+
+        // Act
+        Response<Boolean> response =
+                lotteryService.registerUserToLottery(null, eventId);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("User is not logged in", response.getMessage());
+    }
+
+    @Test
+    void GivenAlreadyRegisteredMember_WhenRegisterUserToLottery_ThenDuplicateRegistrationError() {
+        // Arrange
+        LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+        lotteryService.createLottery(validToken, eventId, 5, lotteryDate_X, 24L);
+
+        // first registration
+        Response<Boolean> first =
+                lotteryService.registerUserToLottery(validToken, eventId);
+
+        assertTrue(first.getValue());
+
+        // Act – second registration trial
+        Response<Boolean> second =
+                lotteryService.registerUserToLottery(validToken, eventId);
+
+        // Assert
+        assertFalse(second.getValue());
+        assertEquals("User is already registered to this lottery", second.getMessage());
+    }
+    @Test
+    void GivenExpiredLotteryRegistration_WhenRegisterUserToLottery_ThenRegistrationExpiredError() {
+        // Arrange
+        LocalDateTime pastWindow = LocalDateTime.now().minusDays(1);
+
+        Lottery expiredLottery = new Lottery(eventId, 5, pastWindow, 24L);
+        lotteryRepo.store(expiredLottery);
+
+        // Act
+        Response<Boolean> response =
+                lotteryService.registerUserToLottery(validToken, eventId);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Lottery registration period has expired", response.getMessage());
+    }
+
+    @Test
+    void GivenEventWithLotteryPolicyButNoLottery_WhenRegisterUserToLottery_ThenLotteryNotFound() {
+        // Arrange
+
+        // Act
+        Response<Boolean> response =
+                lotteryService.registerUserToLottery(validToken, eventId);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Lottery not found", response.getMessage());
+    }
+
+    @Test
+    void GivenTenDifferentUsersRegisterConcurrently_WhenRegisterUserToLottery_ThenAllUsersRegistered() throws Exception {
+        // Arrange
+        LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+
+        Response<Boolean> createLotteryResponse =
+                lotteryService.createLottery(validToken, eventId, 3, lotteryDate_X, 24L);
+
+        assertTrue(Boolean.TRUE.equals(createLotteryResponse.getValue()),
+                "Lottery creation failed: " + createLotteryResponse.getMessage());
+
+        int usersCount = 10;
+
+        UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
+        List<String> tokens = new ArrayList<>();
+
+        for (int i = 0; i < usersCount; i++) {
+            String email = "lottery_concurrent_user_" + i + "@test.com";
+
+            Response<Boolean> registerResponse = userService.registerUser(null, new UserDTO(
+                    email,
+                    "first" + i,
+                    "last" + i,
+                    "pass",
+                    1,
+                    1,
+                    2000,
+                    "city",
+                    "050-123-45" + String.format("%02d", i)
+            ));
+
+            assertTrue(Boolean.TRUE.equals(registerResponse.getValue()),
+                    "User registration failed: " + registerResponse.getMessage());
+
+            String token = userService.login(email, "pass").getValue();
+
+            assertNotNull(token, "Login failed for user " + i);
+
+            tokens.add(token);
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(usersCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<Boolean>>> futures = new ArrayList<>();
+
+        // Act
+        for (String token : tokens) {
+            futures.add(executor.submit(() -> {
+                start.await();
+                return lotteryService.registerUserToLottery(token, eventId);
+            }));
+        }
+
+        start.countDown();
+
+        int successfulRegistrations = 0;
+
+        for (Future<Response<Boolean>> future : futures) {
+            Response<Boolean> response = future.get();
+
+            if (Boolean.TRUE.equals(response.getValue())) {
+                successfulRegistrations++;
+            } else {
+                fail("Registration failed unexpectedly: " + response.getMessage());
+            }
+        }
+
+        executor.shutdown();
+
+        // Assert
+        Lottery lottery = lotteryRepo.findById(eventId);
+
+        assertEquals(usersCount, successfulRegistrations);
+        assertEquals(usersCount, lottery.getRegistered().size());
+    }
+
+
 
 }
