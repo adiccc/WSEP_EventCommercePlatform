@@ -39,4 +39,10 @@ public abstract class Ticket {
             this.status = AVAILABLE;
         }
     }
+
+    public void setStatusFromLocked(TicketStatus newStatus) {
+        if (this.status == TicketStatus.LOCKED) {
+            this.status = newStatus;
+        }
+    }
 }

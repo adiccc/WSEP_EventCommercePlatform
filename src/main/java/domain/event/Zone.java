@@ -31,6 +31,7 @@ public abstract class Zone {
     public double getPrice() {
         return price;
     }
-
+    public abstract boolean containsTicketId(int ticketId);
     abstract void releaseTickets(List<Integer> ticketIds) ;
+    public abstract void markTicketsAsSold(List<Integer> ticketIds);
 }

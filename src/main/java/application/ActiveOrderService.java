@@ -1,5 +1,6 @@
 package application;
 
+import DTO.PaymentDetailsDTO;
 import DTO.TicketSupplyRequestDTO;
 import DTO.TicketSupplyResultDTO;
 
@@ -12,6 +13,7 @@ import domain.dto.SeatingTicketDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
+import domain.event.Order;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
@@ -224,6 +226,187 @@ public class ActiveOrderService {
 
     });}
 
+    public Response<Integer> checkoutAndPayment(
+            String token,
+            int activeOrderId,
+            PaymentDetailsDTO paymentDetails) {
+
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "checkoutAndPayment called");
+
+            ActiveOrder activeOrder = null;
+            Event event = null;
+            Order order = null;
+
+            boolean shouldDeleteActiveOrder = false;
+            boolean shouldReleaseTickets = false;
+            boolean paymentStageAcquired = false;
+
+            try {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
+                    return new Response<>(null, "Invalid token");
+                }
+
+                activeOrder = activeOrderRepo.findById(activeOrderId);
+
+                if (activeOrder.getUserId() != userId) {
+                    return new Response<>(null, "Active order does not belong to user");
+                }
+
+                event = eventRepo.findById(activeOrder.getEventId());
+
+                if (!event.isActive()) {
+                    return new Response<>(null, "Event is not active");
+                }
+
+                if (!activeOrder.hasTickets()) {
+                    return new Response<>(null, "Active order has no selected tickets");
+                }
+
+                if (activeOrder.isExpired()) {
+                    shouldDeleteActiveOrder = true;
+                    shouldReleaseTickets = true;
+                    return new Response<>(null, "Active order expired");
+                }
+
+                try {
+                    activeOrder.startPayment();
+                    activeOrderRepo.store(activeOrder);
+                    paymentStageAcquired = true;
+                } catch (IllegalStateException e) {
+                    return new Response<>(null, e.getMessage());
+                } catch (OptimisticLockingFailureException e) {
+                    throw e;
+                }
+
+                double total = event.calculateFinalTotalPrice(
+                        activeOrder.getTickets(),
+                        paymentDetails.getCouponCode()
+                );
+
+                String paymentConfirmationId = paymentSystem.pay(total, paymentDetails);
+
+                if (paymentConfirmationId == null || paymentConfirmationId.isBlank()) {
+                    ActiveOrder freshOrder = activeOrderRepo.findById(activeOrderId);
+                    freshOrder.returnToCheckout();
+                    activeOrderRepo.store(freshOrder);
+                    paymentStageAcquired = false;
+                    return new Response<>(null, "Payment rejected");
+                }
+
+                order = new Order(
+                        activeOrder.getId(),
+                        userId,
+                        event.getId(),
+                        activeOrder.getTickets(),
+                        total,
+                        paymentConfirmationId
+                );
+
+                shouldDeleteActiveOrder = true;
+
+                boolean issuanceFailed = false;
+
+                try {
+                    TicketSupplyResultDTO issueResult = ticketSupply.issue(
+                            new TicketSupplyRequestDTO(activeOrder.getTickets())
+                    );
+
+                    if (issueResult == null || !issueResult.isSuccess()) {
+                        issuanceFailed = true;
+                    }
+
+                } catch (Exception e) {
+                    logger.log(Level.SEVERE, "Ticket issuance failed: " + e.getMessage());
+                    issuanceFailed = true;
+                }
+
+                if (issuanceFailed) {
+                    boolean refundApproved = paymentSystem.refund(paymentConfirmationId, total);
+
+                    if (refundApproved) {
+                        order.markRefunded();
+                    } else {
+                        order.markRefundRequired();
+                    }
+
+                    shouldReleaseTickets = true;
+                    return new Response<>(null, "Ticket issuance failed");
+                }
+
+                return new Response<>(order.getOrderId(), "Purchase completed successfully");
+
+            } catch (NoSuchElementException e) {
+                return new Response<>(null, "Event or active order not found");
+
+            } catch (OptimisticLockingFailureException e) {
+                if (paymentStageAcquired && activeOrder != null && order == null) {
+                    try {
+                        ActiveOrder freshOrder = activeOrderRepo.findById(activeOrderId);
+                        freshOrder.returnToCheckout();
+                        activeOrderRepo.store(freshOrder);
+                    } catch (Exception resetException) {
+                        logger.log(Level.SEVERE, "Failed to reset active order stage: " + resetException.getMessage());
+                    }
+                }
+                throw e;
+
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to complete purchase: " + e.getMessage());
+
+                if (paymentStageAcquired && activeOrder != null && order == null) {
+                    try {
+                        ActiveOrder freshOrder = activeOrderRepo.findById(activeOrderId);
+                        freshOrder.returnToCheckout();
+                        activeOrderRepo.store(freshOrder);
+                    } catch (Exception resetException) {
+                        logger.log(Level.SEVERE, "Failed to reset active order stage: " + resetException.getMessage());
+                    }
+                }
+
+                return new Response<>(null, "Failed to complete purchase");
+
+            } finally {
+                if (event != null && activeOrder != null) {
+                    if (shouldReleaseTickets || order != null) {
+                        boolean stored = false;
+
+                        while (!stored) {
+                            try {
+                                Event freshEvent = eventRepo.findById(event.getId());
+
+                                if (shouldReleaseTickets) {
+                                    freshEvent.releaseTickets(activeOrder.getTickets());
+                                }
+
+                                if (order != null && freshEvent.findOrderById(order.getOrderId()) == null) {
+                                    freshEvent.getOrders().add(order);
+                                }
+
+                                if (order != null && !shouldReleaseTickets) {
+                                    freshEvent.markTicketsAsSold(activeOrder.getTickets());
+                                }
+
+                                eventRepo.store(freshEvent);
+                                stored = true;
+
+                            } catch (OptimisticLockingFailureException e) {
+                                logger.log(Level.INFO, "Retrying event update after optimistic locking failure");
+                            }
+                        }
+                    }
+
+                    if (shouldDeleteActiveOrder) {
+                        activeOrderRepo.delete(activeOrderId);
+                        promoteNextInQueue(event);
+                    }
+                }
+            }
+        });
+    }
+
+
     public void cleanupExpiredOrders() {
         logger.log(Level.INFO, "cleanupExpiredOrders running");
         List<ActiveOrder> expired = activeOrderRepo.findExpired(LocalDateTime.now());
@@ -410,23 +593,31 @@ public class ActiveOrderService {
         eventRepo.store(event);
         return new Response<>(true, "Order placed successfully");
     }
-
+    // TODO: This promotion flow updates two repositories: EventRepo and ActiveOrderRepo.
     private void promoteNextInQueue(Event event) {
-        if (!event.getEventQueue().isEmpty()
-                && activeOrderRepo.countActiveOrdersForEvent(event.getId()) < capacity) {
+        Response<Boolean> response = RetryHelper.executeWithRetry(() -> {
+            if (!event.getEventQueue().isEmpty()
+                    && activeOrderRepo.countActiveOrdersForEvent(event.getId()) < capacity) {
 
-            String nextToken = event.getEventQueue().dequeue();
-            int orderId = idGenerator.getAndIncrement();
+                String nextToken = event.getEventQueue().dequeue();
+                int orderId = idGenerator.getAndIncrement();
 
-            ActiveOrder nextOrder = new ActiveOrder(
-                    orderId,
-                    auth.getUserId(nextToken).getValue(),
-                    event.getId(),
-                    new ArrayList<>()
-            );
+                ActiveOrder nextOrder = new ActiveOrder(
+                        orderId,
+                        auth.getUserId(nextToken).getValue(),
+                        event.getId(),
+                        new ArrayList<>()
+                );
 
-            activeOrderRepo.store(nextOrder);
-            eventRepo.store(event);
+                activeOrderRepo.store(nextOrder);
+                eventRepo.store(event);
+            }
+
+            return new Response<>(true, "Queue promotion completed");
+        });
+
+        if (response.getValue() == null || !response.getValue()) {
+            logger.log(Level.SEVERE, "Queue promotion failed: " + response.getMessage());
         }
     }
 }

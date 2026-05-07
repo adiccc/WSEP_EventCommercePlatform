@@ -91,6 +91,28 @@ public class EventMap {
         return bookedTicketsIds;
     }
 
+    public double calculateTotalPriceBeforeDiscount(List<Integer> ticketIds) {
+        double total = 0.0;
+
+        for (Integer ticketId : ticketIds) {
+            boolean found = false;
+
+            for (Zone zone : zones) {
+                if (zone.containsTicketId(ticketId)) {
+                    total += zone.getPrice();
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                throw new IllegalArgumentException("Ticket does not exist in event map: " + ticketId);
+            }
+        }
+
+        return total;
+    }
+
     public void releaseTickets(List<Integer> ticketIds) {
         for (Zone z : zones) {
             z.releaseTickets(ticketIds);
@@ -108,5 +130,11 @@ public class EventMap {
             }
         }
         throw new IllegalArgumentException("Zone does not exist: " + zone);
+    }
+
+    public void markTicketsAsSold(List<Integer> ticketIds) {
+        for (Zone zone : zones) {
+            zone.markTicketsAsSold(ticketIds);
+        }
     }
 }

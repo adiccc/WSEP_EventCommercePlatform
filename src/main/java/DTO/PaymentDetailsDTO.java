@@ -6,6 +6,7 @@ public class PaymentDetailsDTO {
     private String cvv;
     private String cardHolderId;
     private int numberOfPayments;
+    private String couponCode;
 
     public PaymentDetailsDTO(String cardNumber, String expirationDate, String cvv,
                              String cardHolderId, int numberOfPayments) {
@@ -34,5 +35,9 @@ public class PaymentDetailsDTO {
 
     public int getNumberOfPayments() {
         return numberOfPayments;
+    }
+
+    public String getCouponCode() {
+        return couponCode;
     }
 }

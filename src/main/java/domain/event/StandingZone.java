@@ -58,9 +58,12 @@ public class StandingZone extends Zone {
         if (quantity > available) {
             throw new IllegalArgumentException("Not enough tickets available in this zone.");
         }
+
         List<Integer> bookedTicketIds = new ArrayList<>();
+
         for (int i = 0; i < quantity; i++) {
-            StandingTicket ticket = availableTickets.poll(); //get a ticket from the available queue
+            StandingTicket ticket = availableTickets.poll();
+
             if (ticket == null) {
                 throw new IllegalStateException("No more tickets available.");
             }
@@ -69,7 +72,8 @@ public class StandingZone extends Zone {
             occupiedTickets.add(ticket); //add the ticket to the occupied list
             bookedTicketIds.add(ticketId);
         }
-        available -= quantity; //decrease the capacity by the number of booked tickets
+
+        available -= quantity;
         return bookedTicketIds;
     }
 
@@ -83,21 +87,39 @@ public class StandingZone extends Zone {
     }
 
     @Override
+    public boolean containsTicketId(int ticketId) {
+        for (StandingTicket ticket : availableTickets) {
+            if (ticket.getTicketId() == ticketId) {
+                return true;
+            }
+        }
+
+        for (StandingTicket ticket : occupiedTickets) {
+            if (ticket.getTicketId() == ticketId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    @Override
     public void releaseTickets(List<Integer> ticketIds) {
+        List<StandingTicket> ticketsToRemove = new ArrayList<>();
+
         for (Integer ticketId : ticketIds) {
             for (StandingTicket ticket : occupiedTickets) {
-                if (ticket.getTicketId() == ticketId) {
-                    if (ticket.getStatus() == TicketStatus.LOCKED) {
-                        ticket.setStatusFromAvailable(TicketStatus.AVAILABLE);
-                        availableTickets.add(ticket); //add the released ticket back to the available queue
-                        available++; //increase the capacity by one
-                    }
+                if (ticket.getTicketId() == ticketId && ticket.getStatus() == TicketStatus.LOCKED) {
+                    ticket.setStatusFromAvailable(TicketStatus.AVAILABLE);
+                    availableTickets.add(ticket);
+                    available++;
+                    ticketsToRemove.add(ticket);
+                    break;
                 }
             }
         }
-        for (Integer ticketId : ticketIds) {
-            occupiedTickets.removeIf(ticket -> ticket.getTicketId() == ticketId);
-        }
+
+        occupiedTickets.removeAll(ticketsToRemove);
     }
 
     public List<StandingTicket> getOccupiedTickets() {
@@ -133,5 +155,18 @@ public class StandingZone extends Zone {
                             + ", user holds " + pickedTickets.size() + " in this zone");
         }
         return pickedTickets;
+    }
+
+    @Override
+    public void markTicketsAsSold(List<Integer> ticketIds) {
+        for (Integer ticketId : ticketIds) {
+            for (StandingTicket ticket : occupiedTickets) {
+                if (ticket.getTicketId() == ticketId) {
+                    if (ticket.getStatus() == TicketStatus.LOCKED) {
+                        ticket.setStatusFromLocked(TicketStatus.SOLD);
+                    }
+                }
+            }
+        }
     }
 }

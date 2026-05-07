@@ -12,6 +12,9 @@ import domain.dto.ActiveOrderDTO;
 import domain.dto.EventMapDTO;
 import domain.dto.SeatingTicketDTO;
 import domain.dto.UserDTO;
+import domain.event.Event;
+import domain.event.Order;
+import domain.event.OrderStatus;
 import domain.user.IUserRepo;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +24,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -1198,5 +1202,1193 @@ class ActiveOrderServiceTest {
         assertTrue(finalSize == 3 || finalSize == 7,
                 "final ticket count must be one of the two requested totals, got: " + finalSize);
     }
+
+    @Test
+    void GivenValidActiveOrder_WhenCheckoutAndPayment_ThenOrderCreatedAndActiveOrderDeleted() {
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-123");
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNotNull(checkoutResponse.getValue(),
+                "Checkout should return created order id. Message: " + checkoutResponse.getMessage());
+
+        assertEquals("Purchase completed successfully", checkoutResponse.getMessage());
+
+        assertThrows(NoSuchElementException.class,
+                () -> activeOrderRepo.findById(activeOrderId),
+                "Active order should be deleted after successful checkout");
+
+        assertEquals(1, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Successful checkout should create exactly one order");
+
+        Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+        Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+    @Test
+    void GivenPaymentRejected_WhenCheckoutAndPayment_ThenActiveOrderRemainsAndOrderNotCreated() {
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn(null);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(checkoutResponse.getValue());
+        assertEquals("Payment rejected", checkoutResponse.getMessage());
+
+        assertNotNull(activeOrderRepo.findById(activeOrderId),
+                "Active order should remain when payment is rejected");
+
+        assertEquals(0, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Rejected payment must not create an order");
+
+        Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+        Mockito.verify(ticketSupply, Mockito.never()).issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+    @Test
+    void GivenTicketIssuanceRejected_WhenCheckoutAndPayment_ThenRefundAndActiveOrderDeleted() {
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-123");
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(false);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        Mockito.when(paymentSystem.refund(Mockito.eq("payment-123"), Mockito.anyDouble()))
+                .thenReturn(true);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(checkoutResponse.getValue());
+        assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
+
+        assertThrows(NoSuchElementException.class,
+                () -> activeOrderRepo.findById(activeOrderId),
+                "Active order should be deleted after ticket issuance failure");
+
+        assertEquals(1, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Order should be created before refund handling");
+
+        assertEquals(domain.event.OrderStatus.REFUNDED,
+                eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
+                "Order should be marked REFUNDED when refund succeeds");
+
+        Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+        Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
+        Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
+    }
+
+    @Test
+    void GivenTicketIssuanceThrows_WhenCheckoutAndPayment_ThenRefundAndActiveOrderDeleted() {
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-123");
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenThrow(new RuntimeException("Ticket supply unavailable"));
+
+        Mockito.when(paymentSystem.refund(Mockito.eq("payment-123"), Mockito.anyDouble()))
+                .thenReturn(true);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(checkoutResponse.getValue());
+        assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
+
+        assertThrows(NoSuchElementException.class,
+                () -> activeOrderRepo.findById(activeOrderId),
+                "Active order should be deleted after ticket issuance exception");
+
+        assertEquals(domain.event.OrderStatus.REFUNDED,
+                eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
+                "Order should be marked REFUNDED when refund succeeds");
+
+        Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+        Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
+        Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
+    }
+
+    @Test
+    void GivenRefundFailsAfterIssuanceFailure_WhenCheckoutAndPayment_ThenOrderMarkedRefundRequired() {
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-123");
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(false);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        Mockito.when(paymentSystem.refund(Mockito.eq("payment-123"), Mockito.anyDouble()))
+                .thenReturn(false);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(checkoutResponse.getValue());
+        assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
+
+        assertThrows(NoSuchElementException.class,
+                () -> activeOrderRepo.findById(activeOrderId),
+                "Active order should be deleted after failed issuance");
+
+        assertEquals(domain.event.OrderStatus.REFUND_REQUIRED,
+                eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
+                "Order should be marked REFUND_REQUIRED when refund fails");
+
+        Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+        Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
+        Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
+    }
+
+    @Test
+    void GivenExpiredActiveOrder_WhenCheckoutAndPayment_ThenTicketsReleasedAndActiveOrderDeleted() {
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        forceExpireOrder(activeOrderId);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(checkoutResponse.getValue());
+        assertEquals("Active order expired", checkoutResponse.getMessage());
+
+        assertThrows(NoSuchElementException.class,
+                () -> activeOrderRepo.findById(activeOrderId),
+                "Expired active order should be deleted during checkout");
+
+        assertEquals(0, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Expired checkout must not create an order");
+
+        String newEmail = "after_expired_checkout@mail.com";
+        userService.registerUser("", new UserDTO(
+                newEmail, "after", "expired", "pass",
+                1, 1, 2000, "Israel", "050-101-2020"
+        ));
+
+        String newToken = userService.login(newEmail, "pass").getValue();
+
+        Response<EventMapDTO> enterResponse =
+                service.enterEventPurchase(newToken, companyId, concurrentEventId);
+
+        assertNotNull(enterResponse.getValue(),
+                "New user should enter purchase before rebooking. Message: " + enterResponse.getMessage());
+
+        Response<Integer> rebookResponse =
+                service.userSelectTickets(newToken, concurrentEventId, new HashMap<>(), Map.of("floor", 2));
+
+        assertNotNull(rebookResponse.getValue(),
+                "Tickets from expired active order should be released and selectable again. Message: "
+                        + rebookResponse.getMessage());
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.never())
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+    @Test
+    void GivenActiveOrderHasNoTickets_WhenCheckoutAndPayment_ThenErrorAndActiveOrderRemains() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+
+        int userId = auth.getUserId(validToken).getValue();
+        int activeOrderId = activeOrderRepo.findOrderByUserId(userId).getId();
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(checkoutResponse.getValue());
+        assertEquals("Active order has no selected tickets", checkoutResponse.getMessage());
+
+        assertNotNull(activeOrderRepo.findById(activeOrderId),
+                "Active order should remain when no tickets were selected");
+
+        assertEquals(0, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Checkout without tickets must not create an order");
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.never())
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+    @Test
+    void GivenInvalidToken_WhenCheckoutAndPayment_ThenErrorReturned() {
+        String invalidToken = "not-a-real-token";
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> response =
+                service.checkoutAndPayment(invalidToken, 999, paymentDetails);
+
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.never())
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+
+    @Test
+    void GivenSameActiveOrder_WhenCheckoutAndPaymentConcurrently_With10Threads_ThenOnlyOneSucceeds() throws Exception {
+        int threadCount = 10;
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+
+        Response<Integer> selectResponse = service.userSelectTickets(
+                validToken,
+                concurrentEventId,
+                new HashMap<>(),
+                Map.of("floor", 2)
+        );
+
+        assertNotNull(selectResponse.getValue(),
+                "setup select failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenAnswer(invocation -> "payment-" + UUID.randomUUID());
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<Integer>>> futures = new ArrayList<>();
+
+        for (int i = 0; i < threadCount; i++) {
+            futures.add(executor.submit(() -> {
+                start.await();
+
+                PaymentDetailsDTO paymentDetails =
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+                return service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+            }));
+        }
+
+        start.countDown();
+
+        int successes = 0;
+        int failures = 0;
+        List<String> failureMessages = new ArrayList<>();
+
+        for (Future<Response<Integer>> future : futures) {
+            Response<Integer> response = future.get();
+
+            if (response.getValue() != null) {
+                successes++;
+            } else {
+                failures++;
+                failureMessages.add(response.getMessage());
+            }
+        }
+
+        executor.shutdown();
+
+        assertEquals(1, successes,
+                "Only one concurrent checkout on the same active order should succeed. Failures: "
+                        + failureMessages);
+
+        assertEquals(threadCount - 1, failures,
+                "All other concurrent checkout attempts should fail cleanly");
+
+        assertThrows(NoSuchElementException.class,
+                () -> activeOrderRepo.findById(activeOrderId),
+                "Active order should be deleted after the successful checkout");
+
+        assertEquals(1, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Concurrent checkout must not create duplicate orders");
+
+        Mockito.verify(ticketSupply, Mockito.times(1))
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+
+        Mockito.verify(paymentSystem, Mockito.times(1))
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+    }
+
+    @Test
+    void GivenDifferentActiveOrders_WhenCheckoutAndPaymentConcurrently_WithSlowPayment_ThenAllSucceed() throws Exception {
+        int usersCount = 10;
+
+        List<String> tokens = new ArrayList<>();
+        List<Integer> activeOrderIds = new ArrayList<>();
+
+        for (int i = 0; i < usersCount; i++) {
+            String email = "checkout_slow_payment_" + i + "@mail.com";
+
+            Response<Boolean> registerResponse = userService.registerUser("", new UserDTO(
+                    email,
+                    "f" + i,
+                    "l" + i,
+                    "pass",
+                    1,
+                    1,
+                    2000,
+                    "Israel",
+                    "050-456-78" + String.format("%02d", i)
+            ));
+
+            assertTrue(registerResponse.getValue(),
+                    "register failed for user " + i + ": " + registerResponse.getMessage());
+
+            String token = userService.login(email, "pass").getValue();
+            tokens.add(token);
+
+            Response<EventMapDTO> enterResponse =
+                    service.enterEventPurchase(token, companyId, concurrentEventId);
+
+            assertNotNull(enterResponse.getValue(),
+                    "enter failed for user " + i + ": " + enterResponse.getMessage());
+
+            Response<Integer> selectResponse = service.userSelectTickets(
+                    token,
+                    concurrentEventId,
+                    new HashMap<>(),
+                    Map.of("floor", 1)
+            );
+
+            assertNotNull(selectResponse.getValue(),
+                    "select failed for user " + i + ": " + selectResponse.getMessage());
+
+            activeOrderIds.add(selectResponse.getValue());
+        }
+
+        assertEquals(usersCount, activeOrderIds.stream().distinct().count(),
+                "setup bug: active order ids must be unique. ids=" + activeOrderIds);
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenAnswer(invocation -> {
+                    Thread.sleep(50);
+                    return "payment-" + UUID.randomUUID();
+                });
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        ExecutorService executor = Executors.newFixedThreadPool(usersCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<Integer>>> futures = new ArrayList<>();
+
+        for (int i = 0; i < usersCount; i++) {
+            String token = tokens.get(i);
+            int activeOrderId = activeOrderIds.get(i);
+
+            futures.add(executor.submit(() -> {
+                start.await();
+
+                PaymentDetailsDTO paymentDetails =
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+                return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
+            }));
+        }
+
+        start.countDown();
+
+        int successes = 0;
+        List<String> failures = new ArrayList<>();
+
+        for (Future<Response<Integer>> future : futures) {
+            Response<Integer> response = future.get();
+
+            if (response.getValue() != null) {
+                successes++;
+            } else {
+                failures.add(response.getMessage());
+            }
+        }
+
+        executor.shutdown();
+
+        assertEquals(usersCount, successes,
+                "All different active orders should succeed even when payment is slow. Failures: " + failures);
+
+        assertEquals(usersCount, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Each successful checkout should create exactly one order");
+
+        Mockito.verify(paymentSystem, Mockito.times(usersCount))
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.times(usersCount))
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+    @Test
+    void GivenDifferentActiveOrders_WhenCheckoutAndPaymentConcurrently_WithSlowTicketSupply_ThenAllSucceed() throws Exception {
+        int usersCount = 10;
+
+        List<String> tokens = new ArrayList<>();
+        List<Integer> activeOrderIds = new ArrayList<>();
+
+        for (int i = 0; i < usersCount; i++) {
+            String email = "checkout_slow_supply_" + i + "@mail.com";
+
+            Response<Boolean> registerResponse = userService.registerUser("", new UserDTO(
+                    email,
+                    "f" + i,
+                    "l" + i,
+                    "pass",
+                    1,
+                    1,
+                    2000,
+                    "Israel",
+                    "050-567-89" + String.format("%02d", i)
+            ));
+
+            assertTrue(registerResponse.getValue(),
+                    "register failed for user " + i + ": " + registerResponse.getMessage());
+
+            String token = userService.login(email, "pass").getValue();
+            tokens.add(token);
+
+            Response<EventMapDTO> enterResponse =
+                    service.enterEventPurchase(token, companyId, concurrentEventId);
+
+            assertNotNull(enterResponse.getValue(),
+                    "enter failed for user " + i + ": " + enterResponse.getMessage());
+
+            Response<Integer> selectResponse = service.userSelectTickets(
+                    token,
+                    concurrentEventId,
+                    new HashMap<>(),
+                    Map.of("floor", 1)
+            );
+
+            assertNotNull(selectResponse.getValue(),
+                    "select failed for user " + i + ": " + selectResponse.getMessage());
+
+            activeOrderIds.add(selectResponse.getValue());
+        }
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenAnswer(invocation -> "payment-" + UUID.randomUUID());
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenAnswer(invocation -> {
+                    Thread.sleep(50);
+                    return supplyResult;
+                });
+
+        ExecutorService executor = Executors.newFixedThreadPool(usersCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<Integer>>> futures = new ArrayList<>();
+
+        for (int i = 0; i < usersCount; i++) {
+            String token = tokens.get(i);
+            int activeOrderId = activeOrderIds.get(i);
+
+            futures.add(executor.submit(() -> {
+                start.await();
+
+                PaymentDetailsDTO paymentDetails =
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+                return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
+            }));
+        }
+
+        start.countDown();
+
+        int successes = 0;
+        List<String> failures = new ArrayList<>();
+
+        for (Future<Response<Integer>> future : futures) {
+            Response<Integer> response = future.get();
+
+            if (response.getValue() != null) {
+                successes++;
+            } else {
+                failures.add(response.getMessage());
+            }
+        }
+
+        executor.shutdown();
+
+        assertEquals(usersCount, successes,
+                "All different active orders should succeed even when ticket supply is slow. Failures: " + failures);
+
+        assertEquals(usersCount, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Each successful checkout should create exactly one order");
+
+        Mockito.verify(paymentSystem, Mockito.times(usersCount))
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.times(usersCount))
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+    @Test
+    void GivenDifferentActiveOrders_WhenCheckoutAndPaymentConcurrently_WithPartialTicketSupplyFailure_ThenConsistentState() throws Exception {
+        int usersCount = 10;
+
+        List<String> tokens = new ArrayList<>();
+        List<Integer> activeOrderIds = new ArrayList<>();
+
+        for (int i = 0; i < usersCount; i++) {
+            String email = "checkout_partial_failure_" + i + "@mail.com";
+
+            Response<Boolean> registerResponse = userService.registerUser("", new UserDTO(
+                    email,
+                    "f" + i,
+                    "l" + i,
+                    "pass",
+                    1,
+                    1,
+                    2000,
+                    "Israel",
+                    "050-678-90" + String.format("%02d", i)
+            ));
+
+            assertTrue(registerResponse.getValue(),
+                    "register failed for user " + i + ": " + registerResponse.getMessage());
+
+            String token = userService.login(email, "pass").getValue();
+            tokens.add(token);
+
+            service.enterEventPurchase(token, companyId, concurrentEventId);
+
+            Response<Integer> selectResponse = service.userSelectTickets(
+                    token,
+                    concurrentEventId,
+                    new HashMap<>(),
+                    Map.of("floor", 1)
+            );
+
+            assertNotNull(selectResponse.getValue(),
+                    "select failed for user " + i + ": " + selectResponse.getMessage());
+
+            activeOrderIds.add(selectResponse.getValue());
+        }
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenAnswer(invocation -> "payment-" + UUID.randomUUID());
+
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
+                .thenReturn(true);
+
+        AtomicInteger counter = new AtomicInteger(0);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenAnswer(invocation -> {
+                    int index = counter.getAndIncrement();
+
+                    TicketSupplyResultDTO result = Mockito.mock(TicketSupplyResultDTO.class);
+
+                    if (index % 2 == 0) {
+                        Mockito.when(result.isSuccess()).thenReturn(true);
+                    } else {
+                        Mockito.when(result.isSuccess()).thenReturn(false);
+                    }
+
+                    return result;
+                });
+
+        ExecutorService executor = Executors.newFixedThreadPool(usersCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<Integer>>> futures = new ArrayList<>();
+
+        for (int i = 0; i < usersCount; i++) {
+            String token = tokens.get(i);
+            int activeOrderId = activeOrderIds.get(i);
+
+            futures.add(executor.submit(() -> {
+                start.await();
+
+                PaymentDetailsDTO paymentDetails =
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+                return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
+            }));
+        }
+
+        start.countDown();
+
+        int successResponses = 0;
+        int failedResponses = 0;
+
+        for (Future<Response<Integer>> future : futures) {
+            Response<Integer> response = future.get();
+
+            if (response.getValue() != null) {
+                successResponses++;
+            } else {
+                failedResponses++;
+            }
+        }
+
+        executor.shutdown();
+
+        List<Order> orders = eventRepo.findById(concurrentEventId).getOrders();
+
+        long approved = orders.stream().filter(o -> o.getStatus() == OrderStatus.APPROVED).count();
+        long refunded = orders.stream().filter(o -> o.getStatus() == OrderStatus.REFUNDED).count();
+
+        assertEquals(usersCount, orders.size(),
+                "Every checkout attempt should result in exactly one order");
+
+        assertEquals(successResponses, approved,
+                "Successful responses must match approved orders");
+
+        assertEquals(failedResponses, refunded,
+                "Failed responses must result in refunded orders");
+
+        Mockito.verify(paymentSystem, Mockito.times(usersCount))
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.times(usersCount))
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+    @Test
+    void GivenDifferentActiveOrders_WhenCheckoutAndPaymentConcurrently_With10Threads_ThenAllSucceed() throws Exception {
+        int usersCount = 10;
+
+        List<String> tokens = new ArrayList<>();
+        List<Integer> activeOrderIds = new ArrayList<>();
+
+        for (int i = 0; i < usersCount; i++) {
+            String email = "checkout_distinct_" + i + "@mail.com";
+
+            Response<Boolean> registerResponse = userService.registerUser("", new UserDTO(
+                    email,
+                    "f" + i,
+                    "l" + i,
+                    "pass",
+                    1,
+                    1,
+                    2000,
+                    "Israel",
+                    "050-888-77" + String.format("%02d", i)
+            ));
+
+            assertTrue(registerResponse.getValue(),
+                    "register failed: " + registerResponse.getMessage());
+
+            String token = userService.login(email, "pass").getValue();
+            tokens.add(token);
+
+            Response<EventMapDTO> enterResponse =
+                    service.enterEventPurchase(token, companyId, concurrentEventId);
+
+            assertNotNull(enterResponse.getValue(),
+                    "enter failed: " + enterResponse.getMessage());
+
+            Response<Integer> selectResponse =
+                    service.userSelectTickets(token, concurrentEventId,
+                            new HashMap<>(),
+                            Map.of("floor", 1));
+
+            assertNotNull(selectResponse.getValue(),
+                    "select failed: " + selectResponse.getMessage());
+
+            activeOrderIds.add(selectResponse.getValue());
+        }
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any()))
+                .thenAnswer(inv -> "payment-" + UUID.randomUUID());
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+
+        Mockito.when(ticketSupply.issue(Mockito.any()))
+                .thenReturn(supplyResult);
+
+        ExecutorService executor = Executors.newFixedThreadPool(usersCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<Integer>>> futures = new ArrayList<>();
+
+        for (int i = 0; i < usersCount; i++) {
+            String token = tokens.get(i);
+            int orderId = activeOrderIds.get(i);
+
+            futures.add(executor.submit(() -> {
+                start.await();
+                return service.checkoutAndPayment(token, orderId,
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1));
+            }));
+        }
+
+        start.countDown();
+
+        int successes = 0;
+        List<String> failures = new ArrayList<>();
+
+        for (Future<Response<Integer>> f : futures) {
+            Response<Integer> r = f.get();
+            if (r.getValue() != null) successes++;
+            else failures.add(r.getMessage());
+        }
+
+        executor.shutdown();
+
+        assertEquals(usersCount, successes,
+                "Failures: " + failures);
+
+        assertEquals(usersCount,
+                eventRepo.findById(concurrentEventId).getOrders().size());
+    }
+
+    @Test
+    void GivenLimitedTickets_WhenCheckoutAndPaymentConcurrently_With10Threads_ThenNoOversellAndNoDuplicateOrders() throws Exception {
+        int usersCount = 10;
+        int ticketsPerUser = 20;
+
+        List<String> tokens = new ArrayList<>();
+        List<Integer> activeOrderIds = new ArrayList<>();
+
+        for (int i = 0; i < usersCount; i++) {
+            String email = "checkout_limited_" + i + "@mail.com";
+
+            Response<Boolean> registerResponse = userService.registerUser("", new UserDTO(
+                    email,
+                    "f" + i,
+                    "l" + i,
+                    "pass",
+                    1,
+                    1,
+                    2000,
+                    "Israel",
+                    "050-123-45" + String.format("%02d", i)
+            ));
+
+            assertTrue(registerResponse.getValue());
+
+            String token = userService.login(email, "pass").getValue();
+            tokens.add(token);
+
+            Response<EventMapDTO> enterResponse =
+                    service.enterEventPurchase(token, companyId, concurrentEventId);
+
+            assertNotNull(enterResponse.getValue());
+
+            Response<Integer> selectResponse =
+                    service.userSelectTickets(token, concurrentEventId,
+                            new HashMap<>(),
+                            Map.of("floor", ticketsPerUser));
+
+            assertNotNull(selectResponse.getValue());
+
+            activeOrderIds.add(selectResponse.getValue());
+        }
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any()))
+                .thenAnswer(inv -> "payment-" + UUID.randomUUID());
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+
+        Mockito.when(ticketSupply.issue(Mockito.any()))
+                .thenReturn(supplyResult);
+
+        ExecutorService executor = Executors.newFixedThreadPool(usersCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Response<Integer>>> futures = new ArrayList<>();
+
+        for (int i = 0; i < usersCount; i++) {
+            String token = tokens.get(i);
+            int orderId = activeOrderIds.get(i);
+
+            futures.add(executor.submit(() -> {
+                start.await();
+                return service.checkoutAndPayment(token, orderId,
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1));
+            }));
+        }
+
+        start.countDown();
+
+        int successes = 0;
+        int failures = 0;
+
+        for (Future<Response<Integer>> f : futures) {
+            Response<Integer> r = f.get();
+            if (r.getValue() != null) successes++;
+            else failures++;
+        }
+
+        executor.shutdown();
+
+        int orders = eventRepo.findById(concurrentEventId).getOrders().size();
+
+        assertEquals(successes, orders);
+        assertEquals(usersCount, successes + failures);
+        assertTrue(orders <= usersCount);
+    }
+
+    @Test
+    void GivenActiveOrderBelongsToAnotherUser_WhenCheckoutAndPayment_ThenFail() {
+        // user A
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 2)
+        ).getValue();
+
+        // user B
+        String emailB = "other_user@mail.com";
+        userService.registerUser("", new UserDTO(
+                emailB, "b", "b", "pass",
+                1, 1, 2000, "Israel", "050-999-0000"
+        ));
+        String tokenB = userService.login(emailB, "pass").getValue();
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> response =
+                service.checkoutAndPayment(tokenB, orderId, paymentDetails);
+
+        assertNull(response.getValue());
+        assertEquals("Active order does not belong to user", response.getMessage());
+    }
+
+    @Test
+    void GivenEventBecomesInactiveAfterTicketSelection_WhenCheckoutAndPayment_ThenFail() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+
+        Response<Integer> selectResponse = service.userSelectTickets(
+                validToken,
+                concurrentEventId,
+                new HashMap<>(),
+                Map.of("floor", 2)
+        );
+
+        assertNotNull(selectResponse.getValue(),
+                "setup select failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Event event = eventRepo.findById(concurrentEventId);
+        event.setActive(false);
+        eventRepo.store(event);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> response =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(response.getValue());
+        assertEquals("Event is not active", response.getMessage());
+
+        assertNotNull(activeOrderRepo.findById(activeOrderId),
+                "Active order should remain when checkout is rejected because event is inactive");
+
+        assertEquals(0, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Inactive event checkout must not create an order");
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.never())
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+    @Test
+    void GivenTicketSupplyReturnsNull_WhenCheckoutAndPayment_ThenRefundAndActiveOrderDeleted() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+
+        Response<Integer> selectResponse = service.userSelectTickets(
+                validToken,
+                concurrentEventId,
+                new HashMap<>(),
+                Map.of("floor", 2)
+        );
+
+        assertNotNull(selectResponse.getValue(),
+                "setup select failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-123");
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(null);
+
+        Mockito.when(paymentSystem.refund(Mockito.eq("payment-123"), Mockito.anyDouble()))
+                .thenReturn(true);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> response =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(response.getValue());
+        assertEquals("Ticket issuance failed", response.getMessage());
+
+        assertThrows(NoSuchElementException.class,
+                () -> activeOrderRepo.findById(activeOrderId),
+                "Active order should be deleted after ticket supply returns null");
+
+        assertEquals(1, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Order should be created before refund handling");
+
+        assertEquals(domain.event.OrderStatus.REFUNDED,
+                eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
+                "Order should be marked REFUNDED when refund succeeds");
+
+        Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+        Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
+        Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
+    }
+
+    @Test
+    void GivenPaymentThrowsException_WhenCheckoutAndPayment_ThenFailAndActiveOrderRemains() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+
+        Response<Integer> selectResponse = service.userSelectTickets(
+                validToken,
+                concurrentEventId,
+                new HashMap<>(),
+                Map.of("floor", 2)
+        );
+
+        assertNotNull(selectResponse.getValue(),
+                "setup select failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenThrow(new RuntimeException("payment service unavailable"));
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> response =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(response.getValue());
+        assertEquals("Failed to complete purchase", response.getMessage());
+
+        assertNotNull(activeOrderRepo.findById(activeOrderId),
+                "Active order should remain when payment throws before order creation");
+
+        assertEquals(0, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Payment exception must not create an order");
+
+        Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.never())
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+    @Test
+    void GivenPaymentReturnsBlankConfirmation_WhenCheckoutAndPayment_ThenPaymentRejectedAndActiveOrderRemains() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+
+        Response<Integer> selectResponse = service.userSelectTickets(
+                validToken,
+                concurrentEventId,
+                new HashMap<>(),
+                Map.of("floor", 2)
+        );
+
+        assertNotNull(selectResponse.getValue(),
+                "setup select failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("   ");
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> response =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(response.getValue());
+        assertEquals("Payment rejected", response.getMessage());
+
+        assertNotNull(activeOrderRepo.findById(activeOrderId),
+                "Active order should remain when payment confirmation is blank");
+
+        assertEquals(0, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Blank payment confirmation must not create an order");
+
+        Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.never())
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+    @Test
+    void GivenNonExistingActiveOrder_WhenCheckoutAndPayment_ThenNotFoundAndNoExternalServicesCalled() {
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> response =
+                service.checkoutAndPayment(validToken, 999999, paymentDetails);
+
+        assertNull(response.getValue());
+        assertEquals("Event or active order not found", response.getMessage());
+
+        assertEquals(0, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Checkout with non-existing active order must not create an order");
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.never())
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+    @Test
+    void GivenNullPaymentDetails_WhenCheckoutAndPayment_ThenFailAndActiveOrderRemains() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+
+        Response<Integer> selectResponse = service.userSelectTickets(
+                validToken,
+                concurrentEventId,
+                new HashMap<>(),
+                Map.of("floor", 2)
+        );
+
+        assertNotNull(selectResponse.getValue(),
+                "setup select failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Response<Integer> response =
+                service.checkoutAndPayment(validToken, activeOrderId, null);
+
+        assertNull(response.getValue());
+        assertEquals("Failed to complete purchase", response.getMessage());
+
+        assertNotNull(activeOrderRepo.findById(activeOrderId),
+                "Active order should remain when payment details are null");
+
+        assertEquals(0, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Null payment details must not create an order");
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.never())
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+
 
 }

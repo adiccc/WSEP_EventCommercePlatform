@@ -1,8 +1,6 @@
 package domain.activeOrder;
 
 import java.time.LocalDateTime;
-import domain.event.Event;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -15,6 +13,8 @@ public class ActiveOrder {
     private LocalDateTime checkoutStartedAt;
     private long version;
     private STAGE stage;
+    private static final int SELECTING_TICKETS_TIMEOUT_MINUTES = 5;
+    private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
 
     public ActiveOrder(int orderId, int userId, Integer eventId, List<Integer> tickets) {
         this.orderId = orderId;
@@ -73,6 +73,9 @@ public class ActiveOrder {
         ActiveOrder other = (ActiveOrder) obj;
         return orderId==other.orderId && version == other.getVersion();
     }
+    public boolean isExpired() {
+        return isExpired(LocalDateTime.now());
+    }
 
     public STAGE getStage() {
         return stage;
@@ -94,10 +97,10 @@ public class ActiveOrder {
 
     public boolean isExpired(LocalDateTime now) {
         if (stage == STAGE.SELECTING_TICKETS) {
-            return createdAt.plusMinutes(5).isBefore(now);
+            return createdAt.plusMinutes(SELECTING_TICKETS_TIMEOUT_MINUTES).isBefore(now);
         }
         if (stage == STAGE.CHECKING_OUT) {
-            return checkoutStartedAt.plusMinutes(10).isBefore(now);
+            return checkoutStartedAt.plusMinutes(CHECKOUT_TIMEOUT_MINUTES).isBefore(now);
         }
         return false;
     }
@@ -119,6 +122,24 @@ public class ActiveOrder {
             this.createdAt = now.minusMinutes(6);
         } else if (stage == STAGE.CHECKING_OUT) {
             this.checkoutStartedAt = now.minusMinutes(11);
+        }
+    }
+
+    public void startPayment() {
+        if (stage == STAGE.PAYMENT_IN_PROGRESS) {
+            throw new IllegalStateException("Payment already in progress");
+        }
+
+        if (stage != STAGE.CHECKING_OUT) {
+            throw new IllegalStateException("Active order is not ready for payment");
+        }
+
+        stage = STAGE.PAYMENT_IN_PROGRESS;
+    }
+
+    public void returnToCheckout() {
+        if (stage == STAGE.PAYMENT_IN_PROGRESS) {
+            stage = STAGE.CHECKING_OUT;
         }
     }
 }

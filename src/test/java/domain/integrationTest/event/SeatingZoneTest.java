@@ -283,4 +283,102 @@ class SeatingZoneTest {
         assertEquals(2, result.size());
         assertEquals(1, new HashSet<>(result).size(), "both entries should resolve to the same ID");
     }
+
+    @Test
+    void GivenSoldSeats_WhenReleaseTickets_ThenSeatsStaySoldAndNotAvailable() {
+        List<SeatingTicketDTO> seats = List.of(
+                new SeatingTicketDTO(0, 0),
+                new SeatingTicketDTO(0, 1)
+        );
+
+        Collection<Integer> lockedIds = seatingZone.bookTickets(seats);
+
+        seatingZone.markTicketsAsSold(new ArrayList<>(lockedIds));
+
+        seatingZone.releaseTickets(new ArrayList<>(lockedIds));
+
+        // try to rebook → should fail because seats are SOLD
+        assertThrows(IllegalArgumentException.class,
+                () -> seatingZone.bookTickets(seats),
+                "Sold seats must not become available after releaseTickets");
+
+        // verify they are still SOLD
+        for (Integer ticketId : lockedIds) {
+
+            boolean foundSoldSeat = false;
+
+            for (SeatingTicket ticket : seatingZone.getTicketMap().values()) {
+                if (ticket.getTicketId() == ticketId &&
+                        ticket.getStatus() == domain.dataType.TicketStatus.SOLD) {
+                    foundSoldSeat = true;
+                    break;
+                }
+            }
+
+            assertTrue(foundSoldSeat,
+                    "Seat " + ticketId + " must remain SOLD after releaseTickets");
+        }
+    }
+
+    @Test
+    void GivenLockedSeats_WhenMarkTicketsAsSold_ThenSeatsBecomeSold() {
+        List<SeatingTicketDTO> seats = List.of(
+                new SeatingTicketDTO(0, 0),
+                new SeatingTicketDTO(0, 1)
+        );
+
+        Collection<Integer> lockedIds = seatingZone.bookTickets(seats);
+        List<Integer> ticketIds = new ArrayList<>(lockedIds);
+
+        seatingZone.markTicketsAsSold(ticketIds);
+
+        for (Integer ticketId : ticketIds) {
+            boolean foundSoldSeat = false;
+
+            for (SeatingTicket ticket : seatingZone.getTicketMap().values()) {
+                if (ticket.getTicketId() == ticketId &&
+                        ticket.getStatus() == domain.dataType.TicketStatus.SOLD) {
+                    foundSoldSeat = true;
+                    break;
+                }
+            }
+
+            assertTrue(foundSoldSeat,
+                    "Locked seat " + ticketId + " should become SOLD");
+        }
+    }
+
+    @Test
+    void GivenSoldSeats_WhenReleaseTickets_ThenSeatsStaySoldAndNotBookable() {
+        List<SeatingTicketDTO> seats = List.of(
+                new SeatingTicketDTO(0, 0),
+                new SeatingTicketDTO(0, 1)
+        );
+
+        Collection<Integer> lockedIds = seatingZone.bookTickets(seats);
+        List<Integer> ticketIds = new ArrayList<>(lockedIds);
+
+        seatingZone.markTicketsAsSold(ticketIds);
+
+        seatingZone.releaseTickets(ticketIds);
+
+        for (Integer ticketId : ticketIds) {
+            boolean foundSoldSeat = false;
+
+            for (SeatingTicket ticket : seatingZone.getTicketMap().values()) {
+                if (ticket.getTicketId() == ticketId &&
+                        ticket.getStatus() == domain.dataType.TicketStatus.SOLD) {
+                    foundSoldSeat = true;
+                    break;
+                }
+            }
+
+            assertTrue(foundSoldSeat,
+                    "Sold seat " + ticketId + " should remain SOLD after releaseTickets");
+        }
+
+        assertThrows(IllegalArgumentException.class,
+                () -> seatingZone.bookTickets(seats),
+                "Sold seats must not become bookable again");
+    }
 }

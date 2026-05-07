@@ -80,6 +80,16 @@ public class SeatingZone extends Zone {
     public int getCols() {
         return cols;
     }
+    @Override
+    public boolean containsTicketId(int ticketId) {
+        for (SeatingTicket ticket : ticketMap.values()) {
+            if (ticket.getTicketId() == ticketId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     @Override
     public void releaseTickets(List<Integer> ticketIds) {
@@ -115,5 +125,18 @@ public class SeatingZone extends Zone {
             throw new IllegalArgumentException("Some seats were not found in the zone.");
         }
         return seatingTicketIds;
+    }
+
+    @Override
+    public void markTicketsAsSold(List<Integer> ticketIds) {
+        for (Integer ticketId : ticketIds) {
+            for (SeatingTicket ticket : ticketMap.values()) {
+                if (ticket.getTicketId() == ticketId) {
+                    if (ticket.getStatus() == TicketStatus.LOCKED) {
+                        ticket.setStatusFromLocked(TicketStatus.SOLD);
+                    }
+                }
+            }
+        }
     }
 }
