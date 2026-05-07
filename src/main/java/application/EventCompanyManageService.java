@@ -551,4 +551,45 @@ public class EventCompanyManageService {
         });
     }
 
+    public Response<List<OrderDTO>> getPurchaseHistoryByUser(String token) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "getPurchaseHistoryByUser called");
+
+            int userId = auth.getUserId(token).getValue();
+            if (userId == -1) {
+                logger.severe("User is not logged in");
+                return new Response<>(null, "User is not logged in");
+            }
+
+            try {
+                List<OrderDTO> orderDTOs = new ArrayList<>();
+
+                List<Event> events = eventRepo.getAll();
+
+                for (Event event : events) {
+                    List<Order> orders = event.getOrders();
+
+                    for (Order order : orders) {
+                        if (order.getUserId() == userId) {
+                            orderDTOs.add(new OrderDTO(order));
+                        }
+                    }
+                }
+
+                if (orderDTOs.isEmpty()) {
+                    logger.log(Level.INFO, "No purchase history found for user " + userId);
+                    return new Response<>(orderDTOs, "No purchase history found for user");
+                }
+
+                logger.log(Level.INFO, "Purchase history found: " + orderDTOs.size());
+                return new Response<>(orderDTOs, "Purchase history found");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to get purchase history: " + e.getMessage());
+                return new Response<>(null, "Failed to get purchase history: " + e.getMessage());
+            }
+        });
+    }
 }

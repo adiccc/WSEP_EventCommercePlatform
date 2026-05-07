@@ -1229,4 +1229,68 @@ class EventCompanyManageServiceTest {
         assertNotNull(reportRes.getValue(), "Report generation must survive concurrent tree modification");
     }
 
+    @Test
+    void GivenLoggedInMemberWithOrders_WhenGetPurchaseHistory_ThenOrdersReturned() {
+        Event event = eventRepo.findById(eventId);
+
+        Order order1 = new Order(1, auth.getUserId(validToken1).getValue(), eventId, List.of(1, 2));
+        Order order2 = new Order(2, auth.getUserId(validToken1).getValue(), eventId, List.of(3));
+
+        event.getOrders().add(order1);
+        event.getOrders().add(order2);
+        eventRepo.store(event);
+
+        Response<List<OrderDTO>> response =
+                eventCompanyManageService.getPurchaseHistoryByUser(validToken1);
+
+        assertNotNull(response.getValue());
+        assertEquals(2, response.getValue().size());
+    }
+
+    @Test
+    void GivenLoggedInMemberWithoutOrders_WhenGetPurchaseHistory_ThenEmptyListReturned() {
+        Response<List<OrderDTO>> response =
+                eventCompanyManageService.getPurchaseHistoryByUser(validToken2);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue().isEmpty());
+        assertEquals("No purchase history found for user", response.getMessage());
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenGetPurchaseHistory_ThenErrorReturned() {
+        Response<List<OrderDTO>> response =
+                eventCompanyManageService.getPurchaseHistoryByUser(null);
+
+        assertNull(response.getValue());
+        assertEquals("User is not logged in", response.getMessage());
+    }
+
+    @Test
+    void GivenTwoMembersWithOrders_WhenGetPurchaseHistory_ThenOnlyOwnOrdersReturned() {
+        int user1Id = auth.getUserId(validToken1).getValue();
+        int user2Id = auth.getUserId(validToken2).getValue();
+
+        Event event = eventRepo.findById(eventId);
+
+        // order of member1
+        Order order1 = new Order(1, user1Id, eventId, List.of(1, 2));
+
+        // order of member2
+        Order order2 = new Order(2, user2Id, eventId, List.of(3, 4));
+
+        event.getOrders().add(order1);
+        event.getOrders().add(order2);
+        eventRepo.store(event);
+
+        Response<List<OrderDTO>> response =
+                eventCompanyManageService.getPurchaseHistoryByUser(validToken1);
+
+        assertNotNull(response.getValue());
+        assertEquals(1, response.getValue().size());
+
+        assertEquals(user1Id, response.getValue().get(0).getUserId());
+        assertEquals(order1.getOrderId(), response.getValue().get(0).getOrderId());
+    }
+
 }
