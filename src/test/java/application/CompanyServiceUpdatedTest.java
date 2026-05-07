@@ -1214,4 +1214,141 @@ class CompanyServiceUpdatedTest {
         assertFalse(companyRepo.findById(COMPANY_ID).getCompanyPermission().isManager(MANAGER_ID));
     }
 
+    // ===================== Concurrency: Update Manager Permissions =====================
+
+    @Test
+    void GivenTwoThreadsRaceToUpdateSameManagerPermissions_WhenUpdateManagerPermissions_ThenFinalStateIsConsistent() throws Exception {
+        Set<PermissionType> perms1 = EnumSet.of(PermissionType.CREATE_EVENT);
+        Set<PermissionType> perms2 = EnumSet.of(PermissionType.DELETE_EVENT, PermissionType.VIEW_ORDERS_HISTORY);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, perms1);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, perms2);
+        });
+
+        start.countDown();
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        assertFalse(r1.isError(), r1.getMessage());
+        assertFalse(r2.isError(), r2.getMessage());
+        Set<PermissionType> finalPerms = companyRepo.findById(COMPANY_ID)
+                .getCompanyPermission().getCompanyTree().get(MANAGER_ID).getAllPermissions();
+        assertTrue(finalPerms.equals(perms1) || finalPerms.equals(perms2),
+                "Final permissions must be one of the two submitted sets — no corruption");
+    }
+
+    // ===================== Concurrency: Company Discount =====================
+
+    @Test
+    void GivenTwoThreadsRaceToAddSameDiscount_WhenAddDiscountToCompany_ThenOnlyOneSucceeds() throws Exception {
+        DiscountDTO discount = new DiscountDTO(25.0, LocalDate.now().plusDays(10));
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discount);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discount);
+        });
+
+        start.countDown();
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = (!r1.isError() ? 1 : 0) + (!r2.isError() ? 1 : 0);
+        assertEquals(1, success, "Only one concurrent add of the same discount should succeed");
+    }
+
+    @Test
+    void GivenTwoThreadsRaceToRemoveSameDiscount_WhenRemoveDiscountFromCompany_ThenOnlyOneSucceeds() throws Exception {
+        DiscountDTO discount = new DiscountDTO(25.0, LocalDate.now().plusDays(10));
+        // Add a second discount so removing one is allowed (policy requires at least one to remain)
+        service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, new DiscountDTO(10.0, LocalDate.now().plusDays(5)));
+        service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, discount);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return service.removeDiscountFromCompany(OWNER_TOKEN, COMPANY_ID, discount);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return service.removeDiscountFromCompany(OWNER_TOKEN, COMPANY_ID, discount);
+        });
+
+        start.countDown();
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = (!r1.isError() ? 1 : 0) + (!r2.isError() ? 1 : 0);
+        assertEquals(1, success, "Only one concurrent remove of the same discount should succeed");
+    }
+
+    // ===================== Concurrency: Company Purchase Policy =====================
+
+    @Test
+    void GivenTwoThreadsRaceToAddSameRule_WhenAddRuleToCompany_ThenOnlyOneSucceeds() throws Exception {
+        PurchaseRuleDTO rule = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 5);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID, rule);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID, rule);
+        });
+
+        start.countDown();
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = (!r1.isError() ? 1 : 0) + (!r2.isError() ? 1 : 0);
+        assertEquals(1, success, "Only one concurrent add of the same rule should succeed");
+    }
+
+    @Test
+    void GivenTwoThreadsRaceToRemoveSameRule_WhenRemoveRuleFromCompany_ThenOnlyOneSucceeds() throws Exception {
+        PurchaseRuleDTO rule = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 5);
+        service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID, rule);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return service.removeRuleFromCompany(OWNER_TOKEN, COMPANY_ID, rule);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return service.removeRuleFromCompany(OWNER_TOKEN, COMPANY_ID, rule);
+        });
+
+        start.countDown();
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = (!r1.isError() ? 1 : 0) + (!r2.isError() ? 1 : 0);
+        assertEquals(1, success, "Only one concurrent remove of the same rule should succeed");
+    }
+
 }
