@@ -609,8 +609,7 @@ public class ActiveOrderService {
 
     public Response<Boolean> placeOrder(String token, Integer eventId, int orderId) {
         Event event =eventRepo.findById(eventId);
-      //  int userId=auth.getUserId(token).getValue();
-        String email = auth.getUserEmail(token).getValue(); //need to change to String
+        String email = auth.getUserEmail(token).getValue(); 
         event.placeOrder(email,orderId);
         eventRepo.store(event);
         return new Response<>(true, "Order placed successfully");
