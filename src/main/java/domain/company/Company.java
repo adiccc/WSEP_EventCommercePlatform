@@ -7,6 +7,7 @@ import domain.policy.*;
 import domain.activeOrder.ActiveOrder;
 import domain.dataType.PermissionType;
 import domain.dto.HierarchyDTO;
+import domain.user.State;
 
 import java.util.HashMap;
 import java.util.HashSet;

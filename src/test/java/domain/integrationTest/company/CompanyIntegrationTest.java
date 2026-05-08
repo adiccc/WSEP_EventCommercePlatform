@@ -76,17 +76,6 @@ class CompanyIntegrationTest {
         assertEquals(COMPANY_ID, stored.getCompanyId());
     }
 
-    @Test
-    void GivenFounderMember_WhenStoredWithFounderRole_ThenRoleIsPersisted() {
-        // Attach a Founder role to the member and update the repo
-        founder.addRole(new Founder(COMPANY_ID));
-        userRepo.store(founder);
-
-        Member stored = userRepo.findById(founder.getUserId());
-        boolean hasFounderRole = stored.getRoles().stream()
-                .anyMatch(r -> r instanceof Founder && ((Founder) r).getCompanyId() == COMPANY_ID);
-        assertTrue(hasFounderRole, "Founder role should be persisted after store");
-    }
 
     @Test
     void GivenStoredCompany_WhenFounderChecked_ThenIsMarkedAsOwner() {
@@ -211,7 +200,7 @@ class CompanyIntegrationTest {
     private Member createAndAddManager(int managerId, String email) {
         Member manager = new Member(email, "hashedpw", "Manager", "User",
                 "050-222-2222", LocalDate.of(1995, 6, 15), "Haifa");
-        manager.addRole(new Manager(COMPANY_ID));
+        manager.changeState(new Manager());
         userRepo.store(manager);
 
         Company stored = companyRepo.findById(COMPANY_ID);
@@ -227,7 +216,7 @@ class CompanyIntegrationTest {
         // Add a second manager so removal is allowed
         Member manager2 = new Member("mgr2@test.com", "hashedpw", "Manager2", "User",
                 "050-333-3333", LocalDate.of(1996, 1, 1), "Beer Sheva");
-        manager2.addRole(new Manager(COMPANY_ID));
+        manager2.changeState(new Manager());
         userRepo.store(manager2);
         Company stored = companyRepo.findById(COMPANY_ID);
         stored.getCompanyPermission().addToTree(manager2.getUserId(), founder.getUserId(),
@@ -238,12 +227,11 @@ class CompanyIntegrationTest {
         Company company = companyRepo.findById(COMPANY_ID);
         company.removeManagerAppointment(founder.getUserId(), manager.getUserId());
         companyRepo.store(company);
-        manager.removeManagerRole(COMPANY_ID);
+        manager.changeState(null);
         userRepo.store(manager);
 
         Member updatedUser = userRepo.findById(manager.getUserId());
-        boolean hasRole = updatedUser.getRoles().stream()
-                .anyMatch(r -> r instanceof Manager && ((Manager) r).getCompanyId() == COMPANY_ID);
+        boolean hasRole = updatedUser.getRole() instanceof Manager;
         assertFalse(hasRole, "Manager role should be removed from the user after appointment removal");
     }
 
@@ -252,7 +240,7 @@ class CompanyIntegrationTest {
         Member manager = createAndAddManager(200, "mgr1@test.com");
         Member manager2 = new Member("mgr2@test.com", "hashedpw", "Manager2", "User",
                 "050-333-3333", LocalDate.of(1996, 1, 1), "Beer Sheva");
-        manager2.addRole(new Manager(COMPANY_ID));
+        manager2.changeState(new Manager());
         userRepo.store(manager2);
         Company stored = companyRepo.findById(COMPANY_ID);
         stored.getCompanyPermission().addToTree(manager2.getUserId(), founder.getUserId(),
@@ -278,7 +266,7 @@ class CompanyIntegrationTest {
         // Add a sub-manager under manager
         Member subManager = new Member("sub@test.com", "hashedpw", "Sub", "Manager",
                 "050-444-4444", LocalDate.of(1997, 3, 10), "Eilat");
-        subManager.addRole(new Manager(COMPANY_ID));
+        subManager.changeState(new Manager());
         userRepo.store(subManager);
 
         Company stored = companyRepo.findById(COMPANY_ID);

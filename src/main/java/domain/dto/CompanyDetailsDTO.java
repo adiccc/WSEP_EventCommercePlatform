@@ -1,7 +1,9 @@
 package domain.dto;
 
 import domain.company.Company;
+import domain.policy.PurchasePolicy;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +26,17 @@ public class CompanyDetailsDTO {
         this.purchasePolicy = purchasePolicy;
         this.discountPolicy = discountPolicy;
         this.futureEvents = futureEvents;
+    }
+
+    public CompanyDetailsDTO(Company c) {
+        companyId = c.getCompanyId();
+        companyName = c.getCompanyName();
+        isActive = c.isActive();
+        email = c.getContactInfo().getEmail();
+        phone = c.getContactInfo().getPhone();
+        purchasePolicy=c.getPurchasePolicy().describe();
+        discountPolicy=c.getDiscountPolicy().describe();
+        futureEvents=new ArrayList<>();
     }
 
     public int getCompanyId() {

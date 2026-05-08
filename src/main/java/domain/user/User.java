@@ -7,35 +7,35 @@ import java.util.Objects;
 public class User {
 
     private String identifier;
-    private List<Role> roles;
+    private State state;
 
     public User(String identifier) {
         this.identifier = identifier;
-        this.roles = new ArrayList<>();
+        this.state=new State();
     }
     public User(User other) {
         this.identifier = other.getIdentifier();
-        this.roles = new ArrayList<>(other.getRoles());
+        this.state = other.state;
     }
 
     protected User() {
-        this.roles = new ArrayList<>();
+        this.state = new State();
     }
 
     public String getIdentifier() {
         return identifier;
     }
 
-    public void addRole(Role role) {
-        roles.add(role);
+    public void changeState(State state) {
+        this.state.changeState(state);
     }
 
-    public void removeManagerRole(int companyId) {
-        roles.removeIf(r -> r instanceof Manager && ((Manager) r).getCompanyId() == companyId);
-    }
+//    public void removeManagerRole(int companyId) {
+//        roles.removeIf(r -> r instanceof Manager && ((Manager) r).getCompanyId() == companyId);
+//    }
 
-    public List<Role> getRoles() {
-        return roles;
+    public State getRole() {
+        return state;
     }
 
     @Override
