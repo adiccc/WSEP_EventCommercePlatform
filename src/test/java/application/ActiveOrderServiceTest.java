@@ -132,7 +132,7 @@ class ActiveOrderServiceTest {
         companyEventService.DefineVenueAndSeatingMap(validToken, eventId, stage, entries, standingZones, seatingZones);
         companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId, stage, entries, standingZones, seatingZones);
 
-        LotteryService lotteryService = new LotteryService(lotteryRepo, eventRepo, auth);
+        LotteryService lotteryService = new LotteryService(lotteryRepo, eventRepo, auth,companyRepo);
         lotteryService.createLottery(validToken, eventId, 10,
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);

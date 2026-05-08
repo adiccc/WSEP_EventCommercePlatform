@@ -1,5 +1,8 @@
 package application;
 
+import domain.company.Company;
+import domain.company.ICompanyRepo;
+import domain.dataType.PermissionType;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
@@ -16,18 +19,20 @@ import java.util.concurrent.TimeUnit;
 
 
 public class LotteryService {
-    ILotteryRepo lotteryRepo;
-    IEventRepo eventRepo;
+    private final ILotteryRepo lotteryRepo;
+    private final IEventRepo eventRepo;
     private final Logger logger;
     private final IAuth auth;
     private final ScheduledExecutorService scheduler; // ScheduledExecutorService is used to schedule tasks to run after a given delay
+    private final ICompanyRepo companyRepo;
 
-    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth) {
+    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth, ICompanyRepo companyRepo) {
         this.lotteryRepo = lotteryRepo;
         this.eventRepo = eventRepo;
         this.logger = Logger.getLogger(LotteryService.class.getName());
         this.auth = auth;
         this.scheduler = Executors.newScheduledThreadPool(10);
+        this.companyRepo = companyRepo;
     }
 
     public Response<Boolean> createLottery(String token, int eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
@@ -42,8 +47,9 @@ public class LotteryService {
             }
             try {
                 Event event = eventRepo.findById(eventId);
-                if (event.getCreatorId() != userId) {
-                    return new Response<>(false, "User id mismatch to the creator of this event");
+                Company company = companyRepo.findById(event.getCompanyId());
+                if (!company.checkPermission(userId, PermissionType.CREATE_EVENT)) {
+                    return new Response<>(false, "User id " + userId + " does not have permission to create lottery for this event");
                 }
                 if (!event.hasLottery()) {
                     return new Response<>(false, "This event does not support lottery");

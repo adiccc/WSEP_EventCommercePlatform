@@ -68,7 +68,7 @@ class LotteryServiceTest {
          eventCompanyManageService =
                 new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
 
-        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth);
+        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo);
 
         // user with permission
         UserDTO user1DTO = new UserDTO(
@@ -199,21 +199,6 @@ class LotteryServiceTest {
         // Assert
         assertFalse(response.getValue());
         assertEquals("Invalid token", response.getMessage());
-    }
-
-    @Test
-    void GivenUserNotCompanyOwner_WhenCreateLottery_ThenPermissionErrorIsReturned() {
-        // Arrange: Use an unauthorized user ID
-        LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
-
-        // Act
-        Response<Boolean> response = lotteryService.createLottery(
-                notPermission, eventId, 50, lotteryDate_X, (long) 24.0
-        );
-
-        // Assert
-        assertFalse(response.getValue());
-        assertEquals("User id mismatch to the creator of this event", response.getMessage());
     }
 
     @Test

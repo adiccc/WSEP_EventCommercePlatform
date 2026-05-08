@@ -183,7 +183,8 @@ public class EventCompanyManageService {
             }
             try {
                 Event event = eventRepo.findById(eventId);
-                if (event.getCreatorId() != userId) {
+                Company company = companyRepo.findById(event.getCompanyId());
+                if (!company.checkPermission(userId, CREATE_EVENT)) {
                     logger.severe("User does not have permission to update event date");
                     return new Response<>(false, "User id mismatch to the creator of the event");
                 }
@@ -229,7 +230,8 @@ public class EventCompanyManageService {
                 int eventCreator = event.getCreatorId();
 
                 // check appropriate permission
-                if (userId != eventCreator) {
+                Company company = companyRepo.findById(event.getCompanyId());
+                if (!company.checkPermission(userId, CREATE_EVENT)) {
                     logger.severe("User does not have permission to add zones to event map");
                     return new Response<>(false, "Permission required");
                 }
