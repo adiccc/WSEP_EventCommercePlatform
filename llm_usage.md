@@ -237,3 +237,120 @@
   - How much filtering logic should be encoded in DTOs versus domain services.
 - Final understanding (brief explanation in your own words):
   - DTOs should model request intent. A good filtering DTO captures what the client wants to search by (category, area, constraints), while the domain remains responsible for interpreting and applying those filters. This keeps boundaries clean and makes the API easier to evolve.
+
+---
+
+## Feature / Component: Virtual Queue — Java Concurrency APIs (AtomicInteger CAS Loop, ConcurrentLinkedQueue, Singleton with volatile)
+
+- Purpose of LLM use:
+  - To understand Java concurrency classes (`AtomicInteger`, `ConcurrentLinkedQueue`, `ConcurrentHashMap`) and how to use them correctly, and to speed up writing the boilerplate parts of the implementation and tests.
+- Summary of prompt(s):
+  - Asked what `AtomicInteger.compareAndSet` does and how a CAS loop works in Java, since I had already decided I needed a lock-free counter but was not familiar with the Java API for it.
+  - Asked how `ConcurrentLinkedQueue` and `ConcurrentHashMap` work and what their thread-safety guarantees are.
+  - Asked about the correct syntax for the double-checked locking singleton pattern with `volatile` in Java.
+  - Asked for help writing the boilerplate parts of the unit tests (setup, repeated test patterns) so I could focus on the logic assertions.
+- Output received (short description):
+  - Explanation of CAS semantics and a code snippet showing the do-while CAS loop pattern.
+  - Explanation of `ConcurrentLinkedQueue` as a non-blocking FIFO structure and `ConcurrentHashMap` as a thread-safe map without full locking.
+  - Singleton pattern snippet with `volatile` and double-checked locking.
+  - Test boilerplate snippets that I adapted to fit my test class setup.
+- Files / components affected:
+  - `domain/webQueue/WebQueue.java`, `application/AdmissionCallback.java`, `application/UserService.java`, `DTO/QueueEntryResultDTO.java`, `domain/webQueue/WebQueueTest.java`
+- Modifications made:
+  - I designed the overall structure: the singleton queue, the capacity limit, the O(1) position formula using `sequenceGenerator` and `admittedFromQueue`, the callback interface for admission notification, and the integration with `UserService.logout()` and `leaveStore()`. The LLM helped me use the correct Java APIs to implement the concurrent parts I had already planned, and sped up writing repetitive test cases.
+- Initial gaps in understanding (if any):
+  - I was not familiar with the exact Java API for atomic compare-and-set or with the `volatile` keyword requirement for singleton publication.
+- Final understanding (brief explanation in your own words):
+  - The queue uses a CAS loop on `AtomicInteger` to safely admit users without a lock: only the thread that successfully swaps the count gets the slot, everyone else retries or joins the waiting line. Each waiting user gets a sequence number; subtracting the number of users already promoted from the queue gives their current position in O(1). When a user leaves, one waiting user is promoted and their admission callback is fired.
+
+---
+
+## Feature / Component: Assign Additional Owner — Java List.remove() Integer Ambiguity and Acceptance Test Skeletons
+
+- Purpose of LLM use:
+  - To get Java-specific help on collection operations and to speed up writing acceptance tests by getting suggested test skeletons.
+- Summary of prompt(s):
+  - Asked about the correct Java way to remove a boxed `Integer` from a `List<Integer>` by value rather than by index.
+  - Asked for help generating acceptance test skeletons for the owner appointment flow (request, accept, reject, error cases) using the project's `Given..._When..._Then...` naming convention.
+  - Asked for help generating the concurrency test boilerplate using `CountDownLatch` and `ExecutorService`.
+- Output received (short description):
+  - Clarification that `list.remove(Integer.valueOf(id))` removes by value while `list.remove(id)` removes by index, with a short example.
+  - Acceptance test skeletons with `@Test` names and `assert` calls that I adapted to match my actual service method signatures and DTOs.
+  - Concurrency test boilerplate using `CountDownLatch`, `ExecutorService`, and `Future` that I adapted for the appoint-owner race scenario.
+- Files / components affected:
+  - `domain/company/Permissions.java`, `domain/company/Company.java`, `application/CompanyService.java`, `domain/user/Owner.java`, `application/CompanyServiceUpdatedTest.java`
+- Modifications made:
+  - I designed the two-step pending flow, the `pandingOwners` list, the guard conditions, and the rule that accepting removes a prior manager role. The LLM helped me avoid a subtle Java bug with boxed-integer removal and generated test skeletons that I then filled in with correct method calls, DTOs, and assertions from my own implementation.
+- Initial gaps in understanding (if any):
+  - The `list.remove(int)` vs `list.remove(Integer)` ambiguity in Java was not something I was aware of.
+- Final understanding (brief explanation in your own words):
+  - The owner appointment is a two-step flow: `requestAppointOwner` adds the nominee to a pending list, and `respondOwnerAppointment` either promotes them to the owner set (accept) or simply removes them from pending (reject). If they were previously a manager, their tree entry is removed at the same time to prevent conflicting roles. The service layer also adds the `Owner` role to the user entity and persists both objects.
+
+---
+
+## Feature / Component: Assign Manager Role — HashMap.remove() Return Value and Test Skeletons
+
+- Purpose of LLM use:
+  - To understand Java `HashMap` operations for managing the pending manager entries, and to speed up writing the acceptance test cases.
+- Summary of prompt(s):
+  - Asked how `HashMap.remove(key)` works and what it returns, since I needed to atomically remove the pending entry and use it to populate the active tree in one step.
+  - Asked for help generating acceptance test skeletons for accept, reject, empty permissions, and duplicate-appointment cases.
+  - Asked for help generating the concurrency test boilerplate for the "two threads race to appoint the same user" scenario.
+- Output received (short description):
+  - Explanation that `HashMap.remove(key)` returns the removed value (or `null` if absent), enabling the remove-and-use pattern in one line.
+  - Test skeletons with `Given..._When..._Then...` names that I adapted to my actual method signatures and permission sets.
+  - Concurrency boilerplate using `CountDownLatch` and `Future` that I adapted for the appoint-manager scenario.
+- Files / components affected:
+  - `domain/company/Permissions.java`, `domain/company/Hierarchy.java`, `domain/company/Company.java`, `application/CompanyService.java`, `domain/user/Manager.java`, `application/CompanyServiceUpdatedTest.java`
+- Modifications made:
+  - I designed the structure: a separate `pendingManagers` map, requiring a non-empty permission set at appointment time, and the two-step flow. I also designed how acceptance populates both sides of the bidirectional link in the company tree. The LLM helped me use `HashMap.remove` correctly for the remove-and-promote pattern and generated the test skeletons I then completed.
+- Initial gaps in understanding (if any):
+  - I was not sure whether `HashMap.remove` returned the old value; knowing that it does made the acceptance logic cleaner.
+- Final understanding (brief explanation in your own words):
+  - Pending managers are stored in a separate map so the main tree is never partially populated. On acceptance, `pendingManagers.remove(managerId)` returns the `Hierarchy` object (already holding the appointer id and permissions), which is then placed directly into `companyTree` and the appointer's appointee list is updated. The `Manager` role is also added to the user entity to keep it in sync.
+
+---
+
+## Feature / Component: Update Manager Permissions — Layered Architecture Guard Placement and Concurrency Race Outcome
+
+- Purpose of LLM use:
+  - To understand where in a layered Java architecture an authorization guard like "only the appointing owner can edit this" should live, and to speed up writing tests.
+- Summary of prompt(s):
+  - Asked whether a constraint that depends on data inside a domain object should be enforced in the service or in the domain class itself, in the context of Java layered architecture.
+  - Asked for help generating acceptance test skeletons for the update-permissions use case, including the "manager appointed by a different owner" case.
+  - Asked for help with the concurrency test — specifically, what the correct assertion should be when two valid permission updates race.
+- Output received (short description):
+  - Explanation that constraints depending on data owned by a domain object belong in that domain object, not in the service layer, so future callers cannot bypass them.
+  - Test skeletons with named cases that I adapted to my actual service and repo setup.
+  - Explanation that when two updates are both valid, last-write-wins is the correct expected outcome, and the assertion should verify the final state equals one of the two submitted sets.
+- Files / components affected:
+  - `domain/company/Hierarchy.java`, `domain/company/Permissions.java`, `domain/company/Company.java`, `application/CompanyService.java`, `application/CompanyServiceUpdatedTest.java`
+- Modifications made:
+  - I decided to place the appointer check inside `Hierarchy.setPermissions` and wrote that guard myself. I also wrote the full `updateManagerPermissions` flow in `CompanyService`. The LLM confirmed the layering decision I was already leaning toward and helped generate the test skeletons, including the concurrency test structure with the "final state equals one of two sets" assertion.
+- Initial gaps in understanding (if any):
+  - I was unsure whether in a concurrent last-write-wins case one of the two requests should return an error or both should succeed. The LLM clarified that both succeed and the last persisted write wins.
+- Final understanding (brief explanation in your own words):
+  - The appointer check lives in `Hierarchy` because only that object knows its `myManager`. The service layer handles token validation and owner check, then delegates to the domain. Under concurrency, the optimistic-locking retry serializes the two updates; both are valid, so both succeed, and the final persisted permission set is exactly one of the two submitted sets with no corruption.
+
+---
+
+## Feature / Component: Owner Removes Manager — Java List Iteration Safety During Map Mutation and Test Skeletons
+
+- Purpose of LLM use:
+  - To understand Java `List` mutation during iteration (to avoid `ConcurrentModificationException` when updating sub-manager pointers), and to speed up writing the acceptance and concurrency tests.
+- Summary of prompt(s):
+  - Asked about safe ways to iterate over a list of sub-manager IDs and update each one without triggering `ConcurrentModificationException`, since `removeManagerFromTree` needs to update other entries in the same map while iterating.
+  - Asked for help generating acceptance test skeletons for all the guard conditions and the cascade sub-manager reassignment case.
+  - Asked for help generating the concurrency test boilerplate for two threads racing to remove the same manager.
+- Output received (short description):
+  - Explanation that iterating over a snapshot (e.g., iterating over a copy of the list or the `getMyAppointees()` list directly rather than the live map) avoids modification issues, since the sub-manager entries are in the same `companyTree` map that is being modified.
+  - Test skeletons covering all guard cases and the cascade case, which I adapted to my actual setup.
+  - Concurrency test boilerplate using `CountDownLatch` and `Future` that I adapted for the remove-manager race scenario.
+- Files / components affected:
+  - `domain/company/Permissions.java`, `domain/company/Company.java`, `application/CompanyService.java`, `domain/user/Member.java`, `application/CompanyServiceUpdatedTest.java`
+- Modifications made:
+  - I designed the cascade-reassignment behavior, the four guard conditions (only appointing owner can remove, target must be a manager, company must be active, cannot remove the only manager), and the requirement to call `removeManagerRole` on the user entity. The LLM helped me safely iterate and update the sub-manager entries without a modification exception, and generated the test skeletons I then completed with correct service calls and assertions.
+- Initial gaps in understanding (if any):
+  - I was not sure whether iterating over `removed.getMyAppointees()` while also modifying `companyTree` entries in the same loop would cause issues in Java.
+- Final understanding (brief explanation in your own words):
+  - `removeManagerFromTree` removes the target node, strips it from its appointer's appointee list, appends the target's sub-managers to the appointer's list, and updates each sub-manager's `myManager` pointer. Iterating over the already-removed node's appointee list (a separate `List`) rather than over the live map avoids any concurrent-modification issue. The service layer also calls `removeManagerRole` on the user entity and persists both the company and the user.
