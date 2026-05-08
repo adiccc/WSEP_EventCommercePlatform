@@ -251,14 +251,22 @@ public class ActiveOrderService {
             boolean paymentStageAcquired = false;
 
             try {
-                int userId = auth.getUserId(token).getValue();
-                if (userId == -1) {
+                String role = auth.getRole(token).getValue();
+                if(role == null){
+                    logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
+                String userIdentifier=token; //for Guest
+                if(role.equals("MEMBER")) { //if it's a member should be email
+                    userIdentifier=auth.getUserEmail(token).getValue();
+                    if (userIdentifier == null) {
+                        logger.log(Level.SEVERE, "not a valid user email");
+                        return new Response<>(null, "not a valid user email");
 
+                    }
+                }
                 activeOrder = activeOrderRepo.findById(activeOrderId);
-
-                if (activeOrder.getUserId() != userId) {
+                if (!(activeOrder.getUserIdentifier().equals(userIdentifier))) { //userIdentifier
                     return new Response<>(null, "Active order does not belong to user");
                 }
 
@@ -305,7 +313,7 @@ public class ActiveOrderService {
 
                 order = new Order(
                         activeOrder.getId(),
-                        userId,
+                        userIdentifier,
                         event.getId(),
                         activeOrder.getTickets(),
                         total,

@@ -1492,9 +1492,8 @@ class ActiveOrderServiceTest {
     @Test
     void GivenActiveOrderHasNoTickets_WhenCheckoutAndPayment_ThenErrorAndActiveOrderRemains() {
         service.enterEventPurchase(validToken, companyId, concurrentEventId);
-
-        int userId = auth.getUserId(validToken).getValue();
-        int activeOrderId = activeOrderRepo.findOrderByUserId(userId).getId();
+        String userEmail = auth.getUserEmail(validToken).getValue();
+        int activeOrderId = activeOrderRepo.findOrderByUserId(userEmail).getId();
 
         PaymentDetailsDTO paymentDetails =
                 new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);

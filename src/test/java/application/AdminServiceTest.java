@@ -701,5 +701,96 @@ class AdminServiceTest {
 
         assertFalse(companyRepo.findById(companyId).isActive(), "Company must be closed at the end");
     }
+    @Test
+    void GivenAdminAndOrdersExist_WhenGetAllPurchasers_ThenReturnUniquePurchasersList() {
+        String buyer1 = "unique_buyer@bgu.ac.il";
+        String buyer2 = "another_buyer@bgu.ac.il";
 
+        userService.registerUser(null, new UserDTO(buyer1, "B1", "User", PASSWORD, 1, 1, 1990, "City", "050-111-2222"));
+        userService.registerUser(null, new UserDTO(buyer2, "B2", "User", PASSWORD, 1, 1, 1990, "City", "050-333-4444"));
+
+        String token1 = userService.login(buyer1, PASSWORD).getValue();
+        String token2 = userService.login(buyer2, PASSWORD).getValue();
+
+        activeOrderService.placeOrder(token1, eventId, 1);
+        activeOrderService.placeOrder(token2, eventId, 2);
+        activeOrderService.placeOrder(token1, eventId, 3);
+
+        // Act
+        Response<List<String>> response = adminService.getAllPurchasers(adminToken);
+
+        // Assert
+        assertNotNull(response.getValue(), "Response should not be null");
+        assertEquals(2, response.getValue().size(), "Should return exactly 2 unique purchasers, ignoring the duplicate");
+        assertTrue(response.getValue().contains(buyer1));
+        assertTrue(response.getValue().contains(buyer2));
+        assertEquals("Retrieved purchasers successfully", response.getMessage());
+    }
+
+    @Test
+    void GivenAdminAndNoOrders_WhenGetAllPurchasers_ThenReturnEmptyList() {
+        // Act
+        Response<List<String>> response = adminService.getAllPurchasers(adminToken);
+        // Assert
+        assertNotNull(response.getValue(), "Response should not be null");
+        assertTrue(response.getValue().isEmpty(), "Purchasers list should be empty");
+        assertEquals("No purchasers found", response.getMessage());
+    }
+
+    @Test
+    void GivenNonAdminToken_WhenGetAllPurchasers_ThenUnauthorized() {
+        // Act
+        Response<List<String>> response = adminService.getAllPurchasers(nonAdminToken);
+
+        // Assert
+        assertNull(response.getValue(), "Unauthorized user should not receive data");
+        assertTrue(response.getMessage().contains("Unauthorized"), "Should return Unauthorized error");
+    }
+
+    @Test
+    void GivenLoggedOutAdmin_WhenGetAllPurchasers_ThenUnauthorized() {
+        // Arrange
+        userService.logout(adminToken);
+        // Act
+        Response<List<String>> response = adminService.getAllPurchasers(adminToken);
+
+        // Assert
+        assertNull(response.getValue(), "Logged out admin should not receive data");
+        assertTrue(response.getMessage().contains("Unauthorized"), "Should return Unauthorized error");
+    }
+
+    @Test
+    void GivenConcurrentCompanyClosure_WhenGetAllPurchasers_ThenSystemRemainsStable() throws Exception {
+        // Arrange
+        String raceBuyer = "race_purchaser@bgu.ac.il";
+        userService.registerUser(null, new UserDTO(raceBuyer, "Race", "Buyer", PASSWORD, 1, 1, 1990, "City", "050-999-9999"));
+        String raceToken = userService.login(raceBuyer, PASSWORD).getValue();
+
+        activeOrderService.placeOrder(raceToken, eventId, 999);
+
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> closeFuture = pool.submit(() -> {
+            start.await();
+            return adminService.closeCompanyByAdmin(adminToken, companyId);
+        });
+        Future<Response<List<String>>> fetchFuture = pool.submit(() -> {
+            start.await();
+            return adminService.getAllPurchasers(adminToken);
+        });
+
+        // Act
+        start.countDown();
+        Response<Boolean> closeRes = closeFuture.get();
+        Response<List<String>> fetchRes = fetchFuture.get();
+        pool.shutdown();
+
+        // Assert
+        assertTrue(closeRes.getValue(), "Company closure should succeed");
+        assertNotNull(fetchRes.getValue(), "Fetch should survive the race condition without crashing");
+        assertTrue(fetchRes.getValue().contains(raceBuyer), "The purchaser must be in the list regardless of closure");
+    }
 }

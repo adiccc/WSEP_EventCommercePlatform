@@ -1222,8 +1222,8 @@ class EventCompanyManageServiceTest {
     void GivenLoggedInMemberWithOrders_WhenGetPurchaseHistory_ThenOrdersReturned() {
         Event event = eventRepo.findById(eventId);
 
-        Order order1 = new Order(1, auth.getUserId(validToken1).getValue(), eventId, List.of(1, 2));
-        Order order2 = new Order(2, auth.getUserId(validToken1).getValue(), eventId, List.of(3));
+        Order order1 = new Order(1, auth.getUserEmail(validToken1).getValue(), eventId, List.of(1, 2));
+        Order order2 = new Order(2, auth.getUserEmail(validToken1).getValue(), eventId, List.of(3));
 
         event.getOrders().add(order1);
         event.getOrders().add(order2);
@@ -1257,8 +1257,8 @@ class EventCompanyManageServiceTest {
 
     @Test
     void GivenTwoMembersWithOrders_WhenGetPurchaseHistory_ThenOnlyOwnOrdersReturned() {
-        int user1Id = auth.getUserId(validToken1).getValue();
-        int user2Id = auth.getUserId(validToken2).getValue();
+        String  user1Id = auth.getUserEmail(validToken1).getValue();
+        String user2Id = auth.getUserEmail(validToken2).getValue();
 
         Event event = eventRepo.findById(eventId);
 
@@ -1278,7 +1278,7 @@ class EventCompanyManageServiceTest {
         assertNotNull(response.getValue());
         assertEquals(1, response.getValue().size());
 
-        assertEquals(user1Id, response.getValue().get(0).getUserId());
+        assertEquals(user1Id, response.getValue().get(0).getUserIdentifier());
         assertEquals(order1.getOrderId(), response.getValue().get(0).getOrderId());
     }
 
