@@ -6,18 +6,18 @@ import java.util.List;
 public class Order {
     private OrderStatus status;
     private int orderId;
-    private int userId;
+    private String userIdentifier; //for member will be an email, and for guest will be the token when purchased
     private Integer eventId;
     private List<Integer> tickets;
     private double totalSum;
     String paymentConfirmationId;
 
 
-    public Order(int orderId, int userId, Integer eventId,
+    public Order(int orderId, String userIdentifier, Integer eventId,
                  List<Integer> tickets, double totalSum,
                  String paymentConfirmationId) {
         this.orderId = orderId;
-        this.userId = userId;
+        this.userIdentifier = userIdentifier;
         this.eventId = eventId;
         this.tickets = new ArrayList<>(tickets);
         this.status = OrderStatus.APPROVED;
@@ -25,15 +25,15 @@ public class Order {
         this.paymentConfirmationId = paymentConfirmationId;
     }
     // TODO: fix Order constructor to require totalSum and paymentConfirmationId
-    public Order(int orderId, int userId, Integer eventId, List<Integer> tickets) {
-        this(orderId, userId, eventId, tickets, 0.0,"TEMP_PAYMENT_CONFIRMATION_ID");
+    public Order(int orderId, String userIdentifier, Integer eventId, List<Integer> tickets) {
+        this(orderId, userIdentifier, eventId, tickets, 0.0,"TEMP_PAYMENT_CONFIRMATION_ID");
     }
     public int getOrderId() {
         return orderId;
     }
     public Order(Order order) {
         this.orderId = order.orderId;
-        this.userId = order.userId;
+        this.userIdentifier = order.userIdentifier;
         this.eventId = order.eventId;
         this.tickets=new ArrayList<>(order.tickets);
         this.status = order.status;
@@ -67,9 +67,9 @@ public class Order {
         return tickets.size();
     }
 
-        public int getUserId() {
-            return userId;
-        }
+    public String getUserIdentifier() {
+        return userIdentifier;
+    }
 
         public Integer getEventId() {
             return eventId;

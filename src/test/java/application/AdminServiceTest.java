@@ -9,6 +9,7 @@ import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
+import domain.dto.OrderDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
@@ -30,6 +31,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -552,5 +554,243 @@ class AdminServiceTest {
         assertFalse(updatedEvent.isActive(), "Event should be deactivated");
 
         executor.shutdown();
+    }
+
+    @Test
+    void GivenAdminAndOrdersExist_WhenGetGlobalOrdersByBuyers_ThenReturnFilteredOrders() {
+        // Arrange
+        Event event = eventRepo.findById(eventId);
+        Order order1 = new Order(1, "buyer1@bgu.ac.il", eventId, List.of(1, 2), 100.0, "pay123");
+        Order order2 = new Order(2, "buyer2@bgu.ac.il", eventId, List.of(3, 4), 100.0, "pay456");
+        event.getOrders().add(order1);
+        event.getOrders().add(order2);
+        eventRepo.store(event);
+        Response<List<OrderDTO>> response = adminService.getGlobalOrders(
+                adminToken,
+                List.of("buyer1@bgu.ac.il"),
+                null,
+                null
+        );
+
+        // Assert
+        assertNotNull(response.getValue(), "Response value should not be null");
+        assertEquals(1, response.getValue().size(), "Should filter and return exactly 1 order");
+        assertEquals("buyer1@bgu.ac.il", response.getValue().get(0).getUserIdentifier(), "Should match the requested buyer");
+        assertEquals("Retrieved history orders successfully for filter", response.getMessage());
+    }
+
+    @Test
+    void GivenAdminAndOrdersExist_WhenGetGlobalOrdersByCompaniesAndEvents_ThenReturnFilteredOrders() {
+        // Arrange
+        Event event = eventRepo.findById(eventId);
+        Order order1 = new Order(3, "company_buyer@bgu.ac.il", eventId, List.of(5, 6), 150.0, "pay789");
+        event.getOrders().add(order1);
+        eventRepo.store(event);
+
+        // Act:
+        Response<List<OrderDTO>> response = adminService.getGlobalOrders(
+                adminToken,
+                null,
+                List.of(eventId),
+                List.of(companyId)
+        );
+
+        // Assert
+        assertNotNull(response.getValue(), "Response value should not be null");
+        assertFalse(response.getValue().isEmpty(), "Should return orders for the given company/event");
+        assertTrue(response.getValue().stream().anyMatch(o -> o.getOrderId() == 3), "Must contain the newly added order");
+    }
+
+    @Test
+    void GivenNonAdminToken_WhenGetGlobalOrders_ThenUnauthorized() {
+        // Act
+        Response<List<OrderDTO>> response = adminService.getGlobalOrders(
+                nonAdminToken,
+                List.of("buyer1@bgu.ac.il"),
+                null,
+                null
+        );
+
+        // Assert
+        assertNull(response.getValue(), "Unauthorized user should not receive any data");
+        assertTrue(response.getMessage().contains("Unauthorized"), "Should return Unauthorized error");
+    }
+
+    @Test
+    void GivenLoggedOutAdmin_WhenGetGlobalOrders_ThenUnauthorized() {
+        // Arrange
+        userService.logout(adminToken);
+
+        // Act
+        Response<List<OrderDTO>> response = adminService.getGlobalOrders(
+                adminToken,
+                List.of("buyer1@bgu.ac.il"),
+                null,
+                null
+        );
+
+        // Assert
+        assertNull(response.getValue(), "Logged out user should not receive any data");
+        assertTrue(response.getMessage().contains("Unauthorized"), "Should return Unauthorized error");
+    }
+    @Test
+    void GivenAdminWithConflictingFilters_WhenGetGlobalOrders_ThenInvalidFilterError() {
+        // Act
+        Response<List<OrderDTO>> response = adminService.getGlobalOrders(
+                adminToken,
+                List.of("buyer1@bgu.ac.il"),
+                null,
+                List.of(companyId)
+        );
+
+        // Assert
+        assertNull(response.getValue(), "Should not return data for conflicting filters");
+        assertEquals("Cannot filter both users and companies", response.getMessage());
+    }
+
+    @Test
+    void GivenAdminAndNoMatchingOrders_WhenGetGlobalOrders_ThenReturnEmptyList() {
+        // Act
+        Response<List<OrderDTO>> response = adminService.getGlobalOrders(
+                adminToken,
+                List.of("nonexistent@bgu.ac.il"),
+                null,
+                null
+        );
+
+        // Assert
+        assertNotNull(response.getValue(), "Should return an empty list, not null");
+        assertTrue(response.getValue().isEmpty(), "The list must be empty");
+        assertEquals("No history orders found", response.getMessage());
+    }
+    //Admin closes company while fetching global history
+    @Test
+    void GivenConcurrentCompanyClosure_WhenGetGlobalOrders_ThenSystemRemainsStable() throws Exception {
+        // Arrange
+        Event event = eventRepo.findById(eventId);
+        event.getOrders().add(new Order(999, "race_buyer@bgu.ac.il", eventId, List.of(1, 2), 100.0, "pay123"));
+        eventRepo.store(event);
+
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> closeFuture = pool.submit(() -> {
+            start.await();
+            return adminService.closeCompanyByAdmin(adminToken, companyId);
+        });
+
+        Future<Response<List<OrderDTO>>> reportFuture = pool.submit(() -> {
+            start.await();
+            return adminService.getGlobalOrders(adminToken, null, null, List.of(companyId));
+        });
+
+        // Act
+        start.countDown();
+
+        Response<Boolean> closeRes = closeFuture.get();
+        Response<List<OrderDTO>> reportRes = reportFuture.get();
+        pool.shutdown();
+
+        // Assert
+        assertTrue(closeRes.getValue(), "Company closure should succeed");
+        assertNotNull(reportRes.getValue(), "Global orders fetch should survive the race condition without crashing");
+
+        assertFalse(reportRes.getValue().isEmpty(), "Historical orders should be retrieved regardless of closure status");
+
+        assertFalse(companyRepo.findById(companyId).isActive(), "Company must be closed at the end");
+    }
+    @Test
+    void GivenAdminAndOrdersExist_WhenGetAllPurchasers_ThenReturnUniquePurchasersList() {
+        String buyer1 = "unique_buyer@bgu.ac.il";
+        String buyer2 = "another_buyer@bgu.ac.il";
+
+        userService.registerUser(null, new UserDTO(buyer1, "B1", "User", PASSWORD, 1, 1, 1990, "City", "050-111-2222"));
+        userService.registerUser(null, new UserDTO(buyer2, "B2", "User", PASSWORD, 1, 1, 1990, "City", "050-333-4444"));
+
+        String token1 = userService.login(buyer1, PASSWORD).getValue();
+        String token2 = userService.login(buyer2, PASSWORD).getValue();
+
+        activeOrderService.placeOrder(token1, eventId, 1);
+        activeOrderService.placeOrder(token2, eventId, 2);
+        activeOrderService.placeOrder(token1, eventId, 3);
+
+        // Act
+        Response<List<String>> response = adminService.getAllPurchasers(adminToken);
+
+        // Assert
+        assertNotNull(response.getValue(), "Response should not be null");
+        assertEquals(2, response.getValue().size(), "Should return exactly 2 unique purchasers, ignoring the duplicate");
+        assertTrue(response.getValue().contains(buyer1));
+        assertTrue(response.getValue().contains(buyer2));
+        assertEquals("Retrieved purchasers successfully", response.getMessage());
+    }
+
+    @Test
+    void GivenAdminAndNoOrders_WhenGetAllPurchasers_ThenReturnEmptyList() {
+        // Act
+        Response<List<String>> response = adminService.getAllPurchasers(adminToken);
+        // Assert
+        assertNotNull(response.getValue(), "Response should not be null");
+        assertTrue(response.getValue().isEmpty(), "Purchasers list should be empty");
+        assertEquals("No purchasers found", response.getMessage());
+    }
+
+    @Test
+    void GivenNonAdminToken_WhenGetAllPurchasers_ThenUnauthorized() {
+        // Act
+        Response<List<String>> response = adminService.getAllPurchasers(nonAdminToken);
+
+        // Assert
+        assertNull(response.getValue(), "Unauthorized user should not receive data");
+        assertTrue(response.getMessage().contains("Unauthorized"), "Should return Unauthorized error");
+    }
+
+    @Test
+    void GivenLoggedOutAdmin_WhenGetAllPurchasers_ThenUnauthorized() {
+        // Arrange
+        userService.logout(adminToken);
+        // Act
+        Response<List<String>> response = adminService.getAllPurchasers(adminToken);
+
+        // Assert
+        assertNull(response.getValue(), "Logged out admin should not receive data");
+        assertTrue(response.getMessage().contains("Unauthorized"), "Should return Unauthorized error");
+    }
+
+    @Test
+    void GivenConcurrentCompanyClosure_WhenGetAllPurchasers_ThenSystemRemainsStable() throws Exception {
+        // Arrange
+        String raceBuyer = "race_purchaser@bgu.ac.il";
+        userService.registerUser(null, new UserDTO(raceBuyer, "Race", "Buyer", PASSWORD, 1, 1, 1990, "City", "050-999-9999"));
+        String raceToken = userService.login(raceBuyer, PASSWORD).getValue();
+
+        activeOrderService.placeOrder(raceToken, eventId, 999);
+
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> closeFuture = pool.submit(() -> {
+            start.await();
+            return adminService.closeCompanyByAdmin(adminToken, companyId);
+        });
+        Future<Response<List<String>>> fetchFuture = pool.submit(() -> {
+            start.await();
+            return adminService.getAllPurchasers(adminToken);
+        });
+
+        // Act
+        start.countDown();
+        Response<Boolean> closeRes = closeFuture.get();
+        Response<List<String>> fetchRes = fetchFuture.get();
+        pool.shutdown();
+
+        // Assert
+        assertTrue(closeRes.getValue(), "Company closure should succeed");
+        assertNotNull(fetchRes.getValue(), "Fetch should survive the race condition without crashing");
+        assertTrue(fetchRes.getValue().contains(raceBuyer), "The purchaser must be in the list regardless of closure");
     }
 }

@@ -221,5 +221,34 @@ public class Auth implements IAuth {
             return new Response<>(null, "User is not found");
         }
     }
+    public Response<String> getUserEmail(String token){
+        if (token == null || token.isBlank()) {
+            logger.warning("Token is missing");
+            return new Response<>(null, "Token is missing");
+        }
+        try {
+            String role = tokenService.extractRole(token);
+            if (role.equals("GUEST")) {
+                logger.info("Token is belong to GUEST, returning -1");
+                return new Response<>(null, "Guest token recognized");
+            }
+            if (!isLoggedIn(token).getValue()) {
+                logger.warning("User with token is not logged in");
+                return new Response<>(null, "User with token is not logged in");
+            }
+            String username = tokenService.extractUsername(token);
+            if (username == null) {
+                logger.warning("User with token is not found");
+                return new Response<>(null, "User with token is not found");
+            }
 
+                logger.info("Retrieved member's email " + username);
+                return new Response<>(username, "Retrieved member");
+
+        } catch (Exception e) {
+            logger.severe("User is not found");
+            return new Response<>(null, "User is not found");
+        }
+    }
 }
+

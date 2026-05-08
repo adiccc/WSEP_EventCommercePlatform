@@ -556,13 +556,11 @@ public class EventCompanyManageService {
     public Response<List<OrderDTO>> getPurchaseHistoryByUser(String token) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "getPurchaseHistoryByUser called");
-
-            int userId = auth.getUserId(token).getValue();
-            if (userId == -1) {
+            String userEmail = auth.getUserEmail(token).getValue();
+            if (userEmail == null) {
                 logger.severe("User is not logged in");
                 return new Response<>(null, "User is not logged in");
             }
-
             try {
                 List<OrderDTO> orderDTOs = new ArrayList<>();
 
@@ -572,14 +570,14 @@ public class EventCompanyManageService {
                     List<Order> orders = event.getOrders();
 
                     for (Order order : orders) {
-                        if (order.getUserId() == userId) {
+                        if (order.getUserIdentifier().equals(userEmail)) {
                             orderDTOs.add(new OrderDTO(order));
                         }
                     }
                 }
 
                 if (orderDTOs.isEmpty()) {
-                    logger.log(Level.INFO, "No purchase history found for user " + userId);
+                    logger.log(Level.INFO, "No purchase history found for user " + userEmail);
                     return new Response<>(orderDTOs, "No purchase history found for user");
                 }
 

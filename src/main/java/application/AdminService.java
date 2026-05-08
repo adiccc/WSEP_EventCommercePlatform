@@ -3,6 +3,7 @@ package application;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.company.Permissions;
+import domain.dto.OrderDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.user.IUserRepo;
@@ -14,8 +15,8 @@ import domain.event.IEventRepo;
 import domain.event.Order;
 import domain.webQueue.WebQueue;
 import Exception.OptimisticLockingFailureException;
-import java.util.List;
-import java.util.NoSuchElementException;
+
+import java.util.*;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.logging.Level;
@@ -302,6 +303,98 @@ public class AdminService {
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
                 return new Response<>(false, "Failed to process refund: " + e.getMessage());
+            }
+        });
+    }
+    public Response<List<OrderDTO>> getGlobalOrders(String token,List<String> usersFilter, List<Integer> eventsFilter,List<Integer> companiesFilter) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("getGlobalOrders attempt for admin");
+            try {
+                if (!auth.isAdmin(token).getValue()) {
+                    logger.warning("closeCompanyByAdmin failed: unauthorized");
+                    return new Response<>(null, "Unauthorized: admin access required");
+                }
+                boolean hasUsers = (usersFilter != null && !usersFilter.isEmpty());
+                boolean hasCompanies = (companiesFilter != null && !companiesFilter.isEmpty());
+                boolean hasEvents = (eventsFilter != null && !eventsFilter.isEmpty());
+                if(!hasUsers && !hasCompanies && !hasEvents) {
+                    logger.warning("getGlobalOrders failed: no users or companies found");
+                    return new Response<>(null, "No users or companies to filter");
+                }
+                if(hasUsers && (hasCompanies || hasEvents)) {
+                    logger.warning("getGlobalOrders failed: cannot filter both users and companies");
+                    return new Response<>(null, "Cannot filter both users and companies");
+                }
+                List<Event> allEvents = eventRepo.getAll();
+                List<OrderDTO> historyOrders = new ArrayList<>();
+                if(hasUsers){
+                   for (Event event : allEvents) {
+                       List<Order> orders = event.getOrders();
+                       for (Order order : orders) {
+                           if(usersFilter.contains(order.getUserIdentifier()))
+                                historyOrders.add(new OrderDTO(order));
+                       }
+                   }
+                }
+                else { // in case we have filter on companies or events
+                    for (Event event : allEvents) {
+                        boolean toAdd = false;
+                        if (hasCompanies && !hasEvents) {
+                            if (companiesFilter.contains(event.getCompanyId())){
+                                toAdd = true;
+                        }
+                        } else if (!hasCompanies && hasEvents) {
+                            if (eventsFilter.contains(event.getId())){
+                                toAdd = true;
+                            }
+                        }
+                        else if (hasCompanies && hasEvents) {
+                            if (companiesFilter.contains(event.getCompanyId()) && eventsFilter.contains(event.getId())){
+                                toAdd = true;
+                            }
+                        }
+                        if (toAdd) {
+                            List<Order> orders = event.getOrders();
+                            for (Order order : orders) {
+                                historyOrders.add(new OrderDTO(order));
+                            }
+                        }
+                    }
+                }
+                if(historyOrders.isEmpty()){
+                    logger.warning("getGlobalOrders failed: no history orders found");
+                    return new Response<>(new ArrayList<>(), "No history orders found");
+                   }
+                logger.info("Retrieved history orders successfully for filter");
+                return new Response<>(historyOrders,"Retrieved history orders successfully for filter");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Failed to retrieve history orders: " + e.getMessage());
+            return new Response<>(null, "Failed to retrieve history orders: " + e.getMessage());
+        }
+        });
+    }
+    public Response<List<String>> getAllPurchasers(String token) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("getAllPurchasers attempt for admin");
+                if (!auth.isAdmin(token).getValue()) {
+                    logger.warning("getAllPurchasers failed: unauthorized");
+                    return new Response<>(null, "Unauthorized: Only admin can access");
+                }
+                try{
+                List<String> purchasers = eventRepo.getAllPurchasers();
+                if (purchasers.isEmpty()) {
+                    logger.info("No purchasers found in the system");
+                    return new Response<>(new ArrayList<>(), "No purchasers found");
+                }
+                logger.info("Retrieved all unique purchasers successfully. Total: " + purchasers.size());
+                return new Response<>(purchasers, "Retrieved purchasers successfully");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Failed to retrieve purchasers: " + e.getMessage());
+                return new Response<>(null, "Failed to retrieve purchasers: " + e.getMessage());
             }
         });
     }

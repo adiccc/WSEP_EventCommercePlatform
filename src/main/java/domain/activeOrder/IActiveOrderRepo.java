@@ -9,11 +9,11 @@ import java.util.List;
 
 public interface IActiveOrderRepo extends IRepo<ActiveOrder, Integer> {
 
-    void alreadyHasActiveOrder(Integer value, Integer eventId);
+    void alreadyHasActiveOrder(String value, Integer eventId);
 
     List<ActiveOrder> findExpired(LocalDateTime now);
 
-     ActiveOrderDTO findOrderByUserId(Integer userId);
+     ActiveOrderDTO findOrderByUserId(String userId);
 
     int countActiveOrdersForEvent(int eventId);
 }

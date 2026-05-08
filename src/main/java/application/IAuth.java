@@ -10,5 +10,6 @@ public interface IAuth {
     Response<Boolean> isAdmin(String token);
     Response<String> getRole(String token);
     Response<UserDTO> getUserDTO(String identifier);
+    Response<String> getUserEmail(String token);
 
 }

@@ -6,7 +6,7 @@ import java.util.List;
 
 public class ActiveOrder {
     private final int orderId;
-    private final int userId;
+    private final String userIdentifier;
     private final Integer eventId;
     private List<Integer> tickets;
     private LocalDateTime createdAt;
@@ -16,9 +16,9 @@ public class ActiveOrder {
     private static final int SELECTING_TICKETS_TIMEOUT_MINUTES = 5;
     private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
 
-    public ActiveOrder(int orderId, int userId, Integer eventId, List<Integer> tickets) {
+    public ActiveOrder(int orderId, String userIdentifier, Integer eventId, List<Integer> tickets) {
         this.orderId = orderId;
-        this.userId = userId;
+        this.userIdentifier = userIdentifier;
         this.eventId = eventId;
         this.tickets = tickets;
         this.version = 0;
@@ -29,7 +29,7 @@ public class ActiveOrder {
 
     public ActiveOrder(ActiveOrder activeOrder) {
         this.orderId = activeOrder.orderId;
-        this.userId = activeOrder.userId;
+        this.userIdentifier = activeOrder.userIdentifier;
         this.eventId = activeOrder.eventId;
         this.tickets = new ArrayList<>(activeOrder.tickets);
         this.createdAt = activeOrder.createdAt;
@@ -52,10 +52,6 @@ public class ActiveOrder {
 
     public Integer getEventId() {
         return eventId;
-    }
-
-    public int getUserId() {
-        return userId;
     }
 
     public List<Integer> getTickets() {
@@ -124,8 +120,7 @@ public class ActiveOrder {
             this.checkoutStartedAt = now.minusMinutes(11);
         }
     }
-
-    public void startPayment() {
+        public void startPayment() {
         if (stage == STAGE.PAYMENT_IN_PROGRESS) {
             throw new IllegalStateException("Payment already in progress");
         }
@@ -141,5 +136,9 @@ public class ActiveOrder {
         if (stage == STAGE.PAYMENT_IN_PROGRESS) {
             stage = STAGE.CHECKING_OUT;
         }
+    }
+    
+    public String getUserIdentifier() {
+        return userIdentifier;
     }
 }
