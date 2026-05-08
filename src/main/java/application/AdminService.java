@@ -375,4 +375,27 @@ public class AdminService {
         }
         });
     }
+    public Response<List<String>> getAllPurchasers(String token) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("getAllPurchasers attempt for admin");
+                if (!auth.isAdmin(token).getValue()) {
+                    logger.warning("getAllPurchasers failed: unauthorized");
+                    return new Response<>(null, "Unauthorized: Only admin can access");
+                }
+                try{
+                List<String> purchasers = eventRepo.getAllPurchasers();
+                if (purchasers.isEmpty()) {
+                    logger.info("No purchasers found in the system");
+                    return new Response<>(new ArrayList<>(), "No purchasers found");
+                }
+                logger.info("Retrieved all unique purchasers successfully. Total: " + purchasers.size());
+                return new Response<>(purchasers, "Retrieved purchasers successfully");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Failed to retrieve purchasers: " + e.getMessage());
+                return new Response<>(null, "Failed to retrieve purchasers: " + e.getMessage());
+            }
+        });
+    }
 }

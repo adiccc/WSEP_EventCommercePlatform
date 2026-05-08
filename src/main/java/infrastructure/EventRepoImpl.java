@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import Exception.OptimisticLockingFailureException;
+import domain.event.Order;
 
 public class EventRepoImpl implements IEventRepo {
     Map<Integer,Event> events; // key: eventId, value: event
@@ -87,5 +88,18 @@ public class EventRepoImpl implements IEventRepo {
                 .filter(e -> e.getCreatorId() == creatorId)
                 .map(Event::new)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<String> getAllPurchasers() {
+        HashSet<String> purchasers = new HashSet<>();
+       Collection<Event> allEvents = events.values();
+       for(Event e: allEvents){
+           List<Order> eventsOrder = e.getOrders();
+           for(Order o : eventsOrder){
+               purchasers.add(o.getUserIdentifier());
+           }
+       }
+       return purchasers.stream().toList();
     }
 }
