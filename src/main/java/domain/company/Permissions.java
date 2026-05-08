@@ -2,6 +2,10 @@ package domain.company;
 
 import domain.dataType.PermissionType;
 import domain.dto.HierarchyDTO;
+import domain.user.Founder;
+import domain.user.Manager;
+import domain.user.Owner;
+import domain.user.State;
 
 import java.util.*;
 
@@ -50,7 +54,16 @@ public class Permissions {
         return founderId;
     }
 
-    // ── Owner appointment (two-step pending flow) ──────────────────────────
+    public State getUserState(int userId) {
+        if(getFounderId() == userId) {
+            return new Founder();
+        }else if(getOwnerIds().contains(userId)) {
+            return new Owner();
+        }else if(getCompanyTree().containsKey(userId)) {
+            return new Manager();
+        }else
+            return null;
+    }
 
     public void addOwner(int ownerId) {
         pandingOwners.add(ownerId);

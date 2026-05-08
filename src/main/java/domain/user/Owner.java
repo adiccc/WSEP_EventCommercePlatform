@@ -1,13 +1,6 @@
 package domain.user;
 
-public class Owner extends Role {
+public class Owner extends State {
     private int companyId;
 
-    public Owner(int companyId) {
-        this.companyId = companyId;
-    }
-
-    public int getCompanyId() {
-        return companyId;
-    }
 }

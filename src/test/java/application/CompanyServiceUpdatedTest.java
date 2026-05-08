@@ -12,6 +12,7 @@ import domain.policy.*;
 import domain.user.IUserRepo;
 import domain.dto.CompanyDTO;
 import domain.user.IUserRepo;
+import domain.user.Manager;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -1102,8 +1103,7 @@ class CompanyServiceUpdatedTest {
     void GivenOwnerWhoAppointed_WhenRemoveManager_ThenManagerRoleRemovedFromUser() {
         addSecondManager();
         service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
-        boolean hasRole = userRepo.findById(MANAGER_ID).getRoles().stream()
-                .anyMatch(r -> r instanceof domain.user.Manager && ((domain.user.Manager) r).getCompanyId() == COMPANY_ID);
+        boolean hasRole = userRepo.findById(MANAGER_ID).getRole() instanceof Manager;
         assertFalse(hasRole);
     }
 

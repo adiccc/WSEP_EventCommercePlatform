@@ -7,6 +7,7 @@ import Exception.OptimisticLockingFailureException;
 import domain.company.*;
 import domain.dataType.PermissionType;
 import domain.dto.CompanyDTO;
+import domain.dto.CompanyDetailsDTO;
 import domain.dto.HierarchyDTO;
 import domain.dto.RolesPermissionsTreeDTO;
 import DTO.DiscountDTO;
@@ -72,8 +73,7 @@ public class CompanyService {
                     Company newCompany = new Company(companyId, companyName,
                             contactInfo, defaultPurchase, defaultDiscount, companyPermission);
 
-                    Founder founderRole = new Founder(companyId);
-                    user.addRole(founderRole);
+                    user.changeState(new Founder());
 
                     companyRepo.store(newCompany);
                     userRepo.store(user);
@@ -86,6 +86,32 @@ public class CompanyService {
                 throw e;
             } catch(Exception e){
                 logger.severe("Failed to create company " + companyName + ". Error: " + e.getMessage());
+                return new Response<>(null, "System error occurred: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<CompanyDetailsDTO> getProductionCompany(String sessionToken, int companyId) {
+        return RetryHelper.executeWithRetry(()-> {
+            logger.info("viewRolesAndPermissionsTree called for companyId: " + companyId);
+            try {
+                // 1. Validate token
+                int userId = auth.getUserId(sessionToken).getValue();
+                if (userId == -1) {
+                    logger.warning("viewRolesAndPermissionsTree failed: invalid or expired token");
+                    return Response.error("Invalid or expired token");
+                }
+                // 2. Company must exist
+                Company company = companyRepo.findById(companyId);
+                Member member = userRepo.findById(userId);
+                member.changeState(company.getCompanyPermission().getUserState(userId));
+                userRepo.store(member);
+                logger.info("viewRolesAndPermissionsTree successful");
+                return Response.ok(new CompanyDetailsDTO(company));
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Failed to get company " + companyId + ". Error: " + e.getMessage());
                 return new Response<>(null, "System error occurred: " + e.getMessage());
             }
         });
@@ -526,7 +552,7 @@ public class CompanyService {
                 company.respondOwnerAppointment(userId, accept);
                 if (accept) {
                     Member member = userRepo.findById(userId);
-                    member.addRole(new Owner(companyId));
+                    member.changeState(new Owner());
                     userRepo.store(member);
                     logger.info("respondToOwnerAppointment: user " + userId + " accepted and became owner of company " + companyId);
                 } else {
@@ -622,7 +648,7 @@ public class CompanyService {
                 company.respondManagerAppointment(userId, accept);
                 if (accept) {
                     Member member = userRepo.findById(userId);
-                    member.addRole(new Manager(companyId));
+                    member.changeState(new Manager());
                     userRepo.store(member);
                 }
                 companyRepo.store(company);
@@ -665,7 +691,7 @@ public class CompanyService {
                     logger.warning("removeManagerAppointment failed: manager user not found, id: " + managerId);
                     return Response.error("Manager user not found");
                 }
-                managerMember.removeManagerRole(companyId);
+                managerMember.changeState(null);
                 userRepo.store(managerMember);
                 companyRepo.store(company);
                 logger.info("removeManagerAppointment succeeded for managerId: " + managerId);
