@@ -354,3 +354,79 @@
   - I was not sure whether iterating over `removed.getMyAppointees()` while also modifying `companyTree` entries in the same loop would cause issues in Java.
 - Final understanding (brief explanation in your own words):
   - `removeManagerFromTree` removes the target node, strips it from its appointer's appointee list, appends the target's sub-managers to the appointer's list, and updates each sub-manager's `myManager` pointer. Iterating over the already-removed node's appointee list (a separate `List`) rather than over the live map avoids any concurrent-modification issue. The service layer also calls `removeManagerRole` on the user entity and persists both the company and the user.
+
+
+## Feature / Component: Token Roles & Unified User Identifier (Guest vs. Member)
+
+- **Purpose of LLM use:**
+  - Validation and refinement of my architectural design for handling guests versus registered members, specifically focusing on JWT role-based permission checks and how they tie into domain entity associations.
+- **Summary of prompt(s):**
+  - First, I consulted the LLM on my idea to use a `ROLE` claim (GUEST vs. MEMBER) inside the token to securely differentiate between user types statelessly, block guests from restricted functions, and route shared endpoints appropriately.
+  - Following that, I proposed refactoring the `Order` class to use a `String userIdentifier` (handling both emails for members and UUIDs for guests) so that the stateless token identity could be unified under a single order flow.
+- **Output received (short description):**
+  - The LLM agreed with my `ROLE` claim direction, providing guidance on how to extract it statelessly to enforce authorization guards. It then validated my subsequent `userIdentifier` design as a highly scalable approach to complete the flow.
+- **Files / components affected:**
+  - `TokenService`, `Auth`, `Order`, `ActiveOrder`, `UserService`, `ActiveOrderServiceTest`, `AdminServiceTest`.
+- **Modifications made:**
+  - I implemented the `ROLE` extraction in `TokenService` and `Auth` to add permission guards across the services. Once the roles were safely separated, I implemented my `userIdentifier` (String) design across the domain models to unify the checkout process.
+- **Initial gaps in understanding (if any):**
+  - I wanted to brainstorm the cleanest way to enforce token authorization stateless, and subsequently ensure that passing these dual-identities into the domain model wouldn't break the database architecture.
+- **Final understanding (brief explanation in your own words):**
+  - Embedding a `ROLE` claim directly in the JWT is a powerful stateless authorization mechanism to accept/reject requests instantly. Once validated, mapping these actors to a "Unified Identifier" (String) allows the system to smoothly process orders for anyone without duplicating domain logic.
+
+---
+
+## Feature / Component: TokenService and Authentication Separation
+
+- **Purpose of LLM use:**
+  - Architectural discussion regarding the Single Responsibility Principle in the context of security and token management.
+- **Summary of prompt(s):**
+  - Discussed how to properly separate the responsibility of generating tokens (especially with the new Guest flows) from the responsibility of verifying authentication across the system.
+- **Output received (short description):**
+  - Validated the idea that `TokenService` should strictly handle JWT creation and parsing, while a dedicated `Auth` component should manage identity and permission verification.
+- **Files / components affected:**
+  - `TokenService`, `Auth`, Application Services.
+- **Modifications made:**
+  - Ensured that application services depend on the `Auth` interface for permission checks, rather than directly coupling them to the `TokenService`'s generation logic.
+- **Initial gaps in understanding (if any):**
+  - Clarifying the exact boundaries between token manipulation and domain-level authorization.
+- **Final understanding (brief explanation in your own words):**
+  - Decoupling token mechanics (`TokenService`) from identity verification (`Auth`) adheres strictly to the Single Responsibility Principle. It ensures that services only interact with the `Auth` layer to check permissions, keeping the security architecture modular and easier to test.
+
+---
+
+## Feature / Component: Password Encryption and Security Integration
+
+- **Purpose of LLM use:**
+  - Conceptual understanding of how to securely hash passwords using external libraries, aligning with course materials.
+- **Summary of prompt(s):**
+  - Discussed integrating an external password hashing library (referenced from the course presentation) into the user registration and authentication flow.
+- **Output received (short description):**
+  - Guidance on securely injecting the external encryption logic into the application layer, ensuring passwords are never stored in plain text.
+- **Files / components affected:**
+  - `PasswordEncoderUtil`, `UserService`, `Auth`.
+- **Modifications made:**
+  - Integrated the external library into the `PasswordEncoderUtil`. Updated the registration flow to hash passwords before storing them in `UserRepo`, and updated the login flow to verify raw passwords against the hashed versions.
+- **Initial gaps in understanding (if any):**
+  - The exact mechanism of bridging the external security library with our custom authentication service was slightly unclear.
+- **Final understanding (brief explanation in your own words):**
+  - Passwords must be hashed and salted using established cryptographic libraries. Security logic should be encapsulated in a dedicated utility (`PasswordEncoderUtil`) so the `UserService` focuses purely on orchestration, maintaining the Single Responsibility Principle.
+
+---
+
+## Feature / Component: Concurrency and Integration Testing (Race Conditions)
+
+- **Purpose of LLM use:**
+  - To learn how to write the specific Java code (boilerplate) needed to run the concurrency tests I planned.
+- **Summary of prompt(s):**
+  - I came up with some race condition scenarios (like what happens if an admin closes a company exactly when someone tries to view it, or when multiple users login/register at the same time). I asked the LLM how to write a JUnit test that runs these actions at the exact same millisecond.
+- **Output received (short description):**
+  - The LLM provided code examples using Java's `CountDownLatch` and `ExecutorService` to synchronize threads and run them together.
+- **Files / components affected:**
+  - `AdminServiceTest`, `UserServiceTest`, `EventCompanyManageServiceTest`.
+- **Modifications made:**
+  - I took the LLM's boilerplate code and applied it to my specific test cases. I used my actual service methods to check if the system stays stable and handles permissions correctly during concurrent reads and writes.
+- **Initial gaps in understanding (if any):**
+  - I knew exactly which edge cases I wanted to test, but I didn't know the specific Java classes and syntax needed to force threads to wait and run simultaneously.
+- **Final understanding (brief explanation in your own words):**
+  - I learned that Java utilities like `CountDownLatch` and `ExecutorService` can pause threads and release them at the exact same time. This is really useful to prove that our optimistic locking works and prevents data corruption or weird permission bugs under heavy load.
