@@ -2389,6 +2389,183 @@ class ActiveOrderServiceTest {
                 .issue(Mockito.any(TicketSupplyRequestDTO.class));
     }
 
+    @Test
+    void GivenUsersAboveQueueCapacity_WhenActiveOrdersCompleteCheckout_ThenQueuedUsersArePromotedAndCanSelectTickets() throws Exception {
+        int usersCount = 40;
+        int expectedCapacity = capacity; // 20
+        int expectedQueued = usersCount - expectedCapacity; // 20
 
+        List<String> tokens = new ArrayList<>();
 
+        for (int i = 0; i < usersCount; i++) {
+            String email = "queue_promote_after_checkout_" + i + "@mail.com";
+
+            Response<Boolean> registerResponse = userService.registerUser("", new UserDTO(
+                    email,
+                    "f" + i,
+                    "l" + i,
+                    "pass",
+                    1,
+                    1,
+                    2000,
+                    "Israel",
+                    "050-909-88" + String.format("%02d", i)
+            ));
+
+            assertTrue(registerResponse.getValue(),
+                    "register failed: " + registerResponse.getMessage());
+
+            tokens.add(userService.login(email, "pass").getValue());
+        }
+
+        ExecutorService enterExecutor = Executors.newFixedThreadPool(usersCount);
+        CountDownLatch enterStart = new CountDownLatch(1);
+        Map<String, Future<Response<EventMapDTO>>> enterFutures = new HashMap<>();
+
+        for (String token : tokens) {
+            enterFutures.put(token, enterExecutor.submit(() -> {
+                enterStart.await();
+                return service.enterEventPurchase(token, companyId, concurrentEventId);
+            }));
+        }
+
+        enterStart.countDown();
+
+        List<String> admittedTokens = new ArrayList<>();
+        List<String> queuedTokens = new ArrayList<>();
+
+        for (String token : tokens) {
+            Response<EventMapDTO> response = enterFutures.get(token).get();
+
+            if (response.getValue() != null) {
+                admittedTokens.add(token);
+            } else if (response.getMessage() != null &&
+                    response.getMessage().startsWith("Event is full")) {
+                queuedTokens.add(token);
+            } else {
+                fail("Unexpected enter response: " + response.getMessage());
+            }
+        }
+
+        enterExecutor.shutdown();
+
+        assertEquals(expectedCapacity, admittedTokens.size(),
+                "Exactly capacity users should enter the purchase flow");
+
+        assertEquals(expectedQueued, queuedTokens.size(),
+                "All users above capacity should be queued");
+
+        assertEquals(expectedCapacity, activeOrderRepo.countActiveOrdersForEvent(concurrentEventId),
+                "Repo should contain exactly capacity active orders after first wave");
+
+        List<Integer> activeOrderIds = new ArrayList<>();
+
+        for (String token : admittedTokens) {
+            Response<Integer> selectResponse = service.userSelectTickets(
+                    token,
+                    concurrentEventId,
+                    new HashMap<>(),
+                    Map.of("floor", 1)
+            );
+            assertNotNull(selectResponse.getValue(),
+                    "ticket selection failed: " + selectResponse.getMessage());
+
+            activeOrderIds.add(selectResponse.getValue());
+            System.out.println("Active Order created: "+selectResponse.getValue());
+        }
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenAnswer(invocation -> "payment-" + UUID.randomUUID());
+
+        TicketSupplyResultDTO successfulSupplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(successfulSupplyResult.isSuccess()).thenReturn(true);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(successfulSupplyResult);
+
+        ExecutorService checkoutExecutor = Executors.newFixedThreadPool(expectedCapacity);
+        CountDownLatch checkoutStart = new CountDownLatch(1);
+        List<Future<Response<Integer>>> checkoutFutures = new ArrayList<>();
+
+        for (int i = 0; i < admittedTokens.size(); i++) {
+            String token = admittedTokens.get(i);
+            int activeOrderId = activeOrderIds.get(i);
+
+            checkoutFutures.add(checkoutExecutor.submit(() -> {
+                checkoutStart.await();
+
+                PaymentDetailsDTO paymentDetails =
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111111111", 1);
+                System.out.println("checkout and payment for "+ activeOrderId);
+                return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
+            }));
+        }
+
+        checkoutStart.countDown();
+
+        int successfulCheckouts = 0;
+
+        for (Future<Response<Integer>> future : checkoutFutures) {
+            Response<Integer> response = future.get();
+            System.out.println(response.getMessage());
+            assertNotNull(response.getValue(),
+                    "checkout failed unexpectedly: " + response.getMessage());
+
+            successfulCheckouts++;
+        }
+
+        checkoutExecutor.shutdown();
+
+        assertEquals(expectedCapacity, successfulCheckouts,
+                "All admitted users should complete checkout successfully");
+
+        assertEquals(expectedCapacity, activeOrderRepo.countActiveOrdersForEvent(concurrentEventId),
+                "After first wave checkout, queued users should be promoted into freed active-order slots");
+
+        List<Integer> promotedOrderIds = new ArrayList<>();
+
+        for (String queuedToken : queuedTokens) {
+            Response<ActiveOrderDTO> proceedResponse =
+                    service.memberProceedAnActiveOrder(queuedToken);
+
+            System.out.println(proceedResponse.getMessage());
+
+            assertNotNull(proceedResponse.getValue(),
+                    "queued user should have been promoted to active order: "
+                            + proceedResponse.getMessage());
+
+            assertEquals(concurrentEventId, proceedResponse.getValue().getEventId(),
+                    "promoted active order should belong to the same event");
+
+            promotedOrderIds.add(proceedResponse.getValue().getId());
+        }
+
+        assertEquals(expectedQueued, promotedOrderIds.size(),
+                "Every queued user should now have an active order");
+
+        assertEquals(
+                promotedOrderIds.size(),
+                promotedOrderIds.stream().distinct().count(),
+                "Every promoted active order should have a unique id"
+        );
+
+        for (String queuedToken : queuedTokens) {
+            Response<Integer> selectResponse = service.userSelectTickets(
+                    queuedToken,
+                    concurrentEventId,
+                    new HashMap<>(),
+                    Map.of("floor", 1)
+            );
+
+            assertNotNull(selectResponse.getValue(),
+                    "promoted queued user should be able to select tickets: "
+                            + selectResponse.getMessage());
+        }
+
+        Mockito.verify(paymentSystem, Mockito.times(expectedCapacity))
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.times(expectedCapacity))
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
 }

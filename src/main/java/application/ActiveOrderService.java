@@ -150,7 +150,7 @@ public class ActiveOrderService {
             } catch (IllegalStateException e) {
                 logger.log(Level.SEVERE, e.getMessage());
                 return new Response<>(null, e.getMessage());
-            }catch (OptimisticLockingFailureException e) {
+            } catch (OptimisticLockingFailureException e) {
                 throw e;
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to enter event purchase : " + e.getMessage());
@@ -412,11 +412,12 @@ public class ActiveOrderService {
                             }
                         }
                     }
+                }
+                if (shouldDeleteActiveOrder) {
+                    activeOrderRepo.delete(activeOrderId);
+                    System.out.println("deleting "+activeOrderId);
+                    promoteNextInQueue(event.getId());
 
-                    if (shouldDeleteActiveOrder) {
-                        activeOrderRepo.delete(activeOrderId);
-                        promoteNextInQueue(event);
-                    }
                 }
             }
         });
@@ -437,12 +438,11 @@ public class ActiveOrderService {
                         event.releaseTickets(current.getTickets());
                         eventRepo.store(event);                  // optimistic lock check
                         activeOrderRepo.delete(current.getId());
-                        promoteNextInQueue(event);
+                        promoteNextInQueue(event.getId());
                         return new Response<>(true, "expired");
                     } catch (OptimisticLockingFailureException e) {
                         throw e;
-                     }
-                    catch (NoSuchElementException e) {
+                    } catch (NoSuchElementException e) {
                         // order already gone — user placed it before cleanup hit. Fine.
                         return new Response<>(true, "already removed");
                     }
@@ -614,31 +614,57 @@ public class ActiveOrderService {
         eventRepo.store(event);
         return new Response<>(true, "Order placed successfully");
     }
-    // TODO: This promotion flow updates two repositories: EventRepo and ActiveOrderRepo.
-    private void promoteNextInQueue(Event event) {
-        Response<Boolean> response = RetryHelper.executeWithRetry(() -> {
-            if (!event.getEventQueue().isEmpty()
-                    && activeOrderRepo.countActiveOrdersForEvent(event.getId()) < capacity) {
 
+    private void promoteNextInQueue(int eventId) {
+        String nextToken = dequeueNextToken(eventId);
+        if (nextToken != null) {
+            createActiveOrderForToken(nextToken, eventId);
+        }
+    }
+
+
+    private String dequeueNextToken(int eventId) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                Event event = eventRepo.findById(eventId);
+                if (event.getEventQueue().isEmpty()
+                        || activeOrderRepo.countActiveOrdersForEvent(eventId) >= capacity) {
+                    return new Response<>(null, "Queue empty or event at capacity");
+                }
                 String nextToken = event.getEventQueue().dequeue();
-                int orderId = idGenerator.getAndIncrement();
-
-            ActiveOrder nextOrder = new ActiveOrder(
-                    orderId,
-                    auth.getUserEmail(nextToken).getValue(), //TODO:: CHECK!!
-                    event.getId(),
-                    new ArrayList<>()
-            );
-
-                activeOrderRepo.store(nextOrder);
                 eventRepo.store(event);
+                return new Response<>(nextToken, "Token dequeued successfully");
             }
+            catch (OptimisticLockingFailureException e) {
+                throw e;
+            }
+        }).getValue();
+    }
 
-            return new Response<>(true, "Queue promotion completed");
-        });
+    private void createActiveOrderForToken(String token, int eventId) {
+        boolean skipped = RetryHelper.executeWithRetry(() -> {
+            try {
+                String role = auth.getRole(token).getValue();
+                String userIdentifier = token;
+                if (role.equals("MEMBER")) {
+                    userIdentifier = auth.getUserEmail(token).getValue();
+                }
 
-        if (response.getValue() == null || !response.getValue()) {
-            logger.log(Level.SEVERE, "Queue promotion failed: " + response.getMessage());
+                activeOrderRepo.alreadyHasActiveOrder(userIdentifier, eventId);
+                int orderId = idGenerator.getAndIncrement();
+                ActiveOrder nextOrder = new ActiveOrder(orderId, userIdentifier, eventId, new ArrayList<>());
+                activeOrderRepo.store(nextOrder);
+                return new Response<>(false, "created");
+
+            } catch (IllegalStateException e) {
+                return new Response<>(true, "duplicate");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            }
+        }).getValue();
+
+        if (skipped) {
+            promoteNextInQueue(eventId);
         }
     }
 }
