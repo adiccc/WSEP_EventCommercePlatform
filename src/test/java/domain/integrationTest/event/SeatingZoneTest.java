@@ -3,7 +3,7 @@ package domain.integrationTest.event;
 import domain.dataType.ElementPosition;
 import domain.event.SeatingTicket;
 import domain.event.SeatingZone;
-import domain.dto.SeatingTicketDTO; // ייבוא ה-DTO הנכון
+import domain.dto.SeatingTicketDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

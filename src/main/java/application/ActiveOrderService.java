@@ -6,6 +6,7 @@ import DTO.TicketSupplyResultDTO;
 
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
+import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dto.ActiveOrderDTO;
 import domain.dto.EventMapDTO;
@@ -296,8 +297,16 @@ public class ActiveOrderService {
                     throw e;
                 }
 
-                double total = event.calculateFinalTotalPrice(
+                Company company = companyRepo.findById(event.getCompanyId());
+
+                double totalAfterEventDiscounts = event.calculateFinalTotalPrice(
                         activeOrder.getTickets(),
+                        paymentDetails.getCouponCode()
+                );
+
+                double total = company.getDiscountPolicy().apply(
+                        totalAfterEventDiscounts,
+                        activeOrder.getTickets().size(),
                         paymentDetails.getCouponCode()
                 );
 
@@ -415,7 +424,6 @@ public class ActiveOrderService {
                 }
                 if (shouldDeleteActiveOrder) {
                     activeOrderRepo.delete(activeOrderId);
-                    System.out.println("deleting "+activeOrderId);
                     promoteNextInQueue(event.getId());
 
                 }
@@ -605,15 +613,6 @@ public class ActiveOrderService {
         cleanupScheduler.shutdown();
     }
 
-    //TODO : this implementation is for test only, this function should be implemented currectly
-
-    public Response<Boolean> placeOrder(String token, Integer eventId, int orderId) {
-        Event event =eventRepo.findById(eventId);
-        String email = auth.getUserEmail(token).getValue(); 
-        event.placeOrder(email,orderId);
-        eventRepo.store(event);
-        return new Response<>(true, "Order placed successfully");
-    }
 
     private void promoteNextInQueue(int eventId) {
         String nextToken = dequeueNextToken(eventId);

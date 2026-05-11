@@ -22,7 +22,13 @@ import domain.user.IUserRepo;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import DTO.PaymentDetailsDTO;
+import DTO.TicketSupplyRequestDTO;
+import DTO.TicketSupplyResultDTO;
+import domain.dto.EventMapDTO;
 
+import java.util.HashMap;
+import java.util.Map;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -82,6 +88,7 @@ class EventCompanyManageServiceTest {
         eventRepo = new EventRepoImpl();
 
         paymentSystem = Mockito.mock(IPaymentSystem.class);
+        ticketSupply = Mockito.mock(ITicketSupply.class);
 
         userService=new UserService(tokenService,auth,userRepo,passwordEncoder);
         eventService=new EventService(auth,eventRepo);
@@ -115,7 +122,7 @@ class EventCompanyManageServiceTest {
 
         Response<Company> c=companyService.createProductionCompany(validToken1,companyId,"test-company","testC@company.com","054-5556677","leumi");
 
-        eventId=eventCompanyManageService.createEvent(validToken1,companyId,LocalDateTime.now().plusDays(10),"test-event",LocalDateTime.now().plusDays(5),false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL).getValue();
+        eventId=eventCompanyManageService.createEvent(validToken1,companyId,LocalDateTime.now().plusDays(10),"test-event",LocalDateTime.now().minusMinutes(10),false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL).getValue();
         eventDate=LocalDateTime.now().plusDays(10);
         stage = new ElementPositionDTO(10, 20);
         entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
@@ -130,6 +137,52 @@ class EventCompanyManageServiceTest {
         adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem);
 
     }
+
+    private int createCompletedOrderThroughPurchaseFlow(String buyerToken, int eventId, int ticketCount) {
+        Response<EventMapDTO> enterResponse =
+                activeOrderService.enterEventPurchase(buyerToken, companyId, eventId);
+
+        assertNotNull(enterResponse.getValue(),
+                "enterEventPurchase failed: " + enterResponse.getMessage());
+
+        Response<Integer> selectResponse =
+                activeOrderService.userSelectTickets(
+                        buyerToken,
+                        eventId,
+                        new HashMap<>(),
+                        Map.of("floor", ticketCount)
+                );
+
+        assertNotNull(selectResponse.getValue(),
+                "userSelectTickets failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-" + activeOrderId);
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                activeOrderService.checkoutAndPayment(
+                        buyerToken,
+                        activeOrderId,
+                        paymentDetails
+                );
+
+        assertNotNull(checkoutResponse.getValue(),
+                "checkoutAndPayment failed: " + checkoutResponse.getMessage());
+
+        return checkoutResponse.getValue();
+    }
+
 
     @Test
     void GivenValidAreaSetupScenario_WhenDefineVenueAndSeatingMap_ThenHallIsCreatedAndAssignedToEvent() throws Exception {
@@ -466,8 +519,8 @@ class EventCompanyManageServiceTest {
                 seatingZones
         );
 
-        activeOrderService.placeOrder(validToken1,eventId,1);
-        activeOrderService.placeOrder(validToken2,eventId,2);
+        createCompletedOrderThroughPurchaseFlow(validToken1, eventId, 1);
+        createCompletedOrderThroughPurchaseFlow(validToken2, eventId, 1);
 
         // When
         Response<List<OrderDTO>> response =eventCompanyManageService.getOrdersByCompany(validToken1, companyId);
@@ -762,14 +815,27 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenOwnerWithSalesData_WhenGenerateSalesReports_ThenReturnReportWithData() {
         // Arrange
-        //TODO: make sure that when order is completed change the change to use only repo's and services!!!!
-        Integer event = eventCompanyManageService.createEvent(validToken1,companyId,eventDate,"event1",eventDate.minusDays(1), false,GeographicalArea.NORTH,CategoryEvent.SPORTS).getValue();
-        List<Integer> purchasedTickets = new ArrayList<>();
-        purchasedTickets.add(101);
-        Event e =eventRepo.findById(event);
-        Order order = new Order(1, "1", eventId, purchasedTickets);
-        e.getOrders().add(order);
-        eventRepo.store(e);
+        Integer event = eventCompanyManageService.createEvent(
+                validToken1,
+                companyId,
+                eventDate,
+                "event1",
+                LocalDateTime.now().minusMinutes(10),
+                false,
+                GeographicalArea.NORTH,
+                CategoryEvent.SPORTS
+        ).getValue();
+
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                event,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
+
+        createCompletedOrderThroughPurchaseFlow(validToken1, event, 1);
         Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, validToken1);
 
         assertNotNull(response.getValue());
@@ -949,9 +1015,11 @@ class EventCompanyManageServiceTest {
                 standingZones,
                 seatingZones
         );
-        Event event = eventRepo.findById(eventId);
 
-        activeOrderService.placeOrder(validToken1,eventId,1);
+        int orderId = createCompletedOrderThroughPurchaseFlow(validToken1, eventId, 1);
+        Order createdOrder = eventRepo.findById(eventId).findOrderById(orderId);
+        double expectedRefundAmount = createdOrder.getTotalSum();
+
         // When
         Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, eventId);
 
@@ -962,10 +1030,10 @@ class EventCompanyManageServiceTest {
         Event updatedEvent = eventRepo.findById(eventId);
         assertFalse(updatedEvent.isActive());
 
-        Order updatedOrder = updatedEvent.findOrderById(1);
+        Order updatedOrder = updatedEvent.findOrderById(orderId);
         assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
 
-        Mockito.verify(paymentSystem).refund("order123", 100.0);
+        Mockito.verify(paymentSystem).refund("payment-" + orderId, expectedRefundAmount);
     }
 
     @Test
@@ -1162,12 +1230,21 @@ class EventCompanyManageServiceTest {
 
     @Test
     void GivenConcurrentPurchase_WhenGenerateSalesReport_ThenRevenueIsAccurate() throws Exception {
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
+
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
 
-        Future<Response<Boolean>> purchaseFuture = executor.submit(() -> {
+        Future<Integer> purchaseFuture = executor.submit(() -> {
             start.await();
-            return activeOrderService.placeOrder(validToken2, eventId, 999);
+            return createCompletedOrderThroughPurchaseFlow(validToken2, eventId, 1);
         });
 
         Future<Response<SalesReportDTO>> reportFuture = executor.submit(() -> {
@@ -1220,14 +1297,17 @@ class EventCompanyManageServiceTest {
 
     @Test
     void GivenLoggedInMemberWithOrders_WhenGetPurchaseHistory_ThenOrdersReturned() {
-        Event event = eventRepo.findById(eventId);
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
 
-        Order order1 = new Order(1, auth.getUserEmail(validToken1).getValue(), eventId, List.of(1, 2));
-        Order order2 = new Order(2, auth.getUserEmail(validToken1).getValue(), eventId, List.of(3));
-
-        event.getOrders().add(order1);
-        event.getOrders().add(order2);
-        eventRepo.store(event);
+        createCompletedOrderThroughPurchaseFlow(validToken1, eventId, 1);
+        createCompletedOrderThroughPurchaseFlow(validToken1, eventId, 1);
 
         Response<List<OrderDTO>> response =
                 eventCompanyManageService.getPurchaseHistoryByUser(validToken1);
@@ -1257,20 +1337,20 @@ class EventCompanyManageServiceTest {
 
     @Test
     void GivenTwoMembersWithOrders_WhenGetPurchaseHistory_ThenOnlyOwnOrdersReturned() {
-        String  user1Id = auth.getUserEmail(validToken1).getValue();
-        String user2Id = auth.getUserEmail(validToken2).getValue();
+        String user1Id = auth.getUserEmail(validToken1).getValue();
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
 
-        Event event = eventRepo.findById(eventId);
+        int user1OrderId =
+                createCompletedOrderThroughPurchaseFlow(validToken1, eventId, 1);
 
-        // order of member1
-        Order order1 = new Order(1, user1Id, eventId, List.of(1, 2));
-
-        // order of member2
-        Order order2 = new Order(2, user2Id, eventId, List.of(3, 4));
-
-        event.getOrders().add(order1);
-        event.getOrders().add(order2);
-        eventRepo.store(event);
+        createCompletedOrderThroughPurchaseFlow(validToken2, eventId, 1);
 
         Response<List<OrderDTO>> response =
                 eventCompanyManageService.getPurchaseHistoryByUser(validToken1);
@@ -1279,7 +1359,7 @@ class EventCompanyManageServiceTest {
         assertEquals(1, response.getValue().size());
 
         assertEquals(user1Id, response.getValue().get(0).getUserIdentifier());
-        assertEquals(order1.getOrderId(), response.getValue().get(0).getOrderId());
+        assertEquals(user1OrderId, response.getValue().get(0).getOrderId());
     }
 
 }

@@ -85,7 +85,6 @@ public class ActiveOrder {
     }
 
     public void returnToSelecting() {
-        // todo: call when return to selecting tickets from checkout
         if (stage == STAGE.CHECKING_OUT) {
             stage = STAGE.SELECTING_TICKETS;
         }

@@ -2471,7 +2471,6 @@ class ActiveOrderServiceTest {
                     "ticket selection failed: " + selectResponse.getMessage());
 
             activeOrderIds.add(selectResponse.getValue());
-            System.out.println("Active Order created: "+selectResponse.getValue());
         }
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
@@ -2496,7 +2495,6 @@ class ActiveOrderServiceTest {
 
                 PaymentDetailsDTO paymentDetails =
                         new PaymentDetailsDTO("1234", "12/30", "123", "111111111", 1);
-                System.out.println("checkout and payment for "+ activeOrderId);
                 return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
             }));
         }
@@ -2507,7 +2505,6 @@ class ActiveOrderServiceTest {
 
         for (Future<Response<Integer>> future : checkoutFutures) {
             Response<Integer> response = future.get();
-            System.out.println(response.getMessage());
             assertNotNull(response.getValue(),
                     "checkout failed unexpectedly: " + response.getMessage());
 
@@ -2528,7 +2525,6 @@ class ActiveOrderServiceTest {
             Response<ActiveOrderDTO> proceedResponse =
                     service.memberProceedAnActiveOrder(queuedToken);
 
-            System.out.println(proceedResponse.getMessage());
 
             assertNotNull(proceedResponse.getValue(),
                     "queued user should have been promoted to active order: "
