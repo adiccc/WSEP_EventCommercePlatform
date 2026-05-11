@@ -11,24 +11,23 @@ import java.time.LocalDateTime;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Map;
 
 public class Event {
     private int id;
-    private int companyId;
+    private final int companyId;
     private int creatorId;
     private EventMap eventMap;
-    private EventQueue eventQueue;
+    private final EventQueue eventQueue;
     private LocalDateTime date;
-    private String name;
-    private LocalDateTime saleStartDate;
-    private boolean hasLottery;
-    private PurchasePolicy purchasePolicy;
-    private DiscountPolicy discountPolicy;
+    private final String name;
+    private final LocalDateTime saleStartDate;
+    private final boolean hasLottery;
+    private final PurchasePolicy purchasePolicy;
+    private final DiscountPolicy discountPolicy;
     private boolean active;
-    private GeographicalArea location;
-    private CategoryEvent categoryEvent;
+    private final GeographicalArea location;
+    private final CategoryEvent categoryEvent;
     private List<Order> orders;
     private long version;
 
