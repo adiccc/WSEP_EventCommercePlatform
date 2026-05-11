@@ -3,6 +3,8 @@ package domain.company;
 import DTO.DiscountDTO;
 import DTO.PurchaseRuleDTO;
 import domain.dataType.PermissionType;
+import domain.dto.UserDTO;
+import domain.event.Order;
 import domain.policy.*;
 import domain.activeOrder.ActiveOrder;
 import domain.dataType.PermissionType;
@@ -170,5 +172,11 @@ public class Company {
 
         Company other = (Company) obj;
         return companyId==other.companyId && version == other.getVersion();
+    }
+
+    public void quantityExceedsPolicy(UserDTO user, int ticketsToBuy, int ticketsAlreadyBought) {
+        if( !purchasePolicy.isSatisfied(user, ticketsToBuy,ticketsAlreadyBought)) {
+            throw new IllegalArgumentException("Purchase policy not satisfied for user " + user.getUserId() + " and quantity " + ticketsToBuy);
+        }
     }
 }

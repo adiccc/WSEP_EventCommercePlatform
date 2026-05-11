@@ -1168,6 +1168,9 @@ class ActiveOrderServiceTest {
 
         int sizeA = activeOrderRepo.findOrderByUserId(auth.getUserEmail(validToken).getValue()).getTickets().size();
         int sizeB = activeOrderRepo.findOrderByUserId(auth.getUserEmail(tokenB).getValue()).getTickets().size();
+        System.err.println("DEBUG sizeA=" + sizeA + " sizeB=" + sizeB
+                + " rA=" + (rA.getValue() != null ? "OK" : "FAIL:" + rA.getMessage())
+                + " rB=" + (rB.getValue() != null ? "OK" : "FAIL:" + rB.getMessage()));
         assertEquals(3, sizeA + sizeB, "winner=2 tickets, loser=1 ticket");
     }
 

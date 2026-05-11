@@ -234,12 +234,7 @@ public class Event {
     }
 
     public void quantityExceedsPolicy(UserDTO user, int quantity) {
-        int ticketsBoughtForEvent =0;
-        for (Order order : orders) {
-            if (order.getUserIdentifier().equals(user.getEmail())) {
-                ticketsBoughtForEvent += order.getTickets().size();
-            }
-        }
+        int ticketsBoughtForEvent = countUserTickets(user);
         if( !purchasePolicy.isSatisfied(user, quantity,ticketsBoughtForEvent)) {
             throw new IllegalArgumentException("Purchase policy not satisfied for user " + user.getUserId() + " and quantity " + quantity);
         }
@@ -321,5 +316,21 @@ public class Event {
 
     public void markTicketsAsSold(List<Integer> ticketIds) {
         eventMap.markTicketsAsSold(ticketIds);
+    }
+
+    public int countUserTickets(UserDTO user) {
+        int ticketsBoughtForEvent =0;
+        for (Order order : orders) {
+            if (order.getUserIdentifier().equals(user.getEmail())) {
+                ticketsBoughtForEvent += order.getTickets().size();
+            }
+        }
+        return ticketsBoughtForEvent;
+    }
+
+    public void quantityTotalExceedsPolicy(UserDTO userDTO, int projected) {
+        if( !purchasePolicy.isSatisfied(userDTO, 0,projected)) {
+            throw new IllegalArgumentException("Purchase policy not satisfied for user " + userDTO.getUserId() + " and quantity " + projected);
+        }
     }
 }
