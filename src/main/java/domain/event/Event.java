@@ -262,11 +262,6 @@ public class Event {
         return discountPolicy.apply(priceBeforeDiscount, ticketIds.size(), couponCode);
     }
 
-    //TODO : this implementation is for test only, this function should be implemented currectly
-    public void placeOrder(String userId,int orderId){
-        orders.add(new Order(orderId,userId,-1,new ArrayList<>(),100.0,"order123"));
-    }
-
     public void setId(int id) {
         this.id = id;
     }

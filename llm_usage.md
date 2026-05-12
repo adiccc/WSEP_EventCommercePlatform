@@ -430,3 +430,35 @@
   - I knew exactly which edge cases I wanted to test, but I didn't know the specific Java classes and syntax needed to force threads to wait and run simultaneously.
 - **Final understanding (brief explanation in your own words):**
   - I learned that Java utilities like `CountDownLatch` and `ExecutorService` can pause threads and release them at the exact same time. This is really useful to prove that our optimistic locking works and prevents data corruption or weird permission bugs under heavy load.
+
+---
+## Feature / Component: Checkout Edge-Case Handling and Failure-Safe Control Flow
+
+- Purpose of LLM use:
+  - To validate the robustness of the checkout flow against edge cases and failure scenarios, especially around payment, ticket issuance, cleanup, and state recovery.
+
+- Summary of prompt(s):
+  - Presented checkout edge cases such as payment rejection, ticket issuance failure after successful payment, expired active orders, invalid active-order ownership, and failures during event/order persistence.
+  - Asked how to reason about a `try-catch-finally` structure that preserves system consistency while keeping cleanup actions explicit and predictable.
+  - Asked for feedback on whether the chosen control-flow structure correctly separates success, failure, refund, ticket release, and active-order deletion responsibilities.
+
+- Output received (short description):
+  - Conceptual validation of the failure-handling structure and guidance for checking that each failure path preserves the relevant system invariants.
+  - Suggestions for reviewing cleanup flags and ensuring that `finally` executes the required repository updates and resource release steps.
+
+- Files / components affected:
+  - `ActiveOrderService`
+  - checkout/payment related tests
+  - refund and ticket-issuance failure scenarios
+
+- Modifications made:
+  - Reviewed the checkout flow to ensure that rejected payments return the active order to checkout state.
+  - Ensured that ticket issuance failure after payment triggers refund handling and ticket release.
+  - Verified that expired active orders are deleted and their reserved tickets are released.
+  - Checked that completed orders are persisted and sold tickets are marked consistently.
+
+- Initial gaps in understanding (if any):
+  - The main uncertainty was how to structure the cleanup logic so that every failure path leaves the system in a valid state without duplicating cleanup code across multiple branches.
+
+- Final understanding (brief explanation in your own words):
+  - A failure-safe checkout flow should make each side effect explicit: payment state, ticket reservation, order persistence, refund handling, and active-order cleanup must each have a clear owner in the control flow. The `try-catch-finally` structure helps centralize cleanup while still allowing each edge case to return the correct user-facing result.

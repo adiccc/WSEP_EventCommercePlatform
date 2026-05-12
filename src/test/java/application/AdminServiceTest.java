@@ -14,9 +14,7 @@ import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.OrderStatus;
-import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
-import domain.lottery.Lottery;
 import domain.user.IUserRepo;
 import domain.webQueue.WebQueue;
 import infrastructure.*;
@@ -24,6 +22,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import domain.event.Order;
+import DTO.PaymentDetailsDTO;
+import DTO.TicketSupplyRequestDTO;
+import DTO.TicketSupplyResultDTO;
+import domain.dto.EventMapDTO;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -72,6 +77,7 @@ class AdminServiceTest {
         eventRepo = new EventRepoImpl();
         companyRepo = new CompanyRepoImpl();
         paymentSystem = Mockito.mock(IPaymentSystem.class);
+        ticketSupply = Mockito.mock(ITicketSupply.class);
 
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         IAuth auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(ADMIN_EMAIL));
@@ -100,7 +106,7 @@ class AdminServiceTest {
 
         eventId = eventCompanyManageService
                 .createEvent(adminToken, companyId, LocalDateTime.now().plusDays(10), "test-event",
-                        LocalDateTime.now().plusDays(5), false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL)
+                        LocalDateTime.now().minusMinutes(10), false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL)
                 .getValue();
         eventDate = LocalDateTime.now().plusDays(10);
         stage = new ElementPositionDTO(10, 20);
@@ -233,10 +239,7 @@ class AdminServiceTest {
     @Test
     void GivenValidInputs_WhenCloseCompanyByAdmin_ThenCompanyAndEventsClosed() {
         // Arrange
-        // To Do: use createOrder when implemented
-        Event event = eventRepo.findById(eventId);
-
-        activeOrderService.placeOrder(adminToken,eventId,1);
+        int orderId = createCompletedOrderThroughPurchaseFlow(adminToken, eventId, 1);
 
         // Mock the external payment system to simulate a successful refund process
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
@@ -256,7 +259,7 @@ class AdminServiceTest {
         assertFalse(updatedEvent.isActive());
 
         // Assert: Verify the order was marked for a refund
-        Order updatedOrder = updatedEvent.findOrderById(1);
+        Order updatedOrder = updatedEvent.findOrderById(orderId);
         assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
     }
 
@@ -314,7 +317,7 @@ class AdminServiceTest {
     @Test
     void GivenNotActivePaymentSystem_WhenCloseCompany_ThenCompanyClosedAndFailureHandled() {
         // Arrange: Add an order to the existing event to test the refund mechanism
-        activeOrderService.placeOrder(adminToken,eventId,1);
+        int orderId = createCompletedOrderThroughPurchaseFlow(adminToken, eventId, 1);
 
         // Mock the external payment system to return false, simulating a refund failure
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(false);
@@ -336,7 +339,7 @@ class AdminServiceTest {
         assertFalse(updatedEvent.isActive());
 
         // Assert: The refund failed, so the order status remains REFUND_REQUIRED
-        Order updatedOrder = updatedEvent.findOrderById(1);
+        Order updatedOrder = updatedEvent.findOrderById(orderId);
         assertEquals(domain.event.OrderStatus.REFUND_REQUIRED, updatedOrder.getStatus());
     }
 
@@ -349,6 +352,44 @@ class AdminServiceTest {
         userService.registerUser(null, new UserDTO(
                 email, "Test", "User", PASSWORD, 1, 1, 1995, "City", "050-999-0000"));
         return userRepo.findUserByEmail(email).getUserId();
+    }
+
+    private int createCompletedOrderThroughPurchaseFlow(String buyerToken, int eventId, int ticketCount) {
+        Response<EventMapDTO> enterResponse =
+                activeOrderService.enterEventPurchase(buyerToken, companyId, eventId);
+
+        assertNotNull(enterResponse.getValue(), "enterEventPurchase failed: " + enterResponse.getMessage());
+
+        Response<Integer> selectResponse =
+                activeOrderService.userSelectTickets(
+                        buyerToken,
+                        eventId,
+                        new HashMap<>(),
+                        Map.of("floor", ticketCount)
+                );
+
+        assertNotNull(selectResponse.getValue(), "userSelectTickets failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-" + activeOrderId);
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                activeOrderService.checkoutAndPayment(buyerToken, activeOrderId, paymentDetails);
+
+        assertNotNull(checkoutResponse.getValue(), "checkoutAndPayment failed: " + checkoutResponse.getMessage());
+
+        return checkoutResponse.getValue();
     }
 
     // --- Successful_Removal (plain member) ---
@@ -712,9 +753,9 @@ class AdminServiceTest {
         String token1 = userService.login(buyer1, PASSWORD).getValue();
         String token2 = userService.login(buyer2, PASSWORD).getValue();
 
-        activeOrderService.placeOrder(token1, eventId, 1);
-        activeOrderService.placeOrder(token2, eventId, 2);
-        activeOrderService.placeOrder(token1, eventId, 3);
+        createCompletedOrderThroughPurchaseFlow(token1, eventId, 1);
+        createCompletedOrderThroughPurchaseFlow(token2, eventId, 1);
+        createCompletedOrderThroughPurchaseFlow(token1, eventId, 1);
 
         // Act
         Response<List<String>> response = adminService.getAllPurchasers(adminToken);
@@ -766,7 +807,7 @@ class AdminServiceTest {
         userService.registerUser(null, new UserDTO(raceBuyer, "Race", "Buyer", PASSWORD, 1, 1, 1990, "City", "050-999-9999"));
         String raceToken = userService.login(raceBuyer, PASSWORD).getValue();
 
-        activeOrderService.placeOrder(raceToken, eventId, 999);
+        createCompletedOrderThroughPurchaseFlow(raceToken, eventId, 1);
 
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
 
