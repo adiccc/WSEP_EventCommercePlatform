@@ -11,24 +11,23 @@ import java.time.LocalDateTime;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Map;
 
 public class Event {
     private int id;
-    private int companyId;
+    private final int companyId;
     private int creatorId;
     private EventMap eventMap;
-    private EventQueue eventQueue;
+    private final EventQueue eventQueue;
     private LocalDateTime date;
-    private String name;
-    private LocalDateTime saleStartDate;
-    private boolean hasLottery;
-    private PurchasePolicy purchasePolicy;
-    private DiscountPolicy discountPolicy;
+    private final String name;
+    private final LocalDateTime saleStartDate;
+    private final boolean hasLottery;
+    private final PurchasePolicy purchasePolicy;
+    private final DiscountPolicy discountPolicy;
     private boolean active;
-    private GeographicalArea location;
-    private CategoryEvent categoryEvent;
+    private final GeographicalArea location;
+    private final CategoryEvent categoryEvent;
     private List<Order> orders;
     private long version;
 
@@ -234,12 +233,7 @@ public class Event {
     }
 
     public void quantityExceedsPolicy(UserDTO user, int quantity) {
-        int ticketsBoughtForEvent =0;
-        for (Order order : orders) {
-            if (order.getUserIdentifier().equals(user.getEmail())) {
-                ticketsBoughtForEvent += order.getTickets().size();
-            }
-        }
+        int ticketsBoughtForEvent = countUserTickets(user);
         if( !purchasePolicy.isSatisfied(user, quantity,ticketsBoughtForEvent)) {
             throw new IllegalArgumentException("Purchase policy not satisfied for user " + user.getUserId() + " and quantity " + quantity);
         }
@@ -316,5 +310,21 @@ public class Event {
 
     public void markTicketsAsSold(List<Integer> ticketIds) {
         eventMap.markTicketsAsSold(ticketIds);
+    }
+
+    public int countUserTickets(UserDTO user) {
+        int ticketsBoughtForEvent =0;
+        for (Order order : orders) {
+            if (order.getUserIdentifier().equals(user.getEmail())) {
+                ticketsBoughtForEvent += order.getTickets().size();
+            }
+        }
+        return ticketsBoughtForEvent;
+    }
+
+    public void quantityTotalExceedsPolicy(UserDTO userDTO, int projected) {
+        if( !purchasePolicy.isSatisfied(userDTO, 0,projected)) {
+            throw new IllegalArgumentException("Purchase policy not satisfied for user " + userDTO.getUserId() + " and quantity " + projected);
+        }
     }
 }

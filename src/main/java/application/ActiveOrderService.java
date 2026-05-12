@@ -194,7 +194,6 @@ public class ActiveOrderService {
             logger.log(Level.SEVERE, "identifier is null");
             return new Response<>(null, "Invalid identifier supplied");
         }
-
         try {
             int totalSeatingTickets = seatingZones.values().stream()
                     .mapToInt(List::size)
@@ -205,11 +204,12 @@ public class ActiveOrderService {
                     .sum();
             int totalTickets = totalSeatingTickets + totalStandingTickets;
             Event e = this.eventRepo.findById(eventId);
-            //todo: handle user/ guest
             Response<UserDTO> userResponse = auth.getUserDTO(identifier);
             e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
-            List<Integer> tickets = e.bookTickets(seatingZones,standingZones); // check here quantity and policy
-            this.eventRepo.store(e);
+
+            int totalUserTickets = e.countUserTickets(userResponse.getValue());
+            Company c = companyRepo.findById(e.getCompanyId());
+            c.quantityExceedsPolicy(userResponse.getValue(), totalTickets,totalUserTickets);
             ActiveOrder newActiveOrder;
             try {
                 newActiveOrder = activeOrderRepo.findById(activeOrderRepo.findOrderByUserId(auth.getUserEmail(identifier).getValue()).getId());
@@ -218,9 +218,12 @@ public class ActiveOrderService {
                 logger.log(Level.SEVERE, "Active order not found for user: " + auth.getUserId(identifier).getValue());
                 return new Response<>(null, "Active order not found for user");
             }
+            List<Integer> tickets = e.bookTickets(seatingZones,standingZones);
             newActiveOrder.setTickets(tickets);
             newActiveOrder.proceedToCheckout();
+            this.eventRepo.store(e);
             activeOrderRepo.store(newActiveOrder);
+
             logger.log(Level.INFO, "Tickets selected successfully");
             return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
         } catch (NoSuchElementException e) {
@@ -448,11 +451,12 @@ public class ActiveOrderService {
                         activeOrderRepo.delete(current.getId());
                         promoteNextInQueue(event.getId());
                         return new Response<>(true, "expired");
-                    } catch (OptimisticLockingFailureException e) {
-                        throw e;
-                    } catch (NoSuchElementException e) {
+                    }  catch (NoSuchElementException e) {
                         // order already gone — user placed it before cleanup hit. Fine.
                         return new Response<>(true, "already removed");
+                    }
+                    catch (OptimisticLockingFailureException e) {
+                        throw e;
                     }
                 });
             } catch (Exception e) {
@@ -513,6 +517,8 @@ public class ActiveOrderService {
                     return new Response<>(null, "Invalid token");
                 }
                 String email = auth.getUserEmail(token).getValue();
+
+                // the case that a user tries to remove and add the same tickets
                 if (seatingToRemove != null && seatingToAdd != null) {
                     Set<String> removeKeys = new HashSet<>();
                     for (Map.Entry<String, List<SeatingTicketDTO>> e : seatingToRemove.entrySet())
@@ -552,8 +558,11 @@ public class ActiveOrderService {
                 if (projected < 0) {
                     return new Response<>(null, "Edit would result in negative ticket count");
                 }
+
                 UserDTO userDTO = auth.getUserDTO(token).getValue();
-                event.quantityExceedsPolicy(userDTO, projected); // throws if exceeded
+                event.quantityTotalExceedsPolicy(userDTO, projected); // throws if exceeded
+                Company company = companyRepo.findById(event.getCompanyId());
+                company.quantityExceedsPolicy(userDTO, 0,projected); // throws if exceeded
 
                 if (seatingToRemove != null && !seatingToRemove.isEmpty()) {
                     List<Integer> ids = event.findSeatingTicketIds(seatingToRemove);
@@ -587,8 +596,10 @@ public class ActiveOrderService {
                 }
                 order.setTickets(newTickets);
                 order.returnToSelecting();
+
                 eventRepo.store(event);
                 activeOrderRepo.store(order);
+
 
                 logger.log(Level.INFO, "Selection updated successfully");
                 return new Response<>(new ActiveOrderDTO(order), "Selection updated successfully");

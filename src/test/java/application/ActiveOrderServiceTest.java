@@ -36,9 +36,6 @@ class ActiveOrderServiceTest {
     private IAuth auth;
     private EventRepoImpl eventRepo;
     private ActiveOrderRepoImpl activeOrderRepo;
-    private CompanyRepoImpl companyRepo;
-    private LotteryRepoImpl lotteryRepo;
-    private EventCompanyManageService companyEventService;
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
 
@@ -46,15 +43,7 @@ class ActiveOrderServiceTest {
     private Integer eventId;
     private Integer concurrentEventId;
 
-    private TokenService tokenService;
-    private IUserRepo userRepo;
-    private IPasswordEncoder passwordEncoder;
     private UserService userService;
-
-    private ElementPositionDTO stage;
-    private List<ElementPositionDTO> entries;
-    private List<StandingZoneDTO> standingZones;
-    private List<SeatingZoneDTO> seatingZones;
 
     private final int companyId = 1;
     private final int capacity = 20;
@@ -62,9 +51,9 @@ class ActiveOrderServiceTest {
     @BeforeEach
     void setUp() {
         LoggerSetup.setup();
-        tokenService = new TokenService();
-        userRepo = new UserRepo();
-        passwordEncoder = new PasswordEncoderUtil();
+        TokenService tokenService = new TokenService();
+        IUserRepo userRepo = new UserRepo();
+        IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         auth = new Auth(tokenService, userRepo, passwordEncoder);
 
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
@@ -86,8 +75,8 @@ class ActiveOrderServiceTest {
 
         eventRepo = new EventRepoImpl();
         activeOrderRepo = new ActiveOrderRepoImpl();
-        companyRepo = new CompanyRepoImpl();
-        lotteryRepo = new LotteryRepoImpl();
+        CompanyRepoImpl companyRepo = new CompanyRepoImpl();
+        LotteryRepoImpl lotteryRepo = new LotteryRepoImpl();
 
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
@@ -96,7 +85,7 @@ class ActiveOrderServiceTest {
         companyService.createProductionCompany(validToken, companyId,
                 "test-company", "testC@company.com", "054-5556677", "leumi");
 
-        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
+        EventCompanyManageService companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
 
         Response<Integer> r = companyEventService.createEvent(
                 validToken,
@@ -124,15 +113,15 @@ class ActiveOrderServiceTest {
 
         eventId = r.getValue();
 
-        stage = new ElementPositionDTO(10, 20);
-        entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
-        standingZones = List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1)));
-        seatingZones = List.of(new SeatingZoneDTO(10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
+        ElementPositionDTO stage = new ElementPositionDTO(10, 20);
+        List<ElementPositionDTO> entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
+        List<StandingZoneDTO> standingZones = List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1)));
+        List<SeatingZoneDTO> seatingZones = List.of(new SeatingZoneDTO(10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
 
         companyEventService.DefineVenueAndSeatingMap(validToken, eventId, stage, entries, standingZones, seatingZones);
         companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId, stage, entries, standingZones, seatingZones);
 
-        LotteryService lotteryService = new LotteryService(lotteryRepo, eventRepo, auth,companyRepo);
+        LotteryService lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo);
         lotteryService.createLottery(validToken, eventId, 10,
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
@@ -1168,6 +1157,9 @@ class ActiveOrderServiceTest {
 
         int sizeA = activeOrderRepo.findOrderByUserId(auth.getUserEmail(validToken).getValue()).getTickets().size();
         int sizeB = activeOrderRepo.findOrderByUserId(auth.getUserEmail(tokenB).getValue()).getTickets().size();
+        System.err.println("DEBUG sizeA=" + sizeA + " sizeB=" + sizeB
+                + " rA=" + (rA.getValue() != null ? "OK" : "FAIL:" + rA.getMessage())
+                + " rB=" + (rB.getValue() != null ? "OK" : "FAIL:" + rB.getMessage()));
         assertEquals(3, sizeA + sizeB, "winner=2 tickets, loser=1 ticket");
     }
 

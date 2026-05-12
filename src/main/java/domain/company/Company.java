@@ -3,25 +3,21 @@ package domain.company;
 import DTO.DiscountDTO;
 import DTO.PurchaseRuleDTO;
 import domain.dataType.PermissionType;
+import domain.dto.UserDTO;
 import domain.policy.*;
-import domain.activeOrder.ActiveOrder;
-import domain.dataType.PermissionType;
 import domain.dto.HierarchyDTO;
-import domain.user.State;
 
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
 public class Company {
-    private int companyId;
-    private String companyName;
+    private final int companyId;
+    private final String companyName;
     private boolean isActive;
-    private ContactInfo contactInfo;
-    private PurchasePolicy purchasePolicy;
-    private DiscountPolicy discountPolicy;
-    private Permissions companyPermission;
+    private final ContactInfo contactInfo;
+    private final PurchasePolicy purchasePolicy;
+    private final DiscountPolicy discountPolicy;
+    private final Permissions companyPermission;
     private long version;
 
     public Company(int companyId, String companyName, ContactInfo contactInfo,
@@ -170,5 +166,11 @@ public class Company {
 
         Company other = (Company) obj;
         return companyId==other.companyId && version == other.getVersion();
+    }
+
+    public void quantityExceedsPolicy(UserDTO user, int ticketsToBuy, int ticketsAlreadyBought) {
+        if( !purchasePolicy.isSatisfied(user, ticketsToBuy,ticketsAlreadyBought)) {
+            throw new IllegalArgumentException("Purchase policy not satisfied for user " + user.getUserId() + " and quantity " + ticketsToBuy);
+        }
     }
 }
