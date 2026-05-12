@@ -26,7 +26,6 @@ import java.util.NoSuchElementException;
 
 import static domain.dataType.PermissionType.*;
 
-// TODO: update all EventCompanyManageService initializations to pass IPaymentSystem
 public class EventCompanyManageService {
     private final ICompanyRepo companyRepo;
     private final IEventRepo eventRepo;

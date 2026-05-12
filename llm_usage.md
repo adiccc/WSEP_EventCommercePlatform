@@ -3,8 +3,21 @@
 ## Overall Usage Summary
 
 - Approximate percentage of code influenced by LLMs:
+  - Approximately 20–30% of the codebase was influenced by LLM assistance, mainly through conceptual guidance, test skeletons, boilerplate snippets, and design discussions. The core architecture, final implementation decisions, integration, debugging, and adaptation to the project were performed by the team.
+
 - Main areas where LLMs were used:
+  - Understanding Java concurrency utilities and testing tools.
+  - Improving acceptance-test naming and structure.
+  - Discussing architecture trade-offs for services, DTOs, venue maps, queues, permissions, and checkout flows.
+  - Getting help with Java API details and repetitive test boilerplate.
+  - Improving documentation wording and organization.
+
 - Main areas implemented without LLM assistance:
+  - Final system architecture and domain modeling decisions.
+  - Core business logic and project-specific service flows.
+  - Integration between repositories, services, DTOs, and domain objects.
+  - Debugging and adapting code to the actual project structure.
+  - Final test assertions and verification of expected behavior.
 
 ---
 
@@ -107,27 +120,6 @@
   - How to apply the retry mechanism universally across multiple service methods.
 - Final understanding (brief explanation in your own words):
   - Using a Higher-Order Function (a wrapper that accepts a function as an argument) separates concerns effectively. The `RetryHelper` manages the technical complexities (`OptimisticLockingFailureException`), while the Service methods remain clean, focused purely on domain rules and orchestration.
-
----
-
-## Feature / Component: Venue Map Architecture and Ticket Management
-
-- Purpose of LLM use:
-  - Design assistance and discussion of architectural trade-offs regarding entity relationships (Map, Zone, Ticket) and memory management.
-- Summary of prompt(s):
-  - Asked about the best Object-Oriented way to model the venue map. Discussed whether a dedicated `Zone` class is needed, the differences between seating and standing areas, and who should be responsible for holding the tickets (the Event, the Map, or the Zone).
-  - Asked about the performance implications of pre-generating all tickets versus creating them dynamically.
-- Output received (short description):
-  - Discussed Domain-Driven Design (DDD) principles. Suggested a hierarchy where an `EventMap` aggregates `Zone` objects, with inheritance for specific types like `SeatingZone` and `StandingZone`.
-  - Highlighted the trade-off between pre-allocating thousands of `Ticket` objects in memory (heavy and inefficient) versus tracking `capacity` at the `Zone` level and generating `Ticket` entities only upon a successful purchase.
-- Files / components affected:
-  - Domain layer classes related to mapping: `EventMap`, `Zone`, `SeatingZone`, `StandingZone`, `Ticket`.
-- Modifications made:
-  - Implemented a polymorphic `Zone` hierarchy. Decided that `Zones` will manage their own capacity and occupancy rules, and `Tickets` will be generated during the Zone flow, pre-initialized in a list.
-- Initial gaps in understanding (if any):
-  - How to effectively translate real-world stadium structures into software models without violating the Single Responsibility Principle, and how to manage the memory footprint of large-scale events (e.g., 50,000 attendees).
-- Final understanding (brief explanation in your own words):
-  - A good domain model delegates responsibilities appropriately: The `Event` manages the overall lifecycle, the `EventMap` orchestrates the layout, and individual `Zones` enforce their specific capacity and seating rules. Furthermore, from a performance perspective, tracking numerical capacity is far more scalable than instantiating thousands of idle `Ticket` objects in memory before they are even sold.
 
 ---
 
@@ -358,20 +350,20 @@
 
 ## Feature / Component: Token Roles & Unified User Identifier (Guest vs. Member)
 
-- **Purpose of LLM use:**
+- Purpose of LLM use:
   - Validation and refinement of my architectural design for handling guests versus registered members, specifically focusing on JWT role-based permission checks and how they tie into domain entity associations.
-- **Summary of prompt(s):**
+- Summary of prompt(s):
   - First, I consulted the LLM on my idea to use a `ROLE` claim (GUEST vs. MEMBER) inside the token to securely differentiate between user types statelessly, block guests from restricted functions, and route shared endpoints appropriately.
   - Following that, I proposed refactoring the `Order` class to use a `String userIdentifier` (handling both emails for members and UUIDs for guests) so that the stateless token identity could be unified under a single order flow.
-- **Output received (short description):**
+- Output received (short description):
   - The LLM agreed with my `ROLE` claim direction, providing guidance on how to extract it statelessly to enforce authorization guards. It then validated my subsequent `userIdentifier` design as a highly scalable approach to complete the flow.
-- **Files / components affected:**
+- Files / components affected:
   - `TokenService`, `Auth`, `Order`, `ActiveOrder`, `UserService`, `ActiveOrderServiceTest`, `AdminServiceTest`.
-- **Modifications made:**
+- Modifications made:
   - I implemented the `ROLE` extraction in `TokenService` and `Auth` to add permission guards across the services. Once the roles were safely separated, I implemented my `userIdentifier` (String) design across the domain models to unify the checkout process.
-- **Initial gaps in understanding (if any):**
+- Initial gaps in understanding (if any):
   - I wanted to brainstorm the cleanest way to enforce token authorization stateless, and subsequently ensure that passing these dual-identities into the domain model wouldn't break the database architecture.
-- **Final understanding (brief explanation in your own words):**
+- *inal understanding (brief explanation in your own words):
   - Embedding a `ROLE` claim directly in the JWT is a powerful stateless authorization mechanism to accept/reject requests instantly. Once validated, mapping these actors to a "Unified Identifier" (String) allows the system to smoothly process orders for anyone without duplicating domain logic.
 
 ---
@@ -436,29 +428,23 @@
 
 - Purpose of LLM use:
   - To validate the robustness of the checkout flow against edge cases and failure scenarios, especially around payment, ticket issuance, cleanup, and state recovery.
-
 - Summary of prompt(s):
   - Presented checkout edge cases such as payment rejection, ticket issuance failure after successful payment, expired active orders, invalid active-order ownership, and failures during event/order persistence.
   - Asked how to reason about a `try-catch-finally` structure that preserves system consistency while keeping cleanup actions explicit and predictable.
   - Asked for feedback on whether the chosen control-flow structure correctly separates success, failure, refund, ticket release, and active-order deletion responsibilities.
-
 - Output received (short description):
   - Conceptual validation of the failure-handling structure and guidance for checking that each failure path preserves the relevant system invariants.
   - Suggestions for reviewing cleanup flags and ensuring that `finally` executes the required repository updates and resource release steps.
-
 - Files / components affected:
   - `ActiveOrderService`
   - checkout/payment related tests
   - refund and ticket-issuance failure scenarios
-
 - Modifications made:
   - Reviewed the checkout flow to ensure that rejected payments return the active order to checkout state.
   - Ensured that ticket issuance failure after payment triggers refund handling and ticket release.
   - Verified that expired active orders are deleted and their reserved tickets are released.
   - Checked that completed orders are persisted and sold tickets are marked consistently.
-
 - Initial gaps in understanding (if any):
   - The main uncertainty was how to structure the cleanup logic so that every failure path leaves the system in a valid state without duplicating cleanup code across multiple branches.
-
 - Final understanding (brief explanation in your own words):
   - A failure-safe checkout flow should make each side effect explicit: payment state, ticket reservation, order persistence, refund handling, and active-order cleanup must each have a clear owner in the control flow. The `try-catch-finally` structure helps centralize cleanup while still allowing each edge case to return the correct user-facing result.
