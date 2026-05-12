@@ -448,10 +448,11 @@ public class ActiveOrderService {
                         // order already gone — user placed it before cleanup hit. Fine.
                         return new Response<>(true, "already removed");
                     }
+                    catch (OptimisticLockingFailureException e) {
+                        throw e;
+                    }
                 });
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            }catch (Exception e) {
+            } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to expire order " + expiredOrder.getId() + ": " + e.getMessage());
                 // swallow — keep processing other orders
             }
