@@ -17,3 +17,15 @@ Logs/
 
 # Logs
 *.log
+
+# Vaadin — all of these are auto-generated on every startup, never commit them
+src/main/frontend/generated/
+src/main/bundles/
+node_modules/
+.vaadin/
+webpack.config.js
+vite.config.ts
+vite.generated.ts
+pnpm-lock.yaml
+package-lock.json
+package.json
