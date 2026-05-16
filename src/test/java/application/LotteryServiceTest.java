@@ -1,6 +1,7 @@
 package application;
 
 import Log.LoggerSetup;
+import domain.Suspension.ISuspensionRepo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.UserDTO;
@@ -43,6 +44,8 @@ class LotteryServiceTest {
     private String validToken2;
     private String validToken3;
     private IAuth auth;
+    private IAccessValidator accessValidator;
+    private ISuspensionRepo suspensionRepo;
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
     private String invalidToken;
@@ -56,6 +59,8 @@ class LotteryServiceTest {
         passwordEncoder = new PasswordEncoderUtil();
         tokenService = new TokenService();
         auth = new Auth(tokenService, userRepo, passwordEncoder);
+        suspensionRepo= new SuspensionRepoImpl();
+        accessValidator=new AccessValidator(suspensionRepo);
 
         CompanyRepoImpl companyRepo = new CompanyRepoImpl();
         eventRepo = new EventRepoImpl();
@@ -64,11 +69,11 @@ class LotteryServiceTest {
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
 
         UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
-        CompanyService companyService = new CompanyService(auth, companyRepo, userRepo);
+        CompanyService companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
          eventCompanyManageService =
-                new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
+                new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator);
 
-        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo);
+        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator);
 
         // user with permission
         UserDTO user1DTO = new UserDTO(

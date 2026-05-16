@@ -4,6 +4,7 @@ import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import Log.LoggerSetup;
+import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
 import domain.dataType.CategoryEvent;
@@ -56,6 +57,8 @@ class EventCompanyManageServiceTest {
     private List<SeatingZoneDTO> seatingZones;
     private String validToken1;
     private IAuth auth;
+    private ISuspensionRepo suspensionRepo;
+    private IAccessValidator accessValidator;
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
     private IEventRepo eventRepo;
@@ -83,6 +86,8 @@ class EventCompanyManageServiceTest {
         userRepo=new UserRepo();
         passwordEncoder=new PasswordEncoderUtil();
         tokenService = new TokenService();
+        suspensionRepo = new SuspensionRepoImpl();
+        accessValidator=new AccessValidator(suspensionRepo);
         auth=new Auth(tokenService,userRepo,passwordEncoder);
         companyRepo=new CompanyRepoImpl();
         eventRepo = new EventRepoImpl();
@@ -94,15 +99,15 @@ class EventCompanyManageServiceTest {
         eventService=new EventService(auth,eventRepo);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,accessValidator,100);
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete order repo from company service construture
-        companyService=new CompanyService(auth,companyRepo,userRepo);
+        companyService=new CompanyService(auth,companyRepo,userRepo,accessValidator);
         eventCompanyManageService = new EventCompanyManageService(
                 companyRepo,
                 eventRepo,
                 auth,
-                paymentSystem
+                paymentSystem,accessValidator
         );
 
         validToken1=null; // user with all permissions
@@ -134,7 +139,7 @@ class EventCompanyManageServiceTest {
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "Sys", "Pass123!", 1, 1, 2000, "Address", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
-        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem);
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem,suspensionRepo);
 
     }
 

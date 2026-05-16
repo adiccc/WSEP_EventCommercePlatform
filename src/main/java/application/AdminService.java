@@ -1,5 +1,6 @@
 package application;
 
+import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.company.Permissions;
@@ -8,17 +9,17 @@ import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.user.IUserRepo;
 import domain.user.Member;
-import domain.company.Company;
-import domain.company.ICompanyRepo;
-import domain.event.Event;
-import domain.event.IEventRepo;
 import domain.event.Order;
+import domain.Suspension.Suspension;
 import domain.webQueue.WebQueue;
 import Exception.OptimisticLockingFailureException;
 
 import java.util.*;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -26,18 +27,144 @@ public class AdminService {
     private IEventRepo eventRepo;
     private IPaymentSystem paymentSystem;
     private ICompanyRepo companyRepo;
+    private ISuspensionRepo suspensionRepo;
     private static final Logger logger = Logger.getLogger(AdminService.class.getName());
 
     private final IAuth auth;
     private final IUserRepo userRepo;
+    private final ScheduledExecutorService scheduler;
 
 
-    public AdminService(IAuth auth, IUserRepo userRepo, ICompanyRepo companyRepo, IEventRepo eventRepo, IPaymentSystem paymentSystem) {
+
+    public AdminService(IAuth auth, IUserRepo userRepo, ICompanyRepo companyRepo, IEventRepo eventRepo, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo) {
         this.auth = auth;
         this.userRepo = userRepo;
         this.eventRepo = eventRepo;
         this.paymentSystem = paymentSystem;
         this.companyRepo = companyRepo;
+        this.suspensionRepo = suspensionRepo;
+        this.scheduler = Executors.newScheduledThreadPool(1);
+    }
+
+    //permanent suspension
+    public Response<Boolean> SuspendUser(String token, int userId) {
+        return RetryHelper.executeWithRetry(()->{
+            logger.log(Level.INFO, "SuspendUser called");
+            try{
+                if(!auth.isAdmin(token).getValue()){
+                    logger.log(Level.INFO, "SuspendUser failed : user is not admin");
+                    return new Response<>(false, "SuspendUser failed : user is not admin");
+                }
+                Member member=userRepo.findById(userId);
+                if(member.isSuspended()){
+                    logger.log(Level.INFO, "SuspendUser failed : user is already suspended");
+                    return new Response<>(false, "SuspendUser failed : user is already suspended");
+                }
+                member.suspend();
+                suspensionRepo.store(new Suspension(userId));
+                userRepo.store(member);
+                logger.log(Level.INFO, "SuspendUser succeeded, user "+userId+" suspended");
+                return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
+            }catch(OptimisticLockingFailureException e){
+                throw e;
+            }catch(NoSuchElementException e){
+                logger.log(Level.INFO, "User not found");
+                return new Response<>(false, "User not found");
+            }catch(Exception e){
+                logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
+                return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
+            }
+        });
+    }
+
+    //temp suspension , duration in days
+    public Response<Boolean> SuspendUser(String token, int userId, int duration) {
+        return RetryHelper.executeWithRetry(()->{
+            logger.log(Level.INFO, "SuspendUser called");
+            try{
+                if(!auth.isAdmin(token).getValue()){
+                    logger.log(Level.INFO, "SuspendUser failed : user is not admin");
+                    return new Response<>(false, "SuspendUser failed : user is not admin");
+                }
+                Member member=userRepo.findById(userId);
+                if(member.isSuspended()){
+                    logger.log(Level.INFO, "SuspendUser failed : user is already suspended");
+                    return new Response<>(false, "SuspendUser failed : user is already suspended");
+                }
+                if(duration<=0){
+                    logger.log(Level.INFO, "SuspendUser failed : duration must be greater than 0");
+                    return new Response<>(false, "SuspendUser failed : duration must be greater than 0");
+                }
+                member.suspend();
+                suspensionRepo.store(new Suspension(userId, duration));
+                userRepo.store(member);
+                scheduleActivateAfterSuspension(userId, duration);
+                logger.log(Level.INFO, "SuspendUser succeeded, user "+userId+" suspended");
+                return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
+            }catch(OptimisticLockingFailureException e){
+                throw e;
+            }catch(NoSuchElementException e){
+                logger.log(Level.INFO, "User not found");
+                return new Response<>(false, "User not found");
+            }catch(Exception e){
+                logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
+                return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
+            }
+        });
+    }
+
+    public Response<Boolean> UnsuspendUser(String token, int userId) {
+        return RetryHelper.executeWithRetry(()->{
+            logger.log(Level.INFO, "UnsuspendUser called");
+            try{
+                if(!auth.isAdmin(token).getValue()){
+                    logger.log(Level.INFO, "UnsuspendUser failed : user is not admin");
+                    return new Response<>(false, "UnsuspendUser failed : user is not admin");
+                }
+                Member member=userRepo.findById(userId);
+                if(!member.isSuspended()){
+                    logger.log(Level.INFO, "UnsuspendUser failed : user is not suspended");
+                    return new Response<>(false, "UnsuspendUser failed : user is not suspended");
+                }
+                member.unsuspend();
+                Suspension currentSus = suspensionRepo.findLastSuspensionByUserId(userId);
+                currentSus.unsuspend();
+                suspensionRepo.store(currentSus);
+                userRepo.store(member);
+                logger.log(Level.INFO, "UnsuspendUser succeeded, user "+userId+" not suspended");
+                return new Response<>(true, "UnsuspendUser succeeded, user "+userId+" not suspended");
+            }catch(OptimisticLockingFailureException e){
+                throw e;
+            }catch(NoSuchElementException e){
+                logger.log(Level.INFO, "User not found");
+                return new Response<>(false, "User not found");
+            }catch(Exception e){
+                logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
+                return new Response<>(false,"UnsuspendUser faild due to serer error: "+e.getMessage());
+            }
+        });
+    }
+
+    private void scheduleActivateAfterSuspension(int userId, int duration) {
+        scheduler.schedule( ()-> RetryHelper.executeWithRetry(()->{
+                logger.log(Level.INFO, "ScheduleActivateAfterSuspension called");
+                try {
+                    Member member = userRepo.findById(userId);
+                    member.unsuspend();
+                    userRepo.store(member);
+                    logger.log(Level.INFO, "activate after suspension succeeded, user "+userId+" not suspended");
+                    return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
+                }catch (OptimisticLockingFailureException e) {
+                    throw e;
+                }catch (NoSuchElementException e){
+                    logger.log(Level.INFO, "User not found");
+                    return new Response<>(false,"User not found");
+                }catch (Exception e){
+                    logger.log(Level.SEVERE, "SuspendUser faild due to serer error: ", e.getMessage());
+                    return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
+                }
+            })
+        , duration, TimeUnit.DAYS);
     }
 
     public Response<Boolean> setMaxCapacity(String token, int capacity) {

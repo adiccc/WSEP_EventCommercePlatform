@@ -4,6 +4,7 @@ import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import Log.LoggerSetup;
+import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
@@ -16,6 +17,7 @@ import domain.event.IEventRepo;
 import domain.event.OrderStatus;
 import domain.lottery.ILotteryRepo;
 import domain.user.IUserRepo;
+import domain.user.Member;
 import domain.webQueue.WebQueue;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,12 +29,9 @@ import DTO.TicketSupplyRequestDTO;
 import DTO.TicketSupplyResultDTO;
 import domain.dto.EventMapDTO;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -48,6 +47,8 @@ class AdminServiceTest {
     private String nonAdminToken;
     private ICompanyRepo companyRepo;
     private IUserRepo userRepo;
+    private IAccessValidator accessValidator;
+    private ISuspensionRepo suspensionRepo;
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
     private IEventRepo eventRepo;
@@ -66,6 +67,9 @@ class AdminServiceTest {
     private static final String USER_EMAIL = "user@bgu.ac.il";
     private static final String PASSWORD = "Pass123!";
 
+    private int userIdNotSuspened;
+    private String userNotSusToken;
+
     @BeforeEach
     void setUp() {
         LoggerSetup.setup();
@@ -76,22 +80,24 @@ class AdminServiceTest {
         userRepo = new UserRepo();
         eventRepo = new EventRepoImpl();
         companyRepo = new CompanyRepoImpl();
+        suspensionRepo = new SuspensionRepoImpl();
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
 
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         IAuth auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(ADMIN_EMAIL));
+        accessValidator = new AccessValidator(suspensionRepo);
 
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
 
-        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem);
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem,suspensionRepo);
 
         IActiveOrderRepo activeOrderRepo =new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo = new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,accessValidator,100);
 
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
-        companyService = new CompanyService(auth, companyRepo, userRepo);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator);
+        companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
 
         UserDTO adminDTO = new UserDTO(ADMIN_EMAIL, "Admin", "User", PASSWORD, 1, 1, 1990, "City", "050-000-0000");
         UserDTO userDTO = new UserDTO(USER_EMAIL, "Regular", "User", PASSWORD, 1, 1, 1990, "City", "050-111-1111");
@@ -115,7 +121,14 @@ class AdminServiceTest {
         seatingZones = List.of(new SeatingZoneDTO(10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
         eventCompanyManageService.DefineVenueAndSeatingMap(adminToken, eventId, stage, entries, standingZones,
                 seatingZones);
+
+        userService.registerUser(null, new UserDTO("notSuspenededUser@gmail.com","notSuspenededUser","test","test",1,1,2000,"test-addtess","050-000-0032"));
+        userNotSusToken = userService.login("notSuspenededUser@gmail.com","test").getValue();
+        userIdNotSuspened=auth.getUserId(userNotSusToken).getValue();
+
     }
+
+
 
     // --- setMaxCapacity ---
 
@@ -834,4 +847,450 @@ class AdminServiceTest {
         assertNotNull(fetchRes.getValue(), "Fetch should survive the race condition without crashing");
         assertTrue(fetchRes.getValue().contains(raceBuyer), "The purchaser must be in the list regardless of closure");
     }
+
+    @Test
+    void GivenSystemAdminAndExistingUser_WhenSuspendUserPermanently_ThenUserSuspendedSuccessfully() {
+
+        // Act
+        Response<Boolean> response = adminService.SuspendUser(adminToken, userIdNotSuspened);
+
+        // Assert
+        assertTrue(response.getValue());
+        assertTrue(response.getMessage().contains("Suspension succeeded"));
+
+        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
+    }
+
+    @Test
+    void GivenLoggedOutAdmin_WhenSuspendUserPermanently_ThenUserIsNotAdminErrorReturned() {
+        // Arrange
+        userService.logout(adminToken);
+
+        // Act
+        Response<Boolean> response = adminService.SuspendUser(adminToken, userIdNotSuspened);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("SuspendUser failed : user is not admin", response.getMessage());
+
+        Member member = userRepo.findById(userIdNotSuspened);
+        assertFalse(member.isSuspended());
+
+        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+    }
+
+    @Test
+    void GivenNonAdminUser_WhenSuspendUserPermanently_ThenPermissionDeniedErrorReturned() {
+
+        // Act
+        Response<Boolean> response = adminService.SuspendUser(nonAdminToken, userIdNotSuspened);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("SuspendUser failed : user is not admin", response.getMessage());
+
+        Member member = userRepo.findById(userIdNotSuspened);
+        assertFalse(member.isSuspended());
+
+        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+    }
+
+    @Test
+    void GivenNonExistingUser_WhenSuspendUserPermanently_ThenUserNotFoundErrorReturned() {
+        // Arrange
+        int nonExistingUserId = -1;
+
+        // Act
+        Response<Boolean> response = adminService.SuspendUser(adminToken, nonExistingUserId);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("User not found", response.getMessage());
+
+    }
+
+    @Test
+    void GivenAlreadySuspendedUser_WhenSuspendUserPermanently_ThenUserAlreadySuspendedErrorReturned() {
+        // Arrange
+
+        Response<Boolean> firstResponse = adminService.SuspendUser(adminToken, userIdNotSuspened);
+
+        int suspendedUserId = userIdNotSuspened;
+        assertTrue(firstResponse.getValue());
+
+        // Act
+        Response<Boolean> secondResponse = adminService.SuspendUser(adminToken, suspendedUserId);
+
+        // Assert
+        assertFalse(secondResponse.getValue());
+        assertEquals("SuspendUser failed : user is already suspended", secondResponse.getMessage());
+
+        Member member = userRepo.findById(suspendedUserId);
+        assertTrue(member.isSuspended());
+
+        assertFalse(accessValidator.hasWriteAccess(suspendedUserId));
+    }
+
+    @Test
+    void GivenSystemAdminAndExistingUser_WhenSuspendUserTemporarily_ThenUserSuspendedSuccessfully() {
+        // Arrange
+        int suspensionDuration = 7;
+
+        // Act
+        Response<Boolean> response = adminService.SuspendUser(adminToken, userIdNotSuspened, suspensionDuration);
+
+        // Assert
+        assertTrue(response.getValue());
+        assertTrue(response.getMessage().contains("Suspension succeeded"));
+
+        assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
+        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+    }
+
+    @Test
+    void GivenLoggedOutAdmin_WhenSuspendUserTemporarily_ThenUserIsNotAdminErrorReturned() {
+        // Arrange
+        int suspensionDuration = 7;
+        userService.logout(adminToken);
+
+        // Act
+        Response<Boolean> response = adminService.SuspendUser(adminToken, userIdNotSuspened, suspensionDuration);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("SuspendUser failed : user is not admin", response.getMessage());
+
+        Member member = userRepo.findById(userIdNotSuspened);
+        assertFalse(member.isSuspended());
+
+        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+    }
+
+    @Test
+    void GivenNonAdminUser_WhenSuspendUserTemporarily_ThenPermissionDeniedErrorReturned() {
+        // Arrange
+        int suspensionDuration = 7;
+
+        // Act
+        Response<Boolean> response = adminService.SuspendUser(nonAdminToken, userIdNotSuspened, suspensionDuration);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("SuspendUser failed : user is not admin", response.getMessage());
+
+        Member member = userRepo.findById(userIdNotSuspened);
+        assertFalse(member.isSuspended());
+
+        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+    }
+
+    @Test
+    void GivenNonExistingUser_WhenSuspendUserTemporarily_ThenUserNotFoundErrorReturned() {
+        // Arrange
+        int nonExistingUserId = -1;
+        int suspensionDuration = 7;
+
+        // Act
+        Response<Boolean> response = adminService.SuspendUser(adminToken, nonExistingUserId, suspensionDuration);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("User not found", response.getMessage());
+    }
+
+    @Test
+    void GivenAlreadySuspendedUser_WhenSuspendUserTemporarily_ThenUserAlreadySuspendedErrorReturned() {
+        // Arrange
+        int suspensionDuration = 7;
+
+        Response<Boolean> firstResponse = adminService.SuspendUser(adminToken, userIdNotSuspened, suspensionDuration);
+
+        int suspendedUserId = userIdNotSuspened;
+        assertTrue(firstResponse.getValue());
+
+        // Act
+        Response<Boolean> secondResponse = adminService.SuspendUser(adminToken, suspendedUserId, suspensionDuration);
+
+        // Assert
+        assertFalse(secondResponse.getValue());
+        assertEquals("SuspendUser failed : user is already suspended", secondResponse.getMessage());
+
+        Member member = userRepo.findById(suspendedUserId);
+        assertTrue(member.isSuspended());
+
+        assertFalse(accessValidator.hasWriteAccess(suspendedUserId));
+    }
+
+    @Test
+    void GivenInvalidEndDate_WhenSuspendUserTemporarily_ThenInvalidSuspensionPeriodErrorReturned() {
+        // Arrange
+        int invalidSuspensionDuration = -1;
+
+        // Act
+        Response<Boolean> response = adminService.SuspendUser(adminToken, userIdNotSuspened, invalidSuspensionDuration);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("SuspendUser failed : duration must be greater than 0", response.getMessage());
+
+        Member member = userRepo.findById(userIdNotSuspened);
+        assertFalse(member.isSuspended());
+
+        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+    }
+
+    // Race Condition
+    @Test
+    void GivenAdminSuspendsUserAndUserPerformsWriteActionSimultaneously_ThenSuspendedUserHasNoWriteAccess() throws InterruptedException {
+        // Arrange
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch startGun = new CountDownLatch(1);
+        CountDownLatch finishLine = new CountDownLatch(2);
+        int suspenedUserId = userIdNotSuspened;
+        String suspendedUserToken = userNotSusToken;
+
+        List<Response<Boolean>> responses = Collections.synchronizedList(new ArrayList<>());
+
+        // Thread 1 - Admin suspends the user
+        executor.submit(() -> {
+            try {
+                startGun.await();
+                responses.add(adminService.SuspendUser(adminToken, suspenedUserId));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Thread 2 - User attempts to perform a write action
+        executor.submit(() -> {
+            try {
+                startGun.await();
+                createCompletedOrderThroughPurchaseFlow(suspendedUserToken,eventId,2);
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Act
+        startGun.countDown();
+        finishLine.await();
+
+        // Assert
+        Member member = userRepo.findById(suspenedUserId);
+
+        assertTrue(member.isSuspended(), "User should be suspended");
+        assertFalse(accessValidator.hasWriteAccess(suspenedUserId), "Suspended user should not have write access");
+
+        executor.shutdown();
+    }
+
+    @Test
+    void GivenSystemAdminAndTemporarilySuspendedUser_WhenCancelUserSuspension_ThenSuspensionCancelledSuccessfully() {
+        // Arrange
+        int suspensionDuration = 7;
+
+        Response<Boolean> suspendResponse =
+                adminService.SuspendUser(adminToken, userIdNotSuspened, suspensionDuration);
+
+        assertTrue(suspendResponse.getValue());
+        assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
+        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+
+        // Act
+        Response<Boolean> response = adminService.UnsuspendUser(adminToken, userIdNotSuspened);
+
+        // Assert
+        assertTrue(response.getValue());
+        assertTrue(response.getMessage().contains("UnsuspendUser succeeded"));
+
+        Member member = userRepo.findById(userIdNotSuspened);
+        assertFalse(member.isSuspended());
+
+        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+    }
+
+    @Test
+    void GivenSystemAdminAndPermanentlySuspendedUser_WhenCancelUserSuspension_ThenSuspensionCancelledSuccessfully() {
+        // Arrange
+        Response<Boolean> suspendResponse = adminService.SuspendUser(adminToken, userIdNotSuspened);
+
+        assertTrue(suspendResponse.getValue());
+        assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
+        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+
+        // Act
+        Response<Boolean> response = adminService.UnsuspendUser(adminToken, userIdNotSuspened);
+
+        // Assert
+        assertTrue(response.getValue());
+        assertTrue(response.getMessage().contains("UnsuspendUser succeeded"));
+
+        Member member = userRepo.findById(userIdNotSuspened);
+        assertFalse(member.isSuspended());
+
+        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+    }
+
+    @Test
+    void GivenLoggedOutAdmin_WhenCancelUserSuspension_ThenUserIsNotLoggedInErrorReturned() {
+        // Arrange
+        Response<Boolean> suspendResponse =
+                adminService.SuspendUser(adminToken, userIdNotSuspened);
+
+        assertTrue(suspendResponse.getValue());
+        assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
+        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+
+        userService.logout(adminToken);
+
+        // Act
+        Response<Boolean> response = adminService.UnsuspendUser(adminToken, userIdNotSuspened);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("UnsuspendUser failed : user is not admin", response.getMessage());
+
+        Member member = userRepo.findById(userIdNotSuspened);
+        assertTrue(member.isSuspended());
+
+        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+    }
+
+    @Test
+    void GivenNonAdminUser_WhenCancelUserSuspension_ThenPermissionDeniedErrorReturned() {
+        // Arrange
+        Response<Boolean> suspendResponse =
+                adminService.SuspendUser(adminToken, userIdNotSuspened);
+
+        assertTrue(suspendResponse.getValue());
+        assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
+        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+
+        // Act
+        Response<Boolean> response = adminService.UnsuspendUser(nonAdminToken, userIdNotSuspened);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertTrue(response.getMessage().contains("UnsuspendUser failed"));
+
+        Member member = userRepo.findById(userIdNotSuspened);
+        assertTrue(member.isSuspended());
+
+        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+    }
+
+    @Test
+    void GivenNonExistingUser_WhenCancelUserSuspension_ThenUserNotFoundErrorReturned() {
+        // Arrange
+        int nonExistingUserId = -1;
+
+        // Act
+        Response<Boolean> response = adminService.UnsuspendUser(adminToken, nonExistingUserId);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("User not found", response.getMessage());
+    }
+
+    @Test
+    void GivenActiveUser_WhenCancelUserSuspension_ThenUserIsNotSuspendedErrorReturned() {
+        // Arrange
+        assertFalse(userRepo.findById(userIdNotSuspened).isSuspended());
+        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+
+        // Act
+        Response<Boolean> response = adminService.UnsuspendUser(adminToken, userIdNotSuspened);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("UnsuspendUser failed : user is not suspended", response.getMessage());
+
+        Member member = userRepo.findById(userIdNotSuspened);
+        assertFalse(member.isSuspended());
+
+        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+    }
+
+    // Race Condition
+    @Test
+    void GivenAdminUnsuspendsUserAndUserPerformsWriteActionSimultaneously_ThenUserHasWriteAccess() throws InterruptedException {
+        // Arrange
+        int suspendedUserId = userIdNotSuspened;
+        String suspendedUserToken = userNotSusToken;
+
+        Response<Boolean> suspendResponse = adminService.SuspendUser(adminToken, suspendedUserId);
+        assertTrue(suspendResponse.getValue());
+        assertTrue(userRepo.findById(suspendedUserId).isSuspended());
+        assertFalse(accessValidator.hasWriteAccess(suspendedUserId));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch startGun = new CountDownLatch(1);
+        CountDownLatch finishLine = new CountDownLatch(2);
+
+        List<Response<Boolean>> responses = Collections.synchronizedList(new ArrayList<>());
+        List<Exception> exceptions = Collections.synchronizedList(new ArrayList<>());
+
+        // Thread 1 - Admin unsuspends the user
+        executor.submit(() -> {
+            try {
+                startGun.await();
+
+                Response<Boolean> response =
+                        adminService.UnsuspendUser(adminToken, suspendedUserId);
+
+                responses.add(response);
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                exceptions.add(e);
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Thread 2 - User attempts to perform a write action
+        executor.submit(() -> {
+            try {
+                startGun.await();
+
+                createCompletedOrderThroughPurchaseFlow(suspendedUserToken, eventId, 2);
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                exceptions.add(e);
+            } finally {
+                finishLine.countDown();
+            }
+        });
+
+        // Act
+        startGun.countDown();
+        finishLine.await();
+
+        // Assert
+        assertTrue(exceptions.isEmpty(), "No unexpected exception should be thrown during concurrent execution");
+
+        Member member = userRepo.findById(suspendedUserId);
+
+        assertFalse(member.isSuspended(), "User should not be suspended after unsuspend");
+        assertTrue(accessValidator.hasWriteAccess(suspendedUserId), "Unsuspended user should have write access");
+        assertFalse(suspensionRepo.hasActiveSuspension(suspendedUserId), "User should not have an active suspension");
+
+        long successfulUnsuspensions = responses.stream()
+                .filter(Response::getValue)
+                .count();
+
+        assertEquals(1, successfulUnsuspensions, "The unsuspend operation should succeed");
+
+        executor.shutdown();
+    }
+
 }

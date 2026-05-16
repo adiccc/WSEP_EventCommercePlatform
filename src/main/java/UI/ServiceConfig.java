@@ -1,6 +1,7 @@
 package UI;
 
 import application.*;
+import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
 import domain.event.IEventRepo;
@@ -64,6 +65,16 @@ public class ServiceConfig {
     }
 
     @Bean
+    public ISuspensionRepo suspensionRepo() {
+        return new SuspensionRepoImpl();
+    }
+
+    @Bean
+    public IAccessValidator accessValidator() {
+        return new AccessValidator(suspensionRepo());
+    }
+
+    @Bean
     public IPaymentSystem paymentSystem() {
         return new PaymentSystemProxy();
     }
@@ -87,26 +98,26 @@ public class ServiceConfig {
 
     @Bean
     public CompanyService companyService() {
-        return new CompanyService(auth() ,companyRepo(), userRepo());
+        return new CompanyService(auth() ,companyRepo(), userRepo(), accessValidator());
     }
 
     @Bean
     public ActiveOrderService activeOrderService() {
-        return new ActiveOrderService(auth(), activeOrderRepo(), eventRepo(),companyRepo(), lotteryRepo(), paymentSystem(), ticketSupply(), 20);
+        return new ActiveOrderService(auth(), activeOrderRepo(), eventRepo(),companyRepo(), lotteryRepo(), paymentSystem(), ticketSupply(), accessValidator(),20);
     }
 
     @Bean
     public LotteryService lotteryService() {
-        return new LotteryService(lotteryRepo(), eventRepo(), auth(), companyRepo());
+        return new LotteryService(lotteryRepo(), eventRepo(), auth(), companyRepo(), accessValidator());
     }
 
     @Bean
     public AdminService adminService() {
-        return new AdminService(auth() ,userRepo(), companyRepo(), eventRepo() ,paymentSystem());
+        return new AdminService(auth() ,userRepo(), companyRepo(), eventRepo() ,paymentSystem(), suspensionRepo());
     }
 
     @Bean
     public EventCompanyManageService eventCompanyManageService() {
-        return new EventCompanyManageService(companyRepo(), eventRepo() , auth(), paymentSystem());
+        return new EventCompanyManageService(companyRepo(), eventRepo() , auth(), paymentSystem(), accessValidator());
     }
 }

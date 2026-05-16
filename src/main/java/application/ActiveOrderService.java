@@ -37,6 +37,7 @@ public class ActiveOrderService {
     private final ICompanyRepo companyRepo;
     private final ILotteryRepo lotteryRepo;
     private final IAuth auth;
+    private final IAccessValidator accessValidator;
     private final IPaymentSystem paymentSystem;
     private final ITicketSupply ticketSupply;
     private int capacity;
@@ -50,6 +51,7 @@ public class ActiveOrderService {
             ILotteryRepo lotteryRepo,
             IPaymentSystem paymentSystem,
             ITicketSupply ticketSupply,
+            IAccessValidator accessValidator,
             int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
@@ -58,6 +60,7 @@ public class ActiveOrderService {
         this.auth = auth;
         this.paymentSystem = paymentSystem;
         this.ticketSupply = ticketSupply;
+        this.accessValidator = accessValidator;
         this.capacity = capacity;
         this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "active-order-cleanup");
@@ -88,6 +91,10 @@ public class ActiveOrderService {
             if(role == null){
                 logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
+            }
+            if(!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())){
+                logger.severe("User does not have write access");
+                return new Response<>(null, "user does not have write access.");
             }
 
             try {
@@ -194,6 +201,10 @@ public class ActiveOrderService {
             logger.log(Level.SEVERE, "identifier is null");
             return new Response<>(null, "Invalid identifier supplied");
         }
+        if(!accessValidator.hasWriteAccess(auth.getUserId(identifier).getValue())){
+            logger.severe("User does not have write access");
+            return new Response<>(null, "user does not have write access.");
+        }
         try {
             int totalSeatingTickets = seatingZones.values().stream()
                     .mapToInt(List::size)
@@ -267,6 +278,10 @@ public class ActiveOrderService {
                         logger.log(Level.SEVERE, "not a valid user email");
                         return new Response<>(null, "not a valid user email");
 
+                    }
+                    if(!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())){
+                        logger.severe("User does not have write access");
+                        return new Response<>(null, "user does not have write access.");
                     }
                 }
                 activeOrder = activeOrderRepo.findById(activeOrderId);
@@ -476,6 +491,10 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "user not logged in");
                     return new Response<>(null, "user not logged in");
                 }
+                if(!accessValidator.hasWriteAccess(userId)){
+                    logger.severe("User does not have write access");
+                    return new Response<>(null, "user does not have write access.");
+                }
                 String userEmail = auth.getUserEmail(token).getValue();
                 ActiveOrderDTO order = activeOrderRepo.findOrderByUserId(userEmail);
                 if (!order.getUserIdentifier().equals(auth.getUserEmail(token).getValue())) { //email for member
@@ -515,6 +534,10 @@ public class ActiveOrderService {
                 if (role == null) {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
+                }
+                if(!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())){
+                    logger.severe("User does not have write access");
+                    return new Response<>(null, "user does not have write access.");
                 }
                 String email = auth.getUserEmail(token).getValue();
 
@@ -659,7 +682,6 @@ public class ActiveOrderService {
                 if (role.equals("MEMBER")) {
                     userIdentifier = auth.getUserEmail(token).getValue();
                 }
-
                 activeOrderRepo.alreadyHasActiveOrder(userIdentifier, eventId);
                 int orderId = idGenerator.getAndIncrement();
                 ActiveOrder nextOrder = new ActiveOrder(orderId, userIdentifier, eventId, new ArrayList<>());

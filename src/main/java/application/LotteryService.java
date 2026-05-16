@@ -25,14 +25,16 @@ public class LotteryService {
     private final IAuth auth;
     private final ScheduledExecutorService scheduler; // ScheduledExecutorService is used to schedule tasks to run after a given delay
     private final ICompanyRepo companyRepo;
+    private final IAccessValidator accessValidator;
 
-    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth, ICompanyRepo companyRepo) {
+    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth, ICompanyRepo companyRepo, IAccessValidator accessValidator) {
         this.lotteryRepo = lotteryRepo;
         this.eventRepo = eventRepo;
         this.logger = Logger.getLogger(LotteryService.class.getName());
         this.auth = auth;
         this.scheduler = Executors.newScheduledThreadPool(10);
         this.companyRepo = companyRepo;
+        this.accessValidator = accessValidator;
     }
 
     public Response<Boolean> createLottery(String token, int eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
@@ -44,6 +46,10 @@ public class LotteryService {
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
+            }
+            if(!accessValidator.hasWriteAccess(userId)){
+                logger.severe("User does not have write access");
+                return new Response<>(null, "user does not have write access.");
             }
             try {
                 Event event = eventRepo.findById(eventId);
@@ -136,6 +142,10 @@ public class LotteryService {
             if (userId == -1) {
                 logger.severe("User is not logged in");
                 return new Response<>(false, "User is not logged in");
+            }
+            if(!accessValidator.hasWriteAccess(userId)){
+                logger.severe("User does not have write access");
+                return new Response<>(null, "user does not have write access.");
             }
 
             try {

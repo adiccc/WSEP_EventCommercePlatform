@@ -3,6 +3,7 @@ package application;
 import DTO.DiscountDTO;
 import DTO.PurchaseRuleDTO;
 import Log.LoggerSetup;
+import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
@@ -50,6 +51,8 @@ class CompanyServiceUpdatedTest {
     private UserService userService;
     private ICompanyRepo companyRepo;
     private IAuth auth;
+    private IAccessValidator accessValidator;
+    private ISuspensionRepo suspensionRepo;
     private IUserRepo userRepo;
     private AdminService adminService;
     private IPaymentSystem paymentSystem;
@@ -58,6 +61,8 @@ class CompanyServiceUpdatedTest {
     @BeforeEach
     void setUp() {
         LoggerSetup.setup();
+        suspensionRepo=new SuspensionRepoImpl();
+        accessValidator=new AccessValidator(suspensionRepo);
         userRepo = new UserRepo();
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         TokenService tokenService = new TokenService();
@@ -66,7 +71,7 @@ class CompanyServiceUpdatedTest {
         companyRepo = new CompanyRepoImpl();
 
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
-        service = new CompanyService(auth, companyRepo, userRepo);
+        service = new CompanyService(auth, companyRepo, userRepo,accessValidator);
 
         UserDTO ownerDTO = new UserDTO("owner@test.com", "Owner", "Test", "Password123!", 1, 1, 2000, "City", "050-123-4567");
         userService.registerUser(null, ownerDTO);
@@ -95,7 +100,7 @@ class CompanyServiceUpdatedTest {
         companyRepo.store(company);
         paymentSystem = Mockito.mock(PaymentSystemProxy.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem);
+        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
 
