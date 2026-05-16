@@ -2,7 +2,7 @@ package infrastructure;
 
 import application.IAccessValidator;
 import domain.Suspension.ISuspensionRepo;
-import domain.user.Suspension;
+import domain.Suspension.Suspension;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
