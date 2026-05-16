@@ -4,6 +4,7 @@ import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import Log.LoggerSetup;
+import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.dataType.*;
 import domain.dto.EventDTO;
@@ -36,6 +37,8 @@ class EventServiceTest {
     private  TokenService tokenService;
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
+    private ISuspensionRepo suspensionRepo;
+    private IAccessValidator accessValidator;
     private EventRepoImpl eventRepo;
     private EventService service;
 
@@ -59,7 +62,9 @@ class EventServiceTest {
         auth = new Auth(tokenService,userRepo,passwordEncoder);
         CompanyRepoImpl companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
+        suspensionRepo=new SuspensionRepoImpl();
+        accessValidator=new AccessValidator(suspensionRepo);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator);
         service = new EventService(auth, eventRepo);
 
         UserService userService=new UserService(tokenService,auth,userRepo,passwordEncoder);
@@ -67,7 +72,7 @@ class EventServiceTest {
         userService.registerUser(validToken,userDTO);
         validToken=userService.login("user1@test.com","mytest").getValue();
         GUEST_TOKEN = userService.continueAsGuest().getValue();
-        CompanyService companyService=new CompanyService(auth,companyRepo,userRepo);
+        CompanyService companyService=new CompanyService(auth,companyRepo,userRepo,accessValidator);
         Response<Company> c1=companyService.createProductionCompany(validToken,company1,"test-company","testC@company.com","054-5556677","leumi");
 
         // Active event (company1)

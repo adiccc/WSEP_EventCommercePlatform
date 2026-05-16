@@ -5,6 +5,7 @@ import Log.LoggerSetup;
 
 import java.util.*;
 
+import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.ActiveOrder;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
@@ -54,6 +55,8 @@ class ActiveOrderServiceTest {
         TokenService tokenService = new TokenService();
         IUserRepo userRepo = new UserRepo();
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
+        ISuspensionRepo suspensionRepo = new SuspensionRepoImpl();
+        IAccessValidator accessValidator=new AccessValidator(suspensionRepo);
         auth = new Auth(tokenService, userRepo, passwordEncoder);
 
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
@@ -81,11 +84,11 @@ class ActiveOrderServiceTest {
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
 
-        CompanyService companyService = new CompanyService(auth, companyRepo, userRepo);
+        CompanyService companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
         companyService.createProductionCompany(validToken, companyId,
                 "test-company", "testC@company.com", "054-5556677", "leumi");
 
-        EventCompanyManageService companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem);
+        EventCompanyManageService companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator);
 
         Response<Integer> r = companyEventService.createEvent(
                 validToken,
@@ -121,7 +124,7 @@ class ActiveOrderServiceTest {
         companyEventService.DefineVenueAndSeatingMap(validToken, eventId, stage, entries, standingZones, seatingZones);
         companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId, stage, entries, standingZones, seatingZones);
 
-        LotteryService lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo);
+        LotteryService lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator);
         lotteryService.createLottery(validToken, eventId, 10,
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
@@ -134,6 +137,7 @@ class ActiveOrderServiceTest {
                 lotteryRepo,
                 paymentSystem,
                 ticketSupply,
+                accessValidator,
                 capacity
         );
     }

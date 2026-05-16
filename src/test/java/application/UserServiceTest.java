@@ -2,6 +2,7 @@ package application;
 
 import DTO.QueueEntryResultDTO;
 import Log.LoggerSetup;
+import domain.Suspension.ISuspensionRepo;
 import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
 import domain.event.IEventRepo;
@@ -29,6 +30,7 @@ class UserServiceTest {
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
     private IAuth auth;
+    private ISuspensionRepo suspensionRepo;
     private AdminService adminService;
     private ICompanyRepo companyRepo;
     private IEventRepo eventRepo;
@@ -49,7 +51,7 @@ class UserServiceTest {
         companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem);
+        adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem, suspensionRepo);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
     }

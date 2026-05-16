@@ -32,15 +32,18 @@ public class EventCompanyManageService {
     private final Logger logger;
     private final IAuth auth;
     private final IPaymentSystem paymentSystem;
+    private final IAccessValidator accessValidator;
     AtomicInteger ticketIdGenerator = new AtomicInteger(1);
 
 
-    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem) {
+
+    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, IAccessValidator accessValidator) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;
         this.auth = auth;
         this.logger = Logger.getLogger(EventCompanyManageService.class.getName());
         this.paymentSystem = paymentSystem;
+        this.accessValidator = accessValidator;
     }
 
     public Response<Boolean> DefineVenueAndSeatingMap(String token, Integer eventId, ElementPositionDTO stage,
@@ -54,6 +57,10 @@ public class EventCompanyManageService {
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
+            }
+            if(!accessValidator.hasWriteAccess(userId)){
+                logger.severe("User does not have write access");
+                return new Response<>(null, "user does not have write access.");
             }
             try {
                 Event event = eventRepo.findById(eventId);
@@ -123,6 +130,10 @@ public class EventCompanyManageService {
                 logger.severe("Invalid token");
                 return new Response<>(null, "Invalid token");
             }
+            if(!accessValidator.hasWriteAccess(creatorId)){
+                logger.severe("User does not have write access");
+                return new Response<>(null, "user does not have write access.");
+            }
 
             try {
                 Company c = this.companyRepo.findById(companyId);
@@ -180,6 +191,10 @@ public class EventCompanyManageService {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
             }
+            if(!accessValidator.hasWriteAccess(userId)){
+                logger.severe("User does not have write access");
+                return new Response<>(null, "user does not have write access.");
+            }
             try {
                 Event event = eventRepo.findById(eventId);
                 Company company = companyRepo.findById(event.getCompanyId());
@@ -222,6 +237,10 @@ public class EventCompanyManageService {
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
+            }
+            if(!accessValidator.hasWriteAccess(userId)){
+                logger.severe("User does not have write access");
+                return new Response<>(null, "user does not have write access.");
             }
 
             try {
@@ -291,6 +310,10 @@ public class EventCompanyManageService {
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
+            }
+            if(!accessValidator.hasWriteAccess(userId)){
+                logger.severe("User does not have write access");
+                return new Response<>(null, "user does not have write access.");
             }
             try{
                 Event event = eventRepo.findById(eventId);
