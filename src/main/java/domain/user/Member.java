@@ -17,9 +17,20 @@ public class Member extends User{
     protected String phoneNumber;
     protected LocalDate dateOfBirth;
     protected String address;
-    protected boolean isActive = true;  // false when account is suspended/removed by admin
+    protected ActivationStatus activationStatus;
     private long version;
 
+    public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address,ActivationStatus activationStatus) {
+        super(email);
+        this.password = password;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.phoneNumber = phoneNumber;
+        this.dateOfBirth = dateOfBirth;
+        this.address = address;
+        this.version = 0;
+        this.activationStatus=activationStatus;
+    }
     public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address) {
         super(email);
         this.password = password;
@@ -29,7 +40,7 @@ public class Member extends User{
         this.dateOfBirth = dateOfBirth;
         this.address = address;
         this.version = 0;
-
+        this.activationStatus=ActivationStatus.ACTIVE;
     }
     public Member(Member member) {
         super(member);
@@ -41,7 +52,7 @@ public class Member extends User{
         this.dateOfBirth=member.dateOfBirth;
         this.address=member.address;
         this.version=member.version;
-        this.isActive = member.isActive;
+        this.activationStatus=member.activationStatus;
     }
     public long getVersion() {
         return version;
@@ -59,9 +70,15 @@ public class Member extends User{
         return password;
     }
 
-    public boolean isActive() { return isActive; }
-    public void deactivate() { this.isActive = false; }
-
+    public boolean isActive() { return activationStatus == ActivationStatus.ACTIVE; }
+    public void deactivate() { this.activationStatus=ActivationStatus.INACTIVE; }
+    public boolean isSuspended() { return activationStatus == ActivationStatus.SUSPENDED; }
+    public void suspend(){
+        activationStatus=ActivationStatus.SUSPENDED;
+    }
+    public void unsuspend(){
+        activationStatus=ActivationStatus.ACTIVE;
+    }
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;

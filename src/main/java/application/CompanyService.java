@@ -26,14 +26,17 @@ public class CompanyService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
 
     private final IAuth auth;
+    private final IAccessValidator accessValidator;
     private final ICompanyRepo companyRepo;
     private final IUserRepo userRepo;
 
+
     public CompanyService( IAuth auth, ICompanyRepo companyRepo,
-                          IUserRepo userRepo) {
+                          IUserRepo userRepo, IAccessValidator accessValidator) {
         this.auth = auth;
         this.companyRepo = companyRepo;
         this.userRepo = userRepo;
+        this.accessValidator = accessValidator;
     }
 
     public Response<Company> createProductionCompany(String sessionToken, int companyId, String companyName,
@@ -48,6 +51,10 @@ public class CompanyService {
                 }
                 if (!auth.isLoggedIn(sessionToken).getValue()) {
                     return new Response<>(null, "User must be logged in to create a company.");
+                }
+                if(!accessValidator.hasWriteAccess(userId)){
+                    logger.warning("User " + userId + " does not have write access.");
+                    return new Response<>(null, "user does not have write access.");
                 }
 
                 if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
@@ -180,6 +187,10 @@ public class CompanyService {
                     logger.warning("addRuleToCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
+                if(!accessValidator.hasWriteAccess(userId)){
+                    logger.warning("addRuleToCompany failed: invalid or expired token");
+                    return new Response<>(null, "user does not have write access.");
+                }
 
                 Company company = companyRepo.findById(companyId);
                 if (company == null) {
@@ -225,6 +236,10 @@ public class CompanyService {
                 if (userId == -1) {
                     logger.warning("removeRuleFromCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
+                }
+                if(!accessValidator.hasWriteAccess(userId)){
+                    logger.warning("removeRuleFromCompany failed: invalid or expired token");
+                    return new Response<>(null, "user does not have write access.");
                 }
                 Company company = companyRepo.findById(companyId);
                 if (company == null) {
@@ -274,6 +289,10 @@ public class CompanyService {
                 if (userId == -1) {
                     logger.warning("addDiscountToCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
+                }
+                if(!accessValidator.hasWriteAccess(userId)){
+                    logger.warning("addDiscountToCompany failed: invalid or expired token");
+                    return new Response<>(null, "user does not have write access.");
                 }
 
                 // 2. Company must exist
@@ -334,6 +353,10 @@ public class CompanyService {
                 if (userId == -1) {
                     logger.warning("removeDiscountFromCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
+                }
+                if(!accessValidator.hasWriteAccess(userId)){
+                    logger.warning("removeDiscountFromCompany failed: invalid or expired token");
+                    return new Response<>(null, "user does not have write access.");
                 }
 
                 // 2. Company must exist
@@ -442,6 +465,9 @@ public class CompanyService {
                     logger.warning("updateManagerPermissions failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
+                if(!accessValidator.hasWriteAccess(userId)){
+                    return new Response<>(null, "user does not have write access.");
+                }
                 if (newPermissions == null) {
                     logger.warning("updateManagerPermissions failed: null permissions list");
                     return Response.error("Permissions list cannot be null");
@@ -491,6 +517,10 @@ public class CompanyService {
                     logger.warning("requestAppointOwner failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
+                if(!accessValidator.hasWriteAccess(appointerId)){
+                    logger.warning("requestAppointOwner failed: appointee " + appointeeId + " doesnt have write access");
+                    return new Response<>(null, "user does not have write access.");
+                }
                 Company company;
                 try {
                     company = companyRepo.findById(companyId);
@@ -537,6 +567,10 @@ public class CompanyService {
                 if (userId == -1) {
                     logger.warning("respondToOwnerAppointment failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
+                }
+                if(!accessValidator.hasWriteAccess(userId)){
+                    logger.warning("respondToOwnerAppointment failed: user does not have write access");
+                    return new Response<>(null, "user does not have write access.");
                 }
                 Company company;
                 try {
@@ -586,6 +620,10 @@ public class CompanyService {
                     logger.warning("requestAppointManager failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
+                if(!accessValidator.hasWriteAccess(appointerId)){
+                    logger.warning("requestAppointManager failed: appointee does not have write access");
+                    return new Response<>(null, "user does not have write access.");
+                }
                 Company company;
                 try {
                     company = companyRepo.findById(companyId);
@@ -634,6 +672,10 @@ public class CompanyService {
                     logger.warning("respondToManagerAppointment failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
+                if(!accessValidator.hasWriteAccess(userId)){
+                    logger.warning("respondToManagerAppointment failed: user doesnt have write access");
+                    return new Response<>(null, "user does not have write access.");
+                }
                 Company company;
                 try {
                     company = companyRepo.findById(companyId);
@@ -675,6 +717,10 @@ public class CompanyService {
                 if (actingOwnerId == -1) {
                     logger.warning("removeManagerAppointment failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
+                }
+                if(!accessValidator.hasWriteAccess(actingOwnerId)){
+                    logger.warning("removeManagerAppointment failed: user doesnt have write access");
+                    return new Response<>(null, "user does not have write access.");
                 }
                 Company company;
                 try {
@@ -718,6 +764,10 @@ public class CompanyService {
             if (!auth.isLoggedIn(ownerToken).getValue()) {
                 logger.warning("deactivateCompany failed: invalid or expired token");
                 return new Response<>(false, "Invalid or expired token, deactivate failed");
+            }
+            if(!accessValidator.hasWriteAccess(auth.getUserId(ownerToken).getValue())){
+                logger.warning("deactivateCompany failed: user doesnt have write access");
+                return new Response<>(null, "user does not have write access.");
             }
             try {
                 Company company = companyRepo.findById(companyId);

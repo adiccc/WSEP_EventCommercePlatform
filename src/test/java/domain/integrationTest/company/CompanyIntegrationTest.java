@@ -7,6 +7,7 @@ import domain.dataType.PermissionType;
 import domain.dto.HierarchyDTO;
 import domain.policy.DiscountPolicy;
 import domain.policy.PurchasePolicy;
+import domain.user.ActivationStatus;
 import domain.user.Founder;
 import domain.user.Manager;
 import domain.user.Member;

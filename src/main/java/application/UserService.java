@@ -149,7 +149,8 @@ public class UserService {
                         dto.getLastName(),
                         dto.getPhone(),
                         birthDate,
-                        dto.getAddress());
+                        dto.getAddress(),
+                        ActivationStatus.ACTIVE);
                 userRepo.store(member);
                 logger.info("Registration successful for email: " + email);
                 return Response.ok(true);
