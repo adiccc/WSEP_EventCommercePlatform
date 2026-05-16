@@ -5,6 +5,7 @@ import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.company.Permissions;
 import domain.dto.OrderDTO;
+import domain.dto.SuspensionDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.user.IUserRepo;
@@ -142,6 +143,23 @@ public class AdminService {
                 logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
                 return new Response<>(false,"UnsuspendUser faild due to serer error: "+e.getMessage());
             }
+        });
+    }
+
+    public Response<List<SuspensionDTO>> getAllUsersSuspensions(String token) {
+        return RetryHelper.executeWithRetry(()-> {
+            logger.log(Level.INFO, "getAllUsersSuspensions called");
+            if (!auth.isAdmin(token).getValue()) {
+                logger.log(Level.INFO, "getAllUsersSuspensions failed : user is not admin");
+                return new Response<>(null, "getAllUsersSuspensions failed : user is not admin");
+            }
+            List<Suspension> allSuspension = suspensionRepo.getAll();
+            List<SuspensionDTO> suspensionDTOList = new ArrayList<>();
+            for (Suspension suspension : allSuspension) {
+                suspensionDTOList.add(new SuspensionDTO(suspension));
+            }
+            logger.log(Level.INFO, "getAllUsersSuspensions succeeded");
+            return new Response<>(suspensionDTOList, "getAllUsersSuspensions succeeded");
         });
     }
 

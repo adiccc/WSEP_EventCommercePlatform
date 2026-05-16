@@ -11,6 +11,7 @@ import domain.company.ICompanyRepo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.OrderDTO;
+import domain.dto.SuspensionDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
@@ -1291,6 +1292,137 @@ class AdminServiceTest {
         assertEquals(1, successfulUnsuspensions, "The unsuspend operation should succeed");
 
         executor.shutdown();
+    }
+
+    @Test
+    void GivenSystemAdminAndExistingSuspensions_WhenViewUserSuspensions_ThenSuspensionsReturnedSuccessfully() {
+        // Arrange
+        Response<Boolean> firstSuspendResponse =
+                adminService.SuspendUser(adminToken, userIdNotSuspened);
+
+        assertTrue(firstSuspendResponse.getValue());
+
+        // Act
+        Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(adminToken);
+
+        // Assert
+        assertNotNull(response);
+        assertTrue(response.getValue() != null);
+        assertFalse(response.getValue().isEmpty());
+
+        List<SuspensionDTO> suspensions = response.getValue();
+
+        assertTrue(
+                suspensions.stream()
+                        .anyMatch(suspension -> suspension.getUserId() == userIdNotSuspened),
+                "Suspensions list should contain the suspended user"
+        );
+
+        assertTrue(response.getMessage().contains("succeeded"));
+    }
+
+    @Test
+    void GivenSystemAdminAndNoSuspensions_WhenViewUserSuspensions_ThenEmptyListReturned() {
+        // Act
+        Response<List<SuspensionDTO>> response =
+                adminService.getAllUsersSuspensions(adminToken);
+
+        // Assert
+        assertNotNull(response);
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue().isEmpty());
+
+        assertTrue(response.getMessage().contains("succeeded"));
+    }
+
+    @Test
+    void GivenLoggedOutAdmin_WhenViewUserSuspensions_ThenUserIsNotLoggedInErrorReturned() {
+        // Arrange
+        adminService.SuspendUser(adminToken, userIdNotSuspened);
+        userService.logout(adminToken);
+
+        // Act
+        Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(adminToken);
+
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("getAllUsersSuspensions failed : user is not admin", response.getMessage());
+    }
+
+    @Test
+    void GivenNonAdminUser_WhenViewUserSuspensions_ThenPermissionDeniedErrorReturned() {
+        // Arrange
+        adminService.SuspendUser(adminToken, userIdNotSuspened);
+
+        // Act
+        Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(nonAdminToken);
+
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("getAllUsersSuspensions failed : user is not admin", response.getMessage());
+    }
+
+    @Test
+    void GivenSystemAdminAndTemporarySuspension_WhenViewUserSuspensions_ThenTemporarySuspensionDetailsReturned() {
+        // Arrange
+        int suspensionDuration = 7;
+
+        Response<Boolean> suspendResponse =
+                adminService.SuspendUser(adminToken, userIdNotSuspened, suspensionDuration);
+
+        assertTrue(suspendResponse.getValue());
+
+        // Act
+        Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(adminToken);
+
+        // Assert
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue().isEmpty());
+
+        SuspensionDTO suspension = response.getValue().stream()
+                .filter(s -> s.getUserId() == userIdNotSuspened)
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(userIdNotSuspened, suspension.getUserId());
+        assertNotNull(suspension.getEndDate());
+        assertNotNull(suspension.getStartDate());
+
+        assertTrue(suspension.getEndDate().isAfter(LocalDateTime.now()), "Temporary suspension end time should be in the future");
+    }
+    @Test
+    void GivenSystemAdminAndCancelledSuspension_WhenViewUserSuspensions_ThenCancelledSuspensionDetailsReturned() {
+        // Arrange
+        Response<Boolean> suspendResponse =
+                adminService.SuspendUser(adminToken, userIdNotSuspened);
+
+        assertTrue(suspendResponse.getValue());
+        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+
+        Response<Boolean> unsuspendResponse =
+                adminService.UnsuspendUser(adminToken, userIdNotSuspened);
+
+        assertTrue(unsuspendResponse.getValue());
+        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+
+        // Act
+        Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(adminToken);
+
+        // Assert
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue().isEmpty());
+
+        SuspensionDTO suspension = response.getValue().stream()
+                .filter(s -> s.getUserId() == userIdNotSuspened)
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(userIdNotSuspened, suspension.getUserId());
+
+        Member member = userRepo.findById(userIdNotSuspened);
+        assertFalse(member.isSuspended());
+
+        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
     }
 
 }
