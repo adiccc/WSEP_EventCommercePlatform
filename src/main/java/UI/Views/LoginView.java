@@ -61,11 +61,29 @@ public class LoginView extends VerticalLayout {
                 e -> getUI().ifPresent(ui -> ui.navigate("register"))
         );
 
+        Button guestButton = new Button("Continue as Guest", e -> {
+            Response<String> response = presenter.continueAsGuest();
+
+            if (response.getValue() != null) {
+                VaadinSession.getCurrent()
+                        .setAttribute("token", response.getValue());
+
+                showSuccess(response.getMessage());
+                getUI().ifPresent(ui -> ui.navigate(""));
+            } else {
+                showError(response.getMessage());
+            }
+        });
+
+        guestButton.setWidth("20rem");
+        guestButton.getElement().setAttribute("theme", "contrast");
+
         add(
                 title,
                 emailField,
                 passwordField,
                 loginButton,
+                guestButton,
                 registerButton
         );
     }

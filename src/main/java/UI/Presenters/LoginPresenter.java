@@ -20,11 +20,11 @@ public class LoginPresenter {
         this.userService = userService;
     }
 
-    /**
-     * Attempts login. Returns the service Response so the view can
-     * inspect success/failure and update its own components.
-     */
     public Response<String> login(String email, String password) {
         return userService.login(email, password);
+    }
+
+    public Response<String> continueAsGuest() {
+        return userService.continueAsGuest();
     }
 }
