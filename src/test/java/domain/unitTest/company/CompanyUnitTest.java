@@ -4,8 +4,7 @@ import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.company.Permissions;
 import domain.dataType.PermissionType;
-import domain.policy.DiscountPolicy;
-import domain.policy.PurchasePolicy;
+import domain.policy.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -28,7 +27,7 @@ class CompanyUnitTest {
         permissions = new Permissions(FOUNDER_ID);
         company = new Company(COMPANY_ID, "TestCo",
                 new ContactInfo("info@test.com", "050-000-0000", "bank-1"),
-                new PurchasePolicy(), new DiscountPolicy(), permissions);
+                new AndPurchasePolicy(), new SumDiscountPolicy(), permissions);
     }
 
     @Test

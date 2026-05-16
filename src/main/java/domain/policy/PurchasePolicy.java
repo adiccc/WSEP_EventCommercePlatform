@@ -2,45 +2,63 @@ package domain.policy;
 
 import DTO.PurchaseRuleDTO;
 import domain.dto.UserDTO;
+
 import java.util.ArrayList;
 import java.util.List;
 
-import static DTO.PurchaseRuleDTO.Type.MAX_TICKETS;
-import static DTO.PurchaseRuleDTO.Type.MIN_AGE;
+public abstract class PurchasePolicy implements Purchase {
+    protected List<Purchase> rules;
 
-public class PurchasePolicy implements Purchase {
-    private List<Purchase> rules;
-
-    public PurchasePolicy() {
+    protected PurchasePolicy() {
         this.rules = new ArrayList<>();
     }
-    public PurchasePolicy(PurchasePolicy purchasePolicy) {
-        this.rules=new ArrayList<>();
-        for (Purchase purchase : purchasePolicy.getRules()) {
-            if(purchase instanceof PurchasePolicy) {
-                this.rules.add(new PurchasePolicy((PurchasePolicy) purchase));
-            } if(purchase instanceof MinAgeRule) {
-                this.rules.add(new MinAgeRule((MinAgeRule)purchase));
-            } if(purchase instanceof MaxTicketsRule){
-                this.rules.add(new MaxTicketsRule((MaxTicketsRule)purchase));
-            }
-        }
+
+    protected PurchasePolicy(List<Purchase> rules) {
+        this.rules = new ArrayList<>(rules);
+    }
+
+    @Override
+    public abstract boolean isSatisfied(UserDTO user, int quantity, int ticketsBoughtForEvent);
+
+    protected abstract String policyName();
+
+    public abstract PurchasePolicyType getPolicyType();
+
+    public abstract PurchasePolicy copyPolicy();
+
+    @Override
+    public Purchase copy() { return copyPolicy(); }
+
+    protected List<Purchase> copyRules() {
+        List<Purchase> copied = new ArrayList<>();
+        for (Purchase p : rules) copied.add(p.copy());
+        return copied;
     }
 
     public static Purchase dtoToPurchase(PurchaseRuleDTO ruleDTO) {
-        if (ruleDTO == null)
-            return null;
-        if (ruleDTO.getType() == MIN_AGE)
-            return new MinAgeRule(ruleDTO.getMinAge());
-        if (ruleDTO.getType() == MAX_TICKETS)
-            return new MaxTicketsRule(ruleDTO.getMaxTickets());
-        if (ruleDTO.getType() == PurchaseRuleDTO.Type.PurchasePolicy) {
-            Purchase purchasePolicy = new PurchasePolicy();
-            for (Purchase p : ruleDTO.getPurchases())
-                purchasePolicy.addRule(p);
+        if (ruleDTO == null) return null;
+        switch (ruleDTO.getType()) {
+            case MIN_AGE:     return new MinAgeRule(ruleDTO.getMinAge());
+            case MAX_TICKETS: return new MaxTicketsRule(ruleDTO.getMaxTickets());
+            case MIN_TICKETS: return new MinTicketsRule(ruleDTO.getMinTickets());
+            case AND_POLICY: {
+                AndPurchasePolicy policy = new AndPurchasePolicy();
+                if (ruleDTO.getPurchases() != null)
+                    for (PurchaseRuleDTO child : ruleDTO.getPurchases())
+                        policy.addRule(dtoToPurchase(child));
+                return policy;
+            }
+            case OR_POLICY: {
+                OrPurchasePolicy policy = new OrPurchasePolicy();
+                if (ruleDTO.getPurchases() != null)
+                    for (PurchaseRuleDTO child : ruleDTO.getPurchases())
+                        policy.addRule(dtoToPurchase(child));
+                return policy;
+            }
+            default: return null;
         }
-        return null;
     }
+
     public void addRule(Purchase rule) {
         if (!rule.isValid())
             throw new IllegalArgumentException("Invalid rule data");
@@ -59,19 +77,12 @@ public class PurchasePolicy implements Purchase {
         throw new RuntimeException("Rule not found");
     }
 
+    @Override
     public boolean ruleExists(Purchase newRule) {
         for (Purchase rule : rules) {
             if (rule.ruleExists(newRule)) return true;
         }
         return false;
-    }
-
-    @Override
-    public boolean isSatisfied(UserDTO user, int quantity, int ticketsBoughtForEvent) {
-        for (Purchase rule : rules) {
-            if (!rule.isSatisfied(user, quantity, ticketsBoughtForEvent)) return false;
-        }
-        return true;
     }
 
     @Override
@@ -85,11 +96,13 @@ public class PurchasePolicy implements Purchase {
     @Override
     public String describe() {
         if (rules.isEmpty()) return "No purchase restrictions";
-        StringBuilder sb = new StringBuilder("Purchase policy: ");
+        if (rules.size() == 1) return rules.get(0).describe();
+        StringBuilder sb = new StringBuilder("(");
         for (int i = 0; i < rules.size(); i++) {
             sb.append(rules.get(i).describe());
-            if (i < rules.size() - 1) sb.append(", ");
+            if (i < rules.size() - 1) sb.append(" ").append(policyName()).append(" ");
         }
+        sb.append(")");
         return sb.toString();
     }
 

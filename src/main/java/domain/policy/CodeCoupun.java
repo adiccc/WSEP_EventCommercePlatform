@@ -41,6 +41,11 @@ public class CodeCoupun extends DiscountElement {
         return equals(newdiscount);
     }
 
+    @Override
+    public Discount copy() {
+        return new CodeCoupun(this);
+    }
+
     public boolean equals(Object discount) {
         if(discount instanceof CodeCoupun){
             if(code.equals(((CodeCoupun)discount).code))

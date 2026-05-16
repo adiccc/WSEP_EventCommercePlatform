@@ -39,10 +39,10 @@ public class Event {
         this.name = name;
         this.saleStartDate = saleStartDate;
         this.hasLottery = hasLottery;
-        purchasePolicy = new PurchasePolicy();
+        purchasePolicy = new AndPurchasePolicy();
         purchasePolicy.addRule(new MaxTicketsRule(20));
-        discountPolicy = new DiscountPolicy();
-        discountPolicy.addDiscount(new LimitedDiscount(0.1, 5));
+        discountPolicy = new SumDiscountPolicy();
+        discountPolicy.addDiscount(new MinQuantityDiscount(0.1, 5));
         this.id = -1; // will be set when stored in repo
         active = false;
         this.location = location;
@@ -64,8 +64,8 @@ public class Event {
         this.name = event.name;
         this.saleStartDate = event.saleStartDate;
         this.hasLottery = event.hasLottery;
-        this.purchasePolicy=new PurchasePolicy(event.purchasePolicy);
-        this.discountPolicy=new DiscountPolicy(event.discountPolicy);
+        this.purchasePolicy=event.purchasePolicy.copyPolicy();
+        this.discountPolicy=event.discountPolicy.copyPolicy();
         this.id=event.id;
         this.eventQueue = new EventQueue(event.eventQueue);
         this.active = event.active;
