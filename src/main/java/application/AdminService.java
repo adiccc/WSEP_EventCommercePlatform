@@ -10,7 +10,7 @@ import domain.event.IEventRepo;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import domain.event.Order;
-import domain.user.Suspension;
+import domain.Suspension.Suspension;
 import domain.webQueue.WebQueue;
 import Exception.OptimisticLockingFailureException;
 
@@ -109,6 +109,38 @@ public class AdminService {
             }catch(Exception e){
                 logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
                 return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
+            }
+        });
+    }
+
+    public Response<Boolean> UnsuspendUser(String token, int userId) {
+        return RetryHelper.executeWithRetry(()->{
+            logger.log(Level.INFO, "UnsuspendUser called");
+            try{
+                if(!auth.isAdmin(token).getValue()){
+                    logger.log(Level.INFO, "UnsuspendUser failed : user is not admin");
+                    return new Response<>(false, "UnsuspendUser failed : user is not admin");
+                }
+                Member member=userRepo.findById(userId);
+                if(!member.isSuspended()){
+                    logger.log(Level.INFO, "UnsuspendUser failed : user is not suspended");
+                    return new Response<>(false, "UnsuspendUser failed : user is not suspended");
+                }
+                member.unsuspend();
+                Suspension currentSus = suspensionRepo.findLastSuspensionByUserId(userId);
+                currentSus.unsuspend();
+                suspensionRepo.store(currentSus);
+                userRepo.store(member);
+                logger.log(Level.INFO, "UnsuspendUser succeeded, user "+userId+" not suspended");
+                return new Response<>(true, "UnsuspendUser succeeded, user "+userId+" not suspended");
+            }catch(OptimisticLockingFailureException e){
+                throw e;
+            }catch(NoSuchElementException e){
+                logger.log(Level.INFO, "User not found");
+                return new Response<>(false, "User not found");
+            }catch(Exception e){
+                logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
+                return new Response<>(false,"UnsuspendUser faild due to serer error: "+e.getMessage());
             }
         });
     }

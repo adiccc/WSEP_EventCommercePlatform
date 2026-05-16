@@ -1,8 +1,9 @@
 package infrastructure;
 
 import domain.Suspension.ISuspensionRepo;
-import domain.user.Suspension;
+import domain.Suspension.Suspension;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -89,5 +90,19 @@ public class SuspensionRepoImpl implements ISuspensionRepo {
 
         }
         return false;
+    }
+
+    public Suspension findLastSuspensionByUserId(int userId) {
+        if(!suspensionsIdByUserID.containsKey(userId)){
+            throw new NoSuchElementException("No suspension found with user id " + userId);
+        }
+        Suspension suspension =suspensionsBySusID.get(suspensionsIdByUserID.get(userId).get(0));
+        for(Integer suspensionId : suspensionsIdByUserID.get(userId)){
+            LocalDateTime endTime=suspensionsBySusID.get(suspensionId).getEndDate();
+            if(endTime==null || endTime.isAfter(LocalDateTime.now()))
+                return new Suspension(suspension);
+        }
+        return null;
+
     }
 }
