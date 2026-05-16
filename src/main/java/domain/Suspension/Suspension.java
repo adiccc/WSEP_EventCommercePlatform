@@ -57,4 +57,7 @@ public class Suspension {
     public LocalDateTime getEndDate(){
         return endTime;
     }
+    public LocalDateTime getStartDate(){
+        return startTime;
+    }
 }
