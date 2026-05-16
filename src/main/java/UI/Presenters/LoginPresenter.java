@@ -24,7 +24,7 @@ public class LoginPresenter {
      * Attempts login. Returns the service Response so the view can
      * inspect success/failure and update its own components.
      */
-    public Response<UserDTO> login(String email, String password) {
+    public Response<String> login(String email, String password) {
         return userService.login(email, password);
     }
 }

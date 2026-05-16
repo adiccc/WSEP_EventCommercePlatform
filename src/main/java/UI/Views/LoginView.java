@@ -1,6 +1,7 @@
 package UI.Views;
 
 import UI.Presenters.LoginPresenter;
+import application.Response;
 import application.UserService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.H2;
@@ -48,10 +49,10 @@ public class LoginView extends VerticalLayout {
 
         Button loginButton = new Button("Sign in", e -> {
             // View calls presenter → gets Response back → handles UI itself
-            var response = presenter.login(emailField.getValue(), passwordField.getValue());
+            Response<String> response = presenter.login(emailField.getValue(), passwordField.getValue());
             if (response.getValue() != null) {
                 VaadinSession.getCurrent()
-                        .setAttribute("token", response.getMessage());
+                        .setAttribute("token", response.getValue());
                 getUI().ifPresent(ui -> ui.navigate(""));
             } else {
                 Notification notification = Notification.show(
