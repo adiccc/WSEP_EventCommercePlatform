@@ -2,17 +2,22 @@ package UI.Views;
 
 import UI.Presenters.RegisterPresenter;
 import application.UserService;
+import application.Response;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.component.textfield.*;
+import com.vaadin.flow.component.textfield.EmailField;
+import com.vaadin.flow.component.textfield.PasswordField;
+import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dto.UserDTO;
-import application.Response;
+
+import java.time.LocalDate;
 
 @Route("register")
 @PageTitle("Register")
@@ -24,43 +29,55 @@ public class RegisterView extends VerticalLayout {
     public RegisterView(UserService userService) {
         this.presenter = new RegisterPresenter(userService);
 
-        setWidth("30rem");
-        setAlignItems(Alignment.CENTER);
+        setSizeFull();
+        setPadding(true);
+        setSpacing(true);
+        setJustifyContentMode(JustifyContentMode.START);
 
         H2 title = new H2("Create Account");
 
-        TextField firstName = new TextField("First Name");
-        TextField lastName = new TextField("Last Name");
-        EmailField email = new EmailField("Email");
-        PasswordField password = new PasswordField("Password");
-        TextField phone = new TextField("Phone");
-        TextField address = new TextField("Address");
+        TextField firstNameField = new TextField("First Name");
+        firstNameField.setWidth("20rem");
 
-        IntegerField day = new IntegerField("Day");
-        IntegerField month = new IntegerField("Month");
-        IntegerField year = new IntegerField("Year");
+        TextField lastNameField = new TextField("Last Name");
+        lastNameField.setWidth("20rem");
+
+        EmailField emailField = new EmailField("Email");
+        emailField.setWidth("20rem");
+
+        PasswordField passwordField = new PasswordField("Password");
+        passwordField.setWidth("20rem");
+
+        TextField address = new TextField("Address");
+        address.setWidth("20rem");
+
+        TextField phoneNumber = new TextField("Phone Number");
+        phoneNumber.setWidth("20rem");
+
+        DatePicker birthDatePicker = new DatePicker("Date of Birth");
+        birthDatePicker.setWidth("20rem");
+        birthDatePicker.setMax(LocalDate.now());
+        birthDatePicker.setMin(LocalDate.now().minusYears(120));
 
         Button registerButton = new Button("Register", e -> {
-            if (email.isInvalid()) {
-                showError("Please enter a valid email address");
-                return;
-            }
 
-            UserDTO dto = new UserDTO(
-                    email.getValue().trim(),
-                    firstName.getValue().trim(),
-                    lastName.getValue().trim(),
-                    password.getValue(),
-                    day.getValue(),
-                    month.getValue(),
-                    year.getValue(),
-                    address.getValue().trim(),
-                    phone.getValue().trim()
+            LocalDate birthDate = birthDatePicker.getValue();
+
+            UserDTO userDTO = new UserDTO(
+                    emailField.getValue(),
+                    firstNameField.getValue(),
+                    lastNameField.getValue(),
+                    passwordField.getValue(),
+                    birthDate.getDayOfMonth(),
+                    birthDate.getMonthValue(),
+                    birthDate.getYear(),
+                    address.getValue(),
+                    phoneNumber.getValue()
             );
 
-            Response<Boolean> response = presenter.register(dto);
+            Response<Boolean> response = presenter.register(userDTO);
 
-            if (Boolean.TRUE.equals(response.getValue())) {
+            if (response.getValue() != null) {
                 showSuccess(response.getMessage());
                 getUI().ifPresent(ui -> ui.navigate("login"));
             } else {
@@ -68,19 +85,29 @@ public class RegisterView extends VerticalLayout {
             }
         });
 
-        add(
-                title,
-                firstName,
-                lastName,
-                email,
-                password,
-                phone,
-                address,
-                day,
-                month,
-                year,
-                registerButton
+        registerButton.setWidth("20rem");
+
+        Button loginButton = new Button(
+                "Already have an account? Login",
+                e -> getUI().ifPresent(ui -> ui.navigate("login"))
         );
+        loginButton.setWidth("20rem");
+        VerticalLayout form = new VerticalLayout();
+        form.setAlignItems(Alignment.CENTER);
+        form.setWidth("100%");
+        form.add(
+                firstNameField,
+                lastNameField,
+                emailField,
+                passwordField,
+                birthDatePicker,
+                address,
+                phoneNumber,
+                registerButton,
+                loginButton
+        );
+
+        add(title, form);
     }
 
     private void showSuccess(String message) {
