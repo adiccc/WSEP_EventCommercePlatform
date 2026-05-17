@@ -42,7 +42,6 @@ public class LoginView extends VerticalLayout {
                     presenter.login(emailField.getValue(), passwordField.getValue());
 
             if (response.getValue() != null) {
-                // token נמצא ב-value
                 VaadinSession.getCurrent()
                         .setAttribute("token", response.getValue());
 

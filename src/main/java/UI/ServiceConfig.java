@@ -6,6 +6,7 @@ import domain.activeOrder.IActiveOrderRepo;
 import domain.company.ICompanyRepo;
 import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
+import domain.webQueue.WebQueue;
 import domain.user.IUserRepo;
 import infrastructure.*;
 import org.springframework.context.annotation.Bean;
@@ -21,6 +22,11 @@ import org.springframework.context.annotation.Configuration;
 public class ServiceConfig {
 
     // ── Repos ────────────────────────────────────────────────────────────────
+
+    @Bean
+    public WebQueue webQueue() {
+        return WebQueue.getInstance(100);
+    }
 
     @Bean
     public IUserRepo userRepo() {

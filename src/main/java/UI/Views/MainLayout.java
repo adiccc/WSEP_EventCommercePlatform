@@ -1,30 +1,28 @@
 package UI.Views;
 
+import application.IAuth;
+import application.Response;
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.applayout.DrawerToggle;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.sidenav.SideNav;
 import com.vaadin.flow.component.sidenav.SideNavItem;
 import com.vaadin.flow.router.RouterLayout;
+import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 
-/**
- * Shared shell for all authenticated pages.
- *
- * How to attach a view to this layout:
- *   @Route(value = "my-page", layout = MainLayout.class)
- *   public class MyView extends VerticalLayout { ... }
- *
- * Nav items use string paths for now. Once a view class exists you can
- * switch to the class-reference constructor: new SideNavItem("Label", MyView.class, icon)
- */
 @AnonymousAllowed
 public class MainLayout extends AppLayout implements RouterLayout {
 
-    public MainLayout() {
+    private final IAuth auth;
+
+    public MainLayout(IAuth auth) {
+        this.auth = auth;
         createHeader();
         createDrawer();
     }
@@ -48,26 +46,64 @@ public class MainLayout extends AppLayout implements RouterLayout {
     private void createDrawer() {
         SideNav nav = new SideNav();
 
-        // String paths used here so the file compiles even before other views exist.
-        // Replace with class-reference constructors as you implement each view:
-        //   new SideNavItem("Home", HomeView.class, VaadinIcon.HOME.create())
-
+        // Always visible
         SideNavItem home = new SideNavItem("Home", "");
         home.setPrefixComponent(VaadinIcon.HOME.create());
 
         SideNavItem search = new SideNavItem("Search Events", "search");
         search.setPrefixComponent(VaadinIcon.SEARCH.create());
 
-        SideNavItem orders = new SideNavItem("My Orders", "my-orders");
-        orders.setPrefixComponent(VaadinIcon.TICKET.create());
+        nav.addItem(home, search);
 
-        SideNavItem company = new SideNavItem("My Company", "manage");
-        company.setPrefixComponent(VaadinIcon.OFFICE.create());
+        String token = (String) VaadinSession.getCurrent().getAttribute("token");
 
+        // No token -> anonymous
+        if (token == null || token.isBlank()) {
+            addLoginItem(nav);
+            addToDrawer(nav);
+            return;
+        }
+
+        Response<String> roleResponse = auth.getRole(token);
+        String role = roleResponse.getValue();
+
+        if ("MEMBER".equals(role)) {
+            // Registered member
+            SideNavItem orders = new SideNavItem("My Orders", "my-orders");
+            orders.setPrefixComponent(VaadinIcon.TICKET.create());
+
+            SideNavItem company = new SideNavItem("My Company", "manage");
+            company.setPrefixComponent(VaadinIcon.OFFICE.create());
+
+            SideNavItem logout = new SideNavItem("Logout", "logout");
+            logout.setPrefixComponent(VaadinIcon.SIGN_IN.create());
+
+            nav.addItem(orders, company, logout);
+
+        } else if ("GUEST".equals(role)) {
+            // Guest can still choose to log in
+            addLoginItem(nav);
+
+        } else {
+            // Invalid or expired token
+            VaadinSession.getCurrent().setAttribute("token", null);
+
+            Notification notification = Notification.show(
+                    "Session expired. Please sign in again.",
+                    4000,
+                    Notification.Position.TOP_CENTER
+            );
+            notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+
+            addLoginItem(nav);
+        }
+
+        addToDrawer(nav);
+    }
+
+    private void addLoginItem(SideNav nav) {
         SideNavItem login = new SideNavItem("Login", "login");
         login.setPrefixComponent(VaadinIcon.SIGN_IN.create());
-
-        nav.addItem(home, search, orders, company, login);
-        addToDrawer(nav);
+        nav.addItem(login);
     }
 }
