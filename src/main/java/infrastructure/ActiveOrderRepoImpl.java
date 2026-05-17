@@ -4,12 +4,14 @@ import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import Exception.OptimisticLockingFailureException;
 import domain.dto.ActiveOrderDTO;
+import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
+@Repository
 
 public class ActiveOrderRepoImpl implements IActiveOrderRepo {
     private ConcurrentHashMap<Integer, ActiveOrder> activeOrders; // key: activeOrderId, value: ActiveOrder

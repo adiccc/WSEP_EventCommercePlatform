@@ -1,19 +1,19 @@
 package application;
-import domain.company.Company;
-import domain.company.ICompanyRepo;
+
 import DTO.QueueEntryResultDTO;
 import domain.dto.UserDTO;
 import domain.user.*;
-import application.IAuth;
 import Exception.OptimisticLockingFailureException;
 import domain.webQueue.WebQueue;
+import org.springframework.stereotype.Service;
+
 import java.time.DateTimeException;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Service
 public class UserService {
     private static final Logger logger = Logger.getLogger(UserService.class.getName());
     private final TokenService tokenService;

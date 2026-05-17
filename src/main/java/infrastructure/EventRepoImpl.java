@@ -10,6 +10,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import Exception.OptimisticLockingFailureException;
 import domain.event.Order;
+import org.springframework.stereotype.Repository;
+
+@Repository
 
 public class EventRepoImpl implements IEventRepo {
     Map<Integer,Event> events; // key: eventId, value: event

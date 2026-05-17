@@ -8,6 +8,9 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.stereotype.Repository;
+
+@Repository
 
 public class LotteryRepoImpl implements ILotteryRepo {
     // Thread-safe map for storing lotteries

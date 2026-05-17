@@ -8,6 +8,8 @@ import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.stereotype.Service;
+
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.NoSuchElementException;
@@ -16,7 +18,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.concurrent.TimeUnit;
-
+@Service
 
 public class LotteryService {
     private final ILotteryRepo lotteryRepo;
