@@ -7,6 +7,7 @@ import domain.dto.UserDTO;
 import domain.policy.*;
 import domain.dto.HierarchyDTO;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -15,8 +16,8 @@ public class Company {
     private final String companyName;
     private boolean isActive;
     private final ContactInfo contactInfo;
-    private final PurchasePolicy purchasePolicy;
-    private final DiscountPolicy discountPolicy;
+    private PurchasePolicy purchasePolicy;
+    private DiscountPolicy discountPolicy;
     private final Permissions companyPermission;
     private long version;
 
@@ -38,8 +39,8 @@ public class Company {
         this.companyId = company.companyId;
         this.companyName = company.companyName;
         this.contactInfo = new ContactInfo(company.contactInfo);
-        this.purchasePolicy = new PurchasePolicy(company.purchasePolicy);
-        this.discountPolicy = new DiscountPolicy(company.discountPolicy);
+        this.purchasePolicy = company.purchasePolicy.copyPolicy();
+        this.discountPolicy = company.discountPolicy.copyPolicy();
         this.isActive = company.isActive;
         this.companyPermission = new Permissions(company.companyPermission);
         this.version = company.version;
@@ -87,6 +88,32 @@ public class Company {
         if (!isActive)
             throw new IllegalStateException("Company is not active");
         purchasePolicy.removeRule(PurchasePolicy.dtoToPurchase(dto));
+    }
+
+    public void changePurchasePolicyType(int userId, PurchasePolicyType policyType) {
+        if (!companyPermission.checkPermission(userId, PermissionType.MANAGE_POLICIES))
+            throw new SecurityException("User does not have permission to change purchase policy");
+        if (purchasePolicy.getPolicyType() == policyType) return;
+        PurchasePolicy newPolicy;
+        switch (policyType) {
+            case OR:  newPolicy = new OrPurchasePolicy();  break;
+            default:  newPolicy = new AndPurchasePolicy(); break;
+        }
+        for (Purchase p : purchasePolicy.getRules()) newPolicy.addRule(p.copy());
+        this.purchasePolicy = newPolicy;
+    }
+
+    public void changeDiscountPolicyType(int userId, DiscountPolicyType policyType) {
+        if (!companyPermission.checkPermission(userId, PermissionType.MANAGE_POLICIES))
+            throw new SecurityException("User does not have permission to change discount policy");
+        List<Discount> current = discountPolicy.getDiscounts();
+        DiscountPolicy newPolicy;
+        switch (policyType) {
+            case MAX: newPolicy = new MaxDiscountPolicy(); break;
+            default:  newPolicy = new SumDiscountPolicy(); break;
+        }
+        for (Discount d : current) newPolicy.addDiscount(d.copy());
+        this.discountPolicy = newPolicy;
     }
 
     public int getFounderId() { return companyPermission.getFounderId(); }

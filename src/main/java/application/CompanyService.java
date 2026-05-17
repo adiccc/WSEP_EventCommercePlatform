@@ -12,8 +12,7 @@ import domain.dto.HierarchyDTO;
 import domain.dto.RolesPermissionsTreeDTO;
 import DTO.DiscountDTO;
 import DTO.PurchaseRuleDTO;
-import domain.policy.DiscountPolicy;
-import domain.policy.PurchasePolicy;
+import domain.policy.*;
 import domain.user.Founder;
 import domain.user.IUserRepo;
 import domain.user.Manager;
@@ -74,8 +73,8 @@ public class CompanyService {
                     }
 
                     ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
-                    PurchasePolicy defaultPurchase = new PurchasePolicy();
-                    DiscountPolicy defaultDiscount = new DiscountPolicy();
+                    PurchasePolicy defaultPurchase = new AndPurchasePolicy();
+                    DiscountPolicy defaultDiscount = new SumDiscountPolicy();
                     Permissions companyPermission = new Permissions(userId);
                     Company newCompany = new Company(companyId, companyName,
                             contactInfo, defaultPurchase, defaultDiscount, companyPermission);
@@ -401,6 +400,70 @@ public class CompanyService {
                 throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in removeDiscountFromCompany: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Void> changeDiscountPolicyType(String token, int companyId, DiscountPolicyType policyType) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("changeDiscountPolicyType called for companyId: " + companyId);
+            try {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1)
+                    return Response.error("Invalid or expired token");
+                if (!accessValidator.hasWriteAccess(userId))
+                    return Response.error("User does not have write access");
+
+                Company company = companyRepo.findById(companyId);
+                if (!company.isActive())
+                    return Response.error("Company is not active");
+
+                company.changeDiscountPolicyType(userId, policyType);
+                companyRepo.store(company);
+
+                logger.info("changeDiscountPolicyType succeeded for companyId: " + companyId);
+                return Response.ok(null);
+
+            } catch (SecurityException e) {
+                logger.warning("changeDiscountPolicyType unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in changeDiscountPolicyType: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Void> changePurchasePolicyType(String token, int companyId, PurchasePolicyType policyType) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("changePurchasePolicyType called for companyId: " + companyId);
+            try {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1)
+                    return Response.error("Invalid or expired token");
+                if (!accessValidator.hasWriteAccess(userId))
+                    return Response.error("User does not have write access");
+
+                Company company = companyRepo.findById(companyId);
+                if (!company.isActive())
+                    return Response.error("Company is not active");
+
+                company.changePurchasePolicyType(userId, policyType);
+                companyRepo.store(company);
+
+                logger.info("changePurchasePolicyType succeeded for companyId: " + companyId);
+                return Response.ok(null);
+
+            } catch (SecurityException e) {
+                logger.warning("changePurchasePolicyType unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in changePurchasePolicyType: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
         });

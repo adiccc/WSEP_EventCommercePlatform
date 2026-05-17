@@ -8,4 +8,5 @@ public interface Purchase {
     String describe();
     void addRule(Purchase rule);
     boolean ruleExists(Purchase rule);
+    Purchase copy();
 }

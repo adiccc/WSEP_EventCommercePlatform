@@ -5,8 +5,7 @@ import domain.company.ContactInfo;
 import domain.company.Permissions;
 import domain.dataType.PermissionType;
 import domain.dto.HierarchyDTO;
-import domain.policy.DiscountPolicy;
-import domain.policy.PurchasePolicy;
+import domain.policy.*;
 import domain.user.ActivationStatus;
 import domain.user.Founder;
 import domain.user.Manager;
@@ -59,7 +58,7 @@ class CompanyIntegrationTest {
         Permissions perms = new Permissions(founder.getUserId());
         company = new Company(COMPANY_ID, "LiveNation",
                 new ContactInfo("admin@livenation.com", "050-000-0000", "bank-1"),
-                new PurchasePolicy(), new DiscountPolicy(), perms);
+                new AndPurchasePolicy(), new SumDiscountPolicy(), perms);
         companyRepo.store(company);
     }
 

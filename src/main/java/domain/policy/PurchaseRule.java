@@ -10,4 +10,7 @@ public abstract class PurchaseRule implements Purchase {
     public boolean ruleExists(Purchase rule) {
         return equals(rule);
     }
+
+    @Override
+    public abstract Purchase copy();
 }
