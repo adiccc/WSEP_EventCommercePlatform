@@ -9,6 +9,7 @@ import domain.event.IEventRepo;
 import java.time.LocalDateTime;
 import java.util.List;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.NoSuchElementException;
@@ -23,6 +24,7 @@ public class EventService {
     private final IEventRepo eventRepo;
     private final IAuth auth;
 
+    @Autowired
     public EventService(IAuth auth, IEventRepo eventRepo) {
         this.eventRepo = eventRepo;
         this.auth = auth;

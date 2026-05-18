@@ -2,7 +2,9 @@ package infrastructure;
 
 import DTO.PaymentDetailsDTO;
 import application.IPaymentSystem;
+import org.springframework.stereotype.Component;
 
+@Component
 public class PaymentSystemProxy implements IPaymentSystem {
 
     @Override

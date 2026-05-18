@@ -8,6 +8,7 @@ import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -29,6 +30,7 @@ public class LotteryService {
     private final ICompanyRepo companyRepo;
     private final IAccessValidator accessValidator;
 
+    @Autowired
     public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth, ICompanyRepo companyRepo, IAccessValidator accessValidator) {
         this.lotteryRepo = lotteryRepo;
         this.eventRepo = eventRepo;

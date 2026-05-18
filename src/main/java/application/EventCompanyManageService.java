@@ -15,6 +15,7 @@ import domain.event.Zone;
 
 import domain.event.*;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -40,6 +41,7 @@ public class EventCompanyManageService {
 
 
 
+    @Autowired
     public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, IAccessValidator accessValidator) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;

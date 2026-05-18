@@ -3,10 +3,12 @@ package infrastructure;
 import DTO.TicketSupplyRequestDTO;
 import DTO.TicketSupplyResultDTO;
 import application.ITicketSupply;
+import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@Component
 public class TicketSupplyProxy implements ITicketSupply {
 
     @Override

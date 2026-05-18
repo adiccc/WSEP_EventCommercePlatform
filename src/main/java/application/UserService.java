@@ -5,6 +5,7 @@ import domain.dto.UserDTO;
 import domain.user.*;
 import Exception.OptimisticLockingFailureException;
 import domain.webQueue.WebQueue;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.DateTimeException;
@@ -21,6 +22,7 @@ public class UserService {
     private final IPasswordEncoder passwordEncoder;
     private final IUserRepo userRepo;
 
+    @Autowired
     public UserService(TokenService tokenService, IAuth auth, IUserRepo userRepo,
                        IPasswordEncoder passwordEncoder) {
         this.tokenService = tokenService;
