@@ -3,10 +3,12 @@ package infrastructure;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.stereotype.Repository;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
+@Repository
 
 public class CompanyRepoImpl implements ICompanyRepo {
     private static final Logger logger = Logger.getLogger(CompanyRepoImpl.class.getName());

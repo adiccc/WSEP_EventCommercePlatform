@@ -11,6 +11,9 @@ import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.stereotype.Repository;
+
+@Repository
 
 public class UserRepo implements IUserRepo {
     private final ConcurrentHashMap<Integer, Member> usersPerId = new ConcurrentHashMap<>();

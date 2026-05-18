@@ -19,7 +19,10 @@ import domain.user.Manager;
 import domain.user.Member;
 import domain.user.Owner;
 import domain.user.User;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
+@Service
 public class CompanyService {
 
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
@@ -30,6 +33,7 @@ public class CompanyService {
     private final IUserRepo userRepo;
 
 
+    @Autowired
     public CompanyService( IAuth auth, ICompanyRepo companyRepo,
                           IUserRepo userRepo, IAccessValidator accessValidator) {
         this.auth = auth;

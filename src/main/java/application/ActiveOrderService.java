@@ -18,6 +18,10 @@ import domain.event.Order;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
 import java.time.LocalDateTime;
 
 import java.util.*;
@@ -28,6 +32,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+@Service
 
 public class ActiveOrderService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
@@ -43,6 +49,7 @@ public class ActiveOrderService {
     private int capacity;
     private final ScheduledExecutorService cleanupScheduler;
 
+    @Autowired
     public ActiveOrderService(
             IAuth auth,
             IActiveOrderRepo activeOrderRepo,
@@ -52,7 +59,7 @@ public class ActiveOrderService {
             IPaymentSystem paymentSystem,
             ITicketSupply ticketSupply,
             IAccessValidator accessValidator,
-            int capacity) {
+            @Value("${active-order.capacity:100}") int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
@@ -78,6 +85,10 @@ public class ActiveOrderService {
                 },
                 30, 30, TimeUnit.SECONDS
         );
+    }
+
+    public int getCapacity() {
+        return this.capacity;
     }
 
     public Response<EventMapDTO> enterEventPurchase(String token, int companyId, int eventId) {

@@ -7,6 +7,8 @@ import application.TokenService;
 import domain.dto.UserDTO;
 import domain.user.IUserRepo;
 import domain.user.Member;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import java.util.Date;
 import java.util.Map;
@@ -14,6 +16,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
+@Component
 public class Auth implements IAuth {
     private static final Logger logger = Logger.getLogger(Auth.class.getName());
     private final TokenService tokenService;
@@ -29,6 +32,7 @@ public class Auth implements IAuth {
         this.adminEmails = adminEmails;
     }
 
+    @Autowired
     public Auth(TokenService tokenService, IUserRepo userRepo, IPasswordEncoder passwordEncoder) {
         this(tokenService, userRepo, passwordEncoder, Set.of());
     }

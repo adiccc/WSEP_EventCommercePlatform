@@ -14,6 +14,8 @@ import domain.event.Order;
 import domain.Suspension.Suspension;
 import domain.webQueue.WebQueue;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.List;
@@ -23,7 +25,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
+@Service
 public class AdminService {
     private IEventRepo eventRepo;
     private IPaymentSystem paymentSystem;
@@ -37,6 +39,7 @@ public class AdminService {
 
 
 
+    @Autowired
     public AdminService(IAuth auth, IUserRepo userRepo, ICompanyRepo companyRepo, IEventRepo eventRepo, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo) {
         this.auth = auth;
         this.userRepo = userRepo;

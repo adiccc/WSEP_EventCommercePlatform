@@ -9,18 +9,22 @@ import domain.event.IEventRepo;
 import java.time.LocalDateTime;
 import java.util.List;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
 import java.util.NoSuchElementException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-
+@Service
 public class EventService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
 
     private final IEventRepo eventRepo;
     private final IAuth auth;
 
+    @Autowired
     public EventService(IAuth auth, IEventRepo eventRepo) {
         this.eventRepo = eventRepo;
         this.auth = auth;

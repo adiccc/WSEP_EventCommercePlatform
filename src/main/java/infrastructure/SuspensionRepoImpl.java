@@ -10,6 +10,9 @@ import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.stereotype.Repository;
+
+@Repository
 
 public class SuspensionRepoImpl implements ISuspensionRepo {
     ConcurrentHashMap<Integer,List<Integer>> suspensionsIdByUserID = new ConcurrentHashMap<>(); //<User id, List<Susoensions id>>
