@@ -26,7 +26,7 @@ public class HomePresenter {
      * View checks for null and calls getLastError() if needed.
      */
     public List<CompanyDTO> getCompanies(String token) {
-        var response = companyService.getAvailableCompanies(token != null ? token : "");
+        var response = companyService.getAvailableCompanies(token);
         lastError = response.getMessage();
         return response.getValue();
     }

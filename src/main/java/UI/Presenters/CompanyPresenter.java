@@ -25,7 +25,7 @@ public class CompanyPresenter {
 
     /** Returns full company details including contact info and future events. */
     public Response<CompanyDetailsDTO> getCompany(String token, int companyId) {
-        return companyService.getProductionCompany(token != null ? token : "", companyId);
+        return companyService.getProductionCompany(token, companyId);
     }
 
     /**
@@ -33,6 +33,6 @@ public class CompanyPresenter {
      * Any filter field left null means "no restriction on that field".
      */
     public Response<List<EventDTO>> searchEvents(String token, int companyId, EventSearchFilter filter) {
-        return eventService.searchCompanyEvents(token != null ? token : "", companyId, filter);
+        return eventService.searchCompanyEvents(token, companyId, filter);
     }
 }
