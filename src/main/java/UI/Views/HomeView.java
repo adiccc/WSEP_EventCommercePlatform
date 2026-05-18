@@ -172,8 +172,13 @@ public class HomeView extends VerticalLayout {
                         : "var(--lumo-error-text-color)");
 
         card.add(avatarRow, badge);
-        card.addClickListener(e ->
-                getUI().ifPresent(ui -> ui.navigate("company/" + company.getCompanyId())));
+        card.addClickListener(e -> {
+            // Cache the name so CompanyView can show it even when guest token
+            // can't call getProductionCompany (backend doesn't support guest access)
+            VaadinSession.getCurrent().setAttribute(
+                    "company_name_" + company.getCompanyId(), company.getCompanyName());
+            getUI().ifPresent(ui -> ui.navigate("company/" + company.getCompanyId()));
+        });
 
         return card;
     }

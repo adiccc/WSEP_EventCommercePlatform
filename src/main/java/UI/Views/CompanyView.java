@@ -78,15 +78,18 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
                 e -> getUI().ifPresent(ui -> ui.navigate("")));
         back.getElement().setAttribute("theme", "tertiary");
 
-        // Load and display company header
+        // Load and display company header.
+        // getProductionCompany requires a logged-in member (userId != -1),
+        // so guests fall back to the name cached in the session by HomeView.
         var companyResponse = presenter.getCompany(token, companyId);
-        if (companyResponse.getValue() == null) {
-            add(back, new Paragraph("Error loading company: " + companyResponse.getMessage()));
-            return;
+        if (companyResponse.getValue() != null) {
+            add(back, buildCompanyHeader(companyResponse.getValue()));
+        } else {
+            String cachedName = (String) VaadinSession.getCurrent()
+                    .getAttribute("company_name_" + companyId);
+            String displayName = cachedName != null ? cachedName : "Company #" + companyId;
+            add(back, buildGuestCompanyHeader(displayName));
         }
-
-        CompanyDetailsDTO company = companyResponse.getValue();
-        add(back, buildCompanyHeader(company));
 
         // Filter section
         add(buildFilterSection(token));
@@ -100,6 +103,24 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
     }
 
     // ── Company header ────────────────────────────────────────────────────────
+
+    /** Minimal header shown when the user is a guest (no access to full company details). */
+    private VerticalLayout buildGuestCompanyHeader(String companyName) {
+        VerticalLayout header = new VerticalLayout();
+        header.setPadding(false);
+        header.setSpacing(false);
+        header.getStyle()
+                .set("background", "var(--lumo-base-color)")
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "var(--lumo-border-radius-l)")
+                .set("padding", "1.25rem")
+                .set("margin-bottom", "0.5rem");
+
+        H2 name = new H2(companyName);
+        name.getStyle().set("margin", "0");
+        header.add(name);
+        return header;
+    }
 
     private VerticalLayout buildCompanyHeader(CompanyDetailsDTO company) {
         VerticalLayout header = new VerticalLayout();
@@ -213,10 +234,10 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
         eventGrid.setWidthFull();
         eventGrid.setHeight("400px");
 
-        // Click row → navigate to event details page (implement later)
+        // Click row → navigate to event details page
         eventGrid.addItemClickListener(e ->
                 getUI().ifPresent(ui ->
-                        ui.navigate("event/" + e.getItem().getEventID())));
+                        ui.navigate("event/" + companyId + "/" + e.getItem().getEventID())));
     }
 
     private void loadEvents(String token, EventSearchFilter filter) {

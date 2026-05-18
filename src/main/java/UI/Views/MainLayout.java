@@ -2,6 +2,7 @@ package UI.Views;
 
 import application.IAuth;
 import application.Response;
+import application.UserService;
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.applayout.DrawerToggle;
 import com.vaadin.flow.component.html.H1;
@@ -20,11 +21,28 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 public class MainLayout extends AppLayout implements RouterLayout {
 
     private final IAuth auth;
+    private final UserService userService;
 
-    public MainLayout(IAuth auth) {
+    public MainLayout(IAuth auth, UserService userService) {
         this.auth = auth;
+        this.userService = userService;
+        ensureToken();
         createHeader();
         createDrawer();
+    }
+
+    /**
+     * If the session has no token yet, automatically obtain a guest token
+     * so that all service calls work without requiring an explicit login.
+     */
+    private void ensureToken() {
+        String token = (String) VaadinSession.getCurrent().getAttribute("token");
+        if (token == null || token.isBlank()) {
+            Response<String> r = userService.continueAsGuest();
+            if (r.getValue() != null) {
+                VaadinSession.getCurrent().setAttribute("token", r.getValue());
+            }
+        }
     }
 
     private void createHeader() {

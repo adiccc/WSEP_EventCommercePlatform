@@ -1,5 +1,7 @@
 package UI;
 
+import DTO.ElementPositionDTO;
+import DTO.StandingZoneDTO;
 import application.*;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
@@ -9,6 +11,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.logging.Logger;
 
 /**
@@ -163,8 +166,31 @@ public class DataSeeder implements ApplicationRunner {
         var r = eventService.createEvent(token, companyId, date, name, saleStart, false, area, category);
         if (r.getValue() == null) {
             log.warning("DataSeeder: event creation failed [" + name + "] — " + r.getMessage());
+            return;
+        }
+        int eventId = r.getValue();
+        log.info("DataSeeder: created event [" + name + "] id=" + eventId);
+
+        // Add a simple standing-zone map so the event becomes active
+        activateEvent(token, eventId, name);
+    }
+
+    /**
+     * Creates a minimal seating map for the event.
+     * Without a map, events stay inactive and won't appear in search results.
+     */
+    private void activateEvent(String token, int eventId, String eventName) {
+        ElementPositionDTO stage   = new ElementPositionDTO(0, 0);
+        ElementPositionDTO entry   = new ElementPositionDTO(1, 0);
+        StandingZoneDTO    zone    = new StandingZoneDTO(200, "General", 50.0,
+                                        new ElementPositionDTO(0, 1));
+
+        var r = eventService.DefineVenueAndSeatingMap(
+                token, eventId, stage, List.of(entry), List.of(zone), List.of());
+        if (r.getValue() == null || !r.getValue()) {
+            log.warning("DataSeeder: map creation failed for [" + eventName + "] — " + r.getMessage());
         } else {
-            log.info("DataSeeder: created event [" + name + "]");
+            log.info("DataSeeder: activated event [" + eventName + "]");
         }
     }
 }

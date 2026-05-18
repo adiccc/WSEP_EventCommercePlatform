@@ -99,20 +99,26 @@ public class CompanyService {
 
     public Response<CompanyDetailsDTO> getProductionCompany(String sessionToken, int companyId) {
         return RetryHelper.executeWithRetry(()-> {
-            logger.info("viewRolesAndPermissionsTree called for companyId: " + companyId);
+            logger.info("getProductionCompany called for companyId: " + companyId);
             try {
-                // 1. Validate token
-                int userId = auth.getUserId(sessionToken).getValue();
-                if (userId == -1) {
-                    logger.warning("viewRolesAndPermissionsTree failed: invalid or expired token");
+                // 1. Validate token — guests have userId == -1, which is fine for read-only access
+                String role = auth.getRole(sessionToken).getValue();
+                if (role == null) {
+                    logger.warning("getProductionCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
                 // 2. Company must exist
                 Company company = companyRepo.findById(companyId);
-                Member member = userRepo.findById(userId);
-                member.changeState(company.getCompanyPermission().getUserState(userId));
-                userRepo.store(member);
-                logger.info("viewRolesAndPermissionsTree successful");
+                // 3. For members, sync their role state within the company
+                if ("MEMBER".equals(role)) {
+                    int userId = auth.getUserId(sessionToken).getValue();
+                    if (userId != -1) {
+                        Member member = userRepo.findById(userId);
+                        member.changeState(company.getCompanyPermission().getUserState(userId));
+                        userRepo.store(member);
+                    }
+                }
+                logger.info("getProductionCompany successful");
                 return Response.ok(new CompanyDetailsDTO(company));
             } catch (OptimisticLockingFailureException e) {
                 throw e;
