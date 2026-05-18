@@ -20,8 +20,9 @@ public class EventDTO {
     private int creatorId;
     private String saleStartDate;
     private String categoryEvent;
+    private int companyId;
 
-    public EventDTO(Integer eventID, String eventName, LocalDateTime eventDate, LocalDateTime saleStartDate, CategoryEvent categoryEvent, GeographicalArea eventLocation, int creatorId) {
+    public EventDTO(Integer eventID, String eventName, LocalDateTime eventDate, LocalDateTime saleStartDate, CategoryEvent categoryEvent, GeographicalArea eventLocation, int creatorId, int companyId) {
         this.eventID = eventID;
         this.eventName = eventName;
         this.eventDate = eventDate.toString();
@@ -29,6 +30,7 @@ public class EventDTO {
         this.saleStartDate = saleStartDate.toString();
         this.categoryEvent = categoryEvent.name();
         this.creatorId = creatorId;
+        this.companyId = companyId;
     }
 
     public EventDTO(Event event) {
@@ -39,6 +41,7 @@ public class EventDTO {
         this.saleStartDate = event.getSaleStartDate().toString();
         this.categoryEvent = event.getCategoryEvent().name();
         this.creatorId = event.getCreatorId();
+        this.companyId = event.getCompanyId();
     }
 
     public Integer getEventID() {
@@ -57,4 +60,19 @@ public class EventDTO {
         return eventName;
     }
 
+    public String getEventDate() {
+        return eventDate;
+    }
+
+    public String getSaleStartDate() {
+        return saleStartDate;
+    }
+
+    public int getCreatorId() {
+        return creatorId;
+    }
+
+    public int getCompanyId() {
+        return companyId;
+    }
 }

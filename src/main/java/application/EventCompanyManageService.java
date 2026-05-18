@@ -444,7 +444,8 @@ public class EventCompanyManageService {
                                 e.getSaleStartDate(),
                                 e.getCategoryEvent(),
                                 e.getLocation(),
-                                e.getCreatorId()
+                                e.getCreatorId(),
+                                e.getCompanyId()
                         )).toList();
                 CompanyDetailsDTO companyDetailsDTO = new CompanyDetailsDTO(
                         companyId,

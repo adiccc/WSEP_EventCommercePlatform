@@ -59,4 +59,12 @@ public class EventDetailsDTO {
     public String getName() {
         return eventName;
     }
+
+    public String getCategoryEvent() {
+        return categoryEvent;
+    }
+
+    public String getLocation() {
+        return eventLocation;
+    }
 }
