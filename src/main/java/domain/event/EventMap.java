@@ -137,4 +137,13 @@ public class EventMap {
             zone.markTicketsAsSold(ticketIds);
         }
     }
+
+    public boolean isSoldOut() {
+        for (Zone zone : zones) {
+            if (zone.hasAvailableTickets()) {
+                return false;
+            }
+        }
+        return true;
+    }
 }

@@ -139,4 +139,14 @@ public class SeatingZone extends Zone {
             }
         }
     }
+
+    @Override
+    public boolean hasAvailableTickets() {
+        for (SeatingTicket ticket : ticketMap.values()) {
+            if (ticket.getStatus() == TicketStatus.AVAILABLE) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

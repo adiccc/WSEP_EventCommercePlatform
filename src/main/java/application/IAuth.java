@@ -11,5 +11,7 @@ public interface IAuth {
     Response<String> getRole(String token);
     Response<UserDTO> getUserDTO(String identifier);
     Response<String> getUserEmail(String token);
+    Response<String> getUserIdentifier(String token);
+
 
 }

@@ -139,6 +139,7 @@ class ActiveOrderServiceTest {
                 paymentSystem,
                 ticketSupply,
                 accessValidator,
+                notifier,
                 capacity
         );
     }
