@@ -1,5 +1,6 @@
 package application;
 
+import DTO.NotifyDTO;
 import DTO.QueueEntryResultDTO;
 import domain.dto.UserDTO;
 import domain.user.*;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -237,29 +239,47 @@ public class UserService {
             }
         });
     }
-    public Response<Boolean> deliverDelayedNotifications(String userEmail) {
+    public Response<List<NotifyDTO>> getDelayedNotifications(String userEmail) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("deliverDelayedNotifications attempt started for email: " + userEmail);
             if (userEmail == null || userEmail.isBlank()) {
                 logger.warning("Failed to deliver notifications: Email is empty or null");
-                return new Response<>(false, "Invalid email address");
+                return new Response<>(null, "Invalid email address");
             }
             try {
-                boolean ret = notifier.deliverDelayedNotifications(userEmail);
-                if(ret) {
-                    userRepo.store(userRepo.findUserByEmail(userEmail));
-                    logger.info("Successfully processed delayed notifications for: " + userEmail);
-                    return new Response<>(true, "Successfully processed delayed notifications");
-                }
-                else{
-                    logger.warning("Failed to deliver notifications for: " + userEmail);
-                    return new Response<>(false, "Failed to deliver notifications");
-                }
+                Member member = userRepo.findUserByEmail(userEmail);
+                List<NotifyDTO> allDelayedNotification = member.getDelayedNotifications();
+                logger.info("deliverDelayedNotifications successful for email: " + userEmail);
+                return new Response<>(allDelayedNotification, "Successfully processed delayed notifications");
             } catch (OptimisticLockingFailureException e) {
                 throw e;
             } catch (Exception e) {
                 logger.severe("deliverDelayedNotifications failed: " + e.getMessage());
-                return new Response<>(false, "Server error during deliverDelayedNotifications: " + e.getMessage());
+                return new Response<>(null, "Server error during deliverDelayedNotifications: " + e.getMessage());
+            }
+        });
+    }
+    public Response<Boolean> cleanDelayedNotifications(String userEmail) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("cleanDelayedNotifications attempt started for email: " + userEmail);
+            if (userEmail == null || userEmail.isBlank()) {
+                logger.warning("Failed to clean delayed notifications: Email is empty or null");
+                return new Response<>(false, "Invalid email address");
+            }
+            try {
+                Member member = userRepo.findUserByEmail(userEmail);
+                if (member != null) {
+                    member.clearDelayedNotifications();
+                    userRepo.store(member);
+                    logger.info("deliverDelayedNotifications successful for email: " + userEmail);
+                    return new Response<>(true, "Successfully cleaned delayed notifications");
+                }
+                return new Response<>(false, "User not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("cleanDelayedNotifications failed: " + e.getMessage());
+                return new Response<>(false, "Server error during cleanDelayedNotifications: " + e.getMessage());
             }
         });
     }

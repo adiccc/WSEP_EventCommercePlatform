@@ -51,27 +51,6 @@ public class VaadinNotifier implements INotifier {
     public boolean notifyTab(String tabId, NotifyDTO notification){ //because we dont have suspended notifications
         return Broadcaster.broadcastToTab(tabId, notification);
     }
-    @Override
-    public boolean deliverDelayedNotifications(String userIdentifier) {
-        logger.info("Fetching delayed notifications for user: " + userIdentifier);
-        try {
-            Member member = userRepo.findUserByEmail(userIdentifier);
-            if (member != null && !member.getDelayedNotifications().isEmpty()) {
-                List<NotifyDTO> pendingNotifications = new ArrayList<>(member.getDelayedNotifications());
-                logger.info("Found " + pendingNotifications.size() + " delayed notifications for " + userIdentifier);
-                for (NotifyDTO notification : pendingNotifications) {
-                    Broadcaster.broadcastToUser(userIdentifier, notification);
-                }
-                member.clearDelayedNotifications();
-                logger.info("Successfully delivered and cleared delayed notifications for: " + userIdentifier);
-                return true;
-            }
-        } catch (Exception e) {
-            logger.severe("Error delivering delayed notifications for " + userIdentifier + ": " + e.getMessage());
-            return false;
-        }
-        return false;
-    }
 }
 
 
