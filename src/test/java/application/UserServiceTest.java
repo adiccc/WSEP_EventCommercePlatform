@@ -627,7 +627,7 @@ class UserServiceTest {
 
         Response<Boolean> response = userService.deliverDelayedNotifications(dto.getEmail());
 
-        // Assert:
+        // Assert
         assertTrue(response.getValue());
 
         assertTrue(userRepo.findUserByEmail(dto.getEmail()).getDelayedNotifications().isEmpty());
