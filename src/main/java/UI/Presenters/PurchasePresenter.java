@@ -1,5 +1,6 @@
 package UI.Presenters;
 
+import DTO.EnterPurchaseDTO;
 import application.ActiveOrderService;
 import application.Response;
 import domain.dto.EventMapDTO;
@@ -17,7 +18,7 @@ public class PurchasePresenter {
         this.activeOrderService = activeOrderService;
     }
 
-    public Response<EventMapDTO> enterPurchase(
+    public Response<EnterPurchaseDTO> enterPurchase(
             String token,
             int companyId,
             int eventId

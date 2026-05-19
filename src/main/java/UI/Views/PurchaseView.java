@@ -1,8 +1,10 @@
 package UI.Views;
 
 import DTO.ElementPositionDTO;
+import DTO.EnterPurchaseDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
+import domain.activeOrder.STAGE;
 import UI.Presenters.PurchasePresenter;
 import application.ActiveOrderService;
 import application.Response;
@@ -61,7 +63,7 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
 
         String token = (String) VaadinSession.getCurrent().getAttribute("token");
 
-        Response<EventMapDTO> response =
+        Response<EnterPurchaseDTO> response =
                 presenter.enterPurchase(token, companyId, eventId);
 
         if (response.getValue() == null) {
@@ -69,7 +71,20 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
             return;
         }
 
-        this.eventMap = response.getValue();
+        if (response.getValue().isExistingOrder()) {
+            ActiveOrderDTO order = response.getValue().getActiveOrder();
+
+            if (order.getStage() == STAGE.CHECKING_OUT) {
+                UI.getCurrent().navigate("checkout/" + order.getId());
+                return;
+            }
+
+            Notification.show("You already started this order. Continue selecting tickets.");
+        }
+
+        this.eventMap = response.getValue().getEventMap();
+
+        this.eventMap = response.getValue().getEventMap();
 
         add(buildHeader());
 

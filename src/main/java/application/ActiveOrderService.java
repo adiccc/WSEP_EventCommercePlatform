@@ -1,5 +1,6 @@
 package application;
 
+import DTO.EnterPurchaseDTO;
 import DTO.PaymentDetailsDTO;
 import DTO.TicketSupplyRequestDTO;
 import DTO.TicketSupplyResultDTO;
@@ -91,89 +92,142 @@ public class ActiveOrderService {
         return this.capacity;
     }
 
-    public Response<EventMapDTO> enterEventPurchase(String token, int companyId, int eventId) {
-        return RetryHelper.executeWithRetry(() ->
-        {
+    public Response<EnterPurchaseDTO> enterEventPurchase(String token, int companyId, int eventId) {
+        return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "enterEventPurchase called");
             cleanupExpiredOrders();
 
-            // check valid token
             String role = auth.getRole(token).getValue();
-            if(role == null){
+
+            if (role == null) {
                 logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
             }
-            if(!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())){
+
+            Integer userId = auth.getUserId(token).getValue();
+
+            if (!accessValidator.hasWriteAccess(userId)) {
                 logger.severe("User does not have write access");
                 return new Response<>(null, "user does not have write access.");
             }
 
             try {
                 Event e = this.eventRepo.findById(eventId);
-                this.activeOrderRepo.alreadyHasActiveOrder(auth.getUserEmail(token).getValue(), eventId);
+
                 if (e.getCompanyId() != companyId) {
                     logger.log(Level.SEVERE, "The selected event does not belong to the company");
                     return new Response<>(null, "The selected event does not belong to the company");
                 }
+
                 if (!e.isActive()) {
                     logger.log(Level.SEVERE, "The selected event is not active");
                     return new Response<>(null, "The selected event is not active");
                 }
-                if (e.getSaleStartDate().isAfter(java.time.LocalDateTime.now())) {
+
+                if (e.getSaleStartDate().isAfter(LocalDateTime.now())) {
                     logger.log(Level.SEVERE, "The sale for this event has not started yet");
                     return new Response<>(null, "The sale for this event has not started yet");
                 }
 
+                String userIdentifier = role.equals("MEMBER")
+                        ? auth.getUserEmail(token).getValue()
+                        : token;
+
+                Optional<ActiveOrder> existingOrder =
+                        activeOrderRepo.findActiveOrderByUserAndEvent(userIdentifier, eventId);
+
+                if (existingOrder.isPresent()) {
+                    logger.log(Level.INFO,
+                            "Existing active order found. Redirecting user to checkout. Order ID: "
+                                    + existingOrder.get().getId());
+
+                    if (existingOrder.isPresent()) {
+                        return new Response<>(
+                                new EnterPurchaseDTO(
+                                        new EventMapDTO(e.getMap()),
+                                        new ActiveOrderDTO(existingOrder.get()),
+                                        true
+                                ),
+                                "Existing active order found"
+                        );
+                    }
+                }
+
                 if (e.hasLottery()) {
                     Lottery l = lotteryRepo.findById(eventId);
-                    int code = auth.getUserId(token).getValue(); // the code of each user who registered to the lottery is his ID because there ara no notifications in the system
-                    LocalDateTime lotteryEndTime = e.getSaleStartDate().plusHours(l.getExpirationTime());
+                    int code = userId;
+
+                    LocalDateTime lotteryEndTime =
+                            e.getSaleStartDate().plusHours(l.getExpirationTime());
+
                     if (!l.getWinners().contains(code)) {
-                        if (LocalDateTime.now().isBefore(lotteryEndTime))
-                            return new Response<>(null, "User is not a lottery winner and lottery registration is still open");
+                        if (LocalDateTime.now().isBefore(lotteryEndTime)) {
+                            return new Response<>(
+                                    null,
+                                    "User is not a lottery winner and lottery registration is still open"
+                            );
+                        }
                     }
                 }
 
                 if (capacity <= activeOrderRepo.countActiveOrdersForEvent(eventId)) {
-                     // capacity check before allowing to enter the purchase flow
                     if (e.getEventQueue().contains(token)) {
                         int position = e.getEventQueue().position(token);
-                        return new Response<>(null,
-                                "User is still waiting in queue. Position: " + position);
+
+                        return new Response<>(
+                                null,
+                                "User is still waiting in queue. Position: " + position
+                        );
                     }
+
                     e.getEventQueue().enqueue(token);
-                    eventRepo.store(e); // persist the updated event with the new queue state
+                    eventRepo.store(e);
+
                     int position = e.getEventQueue().position(token);
-                    return new Response<>(null,
-                            "Event is full, user added to waiting queue. Position: " + position);
-                }
-                int orderId = idGenerator.getAndIncrement();
-                if(role.equals("MEMBER")) {
-                    ActiveOrder newActiveOrder = new ActiveOrder(orderId, auth.getUserEmail(token).getValue(), eventId, new ArrayList<>()); //for member the user identifier is email
-                    logger.log(Level.SEVERE, "Creating active order with ID: " + newActiveOrder.getId() + " for user ID: " + newActiveOrder.getUserIdentifier() + " and event ID: " + newActiveOrder.getEventId());
-                    eventRepo.store(e);
-                    activeOrderRepo.store(newActiveOrder);
-                }
-                else if(role.equals("GUEST")) {
-                    ActiveOrder newActiveOrder = new ActiveOrder(orderId,token, eventId, new ArrayList<>()); //for guest user identifier is token
-                    logger.log(Level.SEVERE, "Creating active order with ID: " + newActiveOrder.getId() + " for user ID: " + newActiveOrder.getUserIdentifier() + " and event ID: " + newActiveOrder.getEventId());
-                    eventRepo.store(e);
-                    activeOrderRepo.store(newActiveOrder);
+
+                    return new Response<>(
+                            null,
+                            "Event is full, user added to waiting queue. Position: " + position
+                    );
                 }
 
+                int orderId = idGenerator.getAndIncrement();
+
+                ActiveOrder newActiveOrder =
+                        new ActiveOrder(orderId, userIdentifier, eventId, new ArrayList<>());
+
+                logger.log(Level.INFO,
+                        "Creating active order with ID: " + newActiveOrder.getId()
+                                + " for user identifier: " + newActiveOrder.getUserIdentifier()
+                                + " and event ID: " + newActiveOrder.getEventId());
+
+                eventRepo.store(e);
+                activeOrderRepo.store(newActiveOrder);
+
                 logger.log(Level.INFO, "Event map retrieved successfully");
-                return new Response<>(new EventMapDTO(e.getMap()), "Event map retrieved successfully");
+
+                return new Response<>(
+                        new EnterPurchaseDTO(
+                                new EventMapDTO(e.getMap()),
+                                new ActiveOrderDTO(newActiveOrder),
+                                false
+                        ),
+                        "Event map retrieved successfully"
+                );
+
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(null, "Event not found");
-            } catch (IllegalStateException e) {
-                logger.log(Level.SEVERE, e.getMessage());
-                return new Response<>(null, e.getMessage());
+
             } catch (OptimisticLockingFailureException e) {
                 throw e;
+
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to enter event purchase : " + e.getMessage());
-                return new Response<>(null, "Failed to enter event purchase  : " + e.getMessage());
+                return new Response<>(
+                        null,
+                        "Failed to enter event purchase  : " + e.getMessage()
+                );
             }
         });
     }
@@ -234,10 +288,21 @@ public class ActiveOrderService {
             c.quantityExceedsPolicy(userResponse.getValue(), totalTickets,totalUserTickets);
             ActiveOrder newActiveOrder;
             try {
-                newActiveOrder = activeOrderRepo.findById(activeOrderRepo.findOrderByUserId(auth.getUserEmail(identifier).getValue()).getId());
+                String userIdentifier = role.equals("MEMBER")
+                        ? auth.getUserEmail(identifier).getValue()
+                        : identifier;
+
+                ActiveOrderDTO activeOrderDTO =
+                        activeOrderRepo.findActiveOrderByUserAndEvent(userIdentifier, eventId)
+                                .map(ActiveOrderDTO::new)
+                                .orElseThrow(() -> new NoSuchElementException(
+                                        "Active order not found for user"
+                                ));
+
+                newActiveOrder = activeOrderRepo.findById(activeOrderDTO.getId());
             }
             catch (NoSuchElementException ex) {
-                logger.log(Level.SEVERE, "Active order not found for user: " + auth.getUserId(identifier).getValue());
+                logger.log(Level.SEVERE, "Active order not found for user");
                 return new Response<>(null, "Active order not found for user");
             }
             List<Integer> tickets = e.bookTickets(seatingZones,standingZones);

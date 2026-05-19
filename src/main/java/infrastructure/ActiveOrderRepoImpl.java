@@ -4,6 +4,7 @@ import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import Exception.OptimisticLockingFailureException;
 import domain.dto.ActiveOrderDTO;
+import java.util.Optional;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -111,6 +112,18 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
         return count;
     }
 
+    @Override
+    public Optional<ActiveOrder> findActiveOrderByUserAndEvent(String userIdentifier, int eventId) {
+        for (ActiveOrder order : activeOrders.values()) {
+            if (order.getUserIdentifier().equals(userIdentifier)
+                    && order.getEventId() != null
+                    && order.getEventId().equals(eventId)) {
 
+                return Optional.of(new ActiveOrder(order));
+            }
+        }
+
+        return Optional.empty();
+    }
 
 }

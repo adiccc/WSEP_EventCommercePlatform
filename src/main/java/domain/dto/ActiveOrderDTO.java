@@ -55,4 +55,7 @@ public class ActiveOrderDTO {
         return userIdentifier;
     }
 
+    public STAGE getStage() {
+        return stage;
+    }
 }
