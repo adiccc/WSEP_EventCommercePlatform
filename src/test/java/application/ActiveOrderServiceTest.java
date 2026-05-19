@@ -144,7 +144,7 @@ class ActiveOrderServiceTest {
     }
     @Test
     void GivenInvalidToken_WhenEnterPurchase_ThenErrorReturned() {
-        Response<EventMapDTO> response = service.enterEventPurchase("", companyId, eventId);
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase("", companyId, eventId);
 
         assertNull(response.getValue());
         assertEquals("Invalid token", response.getMessage());
@@ -152,7 +152,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenNonExistingEvent_WhenEnterPurchase_ThenEventNotFound() {
-        Response<EventMapDTO> response = service.enterEventPurchase(validToken, companyId, -1);
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase(validToken, companyId, -1);
 
         assertNull(response.getValue());
         assertEquals("Event not found", response.getMessage());
@@ -160,7 +160,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenWrongCompany_WhenEnterPurchase_ThenMismatchError() {
-        Response<EventMapDTO> response = service.enterEventPurchase(validToken, 999, eventId);
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase(validToken, 999, eventId);
 
         assertNull(response.getValue());
         assertEquals("The selected event does not belong to the company", response.getMessage());
@@ -168,7 +168,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenFutureSaleWithoutLottery_WhenEnterPurchase_ThenSaleNotStarted() {
-        Response<EventMapDTO> response = service.enterEventPurchase(validToken, companyId, eventId);
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase(validToken, companyId, eventId);
 
         assertNull(response.getValue());
         assertEquals("The sale for this event has not started yet", response.getMessage());
@@ -176,7 +176,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenValidEvent_WhenEnterPurchase_ThenReturnEventMap() {
-        Response<EventMapDTO> response =
+        Response<EnterPurchaseDTO> response =
                 service.enterEventPurchase(validToken, companyId, concurrentEventId);
 
         assertNotNull(response.getValue());
@@ -201,7 +201,7 @@ class ActiveOrderServiceTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(usersCount);
         CountDownLatch start = new CountDownLatch(1);
-        List<Future<Response<EventMapDTO>>> futures = new ArrayList<>();
+        List<Future<Response<EnterPurchaseDTO>>> futures = new ArrayList<>();
 
         for (String token : tokens) {
             futures.add(executor.submit(() -> {
@@ -215,8 +215,8 @@ class ActiveOrderServiceTest {
         int success = 0;
         int queued = 0;
 
-        for (Future<Response<EventMapDTO>> future : futures) {
-            Response<EventMapDTO> response = future.get();
+        for (Future<Response<EnterPurchaseDTO>> future : futures) {
+            Response<EnterPurchaseDTO> response = future.get();
             if (response.getValue() != null) success++;
             if ("Event is full, user added to waiting queue".equals(response.getMessage())) queued++;
         }
@@ -247,7 +247,7 @@ class ActiveOrderServiceTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(usersCount);
         CountDownLatch start = new CountDownLatch(1);
-        List<Future<Response<EventMapDTO>>> futures = new ArrayList<>();
+        List<Future<Response<EnterPurchaseDTO>>> futures = new ArrayList<>();
 
         for (String token : tokens) {
             futures.add(executor.submit(() -> {
@@ -261,10 +261,17 @@ class ActiveOrderServiceTest {
         int success = 0;
         int queued = 0;
 
-        for (Future<Response<EventMapDTO>> future : futures) {
-            Response<EventMapDTO> response = future.get();
-            if (response.getValue() != null) success++;
-            if (response.getMessage() != null && response.getMessage().startsWith("Event is full")) queued++;
+        for (Future<Response<EnterPurchaseDTO>> future : futures) {
+            Response<EnterPurchaseDTO> response = future.get();
+            EnterPurchaseDTO dto = response.getValue();
+
+            if (dto != null && !dto.isWaitingInQueue()) {
+                success++;
+            }
+
+            if (dto != null && dto.isWaitingInQueue()) {
+                queued++;
+            }
         }
 
         executor.shutdown();
@@ -288,7 +295,7 @@ class ActiveOrderServiceTest {
             ));
             String fillerToken = userService.login(email, "pass").getValue();
 
-            Response<EventMapDTO> fillerResp =
+            Response<EnterPurchaseDTO> fillerResp =
                     service.enterEventPurchase(fillerToken, companyId, concurrentEventId);
             assertNotNull(fillerResp.getValue(),
                     "Filler user " + i + " should have received the map (slot available)");
@@ -313,35 +320,40 @@ class ActiveOrderServiceTest {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
 
-        Future<Response<EventMapDTO>> futureA = executor.submit(() -> {
+        Future<Response<EnterPurchaseDTO>> futureA = executor.submit(() -> {
             start.await();
             return service.enterEventPurchase(tokenA, companyId, concurrentEventId);
         });
-        Future<Response<EventMapDTO>> futureB = executor.submit(() -> {
+        Future<Response<EnterPurchaseDTO>> futureB = executor.submit(() -> {
             start.await();
             return service.enterEventPurchase(tokenB, companyId, concurrentEventId);
         });
 
         start.countDown();
 
-        Response<EventMapDTO> responseA = futureA.get();
-        Response<EventMapDTO> responseB = futureB.get();
+        Response<EnterPurchaseDTO> responseA = futureA.get();
+        Response<EnterPurchaseDTO> responseB = futureB.get();
         executor.shutdown();
 
         int success = 0;
-        int queued  = 0;
+        int queued = 0;
 
-        if (responseA.getValue() != null) success++; else queued++;
-        if (responseB.getValue() != null) success++; else queued++;
+        EnterPurchaseDTO dtoA = responseA.getValue();
+        EnterPurchaseDTO dtoB = responseB.getValue();
+
+        if (dtoA != null && dtoA.isWaitingInQueue()) queued++;
+        else if (dtoA != null) success++;
+
+        if (dtoB != null && dtoB.isWaitingInQueue()) queued++;
+        else if (dtoB != null) success++;
 
         // The critical race-condition assertion: two threads must never both win the last slot
         assertEquals(1, success);
         assertEquals(1, queued);
 
         // Confirm the loser has a real queue position (not an error response)
-        Response<EventMapDTO> loser = (responseA.getValue() == null) ? responseA : responseB;
-        assertTrue(loser.getMessage().startsWith("Event is full"),
-                "Losing racer should receive a queue confirmation, got: " + loser.getMessage());
+        Response<EnterPurchaseDTO> loser = responseA.getValue().isWaitingInQueue() ? responseA : responseB;
+        assertTrue(loser.getValue().isWaitingInQueue());
     }
     @Test
     void GivenNullTicketSupplyRequest_WhenIssueTickets_ThenInvalidRequestReturned() {
@@ -1466,7 +1478,7 @@ class ActiveOrderServiceTest {
 
         String newToken = userService.login(newEmail, "pass").getValue();
 
-        Response<EventMapDTO> enterResponse =
+        Response<EnterPurchaseDTO> enterResponse =
                 service.enterEventPurchase(newToken, companyId, concurrentEventId);
 
         assertNotNull(enterResponse.getValue(),
@@ -1645,7 +1657,7 @@ class ActiveOrderServiceTest {
             String token = userService.login(email, "pass").getValue();
             tokens.add(token);
 
-            Response<EventMapDTO> enterResponse =
+            Response<EnterPurchaseDTO> enterResponse =
                     service.enterEventPurchase(token, companyId, concurrentEventId);
 
             assertNotNull(enterResponse.getValue(),
@@ -1755,7 +1767,7 @@ class ActiveOrderServiceTest {
             String token = userService.login(email, "pass").getValue();
             tokens.add(token);
 
-            Response<EventMapDTO> enterResponse =
+            Response<EnterPurchaseDTO> enterResponse =
                     service.enterEventPurchase(token, companyId, concurrentEventId);
 
             assertNotNull(enterResponse.getValue(),
@@ -1984,7 +1996,7 @@ class ActiveOrderServiceTest {
             String token = userService.login(email, "pass").getValue();
             tokens.add(token);
 
-            Response<EventMapDTO> enterResponse =
+            Response<EnterPurchaseDTO> enterResponse =
                     service.enterEventPurchase(token, companyId, concurrentEventId);
 
             assertNotNull(enterResponse.getValue(),
@@ -2073,7 +2085,7 @@ class ActiveOrderServiceTest {
             String token = userService.login(email, "pass").getValue();
             tokens.add(token);
 
-            Response<EventMapDTO> enterResponse =
+            Response<EnterPurchaseDTO> enterResponse =
                     service.enterEventPurchase(token, companyId, concurrentEventId);
 
             assertNotNull(enterResponse.getValue());
@@ -2417,7 +2429,7 @@ class ActiveOrderServiceTest {
 
         ExecutorService enterExecutor = Executors.newFixedThreadPool(usersCount);
         CountDownLatch enterStart = new CountDownLatch(1);
-        Map<String, Future<Response<EventMapDTO>>> enterFutures = new HashMap<>();
+        Map<String, Future<Response<EnterPurchaseDTO>>> enterFutures = new HashMap<>();
 
         for (String token : tokens) {
             enterFutures.put(token, enterExecutor.submit(() -> {
@@ -2432,15 +2444,14 @@ class ActiveOrderServiceTest {
         List<String> queuedTokens = new ArrayList<>();
 
         for (String token : tokens) {
-            Response<EventMapDTO> response = enterFutures.get(token).get();
+            Response<EnterPurchaseDTO> response = enterFutures.get(token).get();
+            EnterPurchaseDTO dto = response.getValue();
 
-            if (response.getValue() != null) {
+            if (dto != null && !dto.isWaitingInQueue()) {
                 admittedTokens.add(token);
-            } else if (response.getMessage() != null &&
-                    response.getMessage().startsWith("Event is full")) {
+            }
+            if (dto != null && dto.isWaitingInQueue()) {
                 queuedTokens.add(token);
-            } else {
-                fail("Unexpected enter response: " + response.getMessage());
             }
         }
 

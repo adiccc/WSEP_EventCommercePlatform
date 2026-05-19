@@ -1,6 +1,7 @@
 package UI;
 
 import DTO.ElementPositionDTO;
+import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import application.*;
 import domain.dataType.CategoryEvent;
@@ -180,17 +181,64 @@ public class DataSeeder implements ApplicationRunner {
      * Without a map, events stay inactive and won't appear in search results.
      */
     private void activateEvent(String token, int eventId, String eventName) {
-        ElementPositionDTO stage   = new ElementPositionDTO(0, 0);
-        ElementPositionDTO entry   = new ElementPositionDTO(1, 0);
-        StandingZoneDTO    zone    = new StandingZoneDTO(200, "General", 50.0,
-                                        new ElementPositionDTO(0, 1));
+
+        // ── STAGE (top center) ─────────────────────────────
+        ElementPositionDTO stage = new ElementPositionDTO(400, 20);
+
+        // ── ENTRIES (left + right) ─────────────────────────
+        List<ElementPositionDTO> entries = List.of(
+                new ElementPositionDTO(50, 100),
+                new ElementPositionDTO(750, 100)
+        );
+
+        // ── STANDING ZONE (bottom area) ───────────────────
+        StandingZoneDTO standingZone = new StandingZoneDTO(
+                40,
+                "General Standing",
+                80.0,
+                new ElementPositionDTO(70, 450)
+        );
+
+        // ── VIP (close to stage center) ────────────────────
+        SeatingZoneDTO vipZone = new SeatingZoneDTO(
+                3,
+                10,
+                "VIP",
+                300.0,
+                new ElementPositionDTO(270, 150)
+        );
+
+        // ── REGULAR (middle area) ──────────────────────────
+        SeatingZoneDTO regularZone = new SeatingZoneDTO(
+                8,
+                10,
+                "Regular",
+                150.0,
+                new ElementPositionDTO(270, 400)
+        );
+
+        // ── BALCONY (back area) ────────────────────────────
+        SeatingZoneDTO balconyZone = new SeatingZoneDTO(
+                5,
+                3,
+                "Balcony",
+                180.0,
+                new ElementPositionDTO(700, 300)
+        );
 
         var r = eventService.DefineVenueAndSeatingMap(
-                token, eventId, stage, List.of(entry), List.of(zone), List.of());
+                token,
+                eventId,
+                stage,
+                entries,
+                List.of(standingZone),
+                List.of(vipZone, regularZone, balconyZone)
+        );
+
         if (r.getValue() == null || !r.getValue()) {
             log.warning("DataSeeder: map creation failed for [" + eventName + "] — " + r.getMessage());
         } else {
-            log.info("DataSeeder: activated event [" + eventName + "]");
+            log.info("DataSeeder: activated event with VISUAL MAP [" + eventName + "]");
         }
     }
 }
