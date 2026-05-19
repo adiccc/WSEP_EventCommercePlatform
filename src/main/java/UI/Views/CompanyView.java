@@ -6,6 +6,8 @@ import application.EventService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.datetimepicker.DateTimePicker;
+import java.time.LocalDateTime;
 import com.vaadin.flow.component.html.*;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -44,6 +46,8 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
     private final ComboBox<CategoryEvent>    categoryBox = new ComboBox<>("Category");
     private final NumberField minPriceField = new NumberField("Min price (₪)");
     private final NumberField maxPriceField = new NumberField("Max price (₪)");
+    private final DateTimePicker startDateField = new DateTimePicker("Start Date");
+    private final DateTimePicker endDateField = new DateTimePicker("End Date");
 
     // Event grid
     private final Grid<EventDTO> eventGrid = new Grid<>(EventDTO.class, false);
@@ -174,6 +178,8 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
 
         maxPriceField.setMin(0);
         maxPriceField.setWidth("10rem");
+        startDateField.setWidth("14rem");
+        endDateField.setWidth("14rem");
 
         Button applyBtn = new Button("Search", e -> {
             String t = (String) VaadinSession.getCurrent().getAttribute("token");
@@ -192,13 +198,15 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
         });
 
         HorizontalLayout row1 = new HorizontalLayout(keywordField, areaBox, categoryBox);
-        row1.setDefaultVerticalComponentAlignment(Alignment.BASELINE);
 
-        HorizontalLayout row2 = new HorizontalLayout(minPriceField, maxPriceField, applyBtn, clearBtn);
-        row2.setDefaultVerticalComponentAlignment(Alignment.BASELINE);
+        HorizontalLayout row2 = new HorizontalLayout(startDateField, endDateField);
+
+        HorizontalLayout row3 = new HorizontalLayout(minPriceField, maxPriceField, applyBtn, clearBtn);        row1.setDefaultVerticalComponentAlignment(Alignment.BASELINE);
+
+        row3.setDefaultVerticalComponentAlignment(Alignment.BASELINE);
 
         VerticalLayout filterBox = new VerticalLayout(
-                new H3("Filter Events"), row1, row2);
+                new H3("Filter Events"), row1, row2, row3);
         filterBox.setPadding(true);
         filterBox.setSpacing(false);
         filterBox.getStyle()
@@ -216,6 +224,8 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
         filter.setCategory(categoryBox.getValue());
         filter.setMinPrice(minPriceField.getValue());
         filter.setMaxPrice(maxPriceField.getValue());
+        filter.setStartDate(startDateField.getValue());
+        filter.setEndDate(endDateField.getValue());
         return filter;
     }
 
