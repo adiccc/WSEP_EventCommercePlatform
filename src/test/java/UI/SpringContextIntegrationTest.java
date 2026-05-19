@@ -95,6 +95,6 @@ public class SpringContextIntegrationTest {
 
     @Test
     void activeOrderCapacityValueResolves() {
-        assertEquals(100, activeOrderService.getCapacity());
+        assertEquals(20, activeOrderService.getCapacity());
     }
 }
