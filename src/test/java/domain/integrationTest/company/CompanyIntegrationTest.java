@@ -51,7 +51,7 @@ class CompanyIntegrationTest {
 
         // Create and store a founder member directly
         founder = new Member("founder@test.com", "hashedpw", "Founder", "User",
-                "050-111-1111", LocalDate.of(1990, 1, 1), "Tel Aviv");
+                "050-111-1111", LocalDate.of(1990, 1, 1), "Tel Aviv", new ArrayList<>());
         userRepo.store(founder);
 
         // Build a company with the founder's permissions and store it
@@ -199,7 +199,7 @@ class CompanyIntegrationTest {
     /** Helper: creates a manager member, adds a Manager role, stores them, and adds them to the company tree. */
     private Member createAndAddManager(int managerId, String email) {
         Member manager = new Member(email, "hashedpw", "Manager", "User",
-                "050-222-2222", LocalDate.of(1995, 6, 15), "Haifa");
+                "050-222-2222", LocalDate.of(1995, 6, 15), "Haifa", new ArrayList<>());
         manager.changeState(new Manager());
         userRepo.store(manager);
 
@@ -215,7 +215,7 @@ class CompanyIntegrationTest {
         Member manager = createAndAddManager(200, "mgr1@test.com");
         // Add a second manager so removal is allowed
         Member manager2 = new Member("mgr2@test.com", "hashedpw", "Manager2", "User",
-                "050-333-3333", LocalDate.of(1996, 1, 1), "Beer Sheva");
+                "050-333-3333", LocalDate.of(1996, 1, 1), "Beer Sheva", new ArrayList<>());
         manager2.changeState(new Manager());
         userRepo.store(manager2);
         Company stored = companyRepo.findById(COMPANY_ID);
@@ -239,7 +239,7 @@ class CompanyIntegrationTest {
     void GivenManagerWithRole_WhenRemovedFromCompany_ThenCompanyTreeNoLongerContainsManager() {
         Member manager = createAndAddManager(200, "mgr1@test.com");
         Member manager2 = new Member("mgr2@test.com", "hashedpw", "Manager2", "User",
-                "050-333-3333", LocalDate.of(1996, 1, 1), "Beer Sheva");
+                "050-333-3333", LocalDate.of(1996, 1, 1), "Beer Sheva", new ArrayList<>());
         manager2.changeState(new Manager());
         userRepo.store(manager2);
         Company stored = companyRepo.findById(COMPANY_ID);
@@ -261,11 +261,11 @@ class CompanyIntegrationTest {
         Member manager = createAndAddManager(200, "mgr1@test.com");
         // Add a second top-level manager so removal is not blocked
         Member manager2 = new Member("mgr2@test.com", "hashedpw", "Manager2", "User",
-                "050-333-3333", LocalDate.of(1996, 1, 1), "Beer Sheva");
+                "050-333-3333", LocalDate.of(1996, 1, 1), "Beer Sheva", new ArrayList<>());
         userRepo.store(manager2);
         // Add a sub-manager under manager
         Member subManager = new Member("sub@test.com", "hashedpw", "Sub", "Manager",
-                "050-444-4444", LocalDate.of(1997, 3, 10), "Eilat");
+                "050-444-4444", LocalDate.of(1997, 3, 10), "Eilat", new ArrayList<>());
         subManager.changeState(new Manager());
         userRepo.store(subManager);
 

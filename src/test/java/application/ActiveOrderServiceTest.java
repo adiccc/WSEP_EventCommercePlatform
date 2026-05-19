@@ -39,6 +39,7 @@ class ActiveOrderServiceTest {
     private ActiveOrderRepoImpl activeOrderRepo;
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
+    private INotifier notifier;
 
     private String validToken;
     private Integer eventId;
@@ -58,8 +59,8 @@ class ActiveOrderServiceTest {
         ISuspensionRepo suspensionRepo = new SuspensionRepoImpl();
         IAccessValidator accessValidator=new AccessValidator(suspensionRepo);
         auth = new Auth(tokenService, userRepo, passwordEncoder);
-
-        userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
+        notifier = new VaadinNotifier(userRepo);
+        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
 
         userService.registerUser(
                 "",

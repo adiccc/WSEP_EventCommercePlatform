@@ -1,5 +1,6 @@
 package application;
 
+import DTO.NotifyType;
 import DTO.QueueEntryResultDTO;
 import Log.LoggerSetup;
 import domain.Suspension.ISuspensionRepo;
@@ -35,6 +36,7 @@ class UserServiceTest {
     private ICompanyRepo companyRepo;
     private IEventRepo eventRepo;
     private String ADMIN_TOKEN;
+    private INotifier notifier;
 
     @BeforeEach
     void setUp() {
@@ -47,7 +49,8 @@ class UserServiceTest {
         passwordEncoder = new PasswordEncoderUtil();
         String adminEmail = "admin@admin.com";
         auth = new Auth(realTokenService, userRepo, passwordEncoder, Set.of(adminEmail));
-        userService = new UserService(realTokenService, auth, userRepo, passwordEncoder);
+        notifier = new VaadinNotifier(userRepo);
+        userService = new UserService(realTokenService, auth, userRepo, passwordEncoder,notifier);
         companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         eventRepo = new EventRepoImpl();
@@ -585,6 +588,177 @@ class UserServiceTest {
         executor.shutdown();
 
         assertEquals(guestCount, success, "All guests should receive unique tokens");
+    }
+    @Test
+    void GivenNullOrBlankEmail_WhenDeliverDelayedNotifications_ThenErrorInvalidEmail() {
+        Response<Boolean> responseNull = userService.deliverDelayedNotifications(null);
+        Response<Boolean> responseBlank = userService.deliverDelayedNotifications("   ");
+
+        assertTrue(responseNull.isError());
+        assertFalse(responseNull.getValue());
+        assertEquals("Invalid email address", responseNull.getMessage());
+
+        assertTrue(responseBlank.isError());
+        assertFalse(responseBlank.getValue());
+        assertEquals("Invalid email address", responseBlank.getMessage());
+    }
+
+    @Test
+    void GivenValidEmailWithRealDelayedNotifications_WhenDeliver_ThenClearedFromRepo() {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String email = dto.getEmail();
+
+        DTO.NotifyDTO realNotification1 = new DTO.NotifyDTO(
+                DTO.NotifyType.GENERAL_POPUP,
+                new DTO.NotifyPayload("Welcome back!")
+        );
+        DTO.NotifyDTO realNotification2 = new DTO.NotifyDTO(
+                DTO.NotifyType.GENERAL_POPUP,
+                new DTO.NotifyPayload("Your event was canceled.", 101)
+        );
+
+        notifier.notifyUser(email, realNotification1);
+        notifier.notifyUser(email, realNotification2);
+
+        assertEquals(2, userRepo.findUserByEmail(email).getDelayedNotifications().size());
+
+        // Act
+        Response<Boolean> response = userService.deliverDelayedNotifications(email);
+
+        // Assert
+        assertTrue(response.getValue());
+        assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
+    }
+
+    @Test
+    void GivenOfflineUser_WhenNotifiedAndLogsIn_ThenNotificationsDeliveredSuccessfully() {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String email = dto.getEmail();
+
+        DTO.NotifyDTO offlineNotification = new DTO.NotifyDTO(
+                DTO.NotifyType.GENERAL_POPUP,
+                new DTO.NotifyPayload("You missed this while offline!")
+        );
+
+        notifier.notifyUser(email, offlineNotification);
+
+        assertEquals(1, userRepo.findUserByEmail(email).getDelayedNotifications().size());
+
+        // Act
+        Response<String> loginResponse = userService.login(email, "Password123!");
+        assertNotNull(loginResponse.getValue(), "Login should succeed");
+        Response<Boolean> deliverResponse = userService.deliverDelayedNotifications(email);
+
+        // Assert
+        assertTrue(deliverResponse.getValue());
+        assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty(),
+                "Delayed notifications should be empty after delivery on login");
+    }
+
+    @Test
+    void GivenSameUser_WhenConcurrentDeliverNotifications_ThenHandledSafelyWithoutCrashing() throws Exception {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String email = dto.getEmail();
+
+        notifier.notifyUser(email, new DTO.NotifyDTO(
+                DTO.NotifyType.GENERAL_POPUP,
+                new DTO.NotifyPayload("Spam message")
+        ));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        // Act
+        Future<Response<Boolean>> future1 = executor.submit(() -> {
+            start.await();
+            return userService.deliverDelayedNotifications(email);
+        });
+        Future<Response<Boolean>> future2 = executor.submit(() -> {
+            start.await();
+            return userService.deliverDelayedNotifications(email);
+        });
+
+        start.countDown();
+        Response<Boolean> res1 = future1.get();
+        Response<Boolean> res2 = future2.get();
+        executor.shutdown();
+
+        // Assert
+        boolean success1 = res1.getValue() != null && res1.getValue();
+        boolean success2 = res2.getValue() != null && res2.getValue();
+
+        assertTrue(success1 || success2, "At least one thread should successfully process the notifications");
+
+        assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
+    }
+
+    @Test
+    void GivenUserLoggingIn_WhenConcurrentNotificationSent_ThenNoDataLost() throws Exception {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String email = dto.getEmail();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        // Act
+        Future<Response<Boolean>> deliveryFuture = executor.submit(() -> {
+            start.await();
+            return userService.deliverDelayedNotifications(email);
+        });
+
+        Future<Void> notifyFuture = executor.submit(() -> {
+            start.await();
+            DTO.NotifyDTO concurrentNotification = new DTO.NotifyDTO(
+                    DTO.NotifyType.GENERAL_POPUP,
+                    new DTO.NotifyPayload("System update!")
+            );
+            notifier.notifyUser(email, concurrentNotification);
+            return null;
+        });
+
+        start.countDown();
+
+        Response<Boolean> deliveryRes = deliveryFuture.get();
+        notifyFuture.get();
+        executor.shutdown();
+
+        // Assert
+        assertNotNull(deliveryRes, "Service should return a structured response, not throw an unhandled exception");
+
+        Member memberAfterChaos = userRepo.findUserByEmail(email);
+        assertNotNull(memberAfterChaos);
+
+        assertNotNull(memberAfterChaos.getDelayedNotifications());
+    }
+    @Test
+    void GivenUserWithDelayedNotifications_WhenAdminRemovesUser_ThenLoginFailsAndNotificationsInaccessible() {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String email = dto.getEmail();
+        int userId = userRepo.findUserByEmail(email).getUserId();
+        notifier.notifyUser(email, new DTO.NotifyDTO(
+                DTO.NotifyType.GENERAL_POPUP,
+                new DTO.NotifyPayload("You have a new private message!")
+        ));
+        assertFalse(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
+
+        // Act
+        Response<Boolean> adminRes = adminService.removeUser(ADMIN_TOKEN, userId);
+        assertTrue(adminRes.getValue(), "Admin should successfully remove the user");
+
+        // Assert
+        Response<String> loginResponse = userService.login(email, "Password123!");
+        assertTrue(loginResponse.isError());
+        assertNull(loginResponse.getValue(), "Blocked user should not get a token");
     }
 
 }

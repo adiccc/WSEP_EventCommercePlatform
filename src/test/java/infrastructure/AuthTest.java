@@ -1,5 +1,6 @@
 package infrastructure;
 
+import application.INotifier;
 import application.IPasswordEncoder;
 import application.Response;
 import application.TokenService;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.Date;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -20,6 +22,7 @@ class AuthTest {
     private TokenService tokenServiceMock;
     private IUserRepo userRepoMock;
     private IPasswordEncoder passwordEncoderMock;
+    private INotifier notifierMock;
 
     @BeforeEach
     void setUp() {
@@ -27,6 +30,7 @@ class AuthTest {
         userRepoMock = Mockito.mock(IUserRepo.class);
         passwordEncoderMock = Mockito.mock(IPasswordEncoder.class);
         auth = new Auth(tokenServiceMock, userRepoMock, passwordEncoderMock);
+        notifierMock = Mockito.mock(INotifier.class);
     }
 
     @Test
@@ -36,7 +40,7 @@ class AuthTest {
         String password = "password123";
         String encodedPassword = "encodedPassword123";
         String expectedToken = "validToken123";
-        Member mockMember = new Member(email, encodedPassword, "Test", "User", "050-1234567", null, "Test Address");
+        Member mockMember = new Member(email, encodedPassword, "Test", "User", "050-1234567", null, "Test Address", new ArrayList<>());
 
         when(userRepoMock.findUserByEmail(email)).thenReturn(mockMember);
         when(passwordEncoderMock.matches(password, encodedPassword)).thenReturn(true);
@@ -83,7 +87,7 @@ class AuthTest {
         String email = "test@example.com";
         String password = "wrongPassword";
         String encodedPassword = "encodedPassword123";
-        Member mockMember = new Member(email, encodedPassword, "Test", "User", "050-1234567", null, "Test Address");
+        Member mockMember = new Member(email, encodedPassword, "Test", "User", "050-1234567", null, "Test Address", new ArrayList<>());
 
         // User found, but password doesn't match
         when(userRepoMock.findUserByEmail(email)).thenReturn(mockMember);
@@ -183,7 +187,7 @@ class AuthTest {
         // Arrange
         String token = "corrupted.jwt.token";
         String email = "test@example.com";
-        Member mockMember = new Member(email, "encrypted", "Test", "User", "050", null, "Address");
+        Member mockMember = new Member(email, "encrypted", "Test", "User", "050", null, "Address",new ArrayList<>());
 
         when(tokenServiceMock.validateToken(token)).thenReturn(true);
         when(tokenServiceMock.extractUsername(token)).thenReturn(email);

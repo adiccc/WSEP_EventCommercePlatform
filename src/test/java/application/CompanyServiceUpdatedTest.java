@@ -58,6 +58,8 @@ class CompanyServiceUpdatedTest {
     private AdminService adminService;
     private IPaymentSystem paymentSystem;
     private IEventRepo eventRepo;
+    private INotifier notifier;
+
 
     @BeforeEach
     void setUp() {
@@ -70,8 +72,8 @@ class CompanyServiceUpdatedTest {
         String adminEmail = "admin@admin.com";
         auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(adminEmail));
         companyRepo = new CompanyRepoImpl();
-
-        userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
+        notifier = new VaadinNotifier(userRepo);
+        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
         service = new CompanyService(auth, companyRepo, userRepo,accessValidator);
 
         UserDTO ownerDTO = new UserDTO("owner@test.com", "Owner", "Test", "Password123!", 1, 1, 2000, "City", "050-123-4567");

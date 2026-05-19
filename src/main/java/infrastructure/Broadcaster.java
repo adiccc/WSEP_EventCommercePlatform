@@ -36,14 +36,12 @@ public class Broadcaster {
             if (listeners.isEmpty()) {
                 userListeners.remove(userIdentifier);
             }
-            //TODO: in order to check if the user is logged in we need to check if the key is not exist in the map.
-
         }
     }
 
     public static boolean broadcastToUser(String userIdentifier, NotifyDTO notification) {
         List<Consumer<NotifyDTO>> listeners = userListeners.get(userIdentifier);
-        if (listeners != null && !listeners.isEmpty()) {
+        if (listeners != null && !listeners.isEmpty()) { //if logged in, send in real time
             for (Consumer<NotifyDTO> listener : listeners) {
                 executor.execute(() -> listener.accept(notification));
             }
@@ -60,7 +58,6 @@ public class Broadcaster {
 
     private static synchronized void removeTabListener(String tabId) {
         tabListeners.remove(tabId);
-        //TODO: in order to check if the user is logged in we need to check if the key is not exist in the map.
     }
 
     public static boolean broadcastToTab(String tabId, NotifyDTO notification) {

@@ -2,20 +2,75 @@ package infrastructure;
 
 import DTO.NotifyDTO;
 import application.INotifier;
+import application.RetryHelper;
+import domain.user.IUserRepo;
+import domain.user.Member;
+import Exception.OptimisticLockingFailureException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
+
 @Component
 public class VaadinNotifier implements INotifier {
-
-    @Override
-    public boolean notifyUser(String userIdentifier, NotifyDTO notification){
-        return Broadcaster.broadcastToUser(userIdentifier, notification);
+    private static final Logger logger = Logger.getLogger(VaadinNotifier.class.getName());
+    private final IUserRepo userRepo;
+    @Autowired
+    public VaadinNotifier(IUserRepo userRepo) {
+        this.userRepo = userRepo;
     }
-
     @Override
-    public boolean notifyTab(String tabId, NotifyDTO notification){
+    public void notifyUser(String userIdentifier, NotifyDTO notification){
+        RetryHelper.executeWithRetry(() -> {
+            logger.info("Attempting to send real-time notification to user: " + userIdentifier);
+            try {
+                boolean isSentRealTime = Broadcaster.broadcastToUser(userIdentifier, notification);
+
+                if (!isSentRealTime) {
+                    logger.info("User " + userIdentifier + " is offline. Saving as delayed notification.");
+                    Member member = userRepo.findUserByEmail(userIdentifier);
+                    if (member != null) {
+                        member.addDelayedNotification(notification);
+                        userRepo.store(member);
+                        logger.info("Delayed notification saved successfully for: " + userIdentifier);
+                    } else {
+                        logger.warning("Failed to save delayed notification: Member not found for email " + userIdentifier);
+                    }
+                }
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+                } catch (Exception e) {
+                logger.severe("Error in notifyUser for " + userIdentifier + ": " + e.getMessage());
+            }
+            return null;
+        });
+    }
+    @Override
+    public boolean notifyTab(String tabId, NotifyDTO notification){ //because we dont have suspended notifications
         return Broadcaster.broadcastToTab(tabId, notification);
+    }
+    @Override
+    public boolean deliverDelayedNotifications(String userIdentifier) {
+        logger.info("Fetching delayed notifications for user: " + userIdentifier);
+        try {
+            Member member = userRepo.findUserByEmail(userIdentifier);
+            if (member != null && !member.getDelayedNotifications().isEmpty()) {
+                List<NotifyDTO> pendingNotifications = new ArrayList<>(member.getDelayedNotifications());
+                logger.info("Found " + pendingNotifications.size() + " delayed notifications for " + userIdentifier);
+                for (NotifyDTO notification : pendingNotifications) {
+                    Broadcaster.broadcastToUser(userIdentifier, notification);
+                }
+                member.clearDelayedNotifications();
+                logger.info("Successfully delivered and cleared delayed notifications for: " + userIdentifier);
+                return true;
+            }
+        } catch (Exception e) {
+            logger.severe("Error delivering delayed notifications for " + userIdentifier + ": " + e.getMessage());
+            return false;
+        }
+        return false;
     }
 }
 
