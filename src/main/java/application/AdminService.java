@@ -1,5 +1,7 @@
 package application;
 
+import DTO.NotifyDTO;
+import DTO.NotifyPayload;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
@@ -25,6 +27,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static DTO.NotifyType.GENERAL_POPUP;
+
 @Service
 public class AdminService {
     private IEventRepo eventRepo;
@@ -36,11 +41,12 @@ public class AdminService {
     private final IAuth auth;
     private final IUserRepo userRepo;
     private final ScheduledExecutorService scheduler;
+    private final INotifier notifier;
 
 
 
     @Autowired
-    public AdminService(IAuth auth, IUserRepo userRepo, ICompanyRepo companyRepo, IEventRepo eventRepo, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo) {
+    public AdminService(IAuth auth, IUserRepo userRepo, ICompanyRepo companyRepo, IEventRepo eventRepo, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo, INotifier notifier) {
         this.auth = auth;
         this.userRepo = userRepo;
         this.eventRepo = eventRepo;
@@ -48,6 +54,7 @@ public class AdminService {
         this.companyRepo = companyRepo;
         this.suspensionRepo = suspensionRepo;
         this.scheduler = Executors.newScheduledThreadPool(1);
+        this.notifier = notifier;
     }
 
     //permanent suspension
@@ -368,6 +375,10 @@ public class AdminService {
                     logger.warning("closeCompanyByAdmin failed: company already closed with id " + companyId);
                     return Response.error("Company is already closed");
                 }
+
+                Set<Integer> recipients = new HashSet<>(company.getCompanyPermission().getOwnerIds());
+                recipients.addAll(company.getCompanyPermission().getCompanyTree().keySet());
+
                 company.deactivate();
                 companyRepo.store(company);
                 List<Event> events = eventRepo.findByCompany(companyId);
@@ -389,6 +400,16 @@ public class AdminService {
                         }
                     }
                 }
+
+                //notify all company members about the closure
+                NotifyPayload payload= new NotifyPayload("Company " + company.getCompanyName() + " has been closed by admin, all events are cancelled and refunds are being processed", null,companyId);
+                for (Integer userId : recipients) {
+                    try {
+                        notifier.notifyMemberById(userId, new NotifyDTO(GENERAL_POPUP,payload));
+                    } catch (Exception e) {
+                        logger.log(Level.SEVERE, "Failed to notify user " + userId + " about company closure: " + e.getMessage());
+                    }
+                }
                 logger.info("Company with id " + companyId + " has been closed by admin");
                 return new Response<>(true, "Company closed successfully");
             } catch (NoSuchElementException e) {
@@ -402,7 +423,7 @@ public class AdminService {
             }
         });
     }
-
+    // just for admin to process refunds when closing company
     private Response<Boolean> processRefundAdmin(String token, Integer eventId, int orderId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");
@@ -434,11 +455,20 @@ public class AdminService {
                     order.markRefunded();
                     eventRepo.store(event);
                     logger.log(Level.INFO, "Refund completed successfully");
+                    // Notify the user about the refund and the company closure
+                    String userIdentifier = order.getUserIdentifier();
+                    NotifyPayload payload= new NotifyPayload("Refund processed for order " + order.getOrderId() + " in event " + event.getId() + "because of closing the company", event.getId(),null);
+                    notifier.notifyUser(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
+
                     return new Response<>(true, "Refund completed successfully");
                 }
-
                 order.markRefundRequired();
                 eventRepo.store(event);
+
+                // Notify the user about the refund failure and the company closure
+                String userIdentifier = order.getUserIdentifier();
+                NotifyPayload payload= new NotifyPayload("Refund failed for order " + order.getOrderId() + " in event " + event.getId() + " because of closing the company, please contact support", event.getId(),null);
+                notifier.notifyUser(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
 
                 logger.log(Level.SEVERE, "Refund rejected by external payment service");
                 return new Response<>(false, "Refund rejected by external payment service");

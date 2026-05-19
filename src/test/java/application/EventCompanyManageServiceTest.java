@@ -136,7 +136,7 @@ class EventCompanyManageServiceTest {
        // userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "Sys", "Pass123!", 1, 1, 2000, "Address", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
-        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem,suspensionRepo);
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem,suspensionRepo, notifier);
 
     }
 

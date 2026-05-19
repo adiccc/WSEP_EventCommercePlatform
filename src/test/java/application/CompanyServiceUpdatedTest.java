@@ -103,7 +103,7 @@ class CompanyServiceUpdatedTest {
         companyRepo.store(company);
         paymentSystem = Mockito.mock(PaymentSystemProxy.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo);
+        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo,notifier);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
 

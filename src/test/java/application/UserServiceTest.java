@@ -54,7 +54,7 @@ class UserServiceTest {
         companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem, suspensionRepo);
+        adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem, suspensionRepo,notifier);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
     }
@@ -619,7 +619,7 @@ class UserServiceTest {
         );
         DTO.NotifyDTO realNotification2 = new DTO.NotifyDTO(
                 DTO.NotifyType.GENERAL_POPUP,
-                new DTO.NotifyPayload("Your event was canceled.", 101)
+                new DTO.NotifyPayload("Your event was canceled.", 101,null)
         );
 
         notifier.notifyUser(email, realNotification1);
