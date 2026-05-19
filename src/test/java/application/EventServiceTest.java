@@ -41,6 +41,7 @@ class EventServiceTest {
     private IAccessValidator accessValidator;
     private EventRepoImpl eventRepo;
     private EventService service;
+    private INotifier notifier;
 
     private String validToken;
     private Integer activeEvent1Id;
@@ -66,8 +67,9 @@ class EventServiceTest {
         accessValidator=new AccessValidator(suspensionRepo);
         eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator);
         service = new EventService(auth, eventRepo);
+        notifier = new VaadinNotifier(userRepo);
 
-        UserService userService=new UserService(tokenService,auth,userRepo,passwordEncoder);
+        UserService userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier);
         UserDTO userDTO = new UserDTO("user1@test.com","test1","t","mytest",1,1,2016,"user test address","054-555-6677");
         userService.registerUser(validToken,userDTO);
         validToken=userService.login("user1@test.com","mytest").getValue();

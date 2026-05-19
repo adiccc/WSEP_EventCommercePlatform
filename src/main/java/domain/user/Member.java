@@ -1,5 +1,6 @@
 package domain.user;
 
+import DTO.NotifyDTO;
 import domain.activeOrder.ActiveOrder;
 import domain.dto.UserDTO;
 
@@ -19,6 +20,7 @@ public class Member extends User{
     protected String address;
     protected ActivationStatus activationStatus;
     private long version;
+    private List<NotifyDTO> delayedNotifications = new ArrayList<>();
 
     public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address,ActivationStatus activationStatus) {
         super(email);
@@ -30,8 +32,9 @@ public class Member extends User{
         this.address = address;
         this.version = 0;
         this.activationStatus=activationStatus;
+        this.delayedNotifications = new ArrayList<>();
     }
-    public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address) {
+    public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address, List<NotifyDTO> delayedNotifications) {
         super(email);
         this.password = password;
         this.firstName = firstName;
@@ -41,6 +44,7 @@ public class Member extends User{
         this.address = address;
         this.version = 0;
         this.activationStatus=ActivationStatus.ACTIVE;
+        this.delayedNotifications = delayedNotifications;
     }
     public Member(Member member) {
         super(member);
@@ -53,6 +57,8 @@ public class Member extends User{
         this.address=member.address;
         this.version=member.version;
         this.activationStatus=member.activationStatus;
+        this.delayedNotifications = member.getDelayedNotifications();
+
     }
     public long getVersion() {
         return version;
@@ -94,5 +100,15 @@ public class Member extends User{
                 this.dateOfBirth.getDayOfMonth(), this.dateOfBirth.getMonthValue(), this.dateOfBirth.getYear(),
                 this.address, this.phoneNumber);
     }
+    public void addDelayedNotification(NotifyDTO notification) {
+        this.delayedNotifications.add(notification);
+    }
 
+    public List<NotifyDTO> getDelayedNotifications() {
+        return this.delayedNotifications;
+    }
+
+    public void clearDelayedNotifications() {
+        this.delayedNotifications.clear();
+    }
 }

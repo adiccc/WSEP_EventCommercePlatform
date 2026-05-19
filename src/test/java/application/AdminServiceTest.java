@@ -63,6 +63,7 @@ class AdminServiceTest {
     private List<ElementPositionDTO> entries;
     private List<StandingZoneDTO> standingZones;
     private List<SeatingZoneDTO> seatingZones;
+    private INotifier notifier;
 
     private static final String ADMIN_EMAIL = "admin@bgu.ac.il";
     private static final String USER_EMAIL = "user@bgu.ac.il";
@@ -88,8 +89,8 @@ class AdminServiceTest {
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         IAuth auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(ADMIN_EMAIL));
         accessValidator = new AccessValidator(suspensionRepo);
-
-        userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
+        notifier = new VaadinNotifier(userRepo);
+        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
 
         adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem,suspensionRepo);
 

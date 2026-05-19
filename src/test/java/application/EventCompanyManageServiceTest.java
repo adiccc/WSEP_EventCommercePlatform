@@ -79,6 +79,8 @@ class EventCompanyManageServiceTest {
     private String GUEST_TOKEN;
     private String ADMIN_TOKEN;
     private AdminService adminService;
+    private INotifier notifier;
+
 
     @BeforeEach
     void setUp() {
@@ -94,8 +96,8 @@ class EventCompanyManageServiceTest {
 
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
-
-        userService=new UserService(tokenService,auth,userRepo,passwordEncoder);
+        notifier = new VaadinNotifier(userRepo);
+        userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier);
         eventService=new EventService(auth,eventRepo);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
@@ -136,7 +138,7 @@ class EventCompanyManageServiceTest {
 
         String adminEmail = "admin_master@bgu.ac.il";
         auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(adminEmail));
-        userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
+       // userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "Sys", "Pass123!", 1, 1, 2000, "Address", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
         adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem,suspensionRepo);

@@ -21,14 +21,16 @@ public class UserService {
     private final IAuth auth;
     private final IPasswordEncoder passwordEncoder;
     private final IUserRepo userRepo;
+    private final INotifier notifier;
 
     @Autowired
     public UserService(TokenService tokenService, IAuth auth, IUserRepo userRepo,
-                       IPasswordEncoder passwordEncoder) {
+                       IPasswordEncoder passwordEncoder, INotifier notifier) {
         this.tokenService = tokenService;
         this.auth = auth;
         this.userRepo = userRepo;
         this.passwordEncoder = passwordEncoder;
+        this.notifier = notifier;
     }
 
     // first call when a user opens the application
@@ -232,6 +234,25 @@ public class UserService {
             } catch (Exception e) {
                 logger.severe("leaveStore failed: " + e.getMessage());
                 return Response.error("Server error during leaveStore: " + e.getMessage());
+            }
+        });
+    }
+    public Response<Boolean> deliverDelayedNotifications(String userEmail) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("deliverDelayedNotifications attempt started for email: " + userEmail);
+            if (userEmail == null || userEmail.isBlank()) {
+                logger.warning("Failed to deliver notifications: Email is empty or null");
+                return new Response<>(false, "Invalid email address");
+            }
+            try {
+                notifier.deliverDelayedNotifications(userEmail);
+                logger.info("Successfully processed delayed notifications for: " + userEmail);
+                return new Response<>(true, "Successfully processed delayed notifications");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("deliverDelayedNotifications failed: " + e.getMessage());
+                return new Response<>(false, "Server error during deliverDelayedNotifications: " + e.getMessage());
             }
         });
     }
