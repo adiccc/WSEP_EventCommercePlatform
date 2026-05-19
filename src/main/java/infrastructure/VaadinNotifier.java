@@ -2,8 +2,10 @@ package infrastructure;
 
 import DTO.NotifyDTO;
 import application.INotifier;
+import application.RetryHelper;
 import domain.user.IUserRepo;
 import domain.user.Member;
+import Exception.OptimisticLockingFailureException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -21,25 +23,29 @@ public class VaadinNotifier implements INotifier {
     }
     @Override
     public void notifyUser(String userIdentifier, NotifyDTO notification){
-        logger.info("Attempting to send real-time notification to user: " + userIdentifier);
-        try {
-            boolean isSentRealTime = Broadcaster.broadcastToUser(userIdentifier, notification);
+        RetryHelper.executeWithRetry(() -> {
+            logger.info("Attempting to send real-time notification to user: " + userIdentifier);
+            try {
+                boolean isSentRealTime = Broadcaster.broadcastToUser(userIdentifier, notification);
 
-            if (!isSentRealTime) {
-                logger.info("User " + userIdentifier + " is offline. Saving as delayed notification.");
-                Member member = userRepo.findUserByEmail(userIdentifier);
-
-                if (member != null) {
-                    member.addDelayedNotification(notification);
-                    userRepo.store(member);
-                    logger.info("Delayed notification saved successfully for: " + userIdentifier);
-                } else {
-                    logger.warning("Failed to save delayed notification: Member not found for email " + userIdentifier);
+                if (!isSentRealTime) {
+                    logger.info("User " + userIdentifier + " is offline. Saving as delayed notification.");
+                    Member member = userRepo.findUserByEmail(userIdentifier);
+                    if (member != null) {
+                        member.addDelayedNotification(notification);
+                        userRepo.store(member);
+                        logger.info("Delayed notification saved successfully for: " + userIdentifier);
+                    } else {
+                        logger.warning("Failed to save delayed notification: Member not found for email " + userIdentifier);
+                    }
                 }
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+                } catch (Exception e) {
+                logger.severe("Error in notifyUser for " + userIdentifier + ": " + e.getMessage());
             }
-        } catch (Exception e) {
-            logger.severe("Error in notifyUser for " + userIdentifier + ": " + e.getMessage());
-        }
+            return null;
+        });
     }
     @Override
     public boolean notifyTab(String tabId, NotifyDTO notification){ //because we dont have suspended notifications

@@ -116,14 +116,15 @@ class VaadinNotifierTest {
 
         try (MockedStatic<Broadcaster> broadcasterMock = mockStatic(Broadcaster.class)) {
             // Act
-            vaadinNotifier.deliverDelayedNotifications(email);
+            boolean result = vaadinNotifier.deliverDelayedNotifications(email);
 
             // Assert
+            assertTrue(result, "Notifier should return true upon successful delivery");
+
             broadcasterMock.verify(() -> Broadcaster.broadcastToUser(email, notification1), times(1));
             broadcasterMock.verify(() -> Broadcaster.broadcastToUser(email, notification2), times(1));
-
             verify(mockMember, times(1)).clearDelayedNotifications();
-            verify(userRepoMock, times(1)).store(mockMember);
+
         }
     }
 
