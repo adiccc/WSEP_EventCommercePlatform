@@ -590,21 +590,24 @@ class UserServiceTest {
         assertEquals(guestCount, success, "All guests should receive unique tokens");
     }
     @Test
-    void GivenNullOrBlankEmail_WhenDeliverDelayedNotifications_ThenErrorInvalidEmail() {
-        Response<Boolean> responseNull = userService.deliverDelayedNotifications(null);
-        Response<Boolean> responseBlank = userService.deliverDelayedNotifications("   ");
+    void GivenNullOrBlankEmail_WhenGetOrCleanDelayedNotifications_ThenErrorInvalidEmail() {
+        // GET Tests
+        Response<List<DTO.NotifyDTO>> getNull = userService.getDelayedNotifications(null);
+        Response<List<DTO.NotifyDTO>> getBlank = userService.getDelayedNotifications("   ");
+        assertTrue(getNull.isError());
+        assertEquals("Invalid email address", getNull.getMessage());
+        assertTrue(getBlank.isError());
 
-        assertTrue(responseNull.isError());
-        assertFalse(responseNull.getValue());
-        assertEquals("Invalid email address", responseNull.getMessage());
-
-        assertTrue(responseBlank.isError());
-        assertFalse(responseBlank.getValue());
-        assertEquals("Invalid email address", responseBlank.getMessage());
+        // CLEAN Tests
+        Response<Boolean> cleanNull = userService.cleanDelayedNotifications(null);
+        Response<Boolean> cleanBlank = userService.cleanDelayedNotifications("   ");
+        assertTrue(cleanNull.isError());
+        assertEquals("Invalid email address", cleanNull.getMessage());
+        assertTrue(cleanBlank.isError());
     }
 
     @Test
-    void GivenValidEmailWithRealDelayedNotifications_WhenDeliver_ThenClearedFromRepo() {
+    void GivenValidEmailWithRealDelayedNotifications_WhenGetAndClean_ThenFlowSucceeds() {
         // Arrange
         UserDTO dto = createValidDTO();
         userService.registerUser(null, dto);
@@ -624,16 +627,22 @@ class UserServiceTest {
 
         assertEquals(2, userRepo.findUserByEmail(email).getDelayedNotifications().size());
 
-        // Act
-        Response<Boolean> response = userService.deliverDelayedNotifications(email);
+        Response<List<DTO.NotifyDTO>> getResponse = userService.getDelayedNotifications(email);
 
-        // Assert
-        assertTrue(response.getValue());
-        assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
+        // Assert 1
+        assertNotNull(getResponse.getValue());
+        assertEquals(2, getResponse.getValue().size(), "UI should receive 2 notifications");
+        assertFalse(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
+
+        Response<Boolean> cleanResponse = userService.cleanDelayedNotifications(email);
+
+        // Assert 2
+        assertTrue(cleanResponse.getValue());
+        assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty(), "DB should be empty after clean");
     }
 
     @Test
-    void GivenOfflineUser_WhenNotifiedAndLogsIn_ThenNotificationsDeliveredSuccessfully() {
+    void GivenOfflineUser_WhenNotifiedAndLogsIn_ThenNotificationsFlowWorks() {
         // Arrange
         UserDTO dto = createValidDTO();
         userService.registerUser(null, dto);
@@ -645,22 +654,23 @@ class UserServiceTest {
         );
 
         notifier.notifyUser(email, offlineNotification);
-
         assertEquals(1, userRepo.findUserByEmail(email).getDelayedNotifications().size());
 
-        // Act
+        // Act & Assert
         Response<String> loginResponse = userService.login(email, "Password123!");
         assertNotNull(loginResponse.getValue(), "Login should succeed");
-        Response<Boolean> deliverResponse = userService.deliverDelayedNotifications(email);
 
-        // Assert
-        assertTrue(deliverResponse.getValue());
-        assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty(),
-                "Delayed notifications should be empty after delivery on login");
+        Response<List<DTO.NotifyDTO>> getResponse = userService.getDelayedNotifications(email);
+        assertEquals(1, getResponse.getValue().size());
+
+        Response<Boolean> cleanResponse = userService.cleanDelayedNotifications(email);
+        assertTrue(cleanResponse.getValue());
+
+        assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
     }
 
     @Test
-    void GivenSameUser_WhenConcurrentDeliverNotifications_ThenHandledSafelyWithoutCrashing() throws Exception {
+    void GivenSameUser_WhenConcurrentCleanNotifications_ThenHandledSafelyWithoutCrashing() throws Exception {
         // Arrange
         UserDTO dto = createValidDTO();
         userService.registerUser(null, dto);
@@ -677,11 +687,11 @@ class UserServiceTest {
         // Act
         Future<Response<Boolean>> future1 = executor.submit(() -> {
             start.await();
-            return userService.deliverDelayedNotifications(email);
+            return userService.cleanDelayedNotifications(email);
         });
         Future<Response<Boolean>> future2 = executor.submit(() -> {
             start.await();
-            return userService.deliverDelayedNotifications(email);
+            return userService.cleanDelayedNotifications(email);
         });
 
         start.countDown();
@@ -693,8 +703,7 @@ class UserServiceTest {
         boolean success1 = res1.getValue() != null && res1.getValue();
         boolean success2 = res2.getValue() != null && res2.getValue();
 
-        assertTrue(success1 || success2, "At least one thread should successfully process the notifications");
-
+        assertTrue(success1 || success2, "At least one thread should successfully process the cleaning");
         assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
     }
 
@@ -709,9 +718,9 @@ class UserServiceTest {
         CountDownLatch start = new CountDownLatch(1);
 
         // Act
-        Future<Response<Boolean>> deliveryFuture = executor.submit(() -> {
+        Future<Response<Boolean>> cleanFuture = executor.submit(() -> {
             start.await();
-            return userService.deliverDelayedNotifications(email);
+            return userService.cleanDelayedNotifications(email);
         });
 
         Future<Void> notifyFuture = executor.submit(() -> {
@@ -726,25 +735,25 @@ class UserServiceTest {
 
         start.countDown();
 
-        Response<Boolean> deliveryRes = deliveryFuture.get();
+        Response<Boolean> cleanRes = cleanFuture.get();
         notifyFuture.get();
         executor.shutdown();
 
         // Assert
-        assertNotNull(deliveryRes, "Service should return a structured response, not throw an unhandled exception");
-
+        assertNotNull(cleanRes, "Service should return a structured response, not throw an unhandled exception");
         Member memberAfterChaos = userRepo.findUserByEmail(email);
         assertNotNull(memberAfterChaos);
-
         assertNotNull(memberAfterChaos.getDelayedNotifications());
     }
+
     @Test
-    void GivenUserWithDelayedNotifications_WhenAdminRemovesUser_ThenLoginFailsAndNotificationsInaccessible() {
+    void GivenUserWithDelayedNotifications_WhenAdminRemovesUser_ThenLoginFailsAndDataInaccessible() {
         // Arrange
         UserDTO dto = createValidDTO();
         userService.registerUser(null, dto);
         String email = dto.getEmail();
         int userId = userRepo.findUserByEmail(email).getUserId();
+
         notifier.notifyUser(email, new DTO.NotifyDTO(
                 DTO.NotifyType.GENERAL_POPUP,
                 new DTO.NotifyPayload("You have a new private message!")
@@ -760,5 +769,4 @@ class UserServiceTest {
         assertTrue(loginResponse.isError());
         assertNull(loginResponse.getValue(), "Blocked user should not get a token");
     }
-
 }
