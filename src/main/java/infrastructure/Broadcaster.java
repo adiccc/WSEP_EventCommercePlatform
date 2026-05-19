@@ -9,7 +9,9 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import DTO.NotifyDTO;
+import org.springframework.stereotype.Component;
 
+@Component
 public class Broadcaster {
 
     private static final Executor executor = Executors.newSingleThreadExecutor();
