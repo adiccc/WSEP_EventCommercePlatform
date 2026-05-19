@@ -819,7 +819,7 @@ public class ActiveOrderService {
 
         NotifyDTO payload = new NotifyDTO(
                 NotifyType.GENERAL_POPUP,
-                new NotifyPayload("Event \"" + persisted.getName() + "\" is sold out.", eventId)
+                new NotifyPayload("Event \"" + persisted.getName() + "\" is sold out.", eventId,null)
         );
 
         for (Integer userId : recipientIds) {
