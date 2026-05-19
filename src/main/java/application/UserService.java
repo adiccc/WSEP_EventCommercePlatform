@@ -245,9 +245,16 @@ public class UserService {
                 return new Response<>(false, "Invalid email address");
             }
             try {
-                notifier.deliverDelayedNotifications(userEmail);
-                logger.info("Successfully processed delayed notifications for: " + userEmail);
-                return new Response<>(true, "Successfully processed delayed notifications");
+                boolean ret = notifier.deliverDelayedNotifications(userEmail);
+                if(ret) {
+                    userRepo.store(userRepo.findUserByEmail(userEmail));
+                    logger.info("Successfully processed delayed notifications for: " + userEmail);
+                    return new Response<>(true, "Successfully processed delayed notifications");
+                }
+                else{
+                    logger.warning("Failed to deliver notifications for: " + userEmail);
+                    return new Response<>(false, "Failed to deliver notifications");
+                }
             } catch (OptimisticLockingFailureException e) {
                 throw e;
             } catch (Exception e) {

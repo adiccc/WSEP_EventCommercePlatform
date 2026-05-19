@@ -46,7 +46,7 @@ public class VaadinNotifier implements INotifier {
         return Broadcaster.broadcastToTab(tabId, notification);
     }
     @Override
-    public void deliverDelayedNotifications(String userIdentifier) {
+    public boolean deliverDelayedNotifications(String userIdentifier) {
         logger.info("Fetching delayed notifications for user: " + userIdentifier);
         try {
             Member member = userRepo.findUserByEmail(userIdentifier);
@@ -57,12 +57,14 @@ public class VaadinNotifier implements INotifier {
                     Broadcaster.broadcastToUser(userIdentifier, notification);
                 }
                 member.clearDelayedNotifications();
-                userRepo.store(member);
                 logger.info("Successfully delivered and cleared delayed notifications for: " + userIdentifier);
+                return true;
             }
         } catch (Exception e) {
             logger.severe("Error delivering delayed notifications for " + userIdentifier + ": " + e.getMessage());
+            return false;
         }
+        return false;
     }
 }
 

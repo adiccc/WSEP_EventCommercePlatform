@@ -63,7 +63,7 @@ class VaadinNotifierTest {
 
     @Test
     void givenOfflineUserAndMemberNotFound_whenNotifyUser_thenDoNotSaveToDB() {
-        // Arrange
+        // Agrrange
         String email = "ghost@example.com";
         NotifyDTO mockNotification = Mockito.mock(NotifyDTO.class);
 
