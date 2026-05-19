@@ -182,50 +182,55 @@ public class DataSeeder implements ApplicationRunner {
      */
     private void activateEvent(String token, int eventId, String eventName) {
 
-        // ── Basic layout elements ───────────────────────────────
-        ElementPositionDTO stage = new ElementPositionDTO(0, 0);
-        ElementPositionDTO entry = new ElementPositionDTO(1, 0);
+        // ── STAGE (top center) ─────────────────────────────
+        ElementPositionDTO stage = new ElementPositionDTO(400, 20);
 
-        // ── Standing zone (high capacity) ───────────────────────
+        // ── ENTRIES (left + right) ─────────────────────────
+        List<ElementPositionDTO> entries = List.of(
+                new ElementPositionDTO(50, 100),
+                new ElementPositionDTO(750, 100)
+        );
+
+        // ── STANDING ZONE (bottom area) ───────────────────
         StandingZoneDTO standingZone = new StandingZoneDTO(
-                300,
+                40,
                 "General Standing",
                 80.0,
-                new ElementPositionDTO(0, 1)
+                new ElementPositionDTO(70, 450)
         );
 
-        // ── VIP seating zone (small, expensive) ────────────────
+        // ── VIP (close to stage center) ────────────────────
         SeatingZoneDTO vipZone = new SeatingZoneDTO(
-                4,   // rows
-                6,   // cols
+                3,
+                10,
                 "VIP",
                 300.0,
-                new ElementPositionDTO(2, 2)
+                new ElementPositionDTO(270, 150)
         );
 
-        // ── Regular seating zone (bigger, cheaper) ─────────────
+        // ── REGULAR (middle area) ──────────────────────────
         SeatingZoneDTO regularZone = new SeatingZoneDTO(
-                8,   // rows
-                10,  // cols
+                8,
+                10,
                 "Regular",
                 150.0,
-                new ElementPositionDTO(10, 2)
+                new ElementPositionDTO(270, 400)
         );
 
-        // ── Balcony zone (medium, mid price) ───────────────────
+        // ── BALCONY (back area) ────────────────────────────
         SeatingZoneDTO balconyZone = new SeatingZoneDTO(
                 5,
-                8,
+                3,
                 "Balcony",
                 180.0,
-                new ElementPositionDTO(20, 2)
+                new ElementPositionDTO(700, 300)
         );
 
         var r = eventService.DefineVenueAndSeatingMap(
                 token,
                 eventId,
                 stage,
-                List.of(entry),
+                entries,
                 List.of(standingZone),
                 List.of(vipZone, regularZone, balconyZone)
         );
@@ -233,7 +238,7 @@ public class DataSeeder implements ApplicationRunner {
         if (r.getValue() == null || !r.getValue()) {
             log.warning("DataSeeder: map creation failed for [" + eventName + "] — " + r.getMessage());
         } else {
-            log.info("DataSeeder: activated event with FULL MAP [" + eventName + "]");
+            log.info("DataSeeder: activated event with VISUAL MAP [" + eventName + "]");
         }
     }
 }

@@ -1,10 +1,12 @@
 package UI.Views;
 
+import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import UI.Presenters.PurchasePresenter;
 import application.ActiveOrderService;
 import application.Response;
+import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.*;
@@ -24,6 +26,9 @@ import java.util.*;
 public class PurchaseView extends VerticalLayout implements BeforeEnterObserver {
 
     private final PurchasePresenter presenter;
+
+    private static final int OFFSET_X = 50;
+    private static final int OFFSET_Y = 50;
 
     private int companyId;
     private int eventId;
@@ -52,7 +57,6 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
     }
 
     private void load() {
-
         removeAll();
 
         String token = (String) VaadinSession.getCurrent().getAttribute("token");
@@ -69,19 +73,21 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
 
         add(buildHeader());
 
-        HorizontalLayout layout = new HorizontalLayout();
+        Component map = buildMapSection();
+        Component summary = buildSummary(token);
+
+        HorizontalLayout layout = new HorizontalLayout(map, summary);
         layout.setSizeFull();
+        layout.setSpacing(true);
 
-        layout.add(buildMapSection(), buildSummary(token));
-
-        layout.setFlexGrow(3, layout.getComponentAt(0));
-        layout.setFlexGrow(1, layout.getComponentAt(1));
+        layout.setFlexGrow(1, map);
+        layout.setFlexGrow(0, summary);
 
         add(layout);
+        expand(layout);
     }
 
     private HorizontalLayout buildHeader() {
-
         Button back = new Button("← Back",
                 e -> UI.getCurrent().navigate("event/" + companyId + "/" + eventId));
 
@@ -89,52 +95,137 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
 
         HorizontalLayout header = new HorizontalLayout(back, title);
         header.setWidthFull();
+        header.setAlignItems(Alignment.CENTER);
         header.expand(title);
 
         return header;
     }
 
-    // =========================================================
-    // MAP
-    // =========================================================
+    private Component buildMapSection() {
+        Div wrapper = new Div();
+        wrapper.setSizeFull();
 
-    private VerticalLayout buildMapSection() {
+        wrapper.getStyle()
+                .set("position", "relative")
+                .set("overflow", "auto")
+                .set("border", "1px solid #ccc")
+                .set("border-radius", "12px")
+                .set("background", "#f7f7f7")
+                .set("height", "700px");
 
-        VerticalLayout wrapper = new VerticalLayout();
-        wrapper.setWidthFull();
+        Div map = new Div();
 
-        wrapper.add(new H3("Seating Map"));
+        map.getStyle()
+                .set("position", "relative")
+                .set("width", "1600px")
+                .set("height", "1200px")
+                .set("transform", "scale(0.75)")
+                .set("transform-origin", "top left");
+
+        addStage(map);
+        addEntries(map);
+        addSeatingZones(map);
+        addStandingZones(map);
+
+        wrapper.add(map);
+        return wrapper;
+    }
+
+    private void addStage(Div map) {
+        if (eventMap.getStage() == null) {
+            return;
+        }
+
+        Div stage = new Div();
+        stage.setText("STAGE");
+
+        stage.getStyle()
+                .set("position", "absolute")
+                .set("left", (eventMap.getStage().getX() + OFFSET_X) + "px")
+                .set("top", (eventMap.getStage().getY() + OFFSET_Y) + "px")
+                .set("z-index", "10")
+                .set("background", "black")
+                .set("color", "white")
+                .set("padding", "14px 28px")
+                .set("border-radius", "8px")
+                .set("font-weight", "bold");
+
+        map.add(stage);
+    }
+
+    private void addEntries(Div map) {
+        if (eventMap.getEntries() == null) {
+            return;
+        }
+
+        for (ElementPositionDTO entry : eventMap.getEntries()) {
+            Div entryDiv = new Div();
+            entryDiv.setText("ENTRY");
+
+            entryDiv.getStyle()
+                    .set("position", "absolute")
+                    .set("left", (entry.getX() + OFFSET_X) + "px")
+                    .set("top", (entry.getY() + OFFSET_Y) + "px")
+                    .set("z-index", "5")
+                    .set("background", "green")
+                    .set("color", "white")
+                    .set("padding", "8px 14px")
+                    .set("border-radius", "8px")
+                    .set("font-weight", "bold");
+
+            map.add(entryDiv);
+        }
+    }
+
+    private void addSeatingZones(Div map) {
+        if (eventMap.getSeatingZones() == null) {
+            return;
+        }
 
         for (SeatingZoneDTO zone : eventMap.getSeatingZones()) {
+            Div zoneDiv = new Div();
 
-            String zoneName = zone.getName();
+            zoneDiv.getStyle()
+                    .set("position", "absolute")
+                    .set("left", (zone.getPosition().getX() + OFFSET_X) + "px")
+                    .set("top", (zone.getPosition().getY() + OFFSET_Y) + "px")
+                    .set("border", "1px solid #999")
+                    .set("padding", "8px")
+                    .set("background", "white")
+                    .set("z-index", "2")
+                    .set("border-radius", "10px")
+                    .set("box-shadow", "0 2px 6px rgba(0,0,0,0.12)");
 
-            wrapper.add(new H4("Zone: " + zoneName));
+            H4 title = new H4(zone.getName() + " - Price: " + zone.getPrice());
+            title.getStyle()
+                    .set("margin", "0 0 8px 0")
+                    .set("font-size", "14px");
 
-            FlexLayout grid = new FlexLayout();
+            Div grid = new Div();
             grid.getStyle()
                     .set("display", "grid")
-                    .set("grid-template-columns", "repeat(" + zone.getCols() + ", 45px)")
-                    .set("gap", "6px");
+                    .set("grid-template-columns", "repeat(" + zone.getCols() + ", 32px)")
+                    .set("gap", "4px");
 
             for (int r = 1; r <= zone.getRows(); r++) {
                 for (int c = 1; c <= zone.getCols(); c++) {
-
                     Button seat = new Button(r + "-" + c);
 
-                    seat.setWidth("45px");
-                    seat.setHeight("45px");
-
-                    String key = zoneName + ":" + r + "-" + c;
+                    seat.setWidth("28px");
+                    seat.setHeight("28px");
 
                     seat.getStyle()
+                            .set("font-size", "10px")
+                            .set("padding", "0")
+                            .set("min-width", "28px")
                             .set("background", "#4CAF50")
                             .set("color", "white");
 
+                    String zoneName = zone.getName();
                     int finalR = r;
                     int finalC = c;
-                    seat.addClickListener(e -> {
 
+                    seat.addClickListener(e -> {
                         List<SeatingTicketDTO> list =
                                 selectedSeats.computeIfAbsent(zoneName, z -> new ArrayList<>());
 
@@ -158,52 +249,81 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
                 }
             }
 
-            wrapper.add(grid);
+            zoneDiv.add(title, grid);
+            map.add(zoneDiv);
+        }
+    }
+
+    private void addStandingZones(Div map) {
+        if (eventMap.getStandingZones() == null) {
+            return;
         }
 
-        // ── Standing ─────────────────────────────
-
-        wrapper.add(new Hr());
-        wrapper.add(new H3("Standing"));
-
         for (StandingZoneDTO zone : eventMap.getStandingZones()) {
+            Div zoneDiv = new Div();
 
-            String name = zone.getName();
+            zoneDiv.getStyle()
+                    .set("position", "absolute")
+                    .set("left", (zone.getPosition().getX() + OFFSET_X) + "px")
+                    .set("top", (zone.getPosition().getY() + OFFSET_Y) + "px")
+                    .set("width", "170px")
+                    .set("border", "1px solid #777")
+                    .set("padding", "10px")
+                    .set("background", "#fff8dc")
+                    .set("z-index", "2")
+                    .set("border-radius", "10px")
+                    .set("box-shadow", "0 2px 6px rgba(0,0,0,0.12)");
 
-            IntegerField field = new IntegerField(name + " tickets");
-            field.setMin(0);
-            field.setMax(zone.getCapacty());
-            field.setValue(0);
+            H4 title = new H4(zone.getName());
+            title.getStyle()
+                    .set("margin", "0 0 6px 0")
+                    .set("font-size", "14px");
 
-            field.addValueChangeListener(e -> {
-                selectedStanding.put(name, e.getValue() == null ? 0 : e.getValue());
+            Span capacity = new Span("Price: " + zone.getPrice());
+            capacity.getStyle()
+                    .set("display", "block")
+                    .set("font-size", "12px")
+                    .set("margin-bottom", "8px");
+
+            IntegerField amount = new IntegerField("Tickets");
+            amount.setMin(0);
+            amount.setMax(zone.getCapacty());
+            amount.setValue(0);
+            amount.setStepButtonsVisible(true);
+            amount.setWidthFull();
+
+            amount.addValueChangeListener(e -> {
+                Integer value = e.getValue();
+
+                if (value == null || value <= 0) {
+                    selectedStanding.remove(zone.getName());
+                } else {
+                    selectedStanding.put(zone.getName(), value);
+                }
+
                 refreshSummary();
             });
 
-            wrapper.add(field);
+            zoneDiv.add(title, capacity, amount);
+            map.add(zoneDiv);
         }
-
-        return wrapper;
     }
 
-    // =========================================================
-    // SUMMARY
-    // =========================================================
-
     private VerticalLayout buildSummary(String token) {
-
         VerticalLayout box = new VerticalLayout();
         box.setWidth("350px");
+        box.setMinWidth("350px");
 
         box.getStyle()
                 .set("border", "1px solid #ddd")
                 .set("border-radius", "12px")
-                .set("padding", "1rem");
+                .set("padding", "1rem")
+                .set("z-index", "20")
+                .set("background", "white");
 
         Button continueBtn = new Button("Continue to Checkout");
 
         continueBtn.addClickListener(e -> {
-
             Response<Integer> res =
                     presenter.selectTickets(
                             token,
@@ -225,27 +345,24 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         return box;
     }
 
-    // =========================================================
-    // REFRESH
-    // =========================================================
-
     private void refreshSummary() {
-
         selectedSummary.removeAll();
 
         int total = 0;
 
         for (var entry : selectedSeats.entrySet()) {
-            for (SeatingTicketDTO s : entry.getValue()) {
+            for (SeatingTicketDTO seat : entry.getValue()) {
                 total++;
+
                 selectedSummary.add(new Span(
-                        entry.getKey() + " seat " + s.getRow() + "-" + s.getCol()
+                        entry.getKey() + " seat " + seat.getRow() + "-" + seat.getCol()
                 ));
             }
         }
 
         for (var entry : selectedStanding.entrySet()) {
             total += entry.getValue();
+
             selectedSummary.add(new Span(
                     entry.getKey() + " standing x" + entry.getValue()
             ));
