@@ -34,4 +34,5 @@ public abstract class Zone {
     public abstract boolean containsTicketId(int ticketId);
     abstract void releaseTickets(List<Integer> ticketIds) ;
     public abstract void markTicketsAsSold(List<Integer> ticketIds);
+    public abstract boolean hasAvailableTickets();
 }

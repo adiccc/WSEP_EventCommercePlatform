@@ -1,6 +1,9 @@
 package application;
 
 import DTO.EnterPurchaseDTO;
+import DTO.NotifyDTO;
+import DTO.NotifyPayload;
+import DTO.NotifyType;
 import DTO.PaymentDetailsDTO;
 import DTO.TicketSupplyRequestDTO;
 import DTO.TicketSupplyResultDTO;
@@ -47,6 +50,7 @@ public class ActiveOrderService {
     private final IAccessValidator accessValidator;
     private final IPaymentSystem paymentSystem;
     private final ITicketSupply ticketSupply;
+    private final INotifier notifier;
     private int capacity;
     private final ScheduledExecutorService cleanupScheduler;
 
@@ -60,6 +64,7 @@ public class ActiveOrderService {
             IPaymentSystem paymentSystem,
             ITicketSupply ticketSupply,
             IAccessValidator accessValidator,
+            INotifier notifier,
             @Value("${active-order.capacity:20}") int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
@@ -69,6 +74,7 @@ public class ActiveOrderService {
         this.paymentSystem = paymentSystem;
         this.ticketSupply = ticketSupply;
         this.accessValidator = accessValidator;
+        this.notifier = notifier;
         this.capacity = capacity;
         this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "active-order-cleanup");
@@ -526,6 +532,14 @@ public class ActiveOrderService {
                                 logger.log(Level.INFO, "Retrying event update after optimistic locking failure");
                             }
                         }
+
+                        if (order != null && !shouldReleaseTickets) {
+                            try {
+                                notifySoldOutIfApplicable(event.getId());
+                            } catch (Exception e) {
+                                logger.log(Level.WARNING, "Sold-out notification failed: " + e.getMessage());
+                            }
+                        }
                     }
                 }
                 if (shouldDeleteActiveOrder) {
@@ -785,6 +799,35 @@ public class ActiveOrderService {
 
         if (skipped) {
             promoteNextInQueue(eventId);
+        }
+    }
+
+    private void notifySoldOutIfApplicable(int eventId) {
+        Event persisted = eventRepo.findById(eventId);
+        if (persisted == null || !persisted.isSoldOut()) {
+            return;
+        }
+
+        Company company = companyRepo.findById(persisted.getCompanyId());
+        if (company == null) {
+            return;
+        }
+
+        Set<Integer> recipientIds = new HashSet<>();
+        recipientIds.addAll(company.getCompanyPermission().getOwnerIds());
+        recipientIds.addAll(company.getCompanyPermission().getCompanyTree().keySet());
+
+        NotifyDTO payload = new NotifyDTO(
+                NotifyType.GENERAL_POPUP,
+                new NotifyPayload("Event \"" + persisted.getName() + "\" is sold out.", eventId)
+        );
+
+        for (Integer userId : recipientIds) {
+            try {
+                notifier.notifyMemberById(userId, payload);
+            } catch (Exception e) {
+                logger.log(Level.WARNING, "Sold-out notify failed for user " + userId + ": " + e.getMessage());
+            }
         }
     }
 }

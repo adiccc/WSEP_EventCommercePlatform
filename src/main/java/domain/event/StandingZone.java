@@ -169,4 +169,9 @@ public class StandingZone extends Zone {
             }
         }
     }
+
+    @Override
+    public boolean hasAvailableTickets() {
+        return available > 0;
+    }
 }

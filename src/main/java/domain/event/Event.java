@@ -312,6 +312,10 @@ public class Event {
         eventMap.markTicketsAsSold(ticketIds);
     }
 
+    public boolean isSoldOut() {
+        return eventMap != null && eventMap.isSoldOut();
+    }
+
     public int countUserTickets(UserDTO user) {
         int ticketsBoughtForEvent =0;
         for (Order order : orders) {

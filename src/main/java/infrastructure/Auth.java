@@ -254,5 +254,28 @@ public class Auth implements IAuth {
             return new Response<>(null, "User is not found");
         }
     }
+
+    @Override
+    public Response<String> getUserIdentifier(String token){ //extracting Identifier for notifications
+        if (token == null || token.isBlank()) {
+            logger.warning("Token is missing");
+            return new Response<>(null, "Token is missing");
+        }
+        try {
+            String role = tokenService.extractRole(token);
+            if (role.equals("GUEST") || role.equals("MEMBER")) {
+                String identifier = tokenService.extractUsername(token);
+                logger.info("Retrieved user identifier " + identifier);
+                return new Response<>(identifier, "Guest token recognized");
+            }
+            else{
+                logger.warning("User with token is not found");
+                return new Response<>(null, "User with token is not found");
+            }
+        } catch (Exception e) {
+            logger.severe("User is not found");
+            return new Response<>(null, "User is not found");
+        }
+    }
 }
 
