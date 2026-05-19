@@ -71,6 +71,14 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
             return;
         }
 
+        if (response.getValue().isWaitingInQueue()) {
+            UI.getCurrent().navigate(
+                    "waiting/" + companyId + "/" + eventId + "/" +
+                            response.getValue().getQueuePosition()
+            );
+            return;
+        }
+
         if (response.getValue().isExistingOrder()) {
             ActiveOrderDTO order = response.getValue().getActiveOrder();
 
@@ -81,8 +89,6 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
 
             Notification.show("You already started this order. Continue selecting tickets.");
         }
-
-        this.eventMap = response.getValue().getEventMap();
 
         this.eventMap = response.getValue().getEventMap();
 

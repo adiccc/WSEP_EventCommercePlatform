@@ -1,8 +1,6 @@
 package application;
 
-import DTO.ElementPositionDTO;
-import DTO.SeatingZoneDTO;
-import DTO.StandingZoneDTO;
+import DTO.*;
 import Log.LoggerSetup;
 import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.IActiveOrderRepo;
@@ -23,9 +21,6 @@ import domain.user.IUserRepo;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import DTO.PaymentDetailsDTO;
-import DTO.TicketSupplyRequestDTO;
-import DTO.TicketSupplyResultDTO;
 import domain.dto.EventMapDTO;
 
 import java.util.HashMap;
@@ -146,7 +141,7 @@ class EventCompanyManageServiceTest {
     }
 
     private int createCompletedOrderThroughPurchaseFlow(String buyerToken, int eventId, int ticketCount) {
-        Response<EventMapDTO> enterResponse =
+        Response<EnterPurchaseDTO> enterResponse =
                 activeOrderService.enterEventPurchase(buyerToken, companyId, eventId);
 
         assertNotNull(enterResponse.getValue(),

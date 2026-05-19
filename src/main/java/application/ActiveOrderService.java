@@ -60,7 +60,7 @@ public class ActiveOrderService {
             IPaymentSystem paymentSystem,
             ITicketSupply ticketSupply,
             IAccessValidator accessValidator,
-            @Value("${active-order.capacity:100}") int capacity) {
+            @Value("${active-order.capacity:20}") int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
@@ -140,22 +140,20 @@ public class ActiveOrderService {
                     logger.log(Level.INFO,
                             "Existing active order found. Redirecting user to checkout. Order ID: "
                                     + existingOrder.get().getId());
-
-                    if (existingOrder.isPresent()) {
-                        return new Response<>(
-                                new EnterPurchaseDTO(
-                                        new EventMapDTO(e.getMap()),
-                                        new ActiveOrderDTO(existingOrder.get()),
-                                        true
-                                ),
-                                "Existing active order found"
-                        );
-                    }
+                    return new Response<>(
+                            new EnterPurchaseDTO(
+                                    new EventMapDTO(e.getMap()),
+                                    new ActiveOrderDTO(existingOrder.get()),
+                                    true,
+                                    false, null
+                            ),
+                            "Existing active order found"
+                    );
                 }
 
                 if (e.hasLottery()) {
                     Lottery l = lotteryRepo.findById(eventId);
-                    int code = userId;
+                    int code = userId; // the code of each user who registered to the lottery is his ID because there ara no notifications in the system
 
                     LocalDateTime lotteryEndTime =
                             e.getSaleStartDate().plusHours(l.getExpirationTime());
@@ -175,7 +173,13 @@ public class ActiveOrderService {
                         int position = e.getEventQueue().position(token);
 
                         return new Response<>(
-                                null,
+                                new EnterPurchaseDTO(
+                                        null,
+                                        null,
+                                        false,
+                                        true,
+                                        position
+                                ),
                                 "User is still waiting in queue. Position: " + position
                         );
                     }
@@ -186,7 +190,13 @@ public class ActiveOrderService {
                     int position = e.getEventQueue().position(token);
 
                     return new Response<>(
-                            null,
+                            new EnterPurchaseDTO(
+                                    null,
+                                    null,
+                                    false,
+                                    true,
+                                    position
+                            ),
                             "Event is full, user added to waiting queue. Position: " + position
                     );
                 }
@@ -210,7 +220,7 @@ public class ActiveOrderService {
                         new EnterPurchaseDTO(
                                 new EventMapDTO(e.getMap()),
                                 new ActiveOrderDTO(newActiveOrder),
-                                false
+                                false, false, null
                         ),
                         "Event map retrieved successfully"
                 );
@@ -218,7 +228,9 @@ public class ActiveOrderService {
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(null, "Event not found");
-
+            } catch (IllegalStateException e) {
+                logger.log(Level.SEVERE, e.getMessage());
+                return new Response<>(null, e.getMessage());
             } catch (OptimisticLockingFailureException e) {
                 throw e;
 
