@@ -77,7 +77,7 @@ public class RolesView extends VerticalLayout implements BeforeEnterObserver {
         } else if ("MANAGER".equals(role)) {
             buildManagerView(token);
         } else {
-            add(new Paragraph("You don't have permission to view this page."));
+            add(new Paragraph("⛔ You don't have permission to view this page."));
         }
     }
 
@@ -95,11 +95,11 @@ public class RolesView extends VerticalLayout implements BeforeEnterObserver {
         add(new H2("Roles & Permissions"));
 
         // ── Founder ──────────────────────────────────────────────────────────
-        add(sectionHeader("Founder"));
+        add(sectionHeader("👑 Founder"));
         add(userChip(presenter.getDisplayName(tree.getFounderId()), "var(--lumo-primary-color)"));
 
         // ── Owners ───────────────────────────────────────────────────────────
-        add(sectionHeader("Owners"));
+        add(sectionHeader("🏆 Owners"));
         HorizontalLayout ownersRow = new HorizontalLayout();
         ownersRow.getStyle().set("flex-wrap", "wrap");
         for (int ownerId : tree.getOwnerIds()) {
@@ -113,7 +113,7 @@ public class RolesView extends VerticalLayout implements BeforeEnterObserver {
         add(ownersRow);
 
         // ── Managers grid with Edit / Remove actions ─────────────────────────
-        add(sectionHeader("Managers & Permissions"));
+        add(sectionHeader("🔑 Managers & Permissions"));
 
         Map<Integer, Set<PermissionType>> managers = tree.getManagersPermissions();
         if (managers.isEmpty()) {
@@ -402,7 +402,7 @@ public class RolesView extends VerticalLayout implements BeforeEnterObserver {
     }
 
     private Span permChip(String label) {
-        Span chip = new Span(label);
+        Span chip = new Span("✓ " + label);
         chip.getStyle()
                 .set("display", "block")
                 .set("padding", "0.35rem 0")

@@ -30,7 +30,7 @@ public class RolesPresenter {
 
     /** Returns the calling user's role in the company. */
     public String getUserRole(String token, int companyId) {
-        var r = companyService.getUserRoleInCompany(token, companyId);
+        Response<String> r = companyService.getUserRoleInCompany(token, companyId);
         return r.getValue() != null ? r.getValue() : "MEMBER";
     }
 
