@@ -1,5 +1,8 @@
 package application;
 
+import DTO.NotifyDTO;
+import DTO.NotifyPayload;
+import DTO.NotifyType;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.PermissionType;
@@ -13,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -29,9 +33,10 @@ public class LotteryService {
     private final ScheduledExecutorService scheduler; // ScheduledExecutorService is used to schedule tasks to run after a given delay
     private final ICompanyRepo companyRepo;
     private final IAccessValidator accessValidator;
+    private final INotifier notifier;
 
     @Autowired
-    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth, ICompanyRepo companyRepo, IAccessValidator accessValidator) {
+    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth, ICompanyRepo companyRepo, IAccessValidator accessValidator, INotifier notifier) {
         this.lotteryRepo = lotteryRepo;
         this.eventRepo = eventRepo;
         this.logger = Logger.getLogger(LotteryService.class.getName());
@@ -39,6 +44,7 @@ public class LotteryService {
         this.scheduler = Executors.newScheduledThreadPool(10);
         this.companyRepo = companyRepo;
         this.accessValidator = accessValidator;
+        this.notifier = notifier;
     }
 
     public Response<Boolean> createLottery(String token, int eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
@@ -124,11 +130,16 @@ public class LotteryService {
             // Retrieve the lottery from the database
             Lottery lottery = lotteryRepo.findById(lotteryId);
             // Perform the domain logic to select winners
-            lottery.drawWinners();
+            Map<Integer,String> winners = lottery.drawWinners();
             //Save the updated lottery state (with the populated winners list) back to the database
             lotteryRepo.store(lottery);
-            logger.log(Level.INFO, "Successfully drawn winners for lottery ID: " + lotteryId + ". Total winners: " + lottery.getWinners().size());
-            // notify winners (not in this version)
+            logger.log(Level.INFO, "Successfully drawn winners for lottery ID: " + lotteryId);
+            // Notify the winners
+            for (Integer winner: winners.keySet()) {
+                int userId = winner;
+                String code = winners.get(winner);
+                notifier.notifyMemberById(userId, new NotifyDTO(NotifyType.GENERAL_POPUP,new NotifyPayload("Congratulations! You have won the lottery for event " + lotteryId + ". Your code is: " + code)));
+            }
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Could not draw lottery, ID not found: " + lotteryId);
         } catch (OptimisticLockingFailureException e) {

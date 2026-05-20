@@ -75,7 +75,7 @@ class LotteryServiceTest {
          eventCompanyManageService =
                 new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
 
-        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator);
+        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator,notifier);
 
         // user with permission
         UserDTO user1DTO = new UserDTO(

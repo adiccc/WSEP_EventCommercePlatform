@@ -92,7 +92,7 @@ public class ActiveOrderService {
         return this.capacity;
     }
 
-    public Response<EnterPurchaseDTO> enterEventPurchase(String token, int companyId, int eventId) {
+    public Response<EnterPurchaseDTO> enterEventPurchase(String token, int companyId, int eventId,String code) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "enterEventPurchase called");
             cleanupExpiredOrders();
@@ -153,12 +153,11 @@ public class ActiveOrderService {
 
                 if (e.hasLottery()) {
                     Lottery l = lotteryRepo.findById(eventId);
-                    int code = userId; // the code of each user who registered to the lottery is his ID because there ara no notifications in the system
 
                     LocalDateTime lotteryEndTime =
                             e.getSaleStartDate().plusHours(l.getExpirationTime());
 
-                    if (!l.getWinners().contains(code)) {
+                    if (code !=null && !l.codeMatchesUser(userId,code)) {
                         if (LocalDateTime.now().isBefore(lotteryEndTime)) {
                             return new Response<>(
                                     null,

@@ -17,6 +17,7 @@ public class NotifyPayload {
     public NotifyPayload(String message) {
         this.message = message;
         this.eventId = null;
+        this.companyId = null;
     }
 
     public String getMessage() {
