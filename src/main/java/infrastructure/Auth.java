@@ -22,10 +22,11 @@ public class Auth implements IAuth {
     private final TokenService tokenService;
     private final IUserRepo userRepo;
     private final IPasswordEncoder passwordEncoder;
-    private final Map<String, Date> tokensLoggedOut = new ConcurrentHashMap<>(); //only for members
+    private final Map<String, Date> tokensLoggedOut = new ConcurrentHashMap<>(); // only for members
     private final Set<String> adminEmails;
 
-    public Auth(TokenService tokenService, IUserRepo userRepo, IPasswordEncoder passwordEncoder, Set<String> adminEmails) {
+    public Auth(TokenService tokenService, IUserRepo userRepo, IPasswordEncoder passwordEncoder,
+            Set<String> adminEmails) {
         this.tokenService = tokenService;
         this.userRepo = userRepo;
         this.passwordEncoder = passwordEncoder;
@@ -38,17 +39,17 @@ public class Auth implements IAuth {
     }
 
     @Override
-    public Response<String> login(String username, String password) { //login only for members!
+    public Response<String> login(String username, String password) { // login only for members!
         logger.info("Login attempt for username: " + username);
         try {
             Member member = userRepo.findUserByEmail(username);
             if (member == null || !passwordEncoder.matches(password, member.getPassword())) {
                 logger.warning("Login failed: Invalid credentials for " + username);
-                return new Response<>(null,"Invalid email or password");
+                return new Response<>(null, "Invalid email or password");
             }
-            if(!member.isActive()){
+            if (!member.isActive()) {
                 logger.warning("Login failed: member is blocked by Admin");
-                return new Response<>(null,"Login failed: member is blocked by Admin");
+                return new Response<>(null, "Login failed: member is blocked by Admin");
             }
             String token = tokenService.generateToken(username);
             logger.info("Login successful for username: " + username);
@@ -56,31 +57,32 @@ public class Auth implements IAuth {
 
         } catch (Exception e) {
             logger.severe("Login failed for username: " + username + ". Error: " + e.getMessage());
-            return new Response<>(null,"Login failed due to server error");
+            return new Response<>(null, "Login failed due to server error");
         }
     }
+
     @Override
     public Response<Boolean> logout(String token) {
         logger.info("Logout attempt");
         if (token == null || token.isBlank()) {
             return new Response<>(false, "Token is missing or empty");
         }
-            try{
-                Date date = tokenService.extractExpirationDate(token);
-                int userId = getUserId(token).getValue();
-                if (tokensLoggedOut.putIfAbsent(token, date) != null) {
-                    logger.warning("Logout attempt failed: member is in the logged out tokens list") ;
-                    return new Response<>(false, "Cannot log out, user is Already logged out");
-                }
-                cleanExpiredLoggedOutTokens();
-                logger.info("Logout successful for username: " + userId);
-                return new Response<>(true, "Logout successful");
+        try {
+            Date date = tokenService.extractExpirationDate(token);
+            int userId = getUserId(token).getValue();
+            if (tokensLoggedOut.putIfAbsent(token, date) != null) {
+                logger.warning("Logout attempt failed: member is in the logged out tokens list");
+                return new Response<>(false, "Cannot log out, user is Already logged out");
             }
-            catch(Exception e){
-                logger.severe("Logout failed for token: " + token + ". Error: " + e.getMessage());
-                return new Response<>(false, "Logout failed due to server error");
-            }
+            cleanExpiredLoggedOutTokens();
+            logger.info("Logout successful for username: " + userId);
+            return new Response<>(true, "Logout successful");
+        } catch (Exception e) {
+            logger.severe("Logout failed for token: " + token + ". Error: " + e.getMessage());
+            return new Response<>(false, "Logout failed due to server error");
         }
+    }
+
     @Override
     public Response<Boolean> isAdmin(String token) {
         if (!isLoggedIn(token).getValue()) {
@@ -100,11 +102,11 @@ public class Auth implements IAuth {
     @Override
     public Response<String> getRole(String token) {
         logger.info("trying to extract role");
-        if(token==null || token.isBlank()) {
+        if (token == null || token.isBlank()) {
             logger.warning("token is missing or empty");
             return new Response<>(null, "Token is missing or empty");
         }
-        try{
+        try {
             if (!tokenService.validateToken(token)) {
                 logger.warning("Token validation failed");
                 return new Response<>(null, "Invalid or expired token");
@@ -116,11 +118,11 @@ public class Auth implements IAuth {
                     return new Response<>(null, "Member is logged out");
                 }
             }
-            //in guest extract if it's succesfull we check if the token is valid with expiration date
+            // in guest extract if it's succesfull we check if the token is valid with
+            // expiration date
             logger.info("retrieved and validate role: " + role);
             return new Response<>(role, "retrieved role");
-        }
-        catch(Exception e){
+        } catch (Exception e) {
             logger.severe("getRole failed for token: " + token + ". Error: " + e.getMessage());
             return new Response<>(null, "getRole failed due to server error");
         }
@@ -129,8 +131,8 @@ public class Auth implements IAuth {
     private void cleanExpiredLoggedOutTokens() {
         Date today = new Date();
         logger.info("Clean expired logged out tokens");
-        for(Map.Entry<String, Date> entry : tokensLoggedOut.entrySet()){
-            if(entry.getValue().before(today)){
+        for (Map.Entry<String, Date> entry : tokensLoggedOut.entrySet()) {
+            if (entry.getValue().before(today)) {
                 tokensLoggedOut.remove(entry.getKey());
             }
         }
@@ -139,7 +141,7 @@ public class Auth implements IAuth {
 
     @Override
     public Response<Boolean> isLoggedIn(String token) {
-        if(token == null || token.isBlank()){
+        if (token == null || token.isBlank()) {
             logger.warning("Token is null");
             return new Response<>(false, "Token is null");
         }
@@ -152,8 +154,7 @@ public class Auth implements IAuth {
                 logger.warning("Member is logged out");
                 return new Response<>(false, "Member is logged out");
             }
-        }
-        catch (Exception e){
+        } catch (Exception e) {
             logger.severe("Member is not logged in due to server error");
             return new Response<>(false, "Member is not logged in due to server error");
         }
@@ -185,8 +186,7 @@ public class Auth implements IAuth {
             if (member != null) {
                 logger.info("Retrieved member " + member.getIdentifier());
                 return new Response<>(member.getUserId(), "Retrieved member");
-            }
-            else {
+            } else {
                 logger.warning("Member is not found");
                 return new Response<>(-1, "Member is not found");
             }
@@ -214,8 +214,7 @@ public class Auth implements IAuth {
                 logger.info("Retrieved member " + member.getIdentifier());
                 UserDTO userDTO = member.getUserDTO();
                 return new Response<>(userDTO, "Retrieved member");
-            }
-            else {
+            } else {
                 logger.warning("Member is not found");
                 return new Response<>(null, "Member is not found");
             }
@@ -225,7 +224,8 @@ public class Auth implements IAuth {
             return new Response<>(null, "User is not found");
         }
     }
-    public Response<String> getUserEmail(String token){
+
+    public Response<String> getUserEmail(String token) {
         if (token == null || token.isBlank()) {
             logger.warning("Token is missing");
             return new Response<>(null, "Token is missing");
@@ -246,8 +246,8 @@ public class Auth implements IAuth {
                 return new Response<>(null, "User with token is not found");
             }
 
-                logger.info("Retrieved member's email " + username);
-                return new Response<>(username, "Retrieved member");
+            logger.info("Retrieved member's email " + username);
+            return new Response<>(username, "Retrieved member");
 
         } catch (Exception e) {
             logger.severe("User is not found");
@@ -256,7 +256,7 @@ public class Auth implements IAuth {
     }
 
     @Override
-    public Response<String> getUserIdentifier(String token){ //extracting Identifier for notifications
+    public Response<String> getUserIdentifier(String token) { // extracting Identifier for notifications
         if (token == null || token.isBlank()) {
             logger.warning("Token is missing");
             return new Response<>(null, "Token is missing");
@@ -267,8 +267,7 @@ public class Auth implements IAuth {
                 String identifier = tokenService.extractUsername(token);
                 logger.info("Retrieved user identifier " + identifier);
                 return new Response<>(identifier, "Guest token recognized");
-            }
-            else{
+            } else {
                 logger.warning("User with token is not found");
                 return new Response<>(null, "User with token is not found");
             }
@@ -277,5 +276,5 @@ public class Auth implements IAuth {
             return new Response<>(null, "User is not found");
         }
     }
-}
 
+}
