@@ -65,6 +65,21 @@ public class Permissions {
             return null;
     }
 
+    /** Returns "FOUNDER", "OWNER", "MANAGER", or "MEMBER". */
+    public String getUserRoleName(int userId) {
+        State state = getUserState(userId);
+        if (state instanceof Founder) return "FOUNDER";
+        if (state instanceof Owner)   return "OWNER";
+        if (state instanceof Manager) return "MANAGER";
+        return "MEMBER";
+    }
+
+    /** Returns the permissions granted to a manager, or an empty set if the user is not a manager. */
+    public Set<PermissionType> getManagerPermissions(int userId) {
+        Hierarchy h = companyTree.get(userId);
+        return h != null ? h.getAllPermissions() : Set.of();
+    }
+
     public void addOwner(int ownerId) {
         pandingOwners.add(ownerId);
     }

@@ -186,6 +186,42 @@ public class CompanyService {
         });
     }
 
+    /**
+     * Returns the calling user's role within the given company:
+     * "FOUNDER", "OWNER", "MANAGER", or "MEMBER".
+     */
+    public Response<String> getUserRoleInCompany(String token, int companyId) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) return Response.ok("MEMBER"); // guest
+                Company company = companyRepo.findById(companyId);
+                return Response.ok(company.getUserRoleName(userId));
+            } catch (Exception e) {
+                logger.severe("getUserRoleInCompany failed: " + e.getMessage());
+                return Response.error("Could not determine role: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Returns the set of PermissionTypes granted to the calling user as a manager in the company.
+     * Returns an empty set if the user is not a manager.
+     */
+    public Response<Set<PermissionType>> getMyPermissions(String token, int companyId) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) return Response.error("Not logged in");
+                Company company = companyRepo.findById(companyId);
+                return Response.ok(company.getManagerPermissions(userId));
+            } catch (Exception e) {
+                logger.severe("getMyPermissions failed: " + e.getMessage());
+                return Response.error("Could not retrieve permissions: " + e.getMessage());
+            }
+        });
+    }
+
     public Response<Boolean> addRuleToCompany(String token, int companyId, PurchaseRuleDTO ruleDTO) {
         return RetryHelper.executeWithRetry(() ->
         {

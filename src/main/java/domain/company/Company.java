@@ -125,6 +125,8 @@ public class Company {
     public Map<Integer, HierarchyDTO> getManagersPermissionsMap() {
         return companyPermission.getCompanyTree();
     }
+    public String getUserRoleName(int userId) { return companyPermission.getUserRoleName(userId); }
+    public Set<PermissionType> getManagerPermissions(int userId) { return companyPermission.getManagerPermissions(userId); }
 
     public void updateManagerPermissions(int ownerId, int managerId, Set<PermissionType> newPermissions) {
         companyPermission.updateManagerPermissions(ownerId, managerId, newPermissions);
