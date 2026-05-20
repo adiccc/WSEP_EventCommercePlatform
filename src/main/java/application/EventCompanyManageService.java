@@ -220,6 +220,12 @@ public class EventCompanyManageService {
                 event.setDate(date);
                 eventRepo.store(event);
                 logger.log(Level.INFO, "Event updated successfully");
+                List<String> purchasers = eventRepo.getAllEventPurchasers(eventId);
+                NotifyPayload payload= new NotifyPayload("The Date of event " + event.getName() + " has been updated to " + event.getDate().toString(),eventId, null);
+                NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
+                for(String purchaser : purchasers){
+                    notifier.notifyUser(purchaser, notifyDTO);
+                }
                 return new Response<>(true, "Event updated successfully");
             } catch (OptimisticLockingFailureException e) {
                 throw e;

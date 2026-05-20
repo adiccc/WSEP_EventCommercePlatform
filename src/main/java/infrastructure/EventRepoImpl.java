@@ -105,4 +105,17 @@ public class EventRepoImpl implements IEventRepo {
        }
        return purchasers.stream().toList();
     }
+    public List<String> getAllEventPurchasers(Integer eventId){
+        Event event = events.get(eventId);
+        if (event == null) {
+            throw new NoSuchElementException("Event not found with ID: " + eventId);
+        }
+        List<Order> eventsOrder = event.getOrders();
+        HashSet<String> purchasers = new HashSet<>();
+        for(Order o : eventsOrder){
+            purchasers.add(o.getUserIdentifier());
+        }
+        return purchasers.stream().toList();
+    }
+
 }
