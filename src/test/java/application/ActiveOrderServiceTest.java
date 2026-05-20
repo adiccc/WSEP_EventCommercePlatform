@@ -97,7 +97,7 @@ class ActiveOrderServiceTest {
         companyService.createProductionCompany(validToken, companyId,
                 "test-company", "testC@company.com", "054-5556677", "leumi");
 
-        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator);
+        EventCompanyManageService companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
 
         Response<Integer> r = companyEventService.createEvent(
                 validToken,

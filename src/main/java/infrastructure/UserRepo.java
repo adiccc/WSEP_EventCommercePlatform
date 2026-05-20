@@ -97,6 +97,14 @@ public class UserRepo implements IUserRepo {
             usersPerId.remove(userId);
         }
     }
+    @Override
+    public String getUserEmail(Integer userId){
+        Member member = usersPerId.get(userId);
+        if (member != null) {
+            return member.getIdentifier();
+        }
+        throw new NoSuchElementException("User not found with ID: " + userId);
+    }
 
     @Override
     public String getUserEmail(Integer userId){

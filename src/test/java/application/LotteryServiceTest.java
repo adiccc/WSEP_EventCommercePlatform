@@ -73,7 +73,7 @@ class LotteryServiceTest {
         UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
         CompanyService companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
          eventCompanyManageService =
-                new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator);
+                new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
 
         lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator);
 
