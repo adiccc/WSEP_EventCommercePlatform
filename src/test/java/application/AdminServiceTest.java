@@ -96,7 +96,7 @@ class AdminServiceTest {
         ILotteryRepo lotteryRepo = new LotteryRepoImpl();
         activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,accessValidator,notifier,100);
 
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
         companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
 
         UserDTO adminDTO = new UserDTO(ADMIN_EMAIL, "Admin", "User", PASSWORD, 1, 1, 1990, "City", "050-000-0000");

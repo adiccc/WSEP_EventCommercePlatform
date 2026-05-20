@@ -1,8 +1,6 @@
 package application;
 
-import DTO.ElementPositionDTO;
-import DTO.SeatingZoneDTO;
-import DTO.StandingZoneDTO;
+import DTO.*;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.*;
@@ -27,6 +25,7 @@ import java.util.logging.*;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+import static DTO.NotifyType.GENERAL_POPUP;
 import static domain.dataType.PermissionType.*;
 
 @Service
@@ -37,18 +36,20 @@ public class EventCompanyManageService {
     private final IAuth auth;
     private final IPaymentSystem paymentSystem;
     private final IAccessValidator accessValidator;
+    private final INotifier notifier;
     AtomicInteger ticketIdGenerator = new AtomicInteger(1);
 
 
 
     @Autowired
-    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, IAccessValidator accessValidator) {
+    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, IAccessValidator accessValidator,INotifier notifier) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;
         this.auth = auth;
         this.logger = Logger.getLogger(EventCompanyManageService.class.getName());
         this.paymentSystem = paymentSystem;
         this.accessValidator = accessValidator;
+        this.notifier = notifier;
     }
 
     public Response<Boolean> DefineVenueAndSeatingMap(String token, Integer eventId, ElementPositionDTO stage,
@@ -348,6 +349,10 @@ public class EventCompanyManageService {
                 orders = event.getOrders();
                 for(Order order : orders){
                     try {
+                        String purchaserIdentifier = order.getUserIdentifier();
+                        NotifyPayload payload = new NotifyPayload("Event " + eventId + "cancelled", eventId, null);
+                        NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP,payload);
+                        notifier.notifyUser(purchaserIdentifier,notifyDTO);
                         processRefund(token, event.getId(), order.getOrderId());
                     } catch (Exception e) {
                         logger.log(Level.SEVERE, "Failed to process automatic refund for order " +
@@ -560,12 +565,18 @@ public class EventCompanyManageService {
                     order.markRefunded();
                     eventRepo.store(event);
                     logger.log(Level.INFO, "Refund completed successfully");
+
+                    String userIdentifier = order.getUserIdentifier();
+                    NotifyPayload payload = new NotifyPayload("Refund process for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId,null);
+                    notifier.notifyUser(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
                     return new Response<>(true, "Refund completed successfully");
                 }
 
                 order.markRefundRequired();
                 eventRepo.store(event);
-
+                String userIdentifier = order.getUserIdentifier();
+                NotifyPayload payload = new NotifyPayload("Refund process failed for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId,null);
+                notifier.notifyUser(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
                 logger.log(Level.SEVERE, "Refund rejected by external payment service");
                 return new Response<>(false, "Refund rejected by external payment service");
 

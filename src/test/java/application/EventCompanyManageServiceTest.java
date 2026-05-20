@@ -104,7 +104,7 @@ class EventCompanyManageServiceTest {
                 companyRepo,
                 eventRepo,
                 auth,
-                paymentSystem,accessValidator
+                paymentSystem,accessValidator,notifier
         );
 
         validToken1=null; // user with all permissions
@@ -898,12 +898,13 @@ class EventCompanyManageServiceTest {
                 .thenReturn(true);
 
         Event event = eventRepo.findById(eventId);
+        String buyerEmail = "user2@test.com";
 
-        Order order = new Order(1, "1", eventId, List.of(1, 2), 100.0, "pay123");
+        Order order = new Order(1, buyerEmail, eventId, List.of(1, 2), 100.0, "pay123");
         order.markRefundRequired();
         event.getOrders().add(order);
         eventRepo.store(event);
-
+        userRepo.findUserByEmail(buyerEmail).clearDelayedNotifications();
         Response<Boolean> response = eventCompanyManageService.processRefund(
                 validToken1,
                 eventId,
@@ -916,6 +917,10 @@ class EventCompanyManageServiceTest {
         assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
 
         Mockito.verify(paymentSystem).refund("pay123", 100.0);
+        List<DTO.NotifyDTO> notifications = userRepo.findUserByEmail(buyerEmail).getDelayedNotifications();
+        assertEquals(1, notifications.size(), "Buyer should receive 1 success notification");
+        assertTrue(notifications.get(0).getPayload().getMessage().toLowerCase().contains("successfully")
+                || notifications.get(0).getPayload().getMessage().contains("Refund process for"));
     }
 
     @Test
@@ -939,8 +944,9 @@ class EventCompanyManageServiceTest {
                 .thenReturn(false);
 
         Event event = eventRepo.findById(eventId);
+        String buyerEmail = "user2@test.com";
 
-        Order order = new Order(123, "900", eventId, List.of(1, 2), 100.0, "pay123");
+        Order order = new Order(123, buyerEmail, eventId, List.of(1, 2), 100.0, "pay123");
         order.markRefundRequired();
         event.getOrders().add(order);
         eventRepo.store(event);
@@ -956,6 +962,9 @@ class EventCompanyManageServiceTest {
         assertEquals(OrderStatus.REFUND_REQUIRED, order.getStatus());
 
         Mockito.verify(paymentSystem).refund("pay123", 100.0);
+        List<DTO.NotifyDTO> notifications = userRepo.findUserByEmail(buyerEmail).getDelayedNotifications();
+        assertEquals(1, notifications.size(), "Buyer should receive 1 failure notification");
+        assertTrue(notifications.get(0).getPayload().getMessage().toLowerCase().contains("failed"));
     }
 
     @Test
@@ -1021,7 +1030,8 @@ class EventCompanyManageServiceTest {
         int orderId = createCompletedOrderThroughPurchaseFlow(validToken1, eventId, 1);
         Order createdOrder = eventRepo.findById(eventId).findOrderById(orderId);
         double expectedRefundAmount = createdOrder.getTotalSum();
-
+        String buyerEmail = "user1@test.com";
+        userRepo.findUserByEmail(buyerEmail).clearDelayedNotifications();
         // When
         Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, eventId);
 
@@ -1036,6 +1046,10 @@ class EventCompanyManageServiceTest {
         assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
 
         Mockito.verify(paymentSystem).refund("payment-" + orderId, expectedRefundAmount);
+        List<DTO.NotifyDTO> notifications = userRepo.findUserByEmail(buyerEmail).getDelayedNotifications();
+        assertEquals(2, notifications.size(), "Buyer should receive 2 notifications: Cancellation and Refund");
+        assertTrue(notifications.get(0).getPayload().getMessage().toLowerCase().contains("cancelled"));
+        assertTrue(notifications.get(1).getPayload().getMessage().toLowerCase().contains("refund process"));
     }
 
     @Test

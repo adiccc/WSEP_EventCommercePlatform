@@ -16,7 +16,6 @@ public interface IUserRepo extends IRepo<Member, Integer> {
     void delete(Integer userId);
 
     void store(Member mem);
-
     String getUserEmail(Integer userId);
 
 }

@@ -65,7 +65,7 @@ class EventServiceTest {
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         suspensionRepo=new SuspensionRepoImpl();
         accessValidator=new AccessValidator(suspensionRepo);
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
         service = new EventService(auth, eventRepo);
         notifier = new VaadinNotifier(userRepo);
 
