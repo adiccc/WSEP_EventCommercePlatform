@@ -362,6 +362,9 @@ class EventCompanyManageServiceTest {
                 standingZones,
                 seatingZones
         );
+        createCompletedOrderThroughPurchaseFlow(validToken2, eventId, 1);
+        String purchaserEmail = "user2@test.com";
+        userService.cleanDelayedNotifications(purchaserEmail);
 
         // When
         Response<Boolean> response =eventCompanyManageService.UpdateEventDate(
@@ -376,6 +379,10 @@ class EventCompanyManageServiceTest {
 
         EventDetailsDTO updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
         assertEquals(requestedDate.toString(), updatedEvent.getDate());
+        List<NotifyDTO> notifications = userRepo.findUserByEmail(purchaserEmail).getDelayedNotifications();
+        assertEquals(1, notifications.size(), "Purchaser should receive exactly one notification about the date change");
+        assertTrue(notifications.get(0).getPayload().getMessage().contains("has been updated to"),
+                "Notification should mention the updated date");
     }
 
 
@@ -1376,6 +1383,65 @@ class EventCompanyManageServiceTest {
 
         assertEquals(user1Id, response.getValue().get(0).getUserIdentifier());
         assertEquals(user1OrderId, response.getValue().get(0).getOrderId());
+    }
+    @Test
+    void GivenMultiplePurchasers_WhenUpdateEventDate_ThenAllPurchasersReceiveNotification() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1, eventId, stage, entries, standingZones, seatingZones
+        );
+        String email1 = "buyer1@test.com";
+        String email2 = "buyer2@test.com";
+
+        userService.registerUser("", new UserDTO(email1, "B", "1", "pass", 1, 1, 2000, "Address", "050-111-1111"));
+        userService.registerUser("", new UserDTO(email2, "B", "2", "pass", 1, 1, 2000, "Address", "050-222-2222"));
+
+        String token1 = userService.login(email1, "pass").getValue();
+        String token2 = userService.login(email2, "pass").getValue();
+
+        createCompletedOrderThroughPurchaseFlow(token1, eventId, 1);
+        createCompletedOrderThroughPurchaseFlow(token2, eventId, 1);
+
+        userService.cleanDelayedNotifications(email1);
+        userService.cleanDelayedNotifications(email2);
+
+        LocalDateTime newDate = eventDate.plusDays(5);
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.UpdateEventDate(validToken1, eventId, newDate);
+
+        // Assert
+        assertTrue(response.getValue());
+
+        assertEquals(1, userRepo.findUserByEmail(email1).getDelayedNotifications().size(), "First buyer must be notified");
+        assertEquals(1, userRepo.findUserByEmail(email2).getDelayedNotifications().size(), "Second buyer must be notified");
+    }
+    @Test
+    void GivenSamePurchaserWithMultipleOrders_WhenUpdateEventDate_ThenOnlyOneNotificationIsSent() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1, eventId, stage, entries, standingZones, seatingZones
+        );
+
+        String email = "heavy_buyer@test.com";
+        userService.registerUser("", new UserDTO(email, "Heavy", "Buyer", "pass", 1, 1, 2000, "Address", "050-999-9999"));
+        String buyerToken = userService.login(email, "pass").getValue();
+        createCompletedOrderThroughPurchaseFlow(buyerToken, eventId, 1);
+        createCompletedOrderThroughPurchaseFlow(buyerToken, eventId, 1);
+        createCompletedOrderThroughPurchaseFlow(buyerToken, eventId, 1);
+
+        userService.cleanDelayedNotifications(email);
+
+        LocalDateTime newDate = eventDate.plusDays(10);
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.UpdateEventDate(validToken1, eventId, newDate);
+
+        // Assert
+        assertTrue(response.getValue());
+        List<NotifyDTO> notifications = userRepo.findUserByEmail(email).getDelayedNotifications();
+        assertEquals(1, notifications.size(),
+                "A buyer with multiple separate orders should still receive only ONE notification about the date change (distinct test)");
     }
 
 }
