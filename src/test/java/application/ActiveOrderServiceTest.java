@@ -97,7 +97,7 @@ class ActiveOrderServiceTest {
         companyService.createProductionCompany(validToken, companyId,
                 "test-company", "testC@company.com", "054-5556677", "leumi");
 
-        EventCompanyManageService companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
+        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
 
         Response<Integer> r = companyEventService.createEvent(
                 validToken,
@@ -2990,38 +2990,28 @@ class ActiveOrderServiceTest {
         int manager2Id = auth.getUserId(manager2Token).getValue();
 
         Response<Boolean> reqOwner = companyService.requestAppointOwner(validToken, companyId, owner2Id);
-        assertNotNull(reqOwner.getValue(),
-                "request appoint owner setup failed: " + reqOwner.getMessage());
+        assertNotNull(reqOwner.getValue(), "request appoint owner setup failed");
         Response<Boolean> acceptOwner = companyService.respondToOwnerAppointment(owner2Token, companyId, true);
-        assertNotNull(acceptOwner.getValue(),
-                "accept owner setup failed: " + acceptOwner.getMessage());
+        assertNotNull(acceptOwner.getValue(), "accept owner setup failed");
 
         Response<Boolean> reqManager1 = companyService.requestAppointManager(
-                validToken, companyId, manager1Id,
-                Set.of(PermissionType.MANAGE_EVENTS_INVENTORY));
-        assertNotNull(reqManager1.getValue(),
-                "request appoint manager1 setup failed: " + reqManager1.getMessage());
+                validToken, companyId, manager1Id, Set.of(PermissionType.MANAGE_EVENTS_INVENTORY));
+        assertNotNull(reqManager1.getValue(), "request appoint manager1 setup failed");
         Response<Boolean> acceptManager1 = companyService.respondToManagerAppointment(manager1Token, companyId, true);
-        assertNotNull(acceptManager1.getValue(),
-                "accept manager1 setup failed: " + acceptManager1.getMessage());
+        assertNotNull(acceptManager1.getValue(), "accept manager1 setup failed");
 
         Response<Boolean> reqManager2 = companyService.requestAppointManager(
-                owner2Token, companyId, manager2Id,
-                Set.of(PermissionType.MANAGE_POLICIES));
-        assertNotNull(reqManager2.getValue(),
-                "request appoint manager2 setup failed: " + reqManager2.getMessage());
+                owner2Token, companyId, manager2Id, Set.of(PermissionType.MANAGE_POLICIES));
+        assertNotNull(reqManager2.getValue(), "request appoint manager2 setup failed");
         Response<Boolean> acceptManager2 = companyService.respondToManagerAppointment(manager2Token, companyId, true);
-        assertNotNull(acceptManager2.getValue(),
-                "accept manager2 setup failed: " + acceptManager2.getMessage());
+        assertNotNull(acceptManager2.getValue(), "accept manager2 setup failed");
 
         int soldOutEventId = createSoldOutTestEvent("sold-out-5");
         service.enterEventPurchase(validToken, companyId, soldOutEventId);
-        Map<String, List<SeatingTicketDTO>> seating =
-                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, List<SeatingTicketDTO>> seating = Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
         Map<String, Integer> standing = Map.of("floor", 2);
-        Response<Integer> selectResponse =
-                service.userSelectTickets(validToken, soldOutEventId, seating, standing);
-        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        Response<Integer> selectResponse = service.userSelectTickets(validToken, soldOutEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed");
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-tree");
@@ -3029,26 +3019,25 @@ class ActiveOrderServiceTest {
         Mockito.when(supplyResult.isSuccess()).thenReturn(true);
         Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
                 .thenReturn(supplyResult);
-        PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+        PaymentDetailsDTO paymentDetails = new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        userService.cleanDelayedNotifications("testuser1@gmail.com");
+        userService.cleanDelayedNotifications("owner2@gmail.com");
+        userService.cleanDelayedNotifications("manager1@gmail.com");
+        userService.cleanDelayedNotifications("manager2@gmail.com");
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, selectResponse.getValue(), paymentDetails);
-        assertNotNull(checkoutResponse.getValue(),
-                "Checkout should succeed. Message: " + checkoutResponse.getMessage());
+        assertNotNull(checkoutResponse.getValue(), "Checkout should succeed");
 
         Member founder = userRepo.findUserByEmail("testuser1@gmail.com");
         Member owner2 = userRepo.findUserByEmail("owner2@gmail.com");
         Member manager1 = userRepo.findUserByEmail("manager1@gmail.com");
         Member manager2 = userRepo.findUserByEmail("manager2@gmail.com");
 
-        assertEquals(1, founder.getDelayedNotifications().size(),
-                "Founder should receive the notification");
-        assertEquals(1, owner2.getDelayedNotifications().size(),
-                "Extra owner should receive the notification");
-        assertEquals(1, manager1.getDelayedNotifications().size(),
-                "Manager1 (appointed by founder) should receive the notification");
-        assertEquals(1, manager2.getDelayedNotifications().size(),
-                "Manager2 (appointed by another owner) should also receive the notification");
+        assertEquals(1, founder.getDelayedNotifications().size(), "Founder should receive the notification");
+        assertEquals(1, owner2.getDelayedNotifications().size(), "Extra owner should receive the notification");
+        assertEquals(1, manager1.getDelayedNotifications().size(), "Manager1 (appointed by founder) should receive the notification");
+        assertEquals(1, manager2.getDelayedNotifications().size(), "Manager2 (appointed by another owner) should also receive the notification");
     }
 }
