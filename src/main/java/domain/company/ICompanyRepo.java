@@ -1,5 +1,7 @@
 package domain.company;
 
+import domain.dto.CompanyDTO;
+
 import java.util.List;
 
 public interface ICompanyRepo {
@@ -8,4 +10,7 @@ public interface ICompanyRepo {
     Company findById(int companyId);
     List<Company> getAll();
     boolean existsByName(String companyName);
+
+    /** Returns companies where the given user holds a role (FOUNDER, OWNER, or MANAGER). */
+    List<CompanyDTO> findByUserRole(int userId);
 }

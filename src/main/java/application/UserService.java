@@ -237,7 +237,15 @@ public class UserService {
             }
         });
     }
-
+    /** Returns "FirstName LastName" for the given userId. */
+    public String getUserDisplayName(int userId) {
+        try {
+            Member member = userRepo.findById(userId);
+            return member.getFirstName() + " " + member.getLastName();
+        } catch (Exception e) {
+            return "User #" + userId;
+        }
+    }
     public Response<List<NotifyDTO>> getDelayedNotifications(String userEmail) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("deliverDelayedNotifications attempt started for email: " + userEmail);

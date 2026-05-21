@@ -15,6 +15,7 @@ public class CompanyDTO {
         this.companyName = companyName;
         this.isActive = isActive;
     }
+
     public int getCompanyId() {
         return companyId;
     }
