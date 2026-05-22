@@ -19,7 +19,7 @@ import domain.dto.CompanyDTO;
 
 import java.util.List;
 
-@Route(value = "", layout = MainLayout.class)
+@Route(value = "home", layout = MainLayout.class)
 @PageTitle("Home — EventCommerce")
 @AnonymousAllowed
 public class HomeView extends VerticalLayout {

@@ -24,6 +24,19 @@ public class LoginView extends VerticalLayout {
 
     public LoginView(UserService userService) {
         this.presenter = new LoginPresenter(userService);
+        Boolean webQueueAdmitted =
+                (Boolean) VaadinSession.getCurrent().getAttribute("webQueueAdmitted");
+
+        if (!Boolean.TRUE.equals(webQueueAdmitted)) {
+            Notification.show(
+                    "Please wait for your turn before signing in.",
+                    4000,
+                    Notification.Position.TOP_CENTER
+            );
+
+            getUI().ifPresent(ui -> ui.navigate(""));
+            return;
+        }
 
         setSizeFull();
         setAlignItems(Alignment.CENTER);
@@ -49,7 +62,7 @@ public class LoginView extends VerticalLayout {
 
                 showSuccess(response.getMessage());
 
-                getUI().ifPresent(ui -> ui.navigate(""));
+                getUI().ifPresent(ui -> ui.navigate("home"));
             } else {
                 showError(response.getMessage());
             }
@@ -69,10 +82,10 @@ public class LoginView extends VerticalLayout {
                 VaadinSession.getCurrent()
                         .setAttribute("token", response.getValue());
                 VaadinSession.getCurrent()
-                        .setAttribute("notificationUserIdentifier", userService.getUserIdentifier(response.getValue()));
+                        .setAttribute("notificationUserIdentifier", presenter.getUserIdentifier(response.getValue()).getValue());
 
                 showSuccess(response.getMessage());
-                getUI().ifPresent(ui -> ui.navigate(""));
+                getUI().ifPresent(ui -> ui.navigate("home"));
             } else {
                 showError(response.getMessage());
             }

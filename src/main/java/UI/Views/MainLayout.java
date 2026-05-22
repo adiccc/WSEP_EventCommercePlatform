@@ -1,5 +1,7 @@
 package UI.Views;
 
+import DTO.NotifyType;
+import DTO.QueueEntryResultDTO;
 import application.IAuth;
 import application.Response;
 import application.UserService;
@@ -26,30 +28,14 @@ public class MainLayout extends AppLayout implements RouterLayout {
 
     private final IAuth auth;
     private final UserService userService;
-    private Registration broadcasterRegistration;
+    private Registration userBroadcasterRegistration;
 
     public MainLayout(IAuth auth, UserService userService) {
         this.auth = auth;
         this.userService = userService;
-        ensureToken();
         registerToBroadcaster();
         createHeader();
         createDrawer();
-    }
-
-    /**
-     * If the session has no token yet, automatically obtain a guest token
-     * so that all service calls work without requiring an explicit login.
-     */
-    private void ensureToken() {
-        String token = (String) VaadinSession.getCurrent().getAttribute("token");
-        if (token == null || token.isBlank()) {
-            Response<String> r = userService.continueAsGuest();
-            if (r.getValue() != null) {
-                VaadinSession.getCurrent().setAttribute("token", r.getValue());
-                VaadinSession.getCurrent().setAttribute("notificationUserIdentifier", r.getValue());
-            }
-        }
     }
 
     private void registerToBroadcaster() {
@@ -62,26 +48,49 @@ public class MainLayout extends AppLayout implements RouterLayout {
 
         UI ui = UI.getCurrent();
 
-        broadcasterRegistration = Broadcaster.registerUser(userIdentifier, notification -> {
+        userBroadcasterRegistration = Broadcaster.registerUser(userIdentifier, notification -> {
             if (ui != null) {
-                ui.access(() -> showNotification(notification));
+                ui.access(() -> handleNotification(notification));
             }
         });
 
-        addDetachListener(event -> {
-            if (broadcasterRegistration != null) {
-                broadcasterRegistration.remove();
-                broadcasterRegistration = null;
-            }
-        });
+        addDetachListener(event -> unregisterFromBroadcaster());
+    }
+
+    private void unregisterFromBroadcaster() {
+        if (userBroadcasterRegistration != null) {
+            userBroadcasterRegistration.remove();
+            userBroadcasterRegistration = null;
+        }
+    }
+
+    private void handleNotification(NotifyDTO notification) {
+        if (notification == null || notification.getType() == null) {
+            showNotification(notification);
+            return;
+        }
+
+        if (notification.getType() == NotifyType.GENERAL_POPUP) {
+            showNotification(notification);
+        }
     }
 
     private void showNotification(NotifyDTO notification) {
+        String message = "New notification";
+
+        if (notification != null
+                && notification.getPayload() != null
+                && notification.getPayload().getMessage() != null
+                && !notification.getPayload().getMessage().isBlank()) {
+            message = notification.getPayload().getMessage();
+        }
+
         Notification vaadinNotification = Notification.show(
-                notification.getPayload().getMessage(),
+                message,
                 5000,
                 Notification.Position.TOP_CENTER
         );
+
         vaadinNotification.addThemeVariants(NotificationVariant.LUMO_PRIMARY);
     }
 
@@ -105,7 +114,7 @@ public class MainLayout extends AppLayout implements RouterLayout {
         SideNav nav = new SideNav();
 
         // Always visible
-        SideNavItem home = new SideNavItem("Home", "");
+        SideNavItem home = new SideNavItem("Home", "home");
         home.setPrefixComponent(VaadinIcon.HOME.create());
 
         SideNavItem search = new SideNavItem("Search Events", "search");
@@ -163,8 +172,37 @@ public class MainLayout extends AppLayout implements RouterLayout {
     }
 
     private void addLoginItem(SideNav nav) {
-        SideNavItem login = new SideNavItem("Login", "login");
+        SideNavItem login = new SideNavItem("Sign in", "login");
         login.setPrefixComponent(VaadinIcon.SIGN_IN.create());
         nav.addItem(login);
+    }
+
+    private String getMessageOrDefault(NotifyDTO notification, String defaultMessage) {
+        if (notification == null
+                || notification.getPayload() == null
+                || notification.getPayload().getMessage() == null
+                || notification.getPayload().getMessage().isBlank()) {
+            return defaultMessage;
+        }
+
+        return notification.getPayload().getMessage();
+    }
+
+    private void showSuccess(String message) {
+        Notification notification = Notification.show(
+                message,
+                3000,
+                Notification.Position.TOP_CENTER
+        );
+        notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+    }
+
+    private void showError(String message) {
+        Notification notification = Notification.show(
+                message,
+                4000,
+                Notification.Position.TOP_CENTER
+        );
+        notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
     }
 }

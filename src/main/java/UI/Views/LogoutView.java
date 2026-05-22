@@ -46,6 +46,9 @@ public class LogoutView extends VerticalLayout {
 
         if (Boolean.TRUE.equals(response.getValue())) {
             VaadinSession.getCurrent().setAttribute("token", null);
+            VaadinSession.getCurrent().setAttribute("notificationUserIdentifier", null);
+            VaadinSession.getCurrent().setAttribute("webQueueAdmitted", null);
+            VaadinSession.getCurrent().setAttribute("webQueueToken", null);
 
             Notification notification = Notification.show(
                     response.getMessage(),
@@ -56,7 +59,7 @@ public class LogoutView extends VerticalLayout {
                     NotificationVariant.LUMO_SUCCESS
             );
 
-            getUI().ifPresent(ui -> ui.navigate("login"));
+            getUI().ifPresent(ui -> ui.navigate(""));
         } else {
             Notification notification = Notification.show(
                     response.getMessage(),

@@ -72,6 +72,10 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         }
 
         if (response.getValue().isWaitingInQueue()) {
+            VaadinSession.getCurrent().setAttribute("eventQueueTabId", token);
+            VaadinSession.getCurrent().setAttribute("eventQueueCompanyId", companyId);
+            VaadinSession.getCurrent().setAttribute("eventQueueEventId", eventId);
+
             UI.getCurrent().navigate(
                     "waiting/" + companyId + "/" + eventId + "/" +
                             response.getValue().getQueuePosition()
