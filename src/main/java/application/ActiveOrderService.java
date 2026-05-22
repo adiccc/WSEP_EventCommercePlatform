@@ -754,6 +754,10 @@ public class ActiveOrderService {
         String nextToken = dequeueNextToken(eventId);
         if (nextToken != null) {
             createActiveOrderForToken(nextToken, eventId);
+            NotifyPayload payload = new NotifyPayload("Your turn for event " + eventId + " has arrived!",eventId,null);
+            NotifyDTO notifyDTO = new NotifyDTO(NotifyType.QUEUE_EVENT_TURN_ARRIVED,payload);
+            notifier.notifyTab(nextToken, notifyDTO);
+            logger.info("Notified tab " + nextToken + " that their turn for event " + eventId + " has arrived.");
         }
     }
 
