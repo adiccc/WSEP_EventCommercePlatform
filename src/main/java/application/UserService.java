@@ -77,12 +77,11 @@ public class UserService {
                 logger.info("Guest session fully initialized.");
                 return new Response<>(newGuestSessionId, "Guest session created successfully.");
 
-            }
-            catch (OptimisticLockingFailureException e) {
+            } catch (OptimisticLockingFailureException e) {
                 throw e;
             } catch (Exception e) {
                 logger.severe("Failed to initialize guest session. Error: " + e.getMessage());
-                return new Response<>(null,"Server error while continuing as guest: " + e.getMessage());
+                return new Response<>(null, "Server error while continuing as guest: " + e.getMessage());
             }
         });
     }
@@ -92,7 +91,7 @@ public class UserService {
         {
             logger.info("Registration attempt started for email: " + dto.getEmail());
             try {
-                if(activeIdentifier!=null && !activeIdentifier.isBlank()) {
+                if (activeIdentifier != null && !activeIdentifier.isBlank()) {
                     int currentUserId = auth.getUserId(activeIdentifier).getValue();
                     if (currentUserId != -1) { //in member state
                         logger.warning("Registration failed: Active logged-in user attempted to register (Token: " + activeIdentifier + ")");
@@ -180,17 +179,17 @@ public class UserService {
         });
     }
 
-    public Response<Boolean> logout(String token){
-        return RetryHelper.executeWithRetry(() ->{
+    public Response<Boolean> logout(String token) {
+        return RetryHelper.executeWithRetry(() -> {
             logger.info("Logout attempt started for token: " + token);
             if (token == null || token.isBlank()) {
                 logger.warning("token is empty or invalid");
                 return new Response<>(false, "token is empty or invalid");
             }
             String role = auth.getRole(token).getValue();
-            if(role!=null && role.equals("GUEST")){
-               logger.warning("Logout attempt failed: guest cannot log out");
-               return new Response<>(false, "User is in guest state");
+            if (role != null && role.equals("GUEST")) {
+                logger.warning("Logout attempt failed: guest cannot log out");
+                return new Response<>(false, "User is in guest state");
             }//entering to the try while we know we are MEMBERs
             try {
                 Response<Boolean> response = auth.logout(token);
@@ -209,6 +208,7 @@ public class UserService {
             }
         });
     }
+
     public Response<Boolean> leaveStore(String token) { //leave button for Guests!
         return RetryHelper.executeWithRetry(() -> {
             logger.info("leaveStore attempt started for token: " + token);
@@ -237,6 +237,7 @@ public class UserService {
             }
         });
     }
+
     public Response<List<NotifyDTO>> getDelayedNotifications(String userEmail) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("deliverDelayedNotifications attempt started for email: " + userEmail);
@@ -257,6 +258,7 @@ public class UserService {
             }
         });
     }
+
     public Response<Boolean> cleanDelayedNotifications(String userEmail) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("cleanDelayedNotifications attempt started for email: " + userEmail);
@@ -278,6 +280,30 @@ public class UserService {
             } catch (Exception e) {
                 logger.severe("cleanDelayedNotifications failed: " + e.getMessage());
                 return new Response<>(false, "Server error during cleanDelayedNotifications: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<String> getUserIdentifier(String token) { // extracting Identifier for notifications
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("getUserIdentifier attempt started for token: " + token);
+            if (token == null || token.isBlank()) {
+                logger.warning("Failed to get user identifier: Token is empty or null");
+                return new Response<>(null, "Invalid token");
+            }
+            try {
+                Response<String> response = auth.getUserIdentifier(token);
+                if (response.getValue() == null) {
+                    logger.warning("Failed to get user identifier for token: " + token);
+                    return new Response<>(null, "Failed to retrieve user identifier");
+                }
+                logger.info("getUserIdentifier successful for token: " + token);
+                return response;
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("getUserIdentifier failed: " + e.getMessage());
+                return new Response<>(null, "Server error during getUserIdentifier: " + e.getMessage());
             }
         });
     }

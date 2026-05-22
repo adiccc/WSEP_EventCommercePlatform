@@ -69,7 +69,7 @@ public class LoginView extends VerticalLayout {
                 VaadinSession.getCurrent()
                         .setAttribute("token", response.getValue());
                 VaadinSession.getCurrent()
-                        .setAttribute("notificationUserIdentifier", response.getValue());
+                        .setAttribute("notificationUserIdentifier", userService.getUserIdentifier(response.getValue()));
 
                 showSuccess(response.getMessage());
                 getUI().ifPresent(ui -> ui.navigate(""));

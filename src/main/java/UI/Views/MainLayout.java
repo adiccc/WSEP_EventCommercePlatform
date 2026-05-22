@@ -130,13 +130,16 @@ public class MainLayout extends AppLayout implements RouterLayout {
             SideNavItem orders = new SideNavItem("My Orders", "my-orders");
             orders.setPrefixComponent(VaadinIcon.TICKET.create());
 
+            SideNavItem notifications = new SideNavItem("Notifications", "notifications");
+            notifications.setPrefixComponent(VaadinIcon.ENVELOPE.create());
+
             SideNavItem company = new SideNavItem("My Company", "manage");
             company.setPrefixComponent(VaadinIcon.OFFICE.create());
 
             SideNavItem logout = new SideNavItem("Logout", "logout");
             logout.setPrefixComponent(VaadinIcon.SIGN_IN.create());
 
-            nav.addItem(orders, company, logout);
+            nav.addItem(orders, notifications, company, logout);
 
         } else if ("GUEST".equals(role)) {
             // Guest can still choose to log in
