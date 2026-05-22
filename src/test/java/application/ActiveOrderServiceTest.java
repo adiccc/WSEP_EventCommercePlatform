@@ -7,6 +7,7 @@ import java.util.*;
 
 import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.ActiveOrder;
+import domain.activeOrder.IActiveOrderRepo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dataType.PermissionType;
@@ -15,10 +16,13 @@ import domain.dto.EventMapDTO;
 import domain.dto.SeatingTicketDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
+import domain.event.IEventRepo;
 import domain.event.Order;
 import domain.event.OrderStatus;
+import domain.lottery.ILotteryRepo;
 import domain.user.IUserRepo;
 import domain.user.Member;
+import domain.webQueue.WebQueue;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -3039,5 +3043,156 @@ class ActiveOrderServiceTest {
         assertEquals(1, owner2.getDelayedNotifications().size(), "Extra owner should receive the notification");
         assertEquals(1, manager1.getDelayedNotifications().size(), "Manager1 (appointed by founder) should receive the notification");
         assertEquals(1, manager2.getDelayedNotifications().size(), "Manager2 (appointed by another owner) should also receive the notification");
+    }
+    @Test
+    void GivenSoldOutEventWithWaitingUser_WhenSomeoneCheckouts_ThenWaitingUserPromotedAndNotified() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(100);
+
+        Response<Integer> eventResp = companyEventService.createEvent(validToken, companyId,
+                LocalDateTime.now().plusDays(1), "Isolated Queue Event",
+                LocalDateTime.now().minusMinutes(10), false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
+
+        assertNotNull(eventResp.getValue(), "Event creation failed: " + eventResp.getMessage());
+        int isolatedEventId = eventResp.getValue();
+
+        companyEventService.DefineVenueAndSeatingMap(validToken, isolatedEventId,
+                new ElementPositionDTO(10, 20), List.of(new ElementPositionDTO(0,0)),
+                List.of(new StandingZoneDTO(capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-123");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        String firstFillerToken = null;
+        int firstFillerOrderId = -1;
+        for (int i = 0; i < capacity; i++) {
+            String uniqueEmail = "filler_" + UUID.randomUUID() + "@test.com";
+            String uniquePhone = "050-888-77" + String.format("%02d", (i % 100));
+
+            Response<Boolean> regResp = userService.registerUser("", new UserDTO(uniqueEmail, "f", "l", "p", 1, 1, 2000, "Israel", uniquePhone));
+
+            assertNotNull(regResp.getValue(), "Registration failed for filler " + i + ". Server says: " + regResp.getMessage());
+            assertTrue(regResp.getValue(), "Registration returned false for filler " + i);
+
+            String token = userService.login(uniqueEmail, "p").getValue();
+            assertNotNull(token, "Login failed for filler " + i);
+
+            Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(token, companyId, isolatedEventId);
+            assertNotNull(enterResp.getValue(), "Enter event failed for filler " + i + ". Server says: " + enterResp.getMessage());
+
+            Response<Integer> selectResp = service.userSelectTickets(token, isolatedEventId, new HashMap<>(), Map.of("floor", 1));
+            assertNotNull(selectResp.getValue(), "Ticket selection failed for filler " + i + ". Server says: " + selectResp.getMessage());
+
+            if (i == 0) {
+                firstFillerToken = token;
+                firstFillerOrderId = selectResp.getValue();
+            }
+        }
+
+        // Register waiting user
+        String waiterEmail = "waiter_" + UUID.randomUUID() + "@test.com";
+        Response<Boolean> waiterRegResp = userService.registerUser("", new UserDTO(waiterEmail, "w", "w", "pass", 1, 1, 2000, "Israel", "050-123-4567"));
+        assertNotNull(waiterRegResp.getValue(), "Waiter registration failed: " + waiterRegResp.getMessage());
+
+        String waitingToken = userService.login(waiterEmail, "pass").getValue();
+
+        Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(waitingToken, companyId, isolatedEventId);
+        assertNotNull(enterResp.getValue(), "Waiter enter event failed: " + enterResp.getMessage());
+        assertTrue(enterResp.getValue().isWaitingInQueue(), "User should be in queue");
+
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotif = new AtomicReference<>();
+        Registration registration = Broadcaster.registerTab(waitingToken, n -> {
+            receivedNotif.set(n);
+            latch.countDown();
+        });
+
+        // Act
+        PaymentDetailsDTO payment = new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+        Response<Integer> checkoutResp = service.checkoutAndPayment(firstFillerToken, firstFillerOrderId, payment);
+
+        assertNotNull(checkoutResp.getValue(), "Checkout failed, promoteNextInQueue will not be triggered. Server says: " + checkoutResp.getMessage());
+
+        // Assert
+        assertTrue(latch.await(5, TimeUnit.SECONDS), "Waiting user should have been notified via Tab");
+        assertNotNull(receivedNotif.get());
+        assertEquals(NotifyType.QUEUE_EVENT_TURN_ARRIVED, receivedNotif.get().getType());
+        assertEquals(isolatedEventId, receivedNotif.get().getPayload().getEventId());
+
+        registration.remove();
+    }
+    @Test
+    void GivenExpiredOrderInFullEvent_WhenCleanupRuns_ThenWaitingUserPromotedAndNotified() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(100);
+
+        Response<Integer> eventResp = companyEventService.createEvent(validToken, companyId,
+                LocalDateTime.now().plusDays(1), "Cleanup Queue Event",
+                LocalDateTime.now().minusMinutes(10), false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
+
+        assertNotNull(eventResp.getValue(), "Event creation failed: " + eventResp.getMessage());
+        int isolatedEventId = eventResp.getValue();
+
+        companyEventService.DefineVenueAndSeatingMap(validToken, isolatedEventId,
+                new ElementPositionDTO(10, 20), List.of(new ElementPositionDTO(0,0)),
+                List.of(new StandingZoneDTO(capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
+
+        String firstFillerToken = null;
+        int firstFillerOrderId = -1;
+
+        // Fill capacity to the limit with unique users
+        for (int i = 0; i < capacity; i++) {
+            String uniqueEmail = "cleanup_filler_" + UUID.randomUUID() + "@test.com";
+            String uniquePhone = "050-888-77" + String.format("%02d", (i % 100));
+
+            Response<Boolean> regResp = userService.registerUser("", new UserDTO(uniqueEmail, "f", "l", "p", 1, 1, 2000, "Israel", uniquePhone));
+            assertNotNull(regResp.getValue(), "Registration failed for filler " + i + ". Server says: " + regResp.getMessage());
+
+            String token = userService.login(uniqueEmail, "p").getValue();
+            Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(token, companyId, isolatedEventId);
+            Response<Integer> selectResp = service.userSelectTickets(token, isolatedEventId, new HashMap<>(), Map.of("floor", 1));
+
+            if (i == 0) {
+                firstFillerToken = token;
+                firstFillerOrderId = selectResp.getValue();
+            }
+        }
+
+        // Register waiting user
+        String waiterEmail = "waiter_cleanup_" + UUID.randomUUID() + "@test.com";
+        Response<Boolean> waiterRegResp = userService.registerUser("", new UserDTO(waiterEmail, "w", "w", "pass", 1, 1, 2000, "Israel", "050-765-4321"));
+        assertNotNull(waiterRegResp.getValue(), "Waiter registration failed: " + waiterRegResp.getMessage());
+        String waitingToken = userService.login(waiterEmail, "pass").getValue();
+
+        Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(waitingToken, companyId, isolatedEventId);
+        assertNotNull(enterResp.getValue(), "Waiter enter event failed: " + enterResp.getMessage());
+        assertTrue(enterResp.getValue().isWaitingInQueue(), "User should be in queue");
+
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotif = new AtomicReference<>();
+        Registration registration = Broadcaster.registerTab(waitingToken, n -> {
+            receivedNotif.set(n);
+            latch.countDown();
+        });
+
+        // Force expiration for the first user's active order using the class helper method
+        forceExpireOrder(firstFillerOrderId);
+
+        // Act
+        service.cleanupExpiredOrders();
+
+        // Assert
+        assertTrue(latch.await(5, TimeUnit.SECONDS), "Waiting user should have been notified via Tab after cleanup process");
+        assertNotNull(receivedNotif.get());
+        assertEquals(NotifyType.QUEUE_EVENT_TURN_ARRIVED, receivedNotif.get().getType());
+        assertEquals(isolatedEventId, receivedNotif.get().getPayload().getEventId());
+
+        registration.remove();
     }
 }
