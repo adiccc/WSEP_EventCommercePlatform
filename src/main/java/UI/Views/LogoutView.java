@@ -47,8 +47,12 @@ public class LogoutView extends VerticalLayout {
         if (Boolean.TRUE.equals(response.getValue())) {
             VaadinSession.getCurrent().setAttribute("token", null);
             VaadinSession.getCurrent().setAttribute("notificationUserIdentifier", null);
-            VaadinSession.getCurrent().setAttribute("webQueueAdmitted", null);
             VaadinSession.getCurrent().setAttribute("webQueueToken", null);
+            VaadinSession.getCurrent().setAttribute("webQueueAdmitted", null);
+            VaadinSession.getCurrent().setAttribute("eventQueueTabId", null);
+            VaadinSession.getCurrent().setAttribute("eventQueueCompanyId", null);
+            VaadinSession.getCurrent().setAttribute("eventQueueEventId", null);
+            VaadinSession.getCurrent().setAttribute("eventQueueAdmitted", null);
 
             Notification notification = Notification.show(
                     response.getMessage(),

@@ -4,87 +4,145 @@ import UI.Presenters.SearchEventsPresenter;
 import application.EventService;
 import application.Response;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
-import domain.dataType.EventSearchFilter;
-import domain.dto.EventDTO;
-import com.vaadin.flow.component.combobox.ComboBox;
-import com.vaadin.flow.component.datetimepicker.DateTimePicker;
-import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
-import com.vaadin.flow.component.textfield.NumberField;
+import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dataType.CategoryEvent;
+import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
+import domain.dto.EventDTO;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Route(value = "search", layout = MainLayout.class)
 @PageTitle("Search Events")
+@AnonymousAllowed
 public class SearchEventsView extends VerticalLayout {
 
     private final SearchEventsPresenter presenter;
     private final Grid<EventDTO> grid = new Grid<>(EventDTO.class, false);
 
+    private final TextField nameField = new TextField("Keyword");
+    private final ComboBox<CategoryEvent> categoryBox = new ComboBox<>("Category");
+    private final ComboBox<GeographicalArea> locationBox = new ComboBox<>("Location");
+    private final DateTimePicker startDate = new DateTimePicker("Start Date");
+    private final DateTimePicker endDate = new DateTimePicker("End Date");
+    private final NumberField minPrice = new NumberField("Min Price");
+    private final NumberField maxPrice = new NumberField("Max Price");
+
     public SearchEventsView(EventService eventService) {
         this.presenter = new SearchEventsPresenter(eventService);
 
+        setPadding(true);
+        setSpacing(true);
+        setWidthFull();
+
         H2 title = new H2("Search Events");
 
-        TextField nameField = new TextField("Keyword");
-
-// Category
-        ComboBox<CategoryEvent> categoryBox = new ComboBox<>("Category");
-        categoryBox.setItems(CategoryEvent.values());
-
-// Location
-        ComboBox<GeographicalArea> locationBox = new ComboBox<>("Location");
-        locationBox.setItems(GeographicalArea.values());
-
-// Date range
-        DateTimePicker startDate = new DateTimePicker("Start Date");
-        DateTimePicker endDate = new DateTimePicker("End Date");
-
-// Price range
-        NumberField minPrice = new NumberField("Min Price");
-        NumberField maxPrice = new NumberField("Max Price");
-
-        Button searchButton = new Button("Search", e ->
-                search(
-                        nameField.getValue(),
-                        categoryBox.getValue(),
-                        locationBox.getValue(),
-                        startDate.getValue(),
-                        endDate.getValue(),
-                        minPrice.getValue(),
-                        maxPrice.getValue()
-                )
-        );
+        configureFields();
         configureGrid();
+
+        Button searchButton = new Button("Search", e -> search(buildFilter()));
+        searchButton.getElement().setAttribute("theme", "primary");
+
+        Button clearButton = new Button("Clear", e -> {
+            nameField.clear();
+            categoryBox.clear();
+            locationBox.clear();
+            startDate.clear();
+            endDate.clear();
+            minPrice.clear();
+            maxPrice.clear();
+
+            search(new EventSearchFilter());
+        });
+
+        HorizontalLayout row1 = new HorizontalLayout(nameField);
+        row1.setDefaultVerticalComponentAlignment(Alignment.END);
+
+        HorizontalLayout row2 = new HorizontalLayout(categoryBox, locationBox);
+        row2.setDefaultVerticalComponentAlignment(Alignment.END);
+
+        HorizontalLayout row3 = new HorizontalLayout(startDate, endDate);
+        row3.setDefaultVerticalComponentAlignment(Alignment.END);
+
+        HorizontalLayout row4 = new HorizontalLayout(minPrice, maxPrice, searchButton, clearButton);
+        row4.setDefaultVerticalComponentAlignment(Alignment.END);
+
         add(
                 title,
-                nameField,
-                new HorizontalLayout(categoryBox, locationBox),
-                new HorizontalLayout(startDate, endDate),
-                new HorizontalLayout(minPrice, maxPrice),
-                searchButton,
+                row1,
+                row2,
+                row3,
+                row4,
                 grid
         );
-        setSizeFull();
+
+        search(new EventSearchFilter());
+    }
+
+    private void configureFields() {
+        nameField.setPlaceholder("Search event name...");
+        nameField.setClearButtonVisible(true);
+        nameField.setWidth("14rem");
+
+        categoryBox.setItems(CategoryEvent.values());
+        categoryBox.setClearButtonVisible(true);
+        categoryBox.setWidth("12rem");
+
+        locationBox.setItems(GeographicalArea.values());
+        locationBox.setClearButtonVisible(true);
+        locationBox.setWidth("12rem");
+
+        startDate.setWidth("14rem");
+        endDate.setWidth("14rem");
+
+        minPrice.setMin(0);
+        minPrice.setWidth("10rem");
+
+        maxPrice.setMin(0);
+        maxPrice.setWidth("10rem");
     }
 
     private void configureGrid() {
-        grid.addColumn(EventDTO::getName).setHeader("Event Name");
-        grid.addColumn(EventDTO::getCategoryEvent).setHeader("Category");
+        grid.addColumn(EventDTO::getName)
+                .setHeader("Event Name")
+                .setFlexGrow(2)
+                .setSortable(true);
 
-        grid.asSingleSelect().addValueChangeListener(event -> {
-            EventDTO selected = event.getValue();
+        grid.addColumn(EventDTO::getCategoryEvent)
+                .setHeader("Category")
+                .setFlexGrow(1)
+                .setSortable(true);
+
+        grid.addColumn(EventDTO::getLocation)
+                .setHeader("Area")
+                .setFlexGrow(1)
+                .setSortable(true);
+
+        grid.addColumn(event -> formatDateTime(event.getEventDate()))
+                .setHeader("Date")
+                .setFlexGrow(1)
+                .setSortable(true);
+
+        grid.setWidthFull();
+        grid.setHeight("400px");
+
+        grid.addItemClickListener(event -> {
+            EventDTO selected = event.getItem();
+
             if (selected != null) {
                 getUI().ifPresent(ui ->
                         ui.navigate("event/" +
@@ -92,40 +150,60 @@ public class SearchEventsView extends VerticalLayout {
                                 selected.getEventID()));
             }
         });
-
-        grid.setSizeFull();
     }
 
-    private void search(
-            String keyword,
-            CategoryEvent category,
-            GeographicalArea location,
-            LocalDateTime startDate,
-            LocalDateTime endDate,
-            Double minPrice,
-            Double maxPrice
-    ) {
+    private String formatDateTime(String rawDateTime) {
+        if (rawDateTime == null || rawDateTime.isBlank()) {
+            return "";
+        }
+
+        try {
+            LocalDateTime parsed = LocalDateTime.parse(rawDateTime);
+            return parsed.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
+        } catch (Exception e) {
+            return rawDateTime;
+        }
+    }
+
+    private EventSearchFilter buildFilter() {
+        EventSearchFilter filter = new EventSearchFilter();
+
+        String keyword = nameField.getValue();
+        filter.setKeyword(keyword == null || keyword.isBlank() ? null : keyword.trim());
+
+        filter.setCategory(categoryBox.getValue());
+        filter.setLocation(locationBox.getValue());
+        filter.setStartDate(startDate.getValue());
+        filter.setEndDate(endDate.getValue());
+        filter.setMinPrice(minPrice.getValue());
+        filter.setMaxPrice(maxPrice.getValue());
+
+        return filter;
+    }
+
+    private void search(EventSearchFilter filter) {
         String token = (String) VaadinSession.getCurrent()
                 .getAttribute("token");
-
-        EventSearchFilter filter = new EventSearchFilter();
-        filter.setKeyword(keyword);
-        filter.setCategory(category);
-        filter.setLocation(location);
-        filter.setStartDate(startDate);
-        filter.setEndDate(endDate);
-        filter.setMinPrice(minPrice);
-        filter.setMaxPrice(maxPrice);
 
         Response<List<EventDTO>> response = presenter.search(token, filter);
 
         if (response.getValue() != null) {
             grid.setItems(response.getValue());
         } else {
-            grid.setItems();
-            showError(response.getMessage());
+            grid.setItems(List.of());
+            showInfo(response.getMessage() != null ? response.getMessage() : "No events found.");
         }
     }
+
+    private void showInfo(String message) {
+        Notification notification = Notification.show(
+                message,
+                3000,
+                Notification.Position.TOP_CENTER
+        );
+        notification.addThemeVariants(NotificationVariant.LUMO_PRIMARY);
+    }
+
     private void showError(String message) {
         Notification notification = Notification.show(
                 message,

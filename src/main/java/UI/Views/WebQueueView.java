@@ -59,10 +59,46 @@ public class WebQueueView extends VerticalLayout {
 
         refreshButton = new Button("Check my status", event -> checkCurrentStatus());
         refreshButton.setVisible(false);
-
         add(title, message, positionText, refreshButton);
+        addDetachListener(event -> unregisterFromBroadcaster());
+        initializeQueueState();
+    }
 
-        enterQueue();
+    private void initializeQueueState() {
+        String existingQueueToken =
+                (String) VaadinSession.getCurrent().getAttribute("webQueueToken");
+
+        if (existingQueueToken == null || existingQueueToken.isBlank()) {
+            enterQueue();
+            return;
+        }
+
+        checkCurrentStatusAndRegister(existingQueueToken);
+    }
+    private void checkCurrentStatusAndRegister(String webQueueToken) {
+        Response<QueueEntryResultDTO> response =
+                presenter.getQueueStatus(webQueueToken);
+
+        QueueEntryResultDTO result =
+                response != null ? response.getValue() : null;
+
+        if (result == null) {
+            showError(response != null ? response.getMessage() : "Failed to check queue status.");
+            showQueueErrorState();
+            return;
+        }
+
+        if (result.isAdmitted()) {
+            admitUserAndNavigateToLogin(webQueueToken);
+            return;
+        }
+
+        VaadinSession.getCurrent().setAttribute("webQueueToken", webQueueToken);
+        VaadinSession.getCurrent().setAttribute("notificationUserIdentifier", webQueueToken);
+        VaadinSession.getCurrent().setAttribute("webQueueAdmitted", false);
+
+        showWaitingState(result.getPosition());
+        registerToBroadcaster(webQueueToken);
     }
 
     private void enterQueue() {
@@ -91,6 +127,8 @@ public class WebQueueView extends VerticalLayout {
     }
 
     private void registerToBroadcaster(String queueToken) {
+        unregisterFromBroadcaster();
+
         UI ui = UI.getCurrent();
 
         broadcasterRegistration = Broadcaster.registerTab(queueToken, notification -> {
@@ -98,8 +136,6 @@ public class WebQueueView extends VerticalLayout {
                 ui.access(() -> handleNotification(notification));
             }
         });
-
-        addDetachListener(event -> unregisterFromBroadcaster());
     }
 
     private void handleNotification(NotifyDTO notification) {
@@ -142,8 +178,8 @@ public class WebQueueView extends VerticalLayout {
                 (String) VaadinSession.getCurrent().getAttribute("webQueueToken");
 
         if (webQueueToken == null || webQueueToken.isBlank()) {
-            showError("Queue session is missing. Please refresh and enter the queue again.");
-            showQueueErrorState();
+            showError("Queue session is missing. Entering the queue again.");
+            enterQueue();
             return;
         }
 
@@ -170,7 +206,7 @@ public class WebQueueView extends VerticalLayout {
 
         VaadinSession.getCurrent().setAttribute("webQueueToken", webQueueToken);
         VaadinSession.getCurrent().setAttribute("webQueueAdmitted", true);
-
+        VaadinSession.getCurrent().setAttribute("notificationUserIdentifier", null);
         showSuccess("Your turn has arrived. Please sign in or continue as guest.");
 
         getUI().ifPresent(ui -> ui.navigate("login"));
@@ -186,7 +222,14 @@ public class WebQueueView extends VerticalLayout {
     private void showWaitingState(int position) {
         title.setText("You are in line");
         message.setText("Please wait. We will move you forward automatically when it is your turn.");
-        positionText.setText(position > 0 ? "Your position: " + position : "Waiting...");
+
+        if (position > 0) {
+            positionText.setText("Your position in line: #" + position);
+        } else {
+            positionText.setText("Waiting...");
+        }
+
+        refreshButton.setText("Refresh position");
         refreshButton.setVisible(true);
     }
 
@@ -196,6 +239,8 @@ public class WebQueueView extends VerticalLayout {
         positionText.setText("");
         refreshButton.setText("Try again");
         refreshButton.setVisible(true);
+
+        refreshButton.addClickListener(event -> enterQueue());
     }
 
     private void showSuccess(String text) {

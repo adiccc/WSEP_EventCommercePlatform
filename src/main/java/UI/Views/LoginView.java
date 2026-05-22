@@ -9,6 +9,8 @@ import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.EmailField;
 import com.vaadin.flow.component.textfield.PasswordField;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
@@ -18,25 +20,11 @@ import application.Response;
 @Route("login")
 @PageTitle("Login")
 @AnonymousAllowed
-public class LoginView extends VerticalLayout {
-
+public class LoginView extends VerticalLayout implements BeforeEnterObserver {
     private final LoginPresenter presenter;
 
     public LoginView(UserService userService) {
         this.presenter = new LoginPresenter(userService);
-        Boolean webQueueAdmitted =
-                (Boolean) VaadinSession.getCurrent().getAttribute("webQueueAdmitted");
-
-        if (!Boolean.TRUE.equals(webQueueAdmitted)) {
-            Notification.show(
-                    "Please wait for your turn before signing in.",
-                    4000,
-                    Notification.Position.TOP_CENTER
-            );
-
-            getUI().ifPresent(ui -> ui.navigate(""));
-            return;
-        }
 
         setSizeFull();
         setAlignItems(Alignment.CENTER);
@@ -102,6 +90,23 @@ public class LoginView extends VerticalLayout {
                 guestButton,
                 registerButton
         );
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        Boolean webQueueAdmitted =
+                (Boolean) VaadinSession.getCurrent().getAttribute("webQueueAdmitted");
+
+        if (!Boolean.TRUE.equals(webQueueAdmitted)) {
+            Notification notification = Notification.show(
+                    "Please wait for your turn before signing in.",
+                    4000,
+                    Notification.Position.TOP_CENTER
+            );
+            notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+
+            event.rerouteTo("");
+        }
     }
 
     private void showSuccess(String message) {
