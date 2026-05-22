@@ -1,5 +1,6 @@
-package domain.policy;
+package domain.unitTest.policy;
 
+import domain.policy.*;
 import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -269,5 +270,79 @@ class DiscountPolicyTest {
         policy.addDiscount(new VisualDiscount(10, FUTURE));   // 90 → best
         policy.addDiscount(new MaxQuantityDiscount(30, 5));   // qty=6 > 5, no discount → 100
         assertEquals(90.0, policy.apply(100.0, 6, null), 0.001);
+    }
+
+    // --- Nested Composition ---
+
+    @Test
+    void GivenMaxWithNestedSum_WhenQuantityBelowThreshold_ThenSumPartialPriceBeatsFlat() {
+        // MAX( SUM(Visual10%, MinQty20%@3), Visual5% ) at qty=1
+        SumDiscountPolicy inner = new SumDiscountPolicy();
+        inner.addDiscount(new VisualDiscount(10, FUTURE));    // -10
+        inner.addDiscount(new MinQuantityDiscount(20, 3));    // no effect at qty=1
+
+        MaxDiscountPolicy policy = new MaxDiscountPolicy();
+        policy.addDiscount(inner);                            // SUM → 90
+        policy.addDiscount(new VisualDiscount(5, FUTURE));    // → 95
+
+        assertEquals(90.0, policy.apply(100.0, 1, null), 0.001);
+    }
+
+    @Test
+    void GivenMaxWithNestedSum_WhenQuantityMeetsThreshold_ThenSumFullPriceWins() {
+        // MAX( SUM(Visual10%, MinQty20%@3), Visual5% ) at qty=3
+        SumDiscountPolicy inner = new SumDiscountPolicy();
+        inner.addDiscount(new VisualDiscount(10, FUTURE));    // -10
+        inner.addDiscount(new MinQuantityDiscount(20, 3));    // -20 at qty=3
+
+        MaxDiscountPolicy policy = new MaxDiscountPolicy();
+        policy.addDiscount(inner);                            // SUM → 70
+        policy.addDiscount(new VisualDiscount(5, FUTURE));    // → 95
+
+        assertEquals(70.0, policy.apply(100.0, 3, null), 0.001);
+    }
+
+    @Test
+    void GivenSumWithNestedMax_WhenNoCoupon_ThenMaxPicksBestPlusFlat() {
+        // SUM( MAX(Visual10%, Coupon30%"VIP"), Visual5% ) without coupon
+        MaxDiscountPolicy inner = new MaxDiscountPolicy();
+        inner.addDiscount(new VisualDiscount(10, FUTURE));
+        inner.addDiscount(new CodeCoupun("VIP", 30, FUTURE)); // only active with coupon
+
+        SumDiscountPolicy policy = new SumDiscountPolicy();
+        policy.addDiscount(inner);                            // MAX → 90 (no coupon)
+        policy.addDiscount(new VisualDiscount(5, FUTURE));    // -5
+
+        // reductions: (100-90) + (100-95) = 15 → price = 85
+        assertEquals(85.0, policy.apply(100.0, 1, null), 0.001);
+    }
+
+    @Test
+    void GivenSumWithNestedMax_WhenCouponPresent_ThenMaxPicksCouponPlusFlat() {
+        // SUM( MAX(Visual10%, Coupon30%"VIP"), Visual5% ) with coupon
+        MaxDiscountPolicy inner = new MaxDiscountPolicy();
+        inner.addDiscount(new VisualDiscount(10, FUTURE));
+        inner.addDiscount(new CodeCoupun("VIP", 30, FUTURE)); // 70 wins
+
+        SumDiscountPolicy policy = new SumDiscountPolicy();
+        policy.addDiscount(inner);                            // MAX → 70
+        policy.addDiscount(new VisualDiscount(5, FUTURE));    // -5
+
+        // reductions: (100-70) + (100-95) = 35 → price = 65
+        assertEquals(65.0, policy.apply(100.0, 1, "VIP"), 0.001);
+    }
+
+    @Test
+    void GivenNestedPolicy_WhenCopied_ThenDeepCopyIsIndependent() {
+        SumDiscountPolicy inner = new SumDiscountPolicy();
+        inner.addDiscount(new VisualDiscount(10, FUTURE));
+
+        MaxDiscountPolicy outer = new MaxDiscountPolicy();
+        outer.addDiscount(inner);
+
+        MaxDiscountPolicy copy = (MaxDiscountPolicy) outer.copyPolicy();
+        copy.addDiscount(new VisualDiscount(5, FUTURE));
+
+        assertEquals(1, outer.getDiscounts().size(), "Copy modification should not affect original");
     }
 }
