@@ -16,17 +16,23 @@ import com.vaadin.flow.component.sidenav.SideNavItem;
 import com.vaadin.flow.router.RouterLayout;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
+import DTO.NotifyDTO;
+import com.vaadin.flow.component.UI;
+import com.vaadin.flow.shared.Registration;
+import infrastructure.Broadcaster;
 
 @AnonymousAllowed
 public class MainLayout extends AppLayout implements RouterLayout {
 
     private final IAuth auth;
     private final UserService userService;
+    private Registration broadcasterRegistration;
 
     public MainLayout(IAuth auth, UserService userService) {
         this.auth = auth;
         this.userService = userService;
         ensureToken();
+        registerToBroadcaster();
         createHeader();
         createDrawer();
     }
@@ -41,8 +47,42 @@ public class MainLayout extends AppLayout implements RouterLayout {
             Response<String> r = userService.continueAsGuest();
             if (r.getValue() != null) {
                 VaadinSession.getCurrent().setAttribute("token", r.getValue());
+                VaadinSession.getCurrent().setAttribute("notificationUserIdentifier", r.getValue());
             }
         }
+    }
+
+    private void registerToBroadcaster() {
+        String userIdentifier =
+                (String) VaadinSession.getCurrent().getAttribute("notificationUserIdentifier");
+
+        if (userIdentifier == null || userIdentifier.isBlank()) {
+            return;
+        }
+
+        UI ui = UI.getCurrent();
+
+        broadcasterRegistration = Broadcaster.registerUser(userIdentifier, notification -> {
+            if (ui != null) {
+                ui.access(() -> showNotification(notification));
+            }
+        });
+
+        addDetachListener(event -> {
+            if (broadcasterRegistration != null) {
+                broadcasterRegistration.remove();
+                broadcasterRegistration = null;
+            }
+        });
+    }
+
+    private void showNotification(NotifyDTO notification) {
+        Notification vaadinNotification = Notification.show(
+                notification.getPayload().getMessage(),
+                5000,
+                Notification.Position.TOP_CENTER
+        );
+        vaadinNotification.addThemeVariants(NotificationVariant.LUMO_PRIMARY);
     }
 
     private void createHeader() {
