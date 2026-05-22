@@ -1,6 +1,8 @@
 package application;
 
 import DTO.NotifyDTO;
+import DTO.NotifyPayload;
+import DTO.NotifyType;
 import DTO.QueueEntryResultDTO;
 import domain.dto.UserDTO;
 import domain.user.*;
@@ -51,24 +53,20 @@ public class UserService {
             return Response.ok(result);
         });
     }
-
-    // client polls this while waiting in the queue
     public Response<QueueEntryResultDTO> getQueueStatus(String uuid) {
-        return RetryHelper.executeWithRetry(() ->
-        {
+        return RetryHelper.executeWithRetry(() -> {
             logger.info("Queue status requested for token: " + uuid);
             QueueEntryResultDTO result = WebQueue.getInstance().getStatus(uuid);
-            if (result.isAdmitted()) {
-                logger.info("User with token " + uuid + " is now admitted");
-            }
             return Response.ok(result);
         });
     }
 
-    // fired by WebQueue when a waiting user is admitted — uuid becomes their guest sessionId
-    //trigger for moving to login page //::TO DO!
+    //trigger for moving to login page
     private void onUserAdmitted(String uuid) {
         logger.info("User admitted from queue with sessionId: " + uuid);
+        NotifyPayload payload = new NotifyPayload("Your turn has arrived");
+        NotifyDTO notify = new NotifyDTO(NotifyType.QUEUE_WEB_TURN_ARRIVED,payload);
+        notifier.notifyTab(uuid,notify);
     }
 
     public Response<String> continueAsGuest() {
