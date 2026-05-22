@@ -1,5 +1,6 @@
 package application;
 
+import DTO.NotifyDTO;
 import DTO.NotifyType;
 import DTO.QueueEntryResultDTO;
 import Log.LoggerSetup;
@@ -17,10 +18,7 @@ import org.mockito.Mockito;
 
 import java.time.LocalDate;
 import java.util.*;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -440,17 +438,32 @@ class UserServiceTest {
 
         Response<QueueEntryResultDTO> guest1 = userService.enter();
         Response<QueueEntryResultDTO> guest2 = userService.enter();
+
         assertFalse(guest1.getValue().isAdmitted(), "Guest 1 should be waiting");
-        assertFalse(guest2.getValue().isAdmitted(), "Guest 2 should be waiting");
+        String uuid1 = guest1.getValue().getToken();
 
         assertEquals(2, WebQueue.getInstance().getWaitingCount());
+        CountDownLatch latch = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<NotifyDTO> receivedNotif = new java.util.concurrent.atomic.AtomicReference<>();
 
+        com.vaadin.flow.shared.Registration registration = Broadcaster.registerTab(uuid1, notification -> {
+            receivedNotif.set(notification);
+            latch.countDown();
+        });
+
+        // Act
         userService.logout(activeToken);
 
+        // Assert
         assertEquals(1, WebQueue.getInstance().getActiveCount(), "System should be full again");
         assertEquals(1, WebQueue.getInstance().getWaitingCount(), "Only one guest should remain in the queue");
-    }
 
+        assertTrue(latch.await(2, TimeUnit.SECONDS), "Tab should have received the broadcast within 2 seconds");
+        assertNotNull(receivedNotif.get());
+        assertEquals(NotifyType.QUEUE_WEB_TURN_ARRIVED, receivedNotif.get().getType());
+
+        registration.remove();
+    }
     @Test
     void GivenOneSpotLeft_WhenConcurrentEnter_ThenOneAdmittedOneQueued() throws Exception {
         WebQueue.resetForTesting();
@@ -768,5 +781,113 @@ class UserServiceTest {
         Response<String> loginResponse = userService.login(email, "Password123!");
         assertTrue(loginResponse.isError());
         assertNull(loginResponse.getValue(), "Blocked user should not get a token");
+    }
+    @Test
+    void GivenUsersInQueue_WhenGuestLeavesStore_ThenNextInLineNotifiedViaTab() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(1);
+        userService.enter();
+        String guestToken1 = userService.continueAsGuest().getValue();
+
+        Response<QueueEntryResultDTO> guest2 = userService.enter();
+        String uuid2 = guest2.getValue().getToken();
+
+        CountDownLatch latch = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<NotifyDTO> receivedNotif = new java.util.concurrent.atomic.AtomicReference<>();
+        com.vaadin.flow.shared.Registration registration = Broadcaster.registerTab(uuid2, notification -> {
+            receivedNotif.set(notification);
+            latch.countDown();
+        });
+
+        // Act
+        userService.leaveStore(guestToken1);
+
+        // Assert
+        assertTrue(latch.await(2, TimeUnit.SECONDS), "Tab 2 should have received the broadcast");
+        assertNotNull(receivedNotif.get());
+        assertEquals(NotifyType.QUEUE_WEB_TURN_ARRIVED, receivedNotif.get().getType());
+        assertEquals(1, WebQueue.getInstance().getActiveCount());
+
+        registration.remove();
+    }
+
+    @Test
+    void GivenMultipleQueuedUsers_WhenActiveUsersLeave_ThenNotifiedInFIFOOrder() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(2);
+        userService.enter();
+        String token1 = userService.continueAsGuest().getValue();
+        userService.enter();
+        String token2 = userService.continueAsGuest().getValue();
+
+        String uuid3 = userService.enter().getValue().getToken();
+        String uuid4 = userService.enter().getValue().getToken();
+
+        CountDownLatch latch3 = new CountDownLatch(1);
+        CountDownLatch latch4 = new CountDownLatch(1);
+        com.vaadin.flow.shared.Registration reg3 = Broadcaster.registerTab(uuid3, n -> latch3.countDown());
+        com.vaadin.flow.shared.Registration reg4 = Broadcaster.registerTab(uuid4, n -> latch4.countDown());
+
+        // Act 1
+        userService.leaveStore(token1);
+
+        // Assert 1
+        assertTrue(latch3.await(2, TimeUnit.SECONDS), "Tab 3 must be notified first");
+        assertEquals(1, latch4.getCount(), "Tab 4 must NOT be notified yet");
+
+        // Act 2
+        userService.leaveStore(token2);
+
+        // Assert 2
+        assertTrue(latch4.await(2, TimeUnit.SECONDS), "Tab 4 must be notified second");
+
+        reg3.remove();
+        reg4.remove();
+    }
+    @Test
+    void GivenWaitingUser_WhenPollingQueueStatus_ThenStatusReturnedButNoNotificationSent() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(1);
+        userService.enter();
+
+        Response<QueueEntryResultDTO> queuedUser = userService.enter();
+        String uuid = queuedUser.getValue().getToken();
+        CountDownLatch latch = new CountDownLatch(1);
+        com.vaadin.flow.shared.Registration registration = Broadcaster.registerTab(uuid, n -> latch.countDown());
+
+        // Act
+        Response<QueueEntryResultDTO> status = userService.getQueueStatus(uuid);
+
+        // Assert
+        assertFalse(status.getValue().isAdmitted(), "User should still be waiting");
+
+        boolean notificationFired = latch.await(500, TimeUnit.MILLISECONDS);
+        assertFalse(notificationFired, "Polling getQueueStatus must NOT trigger a WebSocket notification");
+
+        registration.remove();
+    }
+    @Test
+    void GivenEmptySystem_WhenUserEntersImmediately_ThenNoTurnArrivedNotificationSent() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(10);
+
+        String prospectiveUuid = UUID.randomUUID().toString(); // מזהה פיקטיבי לבדיקה
+        CountDownLatch latch = new CountDownLatch(1);
+        com.vaadin.flow.shared.Registration registration = Broadcaster.registerTab(prospectiveUuid, n -> latch.countDown());
+
+        // Act
+        Response<QueueEntryResultDTO> response = userService.enter();
+
+        // Assert
+        assertTrue(response.getValue().isAdmitted(), "User should be admitted immediately");
+
+        boolean notificationFired = latch.await(500, TimeUnit.MILLISECONDS);
+        assertFalse(notificationFired, "Immediately admitted users should NOT receive a 'Turn Arrived' push notification");
+
+        registration.remove();
     }
 }
