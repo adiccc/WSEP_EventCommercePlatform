@@ -875,7 +875,7 @@ class UserServiceTest {
         WebQueue.resetForTesting();
         WebQueue.getInstance(10);
 
-        String prospectiveUuid = UUID.randomUUID().toString(); // מזהה פיקטיבי לבדיקה
+        String prospectiveUuid = UUID.randomUUID().toString(); // effective id for testing
         CountDownLatch latch = new CountDownLatch(1);
         com.vaadin.flow.shared.Registration registration = Broadcaster.registerTab(prospectiveUuid, n -> latch.countDown());
 
