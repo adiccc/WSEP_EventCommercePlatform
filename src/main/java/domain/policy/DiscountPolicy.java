@@ -20,6 +20,8 @@ public abstract class DiscountPolicy implements Discount {
 
     protected abstract String policyName();
 
+    public abstract DiscountPolicyType getPolicyType();
+
     public abstract DiscountPolicy copyPolicy();
 
     @Override

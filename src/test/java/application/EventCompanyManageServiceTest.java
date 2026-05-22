@@ -26,8 +26,11 @@ import domain.dto.EventMapDTO;
 import java.util.HashMap;
 import java.util.Map;
 
+import domain.dataType.PermissionType;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -36,6 +39,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import domain.policy.DiscountPolicyType;
+import domain.policy.PurchasePolicyType;
 import org.mockito.Mockito;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -51,6 +56,8 @@ class EventCompanyManageServiceTest {
     private List<StandingZoneDTO> standingZones;
     private List<SeatingZoneDTO> seatingZones;
     private String validToken1;
+    private String managerToken;
+    private int managerId;
     private IAuth auth;
     private ISuspensionRepo suspensionRepo;
     private IAccessValidator accessValidator;
@@ -130,6 +137,14 @@ class EventCompanyManageServiceTest {
         entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
         standingZones = List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1)));
         seatingZones = List.of(new SeatingZoneDTO(10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
+
+        UserDTO managerDTO = new UserDTO("manager_event@test.com", "Manager", "Test", "Password123!", 1, 1, 2000, "City", "050-555-9999");
+        userService.registerUser(null, managerDTO);
+        managerToken = userService.login("manager_event@test.com", "Password123!").getValue();
+        managerId = auth.getUserId(managerToken).getValue();
+        Company setupCompany = companyRepo.findById(companyId);
+        setupCompany.getCompanyPermission().addToTree(managerId, auth.getUserId(validToken1).getValue(), new HashSet<>());
+        companyRepo.store(setupCompany);
 
         String adminEmail = "admin_master@bgu.ac.il";
         auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(adminEmail));
@@ -1442,6 +1457,564 @@ class EventCompanyManageServiceTest {
         List<NotifyDTO> notifications = userRepo.findUserByEmail(email).getDelayedNotifications();
         assertEquals(1, notifications.size(),
                 "A buyer with multiple separate orders should still receive only ONE notification about the date change (distinct test)");
+    }
+
+    // ===================== Event Purchase Rules =====================
+
+    @Test
+    void GivenOwnerAndValidRule_WhenAddRuleToEvent_ThenSuccess() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4);
+        Response<Boolean> response = eventCompanyManageService.addRuleToEvent(validToken1, eventId, ruleDTO);
+        assertFalse(response.isError());
+        assertEquals(Boolean.TRUE, response.getValue());
+    }
+
+    @Test
+    void GivenOwnerAddsMultipleRules_WhenAddRuleToEvent_ThenAllSucceed() {
+        Response<Boolean> r1 = eventCompanyManageService.addRuleToEvent(validToken1, eventId, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4));
+        Response<Boolean> r2 = eventCompanyManageService.addRuleToEvent(validToken1, eventId, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18));
+        assertFalse(r1.isError());
+        assertFalse(r2.isError());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenAddRuleToEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.addRuleToEvent("invalid-token", eventId, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenUserWithoutPermission_WhenAddRuleToEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.addRuleToEvent(validToken2, eventId, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenManagerWithManagePoliciesPermission_WhenAddRuleToEvent_ThenSuccess() {
+        companyService.updateManagerPermissions(validToken1, companyId, managerId, EnumSet.of(PermissionType.MANAGE_POLICIES));
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4);
+        Response<Boolean> response = eventCompanyManageService.addRuleToEvent(managerToken, eventId, ruleDTO);
+        assertFalse(response.isError());
+        assertEquals(Boolean.TRUE, response.getValue());
+    }
+
+    @Test
+    void GivenManagerWithoutManagePoliciesPermission_WhenAddRuleToEvent_ThenError() {
+        // managerToken has empty permissions by default
+        Response<Boolean> response = eventCompanyManageService.addRuleToEvent(managerToken, eventId, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNegativeTicketCount_WhenAddRuleToEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.addRuleToEvent(validToken1, eventId, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, -1));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNegativeMinAge_WhenAddRuleToEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.addRuleToEvent(validToken1, eventId, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, -5));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenEventNotFound_WhenAddRuleToEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.addRuleToEvent(validToken1, 99999, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInactiveCompany_WhenAddRuleToEvent_ThenError() {
+        companyService.deactivateCompany(validToken1, companyId);
+        Response<Boolean> response = eventCompanyManageService.addRuleToEvent(validToken1, eventId, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenDuplicateRule_WhenAddRuleToEvent_ThenError() {
+        // MAX_TICKETS 20 is the default rule created with the event
+        Response<Boolean> response = eventCompanyManageService.addRuleToEvent(validToken1, eventId, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 20));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenOwnerAndExistingRule_WhenRemoveRuleFromEvent_ThenSuccess() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        eventCompanyManageService.addRuleToEvent(validToken1, eventId, ruleDTO);
+        Response<Boolean> response = eventCompanyManageService.removeRuleFromEvent(validToken1, eventId, ruleDTO);
+        assertFalse(response.isError());
+        assertEquals(Boolean.TRUE, response.getValue());
+    }
+
+    @Test
+    void GivenRuleNotFound_WhenRemoveRuleFromEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.removeRuleFromEvent(validToken1, eventId, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenRemoveRuleFromEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.removeRuleFromEvent("invalid-token", eventId, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 20));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenUserWithoutPermission_WhenRemoveRuleFromEvent_ThenError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        eventCompanyManageService.addRuleToEvent(validToken1, eventId, ruleDTO);
+        Response<Boolean> response = eventCompanyManageService.removeRuleFromEvent(validToken2, eventId, ruleDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenManagerWithManagePoliciesPermission_WhenRemoveRuleFromEvent_ThenSuccess() {
+        companyService.updateManagerPermissions(validToken1, companyId, managerId, EnumSet.of(PermissionType.MANAGE_POLICIES));
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        eventCompanyManageService.addRuleToEvent(validToken1, eventId, ruleDTO);
+        Response<Boolean> response = eventCompanyManageService.removeRuleFromEvent(managerToken, eventId, ruleDTO);
+        assertFalse(response.isError());
+        assertEquals(Boolean.TRUE, response.getValue());
+    }
+
+    @Test
+    void GivenManagerWithoutManagePoliciesPermission_WhenRemoveRuleFromEvent_ThenError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        eventCompanyManageService.addRuleToEvent(validToken1, eventId, ruleDTO);
+        Response<Boolean> response = eventCompanyManageService.removeRuleFromEvent(managerToken, eventId, ruleDTO);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenEventNotFound_WhenRemoveRuleFromEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.removeRuleFromEvent(validToken1, 99999, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4));
+        assertTrue(response.isError());
+    }
+
+    // ===================== Event Discounts =====================
+
+    @Test
+    void GivenOwnerAndValidDiscount_WhenAddDiscountToEvent_ThenSuccess() {
+        DiscountDTO discountDTO = new DiscountDTO(20.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = eventCompanyManageService.addDiscountToEvent(validToken1, eventId, discountDTO);
+        assertFalse(response.isError());
+        assertEquals(Boolean.TRUE, response.getValue());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenAddDiscountToEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.addDiscountToEvent("invalid-token", eventId, new DiscountDTO(10.0, LocalDate.now().plusDays(1)));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenUserWithoutPermission_WhenAddDiscountToEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.addDiscountToEvent(validToken2, eventId, new DiscountDTO(10.0, LocalDate.now().plusDays(1)));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenManagerWithManagePoliciesPermission_WhenAddDiscountToEvent_ThenSuccess() {
+        companyService.updateManagerPermissions(validToken1, companyId, managerId, EnumSet.of(PermissionType.MANAGE_POLICIES));
+        Response<Boolean> response = eventCompanyManageService.addDiscountToEvent(managerToken, eventId, new DiscountDTO(20.0, LocalDate.now().plusDays(1)));
+        assertFalse(response.isError());
+        assertEquals(Boolean.TRUE, response.getValue());
+    }
+
+    @Test
+    void GivenManagerWithoutManagePoliciesPermission_WhenAddDiscountToEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.addDiscountToEvent(managerToken, eventId, new DiscountDTO(20.0, LocalDate.now().plusDays(1)));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNegativePercentage_WhenAddDiscountToEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(-10.0, LocalDate.now().plusDays(1)));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenEmptyCouponCode_WhenAddDiscountToEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO("", 10.0, LocalDate.now().plusDays(1)));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenEventNotFound_WhenAddDiscountToEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.addDiscountToEvent(validToken1, 99999, new DiscountDTO(10.0, LocalDate.now().plusDays(1)));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInactiveCompany_WhenAddDiscountToEvent_ThenError() {
+        companyService.deactivateCompany(validToken1, companyId);
+        Response<Boolean> response = eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(10.0, LocalDate.now().plusDays(1)));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenDuplicateDiscount_WhenAddDiscountToEvent_ThenError() {
+        LocalDate endDate = LocalDate.now().plusDays(1);
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(15.0, endDate));
+        Response<Boolean> response = eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(15.0, endDate));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenExistingDiscount_WhenRemoveDiscountFromEvent_ThenSuccess() {
+        LocalDate endDate = LocalDate.now().plusDays(1);
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(10.0, endDate));
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(80.0, endDate));
+        Response<Boolean> response = eventCompanyManageService.removeDiscountFromEvent(validToken1, eventId, new DiscountDTO(10.0, endDate));
+        assertFalse(response.isError());
+        assertEquals(Boolean.TRUE, response.getValue());
+    }
+
+    @Test
+    void GivenDiscountDoesNotExist_WhenRemoveDiscountFromEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.removeDiscountFromEvent(validToken1, eventId, new DiscountDTO(99.0, LocalDate.now().plusDays(1)));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenRemoveDiscountFromEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.removeDiscountFromEvent("invalid-token", eventId, new DiscountDTO(10.0, LocalDate.now().plusDays(1)));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenUserWithoutPermission_WhenRemoveDiscountFromEvent_ThenError() {
+        LocalDate endDate = LocalDate.now().plusDays(1);
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(10.0, endDate));
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(80.0, endDate));
+        Response<Boolean> response = eventCompanyManageService.removeDiscountFromEvent(validToken2, eventId, new DiscountDTO(10.0, endDate));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenManagerWithManagePoliciesPermission_WhenRemoveDiscountFromEvent_ThenSuccess() {
+        companyService.updateManagerPermissions(validToken1, companyId, managerId, EnumSet.of(PermissionType.MANAGE_POLICIES));
+        LocalDate endDate = LocalDate.now().plusDays(1);
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(10.0, endDate));
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(80.0, endDate));
+        Response<Boolean> response = eventCompanyManageService.removeDiscountFromEvent(managerToken, eventId, new DiscountDTO(10.0, endDate));
+        assertFalse(response.isError());
+        assertEquals(Boolean.TRUE, response.getValue());
+    }
+
+    @Test
+    void GivenManagerWithoutManagePoliciesPermission_WhenRemoveDiscountFromEvent_ThenError() {
+        LocalDate endDate = LocalDate.now().plusDays(1);
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(10.0, endDate));
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(80.0, endDate));
+        Response<Boolean> response = eventCompanyManageService.removeDiscountFromEvent(managerToken, eventId, new DiscountDTO(10.0, endDate));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenEventNotFound_WhenRemoveDiscountFromEvent_ThenError() {
+        Response<Boolean> response = eventCompanyManageService.removeDiscountFromEvent(validToken1, 99999, new DiscountDTO(10.0, LocalDate.now().plusDays(1)));
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInactiveCompany_WhenRemoveDiscountFromEvent_ThenError() {
+        LocalDate endDate = LocalDate.now().plusDays(1);
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(10.0, endDate));
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(80.0, endDate));
+        companyService.deactivateCompany(validToken1, companyId);
+        Response<Boolean> response = eventCompanyManageService.removeDiscountFromEvent(validToken1, eventId, new DiscountDTO(10.0, endDate));
+        assertTrue(response.isError());
+    }
+
+    // ===================== Change Event Purchase Policy Type =====================
+
+    @Test
+    void GivenOwner_WhenChangeEventPurchasePolicyTypeToOR_ThenSuccess() {
+        Response<Void> response = eventCompanyManageService.changeEventPurchasePolicyType(validToken1, eventId, PurchasePolicyType.OR);
+        assertFalse(response.isError());
+        Event event = eventRepo.findById(eventId);
+        assertEquals(PurchasePolicyType.OR, event.getPurchasePolicy().getPolicyType());
+    }
+
+    @Test
+    void GivenOwnerWithOrPolicy_WhenChangeEventPurchasePolicyTypeToAND_ThenSuccess() {
+        eventCompanyManageService.changeEventPurchasePolicyType(validToken1, eventId, PurchasePolicyType.OR);
+        Response<Void> response = eventCompanyManageService.changeEventPurchasePolicyType(validToken1, eventId, PurchasePolicyType.AND);
+        assertFalse(response.isError());
+        Event event = eventRepo.findById(eventId);
+        assertEquals(PurchasePolicyType.AND, event.getPurchasePolicy().getPolicyType());
+    }
+
+    @Test
+    void GivenSamePolicyType_WhenChangeEventPurchasePolicyType_ThenNoOpAndRulesPreserved() {
+        eventCompanyManageService.addRuleToEvent(validToken1, eventId, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18));
+        Response<Void> response = eventCompanyManageService.changeEventPurchasePolicyType(validToken1, eventId, PurchasePolicyType.AND);
+        assertFalse(response.isError());
+        assertEquals(2, eventRepo.findById(eventId).getPurchasePolicy().getRules().size());
+    }
+
+    @Test
+    void GivenOwner_WhenChangePurchasePolicyType_ThenExistingRulesPreserved() {
+        eventCompanyManageService.addRuleToEvent(validToken1, eventId, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18));
+        eventCompanyManageService.changeEventPurchasePolicyType(validToken1, eventId, PurchasePolicyType.OR);
+        assertEquals(2, eventRepo.findById(eventId).getPurchasePolicy().getRules().size());
+    }
+
+    @Test
+    void GivenManagerWithManagePoliciesPermission_WhenChangeEventPurchasePolicyType_ThenSuccess() {
+        companyService.updateManagerPermissions(validToken1, companyId, managerId, EnumSet.of(PermissionType.MANAGE_POLICIES));
+        Response<Void> response = eventCompanyManageService.changeEventPurchasePolicyType(managerToken, eventId, PurchasePolicyType.OR);
+        assertFalse(response.isError());
+        assertEquals(PurchasePolicyType.OR, eventRepo.findById(eventId).getPurchasePolicy().getPolicyType());
+    }
+
+    @Test
+    void GivenManagerWithoutManagePoliciesPermission_WhenChangeEventPurchasePolicyType_ThenError() {
+        Response<Void> response = eventCompanyManageService.changeEventPurchasePolicyType(managerToken, eventId, PurchasePolicyType.OR);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNonMember_WhenChangeEventPurchasePolicyType_ThenError() {
+        Response<Void> response = eventCompanyManageService.changeEventPurchasePolicyType(validToken2, eventId, PurchasePolicyType.OR);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenChangeEventPurchasePolicyType_ThenError() {
+        Response<Void> response = eventCompanyManageService.changeEventPurchasePolicyType("invalid-token", eventId, PurchasePolicyType.OR);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInactiveCompany_WhenChangeEventPurchasePolicyType_ThenError() {
+        companyService.deactivateCompany(validToken1, companyId);
+        Response<Void> response = eventCompanyManageService.changeEventPurchasePolicyType(validToken1, eventId, PurchasePolicyType.OR);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenEventNotFound_WhenChangeEventPurchasePolicyType_ThenError() {
+        Response<Void> response = eventCompanyManageService.changeEventPurchasePolicyType(validToken1, 99999, PurchasePolicyType.OR);
+        assertTrue(response.isError());
+    }
+
+    // ===================== Change Event Discount Policy Type =====================
+
+    @Test
+    void GivenOwner_WhenChangeEventDiscountPolicyTypeToMAX_ThenSuccess() {
+        Response<Void> response = eventCompanyManageService.changeEventDiscountPolicyType(validToken1, eventId, DiscountPolicyType.MAX);
+        assertFalse(response.isError());
+        assertEquals(DiscountPolicyType.MAX, eventRepo.findById(eventId).getDiscountPolicy().getPolicyType());
+    }
+
+    @Test
+    void GivenOwnerWithMaxPolicy_WhenChangeEventDiscountPolicyTypeToSUM_ThenSuccess() {
+        eventCompanyManageService.changeEventDiscountPolicyType(validToken1, eventId, DiscountPolicyType.MAX);
+        Response<Void> response = eventCompanyManageService.changeEventDiscountPolicyType(validToken1, eventId, DiscountPolicyType.SUM);
+        assertFalse(response.isError());
+        assertEquals(DiscountPolicyType.SUM, eventRepo.findById(eventId).getDiscountPolicy().getPolicyType());
+    }
+
+    @Test
+    void GivenOwner_WhenChangeDiscountPolicyType_ThenExistingDiscountsPreserved() {
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(15.0, LocalDate.now().plusDays(1)));
+        eventCompanyManageService.changeEventDiscountPolicyType(validToken1, eventId, DiscountPolicyType.MAX);
+        assertEquals(2, eventRepo.findById(eventId).getDiscountPolicy().getDiscounts().size());
+    }
+
+    @Test
+    void GivenManagerWithManagePoliciesPermission_WhenChangeEventDiscountPolicyType_ThenSuccess() {
+        companyService.updateManagerPermissions(validToken1, companyId, managerId, EnumSet.of(PermissionType.MANAGE_POLICIES));
+        Response<Void> response = eventCompanyManageService.changeEventDiscountPolicyType(managerToken, eventId, DiscountPolicyType.MAX);
+        assertFalse(response.isError());
+        assertEquals(DiscountPolicyType.MAX, eventRepo.findById(eventId).getDiscountPolicy().getPolicyType());
+    }
+
+    @Test
+    void GivenManagerWithoutManagePoliciesPermission_WhenChangeEventDiscountPolicyType_ThenError() {
+        Response<Void> response = eventCompanyManageService.changeEventDiscountPolicyType(managerToken, eventId, DiscountPolicyType.MAX);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNonMember_WhenChangeEventDiscountPolicyType_ThenError() {
+        Response<Void> response = eventCompanyManageService.changeEventDiscountPolicyType(validToken2, eventId, DiscountPolicyType.MAX);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenChangeEventDiscountPolicyType_ThenError() {
+        Response<Void> response = eventCompanyManageService.changeEventDiscountPolicyType("invalid-token", eventId, DiscountPolicyType.MAX);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInactiveCompany_WhenChangeEventDiscountPolicyType_ThenError() {
+        companyService.deactivateCompany(validToken1, companyId);
+        Response<Void> response = eventCompanyManageService.changeEventDiscountPolicyType(validToken1, eventId, DiscountPolicyType.MAX);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenEventNotFound_WhenChangeEventDiscountPolicyType_ThenError() {
+        Response<Void> response = eventCompanyManageService.changeEventDiscountPolicyType(validToken1, 99999, DiscountPolicyType.MAX);
+        assertTrue(response.isError());
+    }
+
+    // ===================== Concurrency: Event Purchase Rules =====================
+
+    @Test
+    void GivenTwoThreadsRaceToAddSameRule_WhenAddRuleToEvent_ThenOnlyOneSucceeds() throws Exception {
+        PurchaseRuleDTO rule = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.addRuleToEvent(validToken1, eventId, rule);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.addRuleToEvent(validToken1, eventId, rule);
+        });
+
+        start.countDown();
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = (!r1.isError() ? 1 : 0) + (!r2.isError() ? 1 : 0);
+        assertEquals(1, success, "Only one concurrent add of the same rule should succeed");
+    }
+
+    @Test
+    void GivenTwoThreadsRaceToRemoveSameRule_WhenRemoveRuleFromEvent_ThenOnlyOneSucceeds() throws Exception {
+        PurchaseRuleDTO rule = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        eventCompanyManageService.addRuleToEvent(validToken1, eventId, rule);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.removeRuleFromEvent(validToken1, eventId, rule);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.removeRuleFromEvent(validToken1, eventId, rule);
+        });
+
+        start.countDown();
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = (!r1.isError() ? 1 : 0) + (!r2.isError() ? 1 : 0);
+        assertEquals(1, success, "Only one concurrent remove of the same rule should succeed");
+    }
+
+    // ===================== Concurrency: Event Discounts =====================
+
+    @Test
+    void GivenTwoThreadsRaceToAddSameDiscount_WhenAddDiscountToEvent_ThenOnlyOneSucceeds() throws Exception {
+        DiscountDTO discount = new DiscountDTO(25.0, LocalDate.now().plusDays(10));
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.addDiscountToEvent(validToken1, eventId, discount);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.addDiscountToEvent(validToken1, eventId, discount);
+        });
+
+        start.countDown();
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = (!r1.isError() ? 1 : 0) + (!r2.isError() ? 1 : 0);
+        assertEquals(1, success, "Only one concurrent add of the same discount should succeed");
+    }
+
+    @Test
+    void GivenTwoThreadsRaceToRemoveSameDiscount_WhenRemoveDiscountFromEvent_ThenOnlyOneSucceeds() throws Exception {
+        DiscountDTO discount = new DiscountDTO(25.0, LocalDate.now().plusDays(10));
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, new DiscountDTO(10.0, LocalDate.now().plusDays(5)));
+        eventCompanyManageService.addDiscountToEvent(validToken1, eventId, discount);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.removeDiscountFromEvent(validToken1, eventId, discount);
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.removeDiscountFromEvent(validToken1, eventId, discount);
+        });
+
+        start.countDown();
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int success = (!r1.isError() ? 1 : 0) + (!r2.isError() ? 1 : 0);
+        assertEquals(1, success, "Only one concurrent remove of the same discount should succeed");
+    }
+
+    // ===================== Concurrency: Change Event Policy Types =====================
+
+    @Test
+    void GivenTwoThreadsRaceToChangePurchasePolicyType_WhenChangeEventPurchasePolicyType_ThenFinalStateIsValid() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Void>> f1 = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.changeEventPurchasePolicyType(validToken1, eventId, PurchasePolicyType.OR);
+        });
+        Future<Response<Void>> f2 = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.changeEventPurchasePolicyType(validToken1, eventId, PurchasePolicyType.AND);
+        });
+
+        start.countDown();
+        f1.get();
+        f2.get();
+        executor.shutdown();
+
+        PurchasePolicyType finalType = eventRepo.findById(eventId).getPurchasePolicy().getPolicyType();
+        assertTrue(finalType == PurchasePolicyType.AND || finalType == PurchasePolicyType.OR,
+                "Final policy type must be valid regardless of thread ordering");
+    }
+
+    @Test
+    void GivenTwoThreadsRaceToChangeDiscountPolicyType_WhenChangeEventDiscountPolicyType_ThenFinalStateIsValid() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Void>> f1 = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.changeEventDiscountPolicyType(validToken1, eventId, DiscountPolicyType.MAX);
+        });
+        Future<Response<Void>> f2 = executor.submit(() -> {
+            start.await();
+            return eventCompanyManageService.changeEventDiscountPolicyType(validToken1, eventId, DiscountPolicyType.SUM);
+        });
+
+        start.countDown();
+        f1.get();
+        f2.get();
+        executor.shutdown();
+
+        DiscountPolicyType finalType = eventRepo.findById(eventId).getDiscountPolicy().getPolicyType();
+        assertTrue(finalType == DiscountPolicyType.SUM || finalType == DiscountPolicyType.MAX,
+                "Final discount policy type must be valid regardless of thread ordering");
     }
 
 }
