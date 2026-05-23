@@ -65,7 +65,7 @@ public class ActiveOrderService {
             ITicketSupply ticketSupply,
             IAccessValidator accessValidator,
             INotifier notifier,
-            @Value("${active-order.capacity:2}") int capacity) {
+            @Value("${active-order.capacity:20}") int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
