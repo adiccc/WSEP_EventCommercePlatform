@@ -1,5 +1,7 @@
 package domain.event;
 
+import DTO.DiscountDTO;
+import DTO.PurchaseRuleDTO;
 import domain.dataType.CategoryEvent;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
@@ -23,8 +25,8 @@ public class Event {
     private final String name;
     private final LocalDateTime saleStartDate;
     private final boolean hasLottery;
-    private final PurchasePolicy purchasePolicy;
-    private final DiscountPolicy discountPolicy;
+    private PurchasePolicy purchasePolicy;
+    private DiscountPolicy discountPolicy;
     private boolean active;
     private final GeographicalArea location;
     private final CategoryEvent categoryEvent;
@@ -230,6 +232,44 @@ public class Event {
 
         Event other = (Event) obj;
         return id == (other.id) && version == other.version;
+    }
+
+    public void addRule(PurchaseRuleDTO dto) {
+        purchasePolicy.addRule(PurchasePolicy.dtoToPurchase(dto));
+    }
+
+    public void removeRule(PurchaseRuleDTO dto) {
+        purchasePolicy.removeRule(PurchasePolicy.dtoToPurchase(dto));
+    }
+
+    public void addDiscount(DiscountDTO discount) {
+        discountPolicy.addDiscount(DiscountPolicy.dtoToDiscount(discount));
+    }
+
+    public void removeDiscount(DiscountDTO discount) {
+        discountPolicy.removeDiscount(DiscountPolicy.dtoToDiscount(discount));
+    }
+
+    public void changePurchasePolicyType(PurchasePolicyType policyType) {
+        if (purchasePolicy.getPolicyType() == policyType) return;
+        PurchasePolicy newPolicy;
+        switch (policyType) {
+            case OR:  newPolicy = new OrPurchasePolicy();  break;
+            default:  newPolicy = new AndPurchasePolicy(); break;
+        }
+        for (Purchase p : purchasePolicy.getRules()) newPolicy.addRule(p.copy());
+        this.purchasePolicy = newPolicy;
+    }
+
+    public void changeDiscountPolicyType(DiscountPolicyType policyType) {
+        List<Discount> current = discountPolicy.getDiscounts();
+        DiscountPolicy newPolicy;
+        switch (policyType) {
+            case MAX: newPolicy = new MaxDiscountPolicy(); break;
+            default:  newPolicy = new SumDiscountPolicy(); break;
+        }
+        for (Discount d : current) newPolicy.addDiscount(d.copy());
+        this.discountPolicy = newPolicy;
     }
 
     public void quantityExceedsPolicy(UserDTO user, int quantity) {

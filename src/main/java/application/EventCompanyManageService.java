@@ -10,6 +10,8 @@ import domain.event.EventMap;
 import domain.event.IEventRepo;
 import domain.dataType.ElementPosition;
 import domain.event.Zone;
+import domain.policy.DiscountPolicyType;
+import domain.policy.PurchasePolicyType;
 
 import domain.event.*;
 import Exception.OptimisticLockingFailureException;
@@ -594,6 +596,252 @@ public class EventCompanyManageService {
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
                 return new Response<>(false, "Failed to process refund: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Boolean> addRuleToEvent(String token, int eventId, PurchaseRuleDTO ruleDTO) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("addRuleToEvent called for eventId: " + eventId);
+            try {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1)
+                    return Response.error("Invalid or expired token");
+                if (!accessValidator.hasWriteAccess(userId))
+                    return Response.error("user does not have write access.");
+
+                if (ruleDTO == null)
+                    return Response.error("Invalid rule data");
+
+                Event event = eventRepo.findById(eventId);
+                Company company = companyRepo.findById(event.getCompanyId());
+                if (!company.isActive())
+                    return Response.error("Company is not active");
+                if (!company.checkPermission(userId, PermissionType.MANAGE_POLICIES))
+                    return Response.error("User does not have permission to manage event policies");
+
+                event.addRule(ruleDTO);
+                eventRepo.store(event);
+
+                logger.info("addRuleToEvent succeeded for eventId: " + eventId);
+                return Response.ok(true);
+
+            } catch (SecurityException e) {
+                logger.warning("addRuleToEvent unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalArgumentException e) {
+                logger.warning("addRuleToEvent invalid data: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalStateException e) {
+                logger.warning("addRuleToEvent invalid state: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in addRuleToEvent: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Boolean> removeRuleFromEvent(String token, int eventId, PurchaseRuleDTO ruleDTO) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("removeRuleFromEvent called for eventId: " + eventId);
+            try {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1)
+                    return Response.error("Invalid or expired token");
+                if (!accessValidator.hasWriteAccess(userId))
+                    return Response.error("user does not have write access.");
+
+                if (ruleDTO == null)
+                    return Response.error("Invalid rule data");
+
+                Event event = eventRepo.findById(eventId);
+                Company company = companyRepo.findById(event.getCompanyId());
+                if (!company.isActive())
+                    return Response.error("Company is not active");
+                if (!company.checkPermission(userId, PermissionType.MANAGE_POLICIES))
+                    return Response.error("User does not have permission to manage event policies");
+
+                event.removeRule(ruleDTO);
+                eventRepo.store(event);
+
+                logger.info("removeRuleFromEvent succeeded for eventId: " + eventId);
+                return Response.ok(true);
+
+            } catch (SecurityException e) {
+                logger.warning("removeRuleFromEvent unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalArgumentException e) {
+                logger.warning("removeRuleFromEvent invalid data: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalStateException e) {
+                logger.warning("removeRuleFromEvent invalid state: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in removeRuleFromEvent: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Boolean> addDiscountToEvent(String token, int eventId, DiscountDTO discountDTO) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("addDiscountToEvent called for eventId: " + eventId);
+            try {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1)
+                    return Response.error("Invalid or expired token");
+                if (!accessValidator.hasWriteAccess(userId))
+                    return Response.error("user does not have write access.");
+
+                if (discountDTO == null)
+                    return Response.error("Invalid discount data");
+
+                Event event = eventRepo.findById(eventId);
+                Company company = companyRepo.findById(event.getCompanyId());
+                if (!company.isActive())
+                    return Response.error("Company is not active");
+                if (!company.checkPermission(userId, PermissionType.MANAGE_POLICIES))
+                    return Response.error("User does not have permission to manage event policies");
+
+                event.addDiscount(discountDTO);
+                eventRepo.store(event);
+
+                logger.info("addDiscountToEvent succeeded for eventId: " + eventId);
+                return Response.ok(true);
+
+            } catch (SecurityException e) {
+                logger.warning("addDiscountToEvent unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalArgumentException e) {
+                logger.warning("addDiscountToEvent invalid data: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalStateException e) {
+                logger.warning("addDiscountToEvent invalid state: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in addDiscountToEvent: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Boolean> removeDiscountFromEvent(String token, int eventId, DiscountDTO discountDTO) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("removeDiscountFromEvent called for eventId: " + eventId);
+            try {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1)
+                    return Response.error("Invalid or expired token");
+                if (!accessValidator.hasWriteAccess(userId))
+                    return Response.error("user does not have write access.");
+
+                if (discountDTO == null)
+                    return Response.error("Invalid discount data");
+
+                Event event = eventRepo.findById(eventId);
+                Company company = companyRepo.findById(event.getCompanyId());
+                if (!company.isActive())
+                    return Response.error("Company is not active");
+                if (!company.checkPermission(userId, PermissionType.MANAGE_POLICIES))
+                    return Response.error("User does not have permission to manage event policies");
+
+                event.removeDiscount(discountDTO);
+                eventRepo.store(event);
+
+                logger.info("removeDiscountFromEvent succeeded for eventId: " + eventId);
+                return Response.ok(true);
+
+            } catch (SecurityException e) {
+                logger.warning("removeDiscountFromEvent unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalArgumentException e) {
+                logger.warning("removeDiscountFromEvent invalid data: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (IllegalStateException e) {
+                logger.warning("removeDiscountFromEvent invalid state: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in removeDiscountFromEvent: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Void> changeEventPurchasePolicyType(String token, int eventId, PurchasePolicyType policyType) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("changeEventPurchasePolicyType called for eventId: " + eventId);
+            try {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1)
+                    return Response.error("Invalid or expired token");
+                if (!accessValidator.hasWriteAccess(userId))
+                    return Response.error("user does not have write access.");
+
+                Event event = eventRepo.findById(eventId);
+                Company company = companyRepo.findById(event.getCompanyId());
+                if (!company.isActive())
+                    return Response.error("Company is not active");
+                if (!company.checkPermission(userId, PermissionType.MANAGE_POLICIES))
+                    return Response.error("User does not have permission to manage event policies");
+
+                event.changePurchasePolicyType(policyType);
+                eventRepo.store(event);
+
+                logger.info("changeEventPurchasePolicyType succeeded for eventId: " + eventId);
+                return Response.ok(null);
+
+            } catch (SecurityException e) {
+                logger.warning("changeEventPurchasePolicyType unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in changeEventPurchasePolicyType: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Void> changeEventDiscountPolicyType(String token, int eventId, DiscountPolicyType policyType) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("changeEventDiscountPolicyType called for eventId: " + eventId);
+            try {
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1)
+                    return Response.error("Invalid or expired token");
+                if (!accessValidator.hasWriteAccess(userId))
+                    return Response.error("user does not have write access.");
+
+                Event event = eventRepo.findById(eventId);
+                Company company = companyRepo.findById(event.getCompanyId());
+                if (!company.isActive())
+                    return Response.error("Company is not active");
+                if (!company.checkPermission(userId, PermissionType.MANAGE_POLICIES))
+                    return Response.error("User does not have permission to manage event policies");
+
+                event.changeDiscountPolicyType(policyType);
+                eventRepo.store(event);
+
+                logger.info("changeEventDiscountPolicyType succeeded for eventId: " + eventId);
+                return Response.ok(null);
+
+            } catch (SecurityException e) {
+                logger.warning("changeEventDiscountPolicyType unauthorized: " + e.getMessage());
+                return Response.error(e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("Unexpected error in changeEventDiscountPolicyType: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
             }
         });
     }

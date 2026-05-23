@@ -23,6 +23,9 @@ public class MaxDiscountPolicy extends DiscountPolicy {
     }
 
     @Override
+    public DiscountPolicyType getPolicyType() { return DiscountPolicyType.MAX; }
+
+    @Override
     protected String policyName() {
         return "Max discount policy";
     }

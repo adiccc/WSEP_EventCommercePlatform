@@ -21,6 +21,9 @@ public class SumDiscountPolicy extends DiscountPolicy {
     }
 
     @Override
+    public DiscountPolicyType getPolicyType() { return DiscountPolicyType.SUM; }
+
+    @Override
     protected String policyName() {
         return "Sum discount policy";
     }
