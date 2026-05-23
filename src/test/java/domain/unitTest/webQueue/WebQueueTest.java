@@ -26,7 +26,7 @@ class WebQueueTest {
     // --- tryEnter: basic admission ---
 
     @Test
-    void userEntersWhenCapacityAvailable_isAdmitted() {
+    void GivenCapacityAvailable_WhenUserEnters_ThenAdmitted() {
         WebQueue queue = WebQueue.getInstance(5);
         QueueEntryResultDTO result = queue.tryEnter(uuid -> {});
 
@@ -37,7 +37,7 @@ class WebQueueTest {
     }
 
     @Test
-    void userEntersWhenFull_isPlacedInQueue() {
+    void GivenQueueFull_WhenUserEnters_ThenPlacedInQueue() {
         WebQueue queue = WebQueue.getInstance(1);
         queue.tryEnter(uuid -> {}); // fills the slot
 
@@ -50,7 +50,7 @@ class WebQueueTest {
     }
 
     @Test
-    void multipleWaitingUsers_positionsAreCorrect() {
+    void GivenQueueFull_WhenMultipleUsersEnter_ThenPositionsAssignedInOrder() {
         WebQueue queue = WebQueue.getInstance(1);
         queue.tryEnter(uuid -> {}); // fills the slot
 
@@ -67,7 +67,7 @@ class WebQueueTest {
     // --- notifyUserLeft ---
 
     @Test
-    void userLeaves_noOneWaiting_activeCountDecrements() {
+    void GivenNoOneWaiting_WhenUserLeaves_ThenActiveCountDecrements() {
         WebQueue queue = WebQueue.getInstance(3);
         queue.tryEnter(uuid -> {});
         queue.tryEnter(uuid -> {});
@@ -79,7 +79,7 @@ class WebQueueTest {
     }
 
     @Test
-    void userLeaves_someoneWaiting_waitingUserAdmitted() {
+    void GivenSomeoneWaiting_WhenUserLeaves_ThenWaitingUserAdmitted() {
         WebQueue queue = WebQueue.getInstance(1);
         queue.tryEnter(uuid -> {}); // fills the slot
         QueueEntryResultDTO waiting = queue.tryEnter(uuid -> {});
@@ -94,7 +94,7 @@ class WebQueueTest {
     }
 
     @Test
-    void userLeaves_callbackFiredWithCorrectUuid() {
+    void GivenUserWaiting_WhenUserLeaves_ThenCallbackFiredWithCorrectToken() {
         WebQueue queue = WebQueue.getInstance(1);
         queue.tryEnter(uuid -> {}); // fills the slot
 
@@ -108,7 +108,7 @@ class WebQueueTest {
     }
 
     @Test
-    void multipleLeave_waitingUsersAdmittedInFifoOrder() {
+    void GivenMultipleUsersWaiting_WhenUsersLeave_ThenAdmittedInFifoOrder() {
         WebQueue queue = WebQueue.getInstance(1);
         queue.tryEnter(uuid -> {}); // fills the slot
 
@@ -127,7 +127,7 @@ class WebQueueTest {
     // --- getStatus ---
 
     @Test
-    void getStatus_admittedUser_returnsAdmitted() {
+    void GivenAdmittedUser_WhenGetStatus_ThenReturnsAdmitted() {
         WebQueue queue = WebQueue.getInstance(5);
         QueueEntryResultDTO result = queue.tryEnter(uuid -> {});
 
@@ -137,7 +137,7 @@ class WebQueueTest {
     }
 
     @Test
-    void getStatus_waitingUser_returnsCorrectPosition() {
+    void GivenWaitingUser_WhenGetStatus_ThenReturnsCorrectPosition() {
         WebQueue queue = WebQueue.getInstance(1);
         queue.tryEnter(uuid -> {}); // fills the slot
         QueueEntryResultDTO waiting = queue.tryEnter(uuid -> {});
@@ -149,7 +149,7 @@ class WebQueueTest {
     }
 
     @Test
-    void getStatus_positionDecreasesAsOthersAreAdmitted() {
+    void GivenWaitingUser_WhenOthersAreAdmitted_ThenPositionDecreases() {
         WebQueue queue = WebQueue.getInstance(1);
         queue.tryEnter(uuid -> {}); // fills the slot
         queue.tryEnter(uuid -> {}); // position 1
@@ -165,20 +165,20 @@ class WebQueueTest {
     // --- setMaxCapacity ---
 
     @Test
-    void setMaxCapacity_validValue_updatesCapacity() {
+    void GivenValidValue_WhenSetMaxCapacity_ThenCapacityUpdated() {
         WebQueue queue = WebQueue.getInstance(5);
         queue.setMaxCapacity(10);
         assertEquals(10, queue.getMaxCapacity());
     }
 
     @Test
-    void setMaxCapacity_zero_throwsIllegalArgumentException() {
+    void GivenZeroValue_WhenSetMaxCapacity_ThenThrowsIllegalArgument() {
         WebQueue queue = WebQueue.getInstance(5);
         assertThrows(IllegalArgumentException.class, () -> queue.setMaxCapacity(0));
     }
 
     @Test
-    void setMaxCapacity_negative_throwsIllegalArgumentException() {
+    void GivenNegativeValue_WhenSetMaxCapacity_ThenThrowsIllegalArgument() {
         WebQueue queue = WebQueue.getInstance(5);
         assertThrows(IllegalArgumentException.class, () -> queue.setMaxCapacity(-3));
     }
@@ -186,12 +186,12 @@ class WebQueueTest {
     // --- getInstance singleton ---
 
     @Test
-    void getInstance_beforeInit_throwsIllegalStateException() {
+    void GivenNotInitialized_WhenGetInstance_ThenThrowsIllegalState() {
         assertThrows(IllegalStateException.class, WebQueue::getInstance);
     }
 
     @Test
-    void getInstance_calledTwiceWithDifferentCapacity_returnsSameInstance() {
+    void GivenAlreadyInitialized_WhenGetInstanceCalledAgainWithDifferentCapacity_ThenReturnsSameInstance() {
         WebQueue first = WebQueue.getInstance(5);
         WebQueue second = WebQueue.getInstance(99); // ignored — already initialized
         assertSame(first, second);
@@ -201,7 +201,7 @@ class WebQueueTest {
     // --- concurrency ---
 
     @Test
-    void concurrentEntries_exactlyMaxCapacityAdmitted() throws InterruptedException {
+    void GivenMaxCapacitySlots_WhenUsersEnterConcurrently_ThenExactlyMaxCapacityAdmitted() throws InterruptedException {
         int capacity = 10;
         int totalUsers = 50;
         WebQueue queue = WebQueue.getInstance(capacity);
@@ -230,7 +230,7 @@ class WebQueueTest {
     }
 
     @Test
-    void concurrentEntriesAndExits_countsAlwaysConsistent() throws InterruptedException {
+    void GivenConcurrentEntriesAndExits_WhenMultipleThreadsEnterAndLeave_ThenCountsRemainConsistent() throws InterruptedException {
         int capacity = 5;
         WebQueue queue = WebQueue.getInstance(capacity);
 
