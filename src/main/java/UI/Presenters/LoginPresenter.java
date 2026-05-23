@@ -27,4 +27,8 @@ public class LoginPresenter {
     public Response<String> continueAsGuest() {
         return userService.continueAsGuest();
     }
+
+    public Response<String> getUserIdentifier(String token) {
+        return userService.getUserIdentifier(token);
+    }
 }

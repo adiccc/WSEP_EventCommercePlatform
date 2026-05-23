@@ -16,10 +16,10 @@ import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dto.CompanyDTO;
-
+import com.vaadin.flow.component.UI;
 import java.util.List;
 
-@Route(value = "", layout = MainLayout.class)
+@Route(value = "home", layout = MainLayout.class)
 @PageTitle("Home — EventCommerce")
 @AnonymousAllowed
 public class HomeView extends VerticalLayout {
@@ -65,8 +65,8 @@ public class HomeView extends VerticalLayout {
     // ── Data loading ──────────────────────────────────────────────────────────
 
     private void loadCompanies() {
-        String token = (String) VaadinSession.getCurrent().getAttribute("token");
-        List<CompanyDTO> companies = presenter.getCompanies(token);
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);        List<CompanyDTO> companies = presenter.getCompanies(token);
 
         if (companies != null) {
             allCompanies = companies;

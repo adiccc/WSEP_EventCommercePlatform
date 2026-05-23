@@ -16,13 +16,18 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dto.UserDTO;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
+import com.vaadin.flow.server.VaadinSession;
+import com.vaadin.flow.component.UI;
+
 
 import java.time.LocalDate;
 
 @Route("register")
 @PageTitle("Register")
 @AnonymousAllowed
-public class RegisterView extends VerticalLayout {
+public class RegisterView extends VerticalLayout implements BeforeEnterObserver {
 
     private final RegisterPresenter presenter;
 
@@ -108,6 +113,18 @@ public class RegisterView extends VerticalLayout {
         );
 
         add(title, form);
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+
+        Boolean webQueueAdmitted =
+                (Boolean) VaadinSession.getCurrent()
+                        .getAttribute("webQueueAdmitted_" + tabId);
+        if (!Boolean.TRUE.equals(webQueueAdmitted)) {
+            event.rerouteTo("");
+        }
     }
 
     private void showSuccess(String message) {

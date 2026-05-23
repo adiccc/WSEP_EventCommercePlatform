@@ -9,17 +9,19 @@ import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.EmailField;
 import com.vaadin.flow.component.textfield.PasswordField;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 import application.Response;
+import com.vaadin.flow.component.UI;
 
 @Route("login")
 @PageTitle("Login")
 @AnonymousAllowed
-public class LoginView extends VerticalLayout {
-
+public class LoginView extends VerticalLayout implements BeforeEnterObserver {
     private final LoginPresenter presenter;
 
     public LoginView(UserService userService) {
@@ -42,12 +44,12 @@ public class LoginView extends VerticalLayout {
                     presenter.login(emailField.getValue(), passwordField.getValue());
 
             if (response.getValue() != null) {
-                VaadinSession.getCurrent()
-                        .setAttribute("token", response.getValue());
-
+                String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+                VaadinSession.getCurrent().setAttribute("token_" + tabId, response.getValue());
+                VaadinSession.getCurrent().setAttribute("notificationUserIdentifier_" + tabId, emailField.getValue());
                 showSuccess(response.getMessage());
 
-                getUI().ifPresent(ui -> ui.navigate(""));
+                getUI().ifPresent(ui -> ui.navigate("home"));
             } else {
                 showError(response.getMessage());
             }
@@ -64,11 +66,14 @@ public class LoginView extends VerticalLayout {
             Response<String> response = presenter.continueAsGuest();
 
             if (response.getValue() != null) {
-                VaadinSession.getCurrent()
-                        .setAttribute("token", response.getValue());
-
+                String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+                VaadinSession.getCurrent().setAttribute("token_" + tabId, response.getValue());
+                VaadinSession.getCurrent().setAttribute(
+                        "notificationUserIdentifier_" + tabId,
+                        presenter.getUserIdentifier(response.getValue()).getValue()
+                );
                 showSuccess(response.getMessage());
-                getUI().ifPresent(ui -> ui.navigate(""));
+                getUI().ifPresent(ui -> ui.navigate("home"));
             } else {
                 showError(response.getMessage());
             }
@@ -85,6 +90,25 @@ public class LoginView extends VerticalLayout {
                 guestButton,
                 registerButton
         );
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+
+        Boolean webQueueAdmitted =
+                (Boolean) VaadinSession.getCurrent()
+                        .getAttribute("webQueueAdmitted_" + tabId);
+        if (!Boolean.TRUE.equals(webQueueAdmitted)) {
+            Notification notification = Notification.show(
+                    "Please wait for your turn before signing in.",
+                    4000,
+                    Notification.Position.TOP_CENTER
+            );
+            notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+
+            event.rerouteTo("");
+        }
     }
 
     private void showSuccess(String message) {

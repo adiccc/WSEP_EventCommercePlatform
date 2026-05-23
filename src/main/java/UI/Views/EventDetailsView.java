@@ -13,6 +13,7 @@ import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dto.EventDetailsDTO;
 import java.util.Locale;
+import com.vaadin.flow.component.UI;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -58,10 +59,8 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     }
 
     private void loadEvent(int companyId, int eventId) {
-
-        String token =
-                (String) VaadinSession.getCurrent()
-                        .getAttribute("token");
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
 
         Button back = new Button(
                 "← Back to Company",

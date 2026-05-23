@@ -7,6 +7,7 @@ import DTO.StandingZoneDTO;
 import domain.activeOrder.STAGE;
 import UI.Presenters.PurchasePresenter;
 import application.ActiveOrderService;
+import com.vaadin.flow.component.UI;
 import application.Response;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -55,14 +56,14 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
     public void beforeEnter(BeforeEnterEvent event) {
         companyId = Integer.parseInt(event.getRouteParameters().get("companyId").orElse("0"));
         eventId = Integer.parseInt(event.getRouteParameters().get("eventId").orElse("0"));
-        load();
+        load(event);
     }
 
-    private void load() {
+    private void load(BeforeEnterEvent event) {
         removeAll();
 
-        String token = (String) VaadinSession.getCurrent().getAttribute("token");
-
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
         Response<EnterPurchaseDTO> response =
                 presenter.enterPurchase(token, companyId, eventId);
 
@@ -72,7 +73,11 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         }
 
         if (response.getValue().isWaitingInQueue()) {
-            UI.getCurrent().navigate(
+            VaadinSession.getCurrent().setAttribute("eventQueueTabId_" + tabId, token);
+            VaadinSession.getCurrent().setAttribute("eventQueueCompanyId_" + tabId, companyId);
+            VaadinSession.getCurrent().setAttribute("eventQueueEventId_" + tabId, eventId);
+
+            event.rerouteTo(
                     "waiting/" + companyId + "/" + eventId + "/" +
                             response.getValue().getQueuePosition()
             );
