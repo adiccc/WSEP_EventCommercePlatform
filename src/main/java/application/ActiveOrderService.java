@@ -771,6 +771,8 @@ public class ActiveOrderService {
 
             } catch (NoSuchElementException e) {
                 return new Response<>(false, "Event not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             }
         });
     }

@@ -61,11 +61,8 @@ public class WaitingQueueEventView extends VerticalLayout implements BeforeEnter
     @Override
     public void beforeLeave(BeforeLeaveEvent event) {
         if (leavingToPurchase) {
-            System.out.println("Leaving to purchase - not cancelling event queue");
             return;
         }
-
-        System.out.println("Leaving waiting queue - cancelling event queue");
         cancelEventQueueEntry();
     }
 
@@ -83,16 +80,7 @@ public class WaitingQueueEventView extends VerticalLayout implements BeforeEnter
             return;
         }
 
-        System.out.println("UI CANCEL EVENT QUEUE:");
-        System.out.println("tabId = " + tabId);
-        System.out.println("token = " + token);
-        System.out.println("eventId = " + eventId);
-
         var response = activeOrderService.cancelEventQueueEntry(token, eventId);
-
-        System.out.println("cancel response = " + response.getValue()
-                + ", message = " + response.getMessage());
-
         VaadinSession.getCurrent().setAttribute("eventQueueTabId_" + tabId, null);
         VaadinSession.getCurrent().setAttribute("eventQueueCompanyId_" + tabId, null);
         VaadinSession.getCurrent().setAttribute("eventQueueEventId_" + tabId, null);
