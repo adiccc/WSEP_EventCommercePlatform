@@ -239,8 +239,6 @@ public class WebQueueView extends VerticalLayout {
         positionText.setText("");
         refreshButton.setText("Try again");
         refreshButton.setVisible(true);
-
-        refreshButton.addClickListener(event -> enterQueue());
     }
 
     private void showSuccess(String text) {

@@ -52,9 +52,18 @@ public class WaitingQueueEventView extends VerticalLayout implements BeforeEnter
     }
 
     private void registerToEventQueueNotifications() {
+        unregisterFromBroadcaster();
+
         String eventQueueTabId =
                 (String) VaadinSession.getCurrent().getAttribute("eventQueueTabId");
+
+        if (eventQueueTabId == null || eventQueueTabId.isBlank()) {
+            showError("Missing event queue identifier. Please try entering the purchase again.");
+            return;
+        }
+
         UI ui = UI.getCurrent();
+
         eventQueueRegistration = Broadcaster.registerTab(eventQueueTabId, notification -> {
             if (ui != null) {
                 ui.access(() -> handleNotification(notification));
