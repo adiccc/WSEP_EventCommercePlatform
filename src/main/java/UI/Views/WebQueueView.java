@@ -27,7 +27,7 @@ import infrastructure.Broadcaster;
 public class WebQueueView extends VerticalLayout {
 
     private final WebQueuePresenter presenter;
-
+    private boolean initialized = false;
     private Registration broadcasterRegistration;
 
     private final H1 title;
@@ -60,11 +60,17 @@ public class WebQueueView extends VerticalLayout {
         refreshButton = new Button("Check my status", event -> checkCurrentStatus());
         refreshButton.setVisible(false);
         add(title, message, positionText, refreshButton);
+
         addDetachListener(event -> unregisterFromBroadcaster());
-        initializeQueueState();
+
+        addAttachListener(event -> initializeQueueState());
     }
 
     private void initializeQueueState() {
+        if (initialized) {
+            return;
+        }
+        initialized = true;
         String existingQueueToken =
                 (String) VaadinSession.getCurrent().getAttribute("webQueueToken");
 
@@ -75,6 +81,7 @@ public class WebQueueView extends VerticalLayout {
 
         checkCurrentStatusAndRegister(existingQueueToken);
     }
+
     private void checkCurrentStatusAndRegister(String webQueueToken) {
         Response<QueueEntryResultDTO> response =
                 presenter.getQueueStatus(webQueueToken);
@@ -207,9 +214,13 @@ public class WebQueueView extends VerticalLayout {
         VaadinSession.getCurrent().setAttribute("webQueueToken", webQueueToken);
         VaadinSession.getCurrent().setAttribute("webQueueAdmitted", true);
         VaadinSession.getCurrent().setAttribute("notificationUserIdentifier", null);
+
         showSuccess("Your turn has arrived. Please sign in or continue as guest.");
 
-        getUI().ifPresent(ui -> ui.navigate("login"));
+        UI ui = UI.getCurrent();
+        if (ui != null) {
+            ui.navigate("login");
+        }
     }
 
     private void unregisterFromBroadcaster() {

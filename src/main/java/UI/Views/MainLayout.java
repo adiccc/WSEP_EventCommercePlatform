@@ -15,6 +15,8 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.sidenav.SideNav;
 import com.vaadin.flow.component.sidenav.SideNavItem;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.RouterLayout;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
@@ -24,7 +26,7 @@ import com.vaadin.flow.shared.Registration;
 import infrastructure.Broadcaster;
 
 @AnonymousAllowed
-public class MainLayout extends AppLayout implements RouterLayout {
+public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterObserver {
 
     private final IAuth auth;
     private final UserService userService;
@@ -36,6 +38,16 @@ public class MainLayout extends AppLayout implements RouterLayout {
         registerToBroadcaster();
         createHeader();
         createDrawer();
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        Boolean webQueueAdmitted =
+                (Boolean) VaadinSession.getCurrent().getAttribute("webQueueAdmitted");
+
+        if (!Boolean.TRUE.equals(webQueueAdmitted)) {
+            event.rerouteTo("");
+        }
     }
 
     private void registerToBroadcaster() {
