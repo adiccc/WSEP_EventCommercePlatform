@@ -1,6 +1,7 @@
 package application;
 
 import DTO.ElementPositionDTO;
+import DTO.PurchaseHistoryDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import domain.company.Company;
@@ -575,7 +576,7 @@ public class EventCompanyManageService {
         });
     }
 
-    public Response<List<OrderDTO>> getPurchaseHistoryByUser(String token) {
+    public Response<List<PurchaseHistoryDTO>> getPurchaseHistoryByUser(String token) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "getPurchaseHistoryByUser called");
             String userEmail = auth.getUserEmail(token).getValue();
@@ -584,7 +585,7 @@ public class EventCompanyManageService {
                 return new Response<>(null, "User is not logged in");
             }
             try {
-                List<OrderDTO> orderDTOs = new ArrayList<>();
+                List<PurchaseHistoryDTO> purchaseHistory = new ArrayList<>();
 
                 List<Event> events = eventRepo.getAll();
 
@@ -593,18 +594,18 @@ public class EventCompanyManageService {
 
                     for (Order order : orders) {
                         if (order.getUserIdentifier().equals(userEmail)) {
-                            orderDTOs.add(new OrderDTO(order));
+                            purchaseHistory.add(order.toPurchaseHistoryDTO());
                         }
                     }
                 }
 
-                if (orderDTOs.isEmpty()) {
+                if (purchaseHistory.isEmpty()) {
                     logger.log(Level.INFO, "No purchase history found for user " + userEmail);
-                    return new Response<>(orderDTOs, "No purchase history found for user");
+                    return new Response<>(purchaseHistory, "No purchase history found for user");
                 }
 
-                logger.log(Level.INFO, "Purchase history found: " + orderDTOs.size());
-                return new Response<>(orderDTOs, "Purchase history found");
+                logger.log(Level.INFO, "Purchase history found: " + purchaseHistory.size());
+                return new Response<>(purchaseHistory, "Purchase history found");
 
             } catch (OptimisticLockingFailureException e) {
                 throw e;

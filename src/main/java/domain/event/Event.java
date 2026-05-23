@@ -1,5 +1,6 @@
 package domain.event;
 
+import DTO.PurchasedTicketDTO;
 import domain.dataType.CategoryEvent;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
@@ -326,5 +327,13 @@ public class Event {
         if( !purchasePolicy.isSatisfied(userDTO, 0,projected)) {
             throw new IllegalArgumentException("Purchase policy not satisfied for user " + userDTO.getUserId() + " and quantity " + projected);
         }
+    }
+
+    public List<PurchasedTicketDTO> getPurchasedTicketDetails(List<Integer> ticketIds) {
+        if (eventMap == null) {
+            throw new IllegalStateException("Event map is not defined");
+        }
+
+        return eventMap.getPurchasedTicketDetails(ticketIds);
     }
 }

@@ -342,6 +342,10 @@ public class ActiveOrderService {
                         activeOrder.getId(),
                         userIdentifier,
                         event.getId(),
+                        event.getName(),
+                        event.getDate().toString(),
+                        event.getLocation().name(),
+                        event.getPurchasedTicketDetails(activeOrder.getTickets()),
                         activeOrder.getTickets(),
                         total,
                         paymentConfirmationId

@@ -1,5 +1,8 @@
 package domain.event;
 
+import DTO.PurchaseHistoryDTO;
+import DTO.PurchasedTicketDTO;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -8,34 +11,57 @@ public class Order {
     private int orderId;
     private String userIdentifier; //for member will be an email, and for guest will be the token when purchased
     private Integer eventId;
+    private String eventName;
+    private String eventDate;
+    private String eventLocation;
+    private List<PurchasedTicketDTO> purchasedTickets;
     private List<Integer> tickets;
     private double totalSum;
-    String paymentConfirmationId;
+    private String paymentConfirmationId;
 
 
-    public Order(int orderId, String userIdentifier, Integer eventId,
+    public Order(int orderId,
+                 String userIdentifier,
+                 Integer eventId,
+                 String eventName,
+                 String eventDate,
+                 String eventLocation,
+                 List<PurchasedTicketDTO> purchasedTickets,
                  List<Integer> tickets, double totalSum,
                  String paymentConfirmationId) {
         this.orderId = orderId;
         this.userIdentifier = userIdentifier;
         this.eventId = eventId;
+        this.eventName = eventName;
+        this.eventDate = eventDate;
+        this.eventLocation = eventLocation;
+        this.purchasedTickets = purchasedTickets == null
+                ? new ArrayList<>()
+                : new ArrayList<>(purchasedTickets);
         this.tickets = new ArrayList<>(tickets);
         this.status = OrderStatus.APPROVED;
         this.totalSum = totalSum;
         this.paymentConfirmationId = paymentConfirmationId;
     }
 
-    public int getOrderId() {
-        return orderId;
-    }
     public Order(Order order) {
         this.orderId = order.orderId;
         this.userIdentifier = order.userIdentifier;
         this.eventId = order.eventId;
+        this.eventName = order.eventName;
+        this.eventDate = order.eventDate;
+        this.eventLocation = order.eventLocation;
+        this.purchasedTickets = order.purchasedTickets == null
+                ? new ArrayList<>()
+                : new ArrayList<>(order.purchasedTickets);
         this.tickets=new ArrayList<>(order.tickets);
         this.status = order.status;
         this.totalSum = order.totalSum;
         this.paymentConfirmationId = order.paymentConfirmationId;
+    }
+
+    public int getOrderId() {
+        return orderId;
     }
 
     public OrderStatus getStatus() {
@@ -53,9 +79,11 @@ public class Order {
     public void markRefundRequired() {
         this.status = OrderStatus.REFUND_REQUIRED;
     }
+
     public double getTotalSum() {
         return totalSum;
     }
+
     public String getPaymentConfirmationId() {
         return paymentConfirmationId;
     }
@@ -68,11 +96,39 @@ public class Order {
         return userIdentifier;
     }
 
-        public Integer getEventId() {
-            return eventId;
-        }
+    public Integer getEventId() {
+        return eventId;
+    }
 
-        public List<Integer> getTickets() {
-            return tickets;
-        }
+    public List<Integer> getTickets() {
+        return new ArrayList<>(tickets);
+    }
+
+    public String getEventName() {
+        return eventName;
+    }
+
+    public String getEventDate() {
+        return eventDate;
+    }
+
+    public String getEventLocation() {
+        return eventLocation;
+    }
+
+    public List<PurchasedTicketDTO> getPurchasedTickets() {
+        return new ArrayList<>(purchasedTickets);
+    }
+
+    public PurchaseHistoryDTO toPurchaseHistoryDTO() {
+        return new PurchaseHistoryDTO(
+                orderId,
+                eventName,
+                eventDate,
+                eventLocation,
+                status,
+                purchasedTickets,
+                totalSum
+        );
+    }
 }

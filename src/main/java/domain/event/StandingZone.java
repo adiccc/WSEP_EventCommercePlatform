@@ -1,5 +1,6 @@
 package domain.event;
 
+import DTO.PurchasedTicketDTO;
 import DTO.StandingZoneDTO;
 import domain.dataType.ElementPosition;
 import domain.dataType.TicketStatus;
@@ -110,7 +111,7 @@ public class StandingZone extends Zone {
         for (Integer ticketId : ticketIds) {
             for (StandingTicket ticket : occupiedTickets) {
                 if (ticket.getTicketId() == ticketId && ticket.getStatus() == TicketStatus.LOCKED) {
-                    ticket.setStatusFromAvailable(TicketStatus.AVAILABLE);
+                    ticket.makeAvailableFromLocked();
                     availableTickets.add(ticket);
                     available++;
                     ticketsToRemove.add(ticket);
@@ -168,5 +169,45 @@ public class StandingZone extends Zone {
                 }
             }
         }
+    }
+
+    @Override
+    public List<PurchasedTicketDTO> getPurchasedTicketDetails(List<Integer> ticketIds) {
+        List<PurchasedTicketDTO> result = new ArrayList<>();
+
+        for (Integer ticketId : ticketIds) {
+            for (StandingTicket ticket : occupiedTickets) {
+                if (ticket.getTicketId() == ticketId) {
+                    result.add(new PurchasedTicketDTO(
+                            ticket.getTicketId(),
+                            getName(),
+                            "STANDING",
+                            null,
+                            null,
+                            getPrice()
+                    ));
+                    break;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    @Override
+    public TicketStatus getTicketStatus(int ticketId) {
+        for (Ticket ticket : availableTickets) {
+            if (ticket.getTicketId() == ticketId) {
+                return ticket.getStatus();
+            }
+        }
+
+        for (Ticket ticket : occupiedTickets) {
+            if (ticket.getTicketId() == ticketId) {
+                return ticket.getStatus();
+            }
+        }
+
+        throw new IllegalArgumentException("Ticket does not exist in standing zone: " + ticketId);
     }
 }

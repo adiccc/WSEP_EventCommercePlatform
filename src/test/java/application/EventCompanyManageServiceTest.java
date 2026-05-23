@@ -1,8 +1,6 @@
 package application;
 
-import DTO.ElementPositionDTO;
-import DTO.SeatingZoneDTO;
-import DTO.StandingZoneDTO;
+import DTO.*;
 import Log.LoggerSetup;
 import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.IActiveOrderRepo;
@@ -23,9 +21,6 @@ import domain.user.IUserRepo;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import DTO.PaymentDetailsDTO;
-import DTO.TicketSupplyRequestDTO;
-import DTO.TicketSupplyResultDTO;
 import domain.dto.EventMapDTO;
 
 import java.util.HashMap;
@@ -901,8 +896,36 @@ class EventCompanyManageServiceTest {
                 .thenReturn(true);
 
         Event event = eventRepo.findById(eventId);
+        Order order = new Order(
+                1,
+                "1",
+                eventId,
+                "Test Event",
+                "2026-01-01T20:00",
+                "TEL_AVIV",
+                List.of(
+                        new PurchasedTicketDTO(
+                                1,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                50.0
+                        ),
+                        new PurchasedTicketDTO(
+                                2,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                50.0
+                        )
+                ),
+                List.of(1, 2),
+                100.0,
+                "pay123"
+        );
 
-        Order order = new Order(1, "1", eventId, List.of(1, 2), 100.0, "pay123");
         order.markRefundRequired();
         event.getOrders().add(order);
         eventRepo.store(event);
@@ -942,8 +965,36 @@ class EventCompanyManageServiceTest {
                 .thenReturn(false);
 
         Event event = eventRepo.findById(eventId);
+        Order order = new Order(
+                123,
+                "900",
+                eventId,
+                "Test Event",
+                "2026-01-01T20:00",
+                "TEL_AVIV",
+                List.of(
+                        new PurchasedTicketDTO(
+                                1,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                50.0
+                        ),
+                        new PurchasedTicketDTO(
+                                2,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                50.0
+                        )
+                ),
+                List.of(1, 2),
+                100.0,
+                "pay123"
+        );
 
-        Order order = new Order(123, "900", eventId, List.of(1, 2), 100.0, "pay123");
         order.markRefundRequired();
         event.getOrders().add(order);
         eventRepo.store(event);
@@ -965,7 +1016,35 @@ class EventCompanyManageServiceTest {
     void GivenApprovedOrder_WhenProcessRefund_ThenOrderCannotBeRefunded() {
         Event event = eventRepo.findById(eventId);
 
-        Order order = new Order(123, "900", eventId, List.of(1, 2), 100.0, "pay123");        // markRefundRequired not called
+        Order order = new Order(
+                123,
+                "900",
+                eventId,
+                "Test Event",
+                "2026-01-01T20:00",
+                "TEL_AVIV",
+                List.of(
+                        new PurchasedTicketDTO(
+                                1,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                50.0
+                        ),
+                        new PurchasedTicketDTO(
+                                2,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                50.0
+                        )
+                ),
+                List.of(1, 2),
+                100.0,
+                "pay123"
+        );     // markRefundRequired not called
 
         event.getOrders().add(order);
         eventRepo.store(event);
@@ -989,8 +1068,36 @@ class EventCompanyManageServiceTest {
                 .thenThrow(new RuntimeException("Payment service unavailable"));
 
         Event event = eventRepo.findById(eventId);
-
-        Order order = new Order(123, "900", eventId, List.of(1, 2), 100.0, "pay123");        order.markRefundRequired();
+        Order order = new Order(
+                123,
+                "900",
+                eventId,
+                "Test Event",
+                "2026-01-01T20:00",
+                "TEL_AVIV",
+                List.of(
+                        new PurchasedTicketDTO(
+                                1,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                50.0
+                        ),
+                        new PurchasedTicketDTO(
+                                2,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                50.0
+                        )
+                ),
+                List.of(1, 2),
+                100.0,
+                "pay123"
+        );
+        order.markRefundRequired();
         event.getOrders().add(order);
         eventRepo.store(event);
         Response<Boolean> response = eventCompanyManageService.processRefund(
@@ -1314,18 +1421,16 @@ class EventCompanyManageServiceTest {
         createCompletedOrderThroughPurchaseFlow(validToken1, eventId, 1);
         createCompletedOrderThroughPurchaseFlow(validToken1, eventId, 1);
 
-        Response<List<OrderDTO>> response =
+        Response<List<PurchaseHistoryDTO>> response =
                 eventCompanyManageService.getPurchaseHistoryByUser(validToken1);
-
         assertNotNull(response.getValue());
         assertEquals(2, response.getValue().size());
     }
 
     @Test
     void GivenLoggedInMemberWithoutOrders_WhenGetPurchaseHistory_ThenEmptyListReturned() {
-        Response<List<OrderDTO>> response =
+        Response<List<PurchaseHistoryDTO>> response =
                 eventCompanyManageService.getPurchaseHistoryByUser(validToken2);
-
         assertNotNull(response.getValue());
         assertTrue(response.getValue().isEmpty());
         assertEquals("No purchase history found for user", response.getMessage());
@@ -1333,9 +1438,8 @@ class EventCompanyManageServiceTest {
 
     @Test
     void GivenLoggedOutUser_WhenGetPurchaseHistory_ThenErrorReturned() {
-        Response<List<OrderDTO>> response =
+        Response<List<PurchaseHistoryDTO>> response =
                 eventCompanyManageService.getPurchaseHistoryByUser(null);
-
         assertNull(response.getValue());
         assertEquals("User is not logged in", response.getMessage());
     }
@@ -1357,14 +1461,45 @@ class EventCompanyManageServiceTest {
 
         createCompletedOrderThroughPurchaseFlow(validToken2, eventId, 1);
 
-        Response<List<OrderDTO>> response =
+        Response<List<PurchaseHistoryDTO>> response =
                 eventCompanyManageService.getPurchaseHistoryByUser(validToken1);
-
         assertNotNull(response.getValue());
         assertEquals(1, response.getValue().size());
-
-        assertEquals(user1Id, response.getValue().get(0).getUserIdentifier());
         assertEquals(user1OrderId, response.getValue().get(0).getOrderId());
     }
 
+    @Test
+    void GivenCompletedPurchase_WhenGetPurchaseHistory_ThenPurchaseHistoryIsIndependentOfFutureEventChanges(){
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
+
+        createCompletedOrderThroughPurchaseFlow(validToken1, eventId, 1);
+
+        Event event = eventRepo.findById(eventId);
+        event.setDate(LocalDateTime.of(2030, 1, 1, 10, 0));
+
+        eventRepo.store(event);
+
+        // Act
+        Response<List<PurchaseHistoryDTO>> response =
+                eventCompanyManageService.getPurchaseHistoryByUser(validToken1);
+
+        // Assert
+        assertNotNull(response.getValue());
+        assertEquals(1, response.getValue().size());
+
+        PurchaseHistoryDTO history = response.getValue().get(0);
+
+        // Must remain with original purchase snapshot
+        assertNotEquals("2030-01-01T20:00", history.getEventDate());
+        assertFalse(history.getPurchasedTickets().isEmpty());
+    }
 }
+

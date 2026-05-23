@@ -1,5 +1,6 @@
 package domain.event;
 
+import DTO.PurchasedTicketDTO;
 import DTO.SeatingZoneDTO;
 import domain.dataType.ElementPosition;
 import domain.dataType.TicketStatus;
@@ -95,14 +96,13 @@ public class SeatingZone extends Zone {
     public void releaseTickets(List<Integer> ticketIds) {
         for (Integer ticketId : ticketIds) {
             for (SeatingTicket ticket : ticketMap.values()) {
-                if (ticket.getTicketId() == ticketId) {
-                    if (ticket.getStatus() == TicketStatus.LOCKED) {
-                        ticket.makeAvailableFromLocked();
-                    }
+                if (ticket.getTicketId() == ticketId && ticket.getStatus() == TicketStatus.LOCKED) {
+                    ticket.makeAvailableFromLocked();
                 }
             }
         }
     }
+
     public Map<String, SeatingTicket> getTicketMap() {
         return ticketMap;
     }
@@ -138,5 +138,39 @@ public class SeatingZone extends Zone {
                 }
             }
         }
+    }
+
+    @Override
+    public List<PurchasedTicketDTO> getPurchasedTicketDetails(List<Integer> ticketIds) {
+        List<PurchasedTicketDTO> result = new ArrayList<>();
+
+        for (Integer ticketId : ticketIds) {
+            for (SeatingTicket ticket : ticketMap.values()) {
+                if (ticket.getTicketId() == ticketId) {
+                    result.add(new PurchasedTicketDTO(
+                            ticket.getTicketId(),
+                            getName(),
+                            "SEATING",
+                            ticket.getRow(),
+                            ticket.getCol(),
+                            getPrice()
+                    ));
+                    break;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    @Override
+    public TicketStatus getTicketStatus(int ticketId) {
+        for (SeatingTicket ticket : ticketMap.values()) {
+            if (ticket.getTicketId() == ticketId) {
+                return ticket.getStatus();
+            }
+        }
+
+        throw new IllegalArgumentException("Ticket does not exist in seating zone: " + ticketId);
     }
 }

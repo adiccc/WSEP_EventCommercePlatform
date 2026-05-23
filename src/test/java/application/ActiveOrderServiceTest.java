@@ -9,6 +9,7 @@ import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.ActiveOrder;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
+import domain.dataType.TicketStatus;
 import domain.dto.ActiveOrderDTO;
 import domain.dto.EventMapDTO;
 import domain.dto.SeatingTicketDTO;
@@ -1200,6 +1201,16 @@ class ActiveOrderServiceTest {
                 "final ticket count must be one of the two requested totals, got: " + finalSize);
     }
 
+    // helper function for ticket status validation:
+    private void assertTicketStatuses(int eventId, List<Integer> ticketIds, TicketStatus expectedStatus) {
+        Event event = eventRepo.findById(eventId);
+
+        for (Integer ticketId : ticketIds) {
+            assertEquals(expectedStatus, event.getMap().getTicketStatus(ticketId),
+                    "Ticket " + ticketId + " should have status " + expectedStatus);
+        }
+    }
+
     @Test
     void GivenValidActiveOrder_WhenCheckoutAndPayment_ThenOrderCreatedAndActiveOrderDeleted() {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
@@ -1213,6 +1224,12 @@ class ActiveOrderServiceTest {
         assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
 
         int activeOrderId = selectResponse.getValue();
+
+        ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
+        List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
+
+        // validation ticket status
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-123");
@@ -1241,6 +1258,7 @@ class ActiveOrderServiceTest {
         assertEquals(1, eventRepo.findById(concurrentEventId).getOrders().size(),
                 "Successful checkout should create exactly one order");
 
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.SOLD);
         Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
         Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
     }
@@ -1259,6 +1277,11 @@ class ActiveOrderServiceTest {
 
         int activeOrderId = selectResponse.getValue();
 
+        ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
+        List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
+
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
+
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn(null);
 
@@ -1273,6 +1296,8 @@ class ActiveOrderServiceTest {
 
         assertNotNull(activeOrderRepo.findById(activeOrderId),
                 "Active order should remain when payment is rejected");
+
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
 
         assertEquals(0, eventRepo.findById(concurrentEventId).getOrders().size(),
                 "Rejected payment must not create an order");
@@ -1294,6 +1319,11 @@ class ActiveOrderServiceTest {
         assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
 
         int activeOrderId = selectResponse.getValue();
+
+        ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
+        List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
+
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-123");
@@ -1327,6 +1357,8 @@ class ActiveOrderServiceTest {
                 eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
                 "Order should be marked REFUNDED when refund succeeds");
 
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.AVAILABLE);
+
         Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
         Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
         Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
@@ -1345,6 +1377,11 @@ class ActiveOrderServiceTest {
         assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
 
         int activeOrderId = selectResponse.getValue();
+
+        ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
+        List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
+
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-123");
@@ -1372,6 +1409,8 @@ class ActiveOrderServiceTest {
                 eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
                 "Order should be marked REFUNDED when refund succeeds");
 
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.AVAILABLE);
+
         Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
         Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
         Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
@@ -1390,6 +1429,11 @@ class ActiveOrderServiceTest {
         assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
 
         int activeOrderId = selectResponse.getValue();
+
+        ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
+        List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
+
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-123");
@@ -1419,6 +1463,7 @@ class ActiveOrderServiceTest {
         assertEquals(domain.event.OrderStatus.REFUND_REQUIRED,
                 eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
                 "Order should be marked REFUND_REQUIRED when refund fails");
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.AVAILABLE);
 
         Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
         Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
@@ -1439,6 +1484,11 @@ class ActiveOrderServiceTest {
 
         int activeOrderId = selectResponse.getValue();
 
+        ActiveOrder activeOrderBeforeExpiration = activeOrderRepo.findById(activeOrderId);
+        List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeExpiration.getTickets());
+
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
+
         forceExpireOrder(activeOrderId);
 
         PaymentDetailsDTO paymentDetails =
@@ -1456,7 +1506,7 @@ class ActiveOrderServiceTest {
 
         assertEquals(0, eventRepo.findById(concurrentEventId).getOrders().size(),
                 "Expired checkout must not create an order");
-
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.AVAILABLE);
         String newEmail = "after_expired_checkout@mail.com";
         userService.registerUser("", new UserDTO(
                 newEmail, "after", "expired", "pass",
@@ -2215,6 +2265,11 @@ class ActiveOrderServiceTest {
 
         int activeOrderId = selectResponse.getValue();
 
+        ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
+        List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
+
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
+
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-123");
 
@@ -2243,6 +2298,7 @@ class ActiveOrderServiceTest {
         assertEquals(domain.event.OrderStatus.REFUNDED,
                 eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
                 "Order should be marked REFUNDED when refund succeeds");
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.AVAILABLE);
 
         Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
         Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
