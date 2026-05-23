@@ -140,9 +140,6 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
                     window.addEventListener("beforeunload", function () {
                         const token = window.__eventCommerceAuthToken;
     
-                        if (!token) {
-                            return;
-                        }
                         const eventQueueToken = sessionStorage.getItem("eventCommerceEventQueueToken");
                         const eventQueueEventId = sessionStorage.getItem("eventCommerceEventQueueEventId");
                 
