@@ -7,7 +7,6 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
-import java.time.LocalDateTime;
 import com.vaadin.flow.component.html.*;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -19,6 +18,7 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dataType.CategoryEvent;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
+import com.vaadin.flow.component.UI;
 import domain.dto.CompanyDetailsDTO;
 import domain.dto.EventDTO;
 
@@ -75,8 +75,8 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
     private void buildPage() {
         removeAll();
 
-        String token = (String) VaadinSession.getCurrent().getAttribute("token");
-
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
         // Back button
         Button back = new Button("← All Companies",
                 e -> getUI().ifPresent(ui -> ui.navigate("")));
@@ -182,8 +182,8 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
         endDateField.setWidth("14rem");
 
         Button applyBtn = new Button("Search", e -> {
-            String t = (String) VaadinSession.getCurrent().getAttribute("token");
-            loadEvents(t, buildFilter());
+            String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+            String t = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);            loadEvents(t, buildFilter());
         });
         applyBtn.getElement().setAttribute("theme", "primary");
 
@@ -193,8 +193,8 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
             categoryBox.clear();
             minPriceField.clear();
             maxPriceField.clear();
-            String t = (String) VaadinSession.getCurrent().getAttribute("token");
-            loadEvents(t, new EventSearchFilter());
+            String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+            String t = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);            loadEvents(t, new EventSearchFilter());
         });
 
         HorizontalLayout row1 = new HorizontalLayout(keywordField, areaBox, categoryBox);

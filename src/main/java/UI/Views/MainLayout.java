@@ -38,21 +38,66 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         registerToBroadcaster();
         createHeader();
         createDrawer();
+        registerBrowserCloseHandler();
     }
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
-        Boolean webQueueAdmitted =
-                (Boolean) VaadinSession.getCurrent().getAttribute("webQueueAdmitted");
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
 
+        Boolean webQueueAdmitted =
+                (Boolean) VaadinSession.getCurrent()
+                        .getAttribute("webQueueAdmitted_" + tabId);
         if (!Boolean.TRUE.equals(webQueueAdmitted)) {
             event.rerouteTo("");
         }
     }
 
+    private void registerBrowserCloseHandler() {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+
+        if (tabId == null || tabId.isBlank()) {
+            return;
+        }
+
+        String token = (String) VaadinSession.getCurrent()
+                .getAttribute("token_" + tabId);
+
+        if (token == null || token.isBlank()) {
+            return;
+        }
+
+        UI.getCurrent().getPage().executeJs(
+                """
+                window.__eventCommerceAuthToken = $0;
+    
+                if (!window.__eventCommerceCloseTabHandlerRegistered) {
+                    window.__eventCommerceCloseTabHandlerRegistered = true;
+    
+                    window.addEventListener("beforeunload", function () {
+                        const token = window.__eventCommerceAuthToken;
+    
+                        if (!token) {
+                            return;
+                        }
+    
+                        navigator.sendBeacon(
+                            "/api/session/close-tab",
+                            new Blob([token], { type: "text/plain" })
+                        );
+                    });
+                }
+                """,
+                token
+        );
+    }
+
     private void registerToBroadcaster() {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+
         String userIdentifier =
-                (String) VaadinSession.getCurrent().getAttribute("notificationUserIdentifier");
+                (String) VaadinSession.getCurrent()
+                        .getAttribute("notificationUserIdentifier_" + tabId);
 
         if (userIdentifier == null || userIdentifier.isBlank()) {
             return;
@@ -134,8 +179,8 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
         nav.addItem(home, search);
 
-        String token = (String) VaadinSession.getCurrent().getAttribute("token");
-
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
         // No token -> anonymous
         if (token == null || token.isBlank()) {
             addLoginItem(nav);
@@ -168,7 +213,8 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
         } else {
             // Invalid or expired token
-            VaadinSession.getCurrent().setAttribute("token", null);
+            VaadinSession.getCurrent().setAttribute("token_" + tabId, null);
+
 
             Notification notification = Notification.show(
                     "Session expired. Please sign in again.",

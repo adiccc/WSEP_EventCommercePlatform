@@ -10,6 +10,6 @@ public class WebQueueConfig {
 
     @Bean
     public WebQueue webQueue() {
-        return WebQueue.getInstance(1);
+        return WebQueue.getInstance(4);
     }
 }

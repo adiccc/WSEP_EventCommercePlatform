@@ -20,6 +20,7 @@ import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 import com.vaadin.flow.shared.Registration;
 import infrastructure.Broadcaster;
+import com.vaadin.flow.component.ClientCallable;
 
 @Route("")
 @PageTitle("Waiting Room")
@@ -62,17 +63,46 @@ public class WebQueueView extends VerticalLayout {
         add(title, message, positionText, refreshButton);
 
         addDetachListener(event -> unregisterFromBroadcaster());
-
-        addAttachListener(event -> initializeQueueState());
+        addAttachListener(event -> initializeBrowserTab());
     }
 
-    private void initializeQueueState() {
+    private void initializeBrowserTab() {
+        getElement().executeJs(
+                """
+                const TAB_ID_KEY = "eventCommerceTabId";
+    
+                let tabId = sessionStorage.getItem(TAB_ID_KEY);
+    
+                if (!tabId) {
+                    if (window.crypto && window.crypto.randomUUID) {
+                        tabId = window.crypto.randomUUID();
+                    } else {
+                        tabId = Date.now() + "-" + Math.random().toString(36).substring(2);
+                    }
+    
+                    sessionStorage.setItem(TAB_ID_KEY, tabId);
+                }
+    
+                this.$server.onBrowserTabReady(tabId);
+                """
+        );
+    }
+
+    @ClientCallable
+    public void onBrowserTabReady(String tabId) {
         if (initialized) {
             return;
         }
+
         initialized = true;
-        String existingQueueToken =
-                (String) VaadinSession.getCurrent().getAttribute("webQueueToken");
+        UI.getCurrent().getElement().setProperty("currentTabId", tabId);
+
+        initializeQueueState();
+    }
+
+    private void initializeQueueState() {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String existingQueueToken = (String) VaadinSession.getCurrent().getAttribute("webQueueToken_" + tabId);
 
         if (existingQueueToken == null || existingQueueToken.isBlank()) {
             enterQueue();
@@ -100,10 +130,10 @@ public class WebQueueView extends VerticalLayout {
             return;
         }
 
-        VaadinSession.getCurrent().setAttribute("webQueueToken", webQueueToken);
-        VaadinSession.getCurrent().setAttribute("notificationUserIdentifier", webQueueToken);
-        VaadinSession.getCurrent().setAttribute("webQueueAdmitted", false);
-
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        VaadinSession.getCurrent().setAttribute("webQueueToken_" + tabId, webQueueToken);
+        VaadinSession.getCurrent().setAttribute("notificationUserIdentifier_" + tabId, webQueueToken);
+        VaadinSession.getCurrent().setAttribute("webQueueAdmitted_" + tabId, false);
         showWaitingState(result.getPosition());
         registerToBroadcaster(webQueueToken);
     }
@@ -118,17 +148,16 @@ public class WebQueueView extends VerticalLayout {
         }
 
         QueueEntryResultDTO result = response.getValue();
-
-        VaadinSession.getCurrent().setAttribute("webQueueToken", result.getToken());
-        VaadinSession.getCurrent().setAttribute("notificationUserIdentifier", result.getToken());
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        VaadinSession.getCurrent().setAttribute("webQueueToken_" + tabId, result.getToken());
+        VaadinSession.getCurrent().setAttribute("notificationUserIdentifier_" + tabId, result.getToken());
 
         if (result.isAdmitted()) {
             admitUserAndNavigateToLogin(result.getToken());
             return;
         }
 
-        VaadinSession.getCurrent().setAttribute("webQueueAdmitted", false);
-
+        VaadinSession.getCurrent().setAttribute("webQueueAdmitted_" + tabId, false);
         showWaitingState(result.getPosition());
         registerToBroadcaster(result.getToken());
     }
@@ -156,8 +185,8 @@ public class WebQueueView extends VerticalLayout {
     }
 
     private void handleWebQueueTurnArrived(NotifyDTO notification) {
-        String webQueueToken =
-                (String) VaadinSession.getCurrent().getAttribute("webQueueToken");
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String webQueueToken = (String) VaadinSession.getCurrent().getAttribute("webQueueToken_" + tabId);
 
         if (webQueueToken == null || webQueueToken.isBlank()) {
             showError("Queue session is missing. Please refresh and enter the queue again.");
@@ -181,8 +210,8 @@ public class WebQueueView extends VerticalLayout {
     }
 
     private void checkCurrentStatus() {
-        String webQueueToken =
-                (String) VaadinSession.getCurrent().getAttribute("webQueueToken");
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String webQueueToken = (String) VaadinSession.getCurrent().getAttribute("webQueueToken_" + tabId);
 
         if (webQueueToken == null || webQueueToken.isBlank()) {
             showError("Queue session is missing. Entering the queue again.");
@@ -211,9 +240,10 @@ public class WebQueueView extends VerticalLayout {
     private void admitUserAndNavigateToLogin(String webQueueToken) {
         unregisterFromBroadcaster();
 
-        VaadinSession.getCurrent().setAttribute("webQueueToken", webQueueToken);
-        VaadinSession.getCurrent().setAttribute("webQueueAdmitted", true);
-        VaadinSession.getCurrent().setAttribute("notificationUserIdentifier", null);
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        VaadinSession.getCurrent().setAttribute("webQueueToken_" + tabId, webQueueToken);
+        VaadinSession.getCurrent().setAttribute("webQueueAdmitted_" + tabId, true);
+        VaadinSession.getCurrent().setAttribute("notificationUserIdentifier_" + tabId, null);
 
         showSuccess("Your turn has arrived. Please sign in or continue as guest.");
 

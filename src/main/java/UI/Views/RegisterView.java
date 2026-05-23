@@ -19,6 +19,8 @@ import domain.dto.UserDTO;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.server.VaadinSession;
+import com.vaadin.flow.component.UI;
+
 
 import java.time.LocalDate;
 
@@ -115,14 +117,16 @@ public class RegisterView extends VerticalLayout implements BeforeEnterObserver 
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
-        Boolean webQueueAdmitted =
-                (Boolean) VaadinSession.getCurrent().getAttribute("webQueueAdmitted");
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
 
+        Boolean webQueueAdmitted =
+                (Boolean) VaadinSession.getCurrent()
+                        .getAttribute("webQueueAdmitted_" + tabId);
         if (!Boolean.TRUE.equals(webQueueAdmitted)) {
             event.rerouteTo("");
         }
     }
-    
+
     private void showSuccess(String message) {
         Notification notification = Notification.show(
                 message,

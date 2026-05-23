@@ -21,6 +21,7 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dataType.CategoryEvent;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
+import com.vaadin.flow.component.UI;
 import domain.dto.EventDTO;
 
 import java.time.LocalDateTime;
@@ -182,8 +183,8 @@ public class SearchEventsView extends VerticalLayout {
     }
 
     private void search(EventSearchFilter filter) {
-        String token = (String) VaadinSession.getCurrent()
-                .getAttribute("token");
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
 
         Response<List<EventDTO>> response = presenter.search(token, filter);
 

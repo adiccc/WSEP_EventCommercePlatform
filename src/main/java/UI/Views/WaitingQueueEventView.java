@@ -53,9 +53,10 @@ public class WaitingQueueEventView extends VerticalLayout implements BeforeEnter
 
     private void registerToEventQueueNotifications() {
         unregisterFromBroadcaster();
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
 
         String eventQueueTabId =
-                (String) VaadinSession.getCurrent().getAttribute("eventQueueTabId");
+                (String) VaadinSession.getCurrent().getAttribute("eventQueueTabId_" + tabId);
 
         if (eventQueueTabId == null || eventQueueTabId.isBlank()) {
             showError("Missing event queue identifier. Please try entering the purchase again.");
@@ -101,10 +102,10 @@ public class WaitingQueueEventView extends VerticalLayout implements BeforeEnter
         }
 
         unregisterFromBroadcaster();
-
-        VaadinSession.getCurrent().setAttribute("eventQueueAdmitted", true);
-        VaadinSession.getCurrent().setAttribute("eventQueueCompanyId", companyId);
-        VaadinSession.getCurrent().setAttribute("eventQueueEventId", eventId);
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        VaadinSession.getCurrent().setAttribute("eventQueueAdmitted_" + tabId, true);
+        VaadinSession.getCurrent().setAttribute("eventQueueCompanyId_" + tabId, companyId);
+        VaadinSession.getCurrent().setAttribute("eventQueueEventId_" + tabId, eventId);
 
         showSuccess(getMessageOrDefault(
                 notification,
@@ -145,7 +146,8 @@ public class WaitingQueueEventView extends VerticalLayout implements BeforeEnter
 
         Button back = new Button("Back to Event", e -> {
             unregisterFromBroadcaster();
-            VaadinSession.getCurrent().setAttribute("eventQueueTabId", null);
+            String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+            VaadinSession.getCurrent().setAttribute("eventQueueTabId_" + tabId, null);
             UI.getCurrent().navigate("event/" + companyId + "/" + eventId);
         });
 

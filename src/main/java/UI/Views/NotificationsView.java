@@ -17,6 +17,7 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
+import com.vaadin.flow.component.UI;
 
 import java.util.List;
 
@@ -113,8 +114,14 @@ public class NotificationsView extends VerticalLayout {
     }
 
     private String getUserEmail() {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+
+        if (tabId == null || tabId.isBlank()) {
+            return null;
+        }
+
         return (String) VaadinSession.getCurrent()
-                .getAttribute("notificationUserIdentifier");
+                .getAttribute("notificationUserIdentifier_" + tabId);
     }
 
     private Div buildNotificationCard(NotifyDTO notification) {
