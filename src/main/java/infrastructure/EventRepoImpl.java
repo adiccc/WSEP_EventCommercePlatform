@@ -10,6 +10,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import Exception.OptimisticLockingFailureException;
 import domain.event.Order;
+import org.springframework.stereotype.Repository;
+
+@Repository
 
 public class EventRepoImpl implements IEventRepo {
     Map<Integer,Event> events; // key: eventId, value: event
@@ -102,4 +105,17 @@ public class EventRepoImpl implements IEventRepo {
        }
        return purchasers.stream().toList();
     }
+    public List<String> getAllEventPurchasers(Integer eventId){
+        Event event = events.get(eventId);
+        if (event == null) {
+            throw new NoSuchElementException("Event not found with ID: " + eventId);
+        }
+        List<Order> eventsOrder = event.getOrders();
+        HashSet<String> purchasers = new HashSet<>();
+        for(Order o : eventsOrder){
+            purchasers.add(o.getUserIdentifier());
+        }
+        return purchasers.stream().toList();
+    }
+
 }

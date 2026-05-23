@@ -43,6 +43,30 @@ public class CompanyDetailsDTO {
         return companyId;
     }
 
+    public String getCompanyName() {
+        return companyName;
+    }
+
+    public boolean isActive() {
+        return isActive;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public String getPurchasePolicy() {
+        return purchasePolicy;
+    }
+
+    public String getDiscountPolicy() {
+        return discountPolicy;
+    }
+
     public List<EventDTO> getFutureEvents() {
         return futureEvents;
     }

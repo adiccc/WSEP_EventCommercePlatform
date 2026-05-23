@@ -36,6 +36,11 @@ public class VisualDiscount extends DiscountElement {
         return equals(newDiscount);
     }
 
+    @Override
+    public Discount copy() {
+        return new VisualDiscount(this);
+    }
+
     public boolean equals(Object discount) {
         if (discount instanceof VisualDiscount) {
             VisualDiscount other = (VisualDiscount) discount;

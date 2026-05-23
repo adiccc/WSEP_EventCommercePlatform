@@ -51,6 +51,7 @@ class LotteryServiceTest {
     private String invalidToken;
     private String notPermission;
     private EventCompanyManageService eventCompanyManageService;
+    private INotifier notifier;
 
     @BeforeEach
     void setUp() {
@@ -67,11 +68,12 @@ class LotteryServiceTest {
         lotteryRepo = new LotteryRepoImpl();
 
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
+        notifier = new VaadinNotifier(userRepo);
 
-        UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
+        UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
         CompanyService companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
          eventCompanyManageService =
-                new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator);
+                new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
 
         lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator);
 
@@ -455,7 +457,7 @@ class LotteryServiceTest {
 
         int usersCount = 10;
 
-        UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
+        UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
         List<String> tokens = new ArrayList<>();
 
         for (int i = 0; i < usersCount; i++) {

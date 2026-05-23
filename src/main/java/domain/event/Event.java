@@ -1,6 +1,8 @@
 package domain.event;
 
 import DTO.PurchasedTicketDTO;
+import DTO.DiscountDTO;
+import DTO.PurchaseRuleDTO;
 import domain.dataType.CategoryEvent;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
@@ -24,8 +26,8 @@ public class Event {
     private final String name;
     private final LocalDateTime saleStartDate;
     private final boolean hasLottery;
-    private final PurchasePolicy purchasePolicy;
-    private final DiscountPolicy discountPolicy;
+    private PurchasePolicy purchasePolicy;
+    private DiscountPolicy discountPolicy;
     private boolean active;
     private final GeographicalArea location;
     private final CategoryEvent categoryEvent;
@@ -40,10 +42,10 @@ public class Event {
         this.name = name;
         this.saleStartDate = saleStartDate;
         this.hasLottery = hasLottery;
-        purchasePolicy = new PurchasePolicy();
+        purchasePolicy = new AndPurchasePolicy();
         purchasePolicy.addRule(new MaxTicketsRule(20));
-        discountPolicy = new DiscountPolicy();
-        discountPolicy.addDiscount(new LimitedDiscount(0.1, 5));
+        discountPolicy = new SumDiscountPolicy();
+        discountPolicy.addDiscount(new MinQuantityDiscount(0.1, 5));
         this.id = -1; // will be set when stored in repo
         active = false;
         this.location = location;
@@ -65,8 +67,8 @@ public class Event {
         this.name = event.name;
         this.saleStartDate = event.saleStartDate;
         this.hasLottery = event.hasLottery;
-        this.purchasePolicy=new PurchasePolicy(event.purchasePolicy);
-        this.discountPolicy=new DiscountPolicy(event.discountPolicy);
+        this.purchasePolicy=event.purchasePolicy.copyPolicy();
+        this.discountPolicy=event.discountPolicy.copyPolicy();
         this.id=event.id;
         this.eventQueue = new EventQueue(event.eventQueue);
         this.active = event.active;
@@ -233,6 +235,44 @@ public class Event {
         return id == (other.id) && version == other.version;
     }
 
+    public void addRule(PurchaseRuleDTO dto) {
+        purchasePolicy.addRule(PurchasePolicy.dtoToPurchase(dto));
+    }
+
+    public void removeRule(PurchaseRuleDTO dto) {
+        purchasePolicy.removeRule(PurchasePolicy.dtoToPurchase(dto));
+    }
+
+    public void addDiscount(DiscountDTO discount) {
+        discountPolicy.addDiscount(DiscountPolicy.dtoToDiscount(discount));
+    }
+
+    public void removeDiscount(DiscountDTO discount) {
+        discountPolicy.removeDiscount(DiscountPolicy.dtoToDiscount(discount));
+    }
+
+    public void changePurchasePolicyType(PurchasePolicyType policyType) {
+        if (purchasePolicy.getPolicyType() == policyType) return;
+        PurchasePolicy newPolicy;
+        switch (policyType) {
+            case OR:  newPolicy = new OrPurchasePolicy();  break;
+            default:  newPolicy = new AndPurchasePolicy(); break;
+        }
+        for (Purchase p : purchasePolicy.getRules()) newPolicy.addRule(p.copy());
+        this.purchasePolicy = newPolicy;
+    }
+
+    public void changeDiscountPolicyType(DiscountPolicyType policyType) {
+        List<Discount> current = discountPolicy.getDiscounts();
+        DiscountPolicy newPolicy;
+        switch (policyType) {
+            case MAX: newPolicy = new MaxDiscountPolicy(); break;
+            default:  newPolicy = new SumDiscountPolicy(); break;
+        }
+        for (Discount d : current) newPolicy.addDiscount(d.copy());
+        this.discountPolicy = newPolicy;
+    }
+
     public void quantityExceedsPolicy(UserDTO user, int quantity) {
         int ticketsBoughtForEvent = countUserTickets(user);
         if( !purchasePolicy.isSatisfied(user, quantity,ticketsBoughtForEvent)) {
@@ -311,6 +351,10 @@ public class Event {
 
     public void markTicketsAsSold(List<Integer> ticketIds) {
         eventMap.markTicketsAsSold(ticketIds);
+    }
+
+    public boolean isSoldOut() {
+        return eventMap != null && eventMap.isSoldOut();
     }
 
     public int countUserTickets(UserDTO user) {

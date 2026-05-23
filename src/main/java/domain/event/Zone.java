@@ -38,4 +38,5 @@ public abstract class Zone {
     public abstract void markTicketsAsSold(List<Integer> ticketIds);
     public abstract List<PurchasedTicketDTO> getPurchasedTicketDetails(List<Integer> ticketIds);
     public abstract TicketStatus getTicketStatus(int ticketId);
+    public abstract boolean hasAvailableTickets();
 }

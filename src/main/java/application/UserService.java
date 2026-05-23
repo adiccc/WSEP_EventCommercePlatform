@@ -1,32 +1,40 @@
 package application;
-import domain.company.Company;
-import domain.company.ICompanyRepo;
+
+import DTO.NotifyDTO;
+import DTO.NotifyPayload;
+import DTO.NotifyType;
 import DTO.QueueEntryResultDTO;
 import domain.dto.UserDTO;
 import domain.user.*;
-import application.IAuth;
 import Exception.OptimisticLockingFailureException;
 import domain.webQueue.WebQueue;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
 import java.time.DateTimeException;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.util.List;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Service
 public class UserService {
     private static final Logger logger = Logger.getLogger(UserService.class.getName());
     private final TokenService tokenService;
     private final IAuth auth;
     private final IPasswordEncoder passwordEncoder;
     private final IUserRepo userRepo;
+    private final INotifier notifier;
 
+    @Autowired
     public UserService(TokenService tokenService, IAuth auth, IUserRepo userRepo,
-                       IPasswordEncoder passwordEncoder) {
+                       IPasswordEncoder passwordEncoder, INotifier notifier) {
         this.tokenService = tokenService;
         this.auth = auth;
         this.userRepo = userRepo;
         this.passwordEncoder = passwordEncoder;
+        this.notifier = notifier;
     }
 
     // first call when a user opens the application
@@ -45,24 +53,20 @@ public class UserService {
             return Response.ok(result);
         });
     }
-
-    // client polls this while waiting in the queue
     public Response<QueueEntryResultDTO> getQueueStatus(String uuid) {
-        return RetryHelper.executeWithRetry(() ->
-        {
+        return RetryHelper.executeWithRetry(() -> {
             logger.info("Queue status requested for token: " + uuid);
             QueueEntryResultDTO result = WebQueue.getInstance().getStatus(uuid);
-            if (result.isAdmitted()) {
-                logger.info("User with token " + uuid + " is now admitted");
-            }
             return Response.ok(result);
         });
     }
 
-    // fired by WebQueue when a waiting user is admitted — uuid becomes their guest sessionId
-    //trigger for moving to login page //::TO DO!
+    //trigger for moving to login page
     private void onUserAdmitted(String uuid) {
         logger.info("User admitted from queue with sessionId: " + uuid);
+        NotifyPayload payload = new NotifyPayload("Your turn has arrived");
+        NotifyDTO notify = new NotifyDTO(NotifyType.QUEUE_WEB_TURN_ARRIVED,payload);
+        notifier.notifyTab(uuid,notify);
     }
 
     public Response<String> continueAsGuest() {
@@ -73,12 +77,11 @@ public class UserService {
                 logger.info("Guest session fully initialized.");
                 return new Response<>(newGuestSessionId, "Guest session created successfully.");
 
-            }
-            catch (OptimisticLockingFailureException e) {
+            } catch (OptimisticLockingFailureException e) {
                 throw e;
             } catch (Exception e) {
                 logger.severe("Failed to initialize guest session. Error: " + e.getMessage());
-                return new Response<>(null,"Server error while continuing as guest: " + e.getMessage());
+                return new Response<>(null, "Server error while continuing as guest: " + e.getMessage());
             }
         });
     }
@@ -88,7 +91,7 @@ public class UserService {
         {
             logger.info("Registration attempt started for email: " + dto.getEmail());
             try {
-                if(activeIdentifier!=null && !activeIdentifier.isBlank()) {
+                if (activeIdentifier != null && !activeIdentifier.isBlank()) {
                     int currentUserId = auth.getUserId(activeIdentifier).getValue();
                     if (currentUserId != -1) { //in member state
                         logger.warning("Registration failed: Active logged-in user attempted to register (Token: " + activeIdentifier + ")");
@@ -176,17 +179,17 @@ public class UserService {
         });
     }
 
-    public Response<Boolean> logout(String token){
-        return RetryHelper.executeWithRetry(() ->{
+    public Response<Boolean> logout(String token) {
+        return RetryHelper.executeWithRetry(() -> {
             logger.info("Logout attempt started for token: " + token);
             if (token == null || token.isBlank()) {
                 logger.warning("token is empty or invalid");
                 return new Response<>(false, "token is empty or invalid");
             }
             String role = auth.getRole(token).getValue();
-            if(role!=null && role.equals("GUEST")){
-               logger.warning("Logout attempt failed: guest cannot log out");
-               return new Response<>(false, "User is in guest state");
+            if (role != null && role.equals("GUEST")) {
+                logger.warning("Logout attempt failed: guest cannot log out");
+                return new Response<>(false, "User is in guest state");
             }//entering to the try while we know we are MEMBERs
             try {
                 Response<Boolean> response = auth.logout(token);
@@ -205,6 +208,7 @@ public class UserService {
             }
         });
     }
+
     public Response<Boolean> leaveStore(String token) { //leave button for Guests!
         return RetryHelper.executeWithRetry(() -> {
             logger.info("leaveStore attempt started for token: " + token);
@@ -230,6 +234,76 @@ public class UserService {
             } catch (Exception e) {
                 logger.severe("leaveStore failed: " + e.getMessage());
                 return Response.error("Server error during leaveStore: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<List<NotifyDTO>> getDelayedNotifications(String userEmail) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("deliverDelayedNotifications attempt started for email: " + userEmail);
+            if (userEmail == null || userEmail.isBlank()) {
+                logger.warning("Failed to deliver notifications: Email is empty or null");
+                return new Response<>(null, "Invalid email address");
+            }
+            try {
+                Member member = userRepo.findUserByEmail(userEmail);
+                List<NotifyDTO> allDelayedNotification = member.getDelayedNotifications();
+                logger.info("deliverDelayedNotifications successful for email: " + userEmail);
+                return new Response<>(allDelayedNotification, "Successfully processed delayed notifications");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("deliverDelayedNotifications failed: " + e.getMessage());
+                return new Response<>(null, "Server error during deliverDelayedNotifications: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<Boolean> cleanDelayedNotifications(String userEmail) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("cleanDelayedNotifications attempt started for email: " + userEmail);
+            if (userEmail == null || userEmail.isBlank()) {
+                logger.warning("Failed to clean delayed notifications: Email is empty or null");
+                return new Response<>(false, "Invalid email address");
+            }
+            try {
+                Member member = userRepo.findUserByEmail(userEmail);
+                if (member != null) {
+                    member.clearDelayedNotifications();
+                    userRepo.store(member);
+                    logger.info("deliverDelayedNotifications successful for email: " + userEmail);
+                    return new Response<>(true, "Successfully cleaned delayed notifications");
+                }
+                return new Response<>(false, "User not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("cleanDelayedNotifications failed: " + e.getMessage());
+                return new Response<>(false, "Server error during cleanDelayedNotifications: " + e.getMessage());
+            }
+        });
+    }
+
+    public Response<String> getUserIdentifier(String token) { // extracting Identifier for notifications
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("getUserIdentifier attempt started for token: " + token);
+            if (token == null || token.isBlank()) {
+                logger.warning("Failed to get user identifier: Token is empty or null");
+                return new Response<>(null, "Invalid token");
+            }
+            try {
+                Response<String> response = auth.getUserIdentifier(token);
+                if (response.getValue() == null) {
+                    logger.warning("Failed to get user identifier for token: " + token);
+                    return new Response<>(null, "Failed to retrieve user identifier");
+                }
+                logger.info("getUserIdentifier successful for token: " + token);
+                return response;
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("getUserIdentifier failed: " + e.getMessage());
+                return new Response<>(null, "Server error during getUserIdentifier: " + e.getMessage());
             }
         });
     }

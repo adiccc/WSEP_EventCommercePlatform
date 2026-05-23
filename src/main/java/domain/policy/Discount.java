@@ -6,4 +6,5 @@ public interface Discount  {
     String describe();
     void addDiscount(Discount discount);
     boolean discountExists(Discount newdiscount);
+    Discount copy();
 }

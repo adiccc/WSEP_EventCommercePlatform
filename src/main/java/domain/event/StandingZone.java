@@ -208,6 +208,10 @@ public class StandingZone extends Zone {
             }
         }
 
-        throw new IllegalArgumentException("Ticket does not exist in standing zone: " + ticketId);
+        throw new IllegalArgumentException("Ticket does not exist in standing zone: " + ticketId);}
+
+    public boolean hasAvailableTickets() {
+        return available > 0;
+
     }
 }

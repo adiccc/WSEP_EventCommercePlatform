@@ -140,6 +140,7 @@ public class EventMap {
         }
     }
 
+
     public List<PurchasedTicketDTO> getPurchasedTicketDetails(List<Integer> ticketIds) {
         List<PurchasedTicketDTO> result = new ArrayList<>();
 
@@ -157,6 +158,16 @@ public class EventMap {
         }
 
         throw new IllegalArgumentException("Ticket does not exist in event map: " + ticketId);
+    }
+
+
+    public boolean isSoldOut() {
+        for (Zone zone : zones) {
+            if (zone.hasAvailableTickets()) {
+                return false;
+            }
+        }
+        return true;
     }
 
 }

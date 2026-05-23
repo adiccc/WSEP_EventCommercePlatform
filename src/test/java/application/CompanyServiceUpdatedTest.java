@@ -10,6 +10,7 @@ import domain.dto.UserDTO;
 
 import domain.event.IEventRepo;
 import domain.policy.*;
+import domain.policy.PurchasePolicyType;
 import domain.user.IUserRepo;
 import domain.dto.CompanyDTO;
 import domain.user.IUserRepo;
@@ -57,6 +58,8 @@ class CompanyServiceUpdatedTest {
     private AdminService adminService;
     private IPaymentSystem paymentSystem;
     private IEventRepo eventRepo;
+    private INotifier notifier;
+
 
     @BeforeEach
     void setUp() {
@@ -69,8 +72,8 @@ class CompanyServiceUpdatedTest {
         String adminEmail = "admin@admin.com";
         auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(adminEmail));
         companyRepo = new CompanyRepoImpl();
-
-        userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
+        notifier = new VaadinNotifier(userRepo);
+        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
         service = new CompanyService(auth, companyRepo, userRepo,accessValidator);
 
         UserDTO ownerDTO = new UserDTO("owner@test.com", "Owner", "Test", "Password123!", 1, 1, 2000, "City", "050-123-4567");
@@ -100,7 +103,7 @@ class CompanyServiceUpdatedTest {
         companyRepo.store(company);
         paymentSystem = Mockito.mock(PaymentSystemProxy.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo);
+        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo,notifier);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
 
@@ -1354,6 +1357,191 @@ class CompanyServiceUpdatedTest {
 
         int success = (!r1.isError() ? 1 : 0) + (!r2.isError() ? 1 : 0);
         assertEquals(1, success, "Only one concurrent remove of the same rule should succeed");
+    }
+
+    // ===================== Change Discount Policy Type =====================
+
+    @Test
+    void GivenOwner_WhenChangeToMaxPolicy_ThenSuccess() {
+        Response<Void> response = service.changeDiscountPolicyType(OWNER_TOKEN, COMPANY_ID, DiscountPolicyType.MAX);
+        assertFalse(response.isError(), response.getMessage());
+        assertTrue(companyRepo.findById(COMPANY_ID).getDiscountPolicy() instanceof MaxDiscountPolicy);
+    }
+
+    @Test
+    void GivenOwnerWithMaxPolicy_WhenChangeToSumPolicy_ThenSuccess() {
+        service.changeDiscountPolicyType(OWNER_TOKEN, COMPANY_ID, DiscountPolicyType.MAX);
+        Response<Void> response = service.changeDiscountPolicyType(OWNER_TOKEN, COMPANY_ID, DiscountPolicyType.SUM);
+        assertFalse(response.isError(), response.getMessage());
+        assertTrue(companyRepo.findById(COMPANY_ID).getDiscountPolicy() instanceof SumDiscountPolicy);
+    }
+
+    @Test
+    void GivenOwner_WhenChangePolicy_ThenExistingDiscountsPreserved() {
+        service.addDiscountToCompany(OWNER_TOKEN, COMPANY_ID, new DiscountDTO(15.0, LocalDate.now().plusDays(1)));
+        service.changeDiscountPolicyType(OWNER_TOKEN, COMPANY_ID, DiscountPolicyType.MAX);
+        assertEquals(1, companyRepo.findById(COMPANY_ID).getDiscountPolicy().getDiscounts().size());
+    }
+
+    @Test
+    void GivenManagerWithManagePoliciesPermission_WhenChangeDiscountPolicyType_ThenSuccess() {
+        service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID,
+                EnumSet.of(PermissionType.MANAGE_POLICIES));
+        Response<Void> response = service.changeDiscountPolicyType(MANAGER_TOKEN, COMPANY_ID, DiscountPolicyType.MAX);
+        assertFalse(response.isError(), response.getMessage());
+        assertTrue(companyRepo.findById(COMPANY_ID).getDiscountPolicy() instanceof MaxDiscountPolicy);
+    }
+
+    @Test
+    void GivenManagerWithoutManagePoliciesPermission_WhenChangeDiscountPolicyType_ThenError() {
+        // MANAGER_ID was added with empty permissions in setUp
+        Response<Void> response = service.changeDiscountPolicyType(MANAGER_TOKEN, COMPANY_ID, DiscountPolicyType.MAX);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNonMember_WhenChangeDiscountPolicyType_ThenError() {
+        Response<Void> response = service.changeDiscountPolicyType(OTHER_TOKEN, COMPANY_ID, DiscountPolicyType.MAX);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenChangeDiscountPolicyType_ThenError() {
+        Response<Void> response = service.changeDiscountPolicyType("invalid-token", COMPANY_ID, DiscountPolicyType.MAX);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInactiveCompany_WhenChangeDiscountPolicyType_ThenError() {
+        service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+        Response<Void> response = service.changeDiscountPolicyType(OWNER_TOKEN, COMPANY_ID, DiscountPolicyType.MAX);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenCompanyNotFound_WhenChangeDiscountPolicyType_ThenError() {
+        Response<Void> response = service.changeDiscountPolicyType(OWNER_TOKEN, 999, DiscountPolicyType.MAX);
+        assertTrue(response.isError());
+    }
+
+    // ===================== Change Purchase Policy Type =====================
+
+    @Test
+    void GivenOwner_WhenChangeToOrPolicy_ThenSuccess() {
+        Response<Void> response = service.changePurchasePolicyType(OWNER_TOKEN, COMPANY_ID, PurchasePolicyType.OR);
+        assertFalse(response.isError(), response.getMessage());
+        assertTrue(companyRepo.findById(COMPANY_ID).getPurchasePolicy() instanceof OrPurchasePolicy);
+    }
+
+    @Test
+    void GivenOwnerWithOrPolicy_WhenChangeToAndPolicy_ThenSuccess() {
+        service.changePurchasePolicyType(OWNER_TOKEN, COMPANY_ID, PurchasePolicyType.OR);
+        Response<Void> response = service.changePurchasePolicyType(OWNER_TOKEN, COMPANY_ID, PurchasePolicyType.AND);
+        assertFalse(response.isError(), response.getMessage());
+        assertTrue(companyRepo.findById(COMPANY_ID).getPurchasePolicy() instanceof AndPurchasePolicy);
+    }
+
+    @Test
+    void GivenSamePolicyType_WhenChangePurchasePolicyType_ThenNoOpAndSuccess() {
+        service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 5));
+        Response<Void> response = service.changePurchasePolicyType(OWNER_TOKEN, COMPANY_ID, PurchasePolicyType.AND);
+        assertFalse(response.isError(), response.getMessage());
+        assertEquals(1, companyRepo.findById(COMPANY_ID).getPurchasePolicy().getRules().size());
+    }
+
+    @Test
+    void GivenOwner_WhenChangePolicyType_ThenExistingRulesPreserved() {
+        service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID, new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 5));
+        service.changePurchasePolicyType(OWNER_TOKEN, COMPANY_ID, PurchasePolicyType.OR);
+        assertEquals(1, companyRepo.findById(COMPANY_ID).getPurchasePolicy().getRules().size());
+    }
+
+    @Test
+    void GivenManagerWithManagePoliciesPermission_WhenChangePurchasePolicyType_ThenSuccess() {
+        service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID,
+                EnumSet.of(PermissionType.MANAGE_POLICIES));
+        Response<Void> response = service.changePurchasePolicyType(MANAGER_TOKEN, COMPANY_ID, PurchasePolicyType.OR);
+        assertFalse(response.isError(), response.getMessage());
+        assertTrue(companyRepo.findById(COMPANY_ID).getPurchasePolicy() instanceof OrPurchasePolicy);
+    }
+
+    @Test
+    void GivenManagerWithoutManagePoliciesPermission_WhenChangePurchasePolicyType_ThenError() {
+        Response<Void> response = service.changePurchasePolicyType(MANAGER_TOKEN, COMPANY_ID, PurchasePolicyType.OR);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenNonMember_WhenChangePurchasePolicyType_ThenError() {
+        Response<Void> response = service.changePurchasePolicyType(OTHER_TOKEN, COMPANY_ID, PurchasePolicyType.OR);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenChangePurchasePolicyType_ThenError() {
+        Response<Void> response = service.changePurchasePolicyType("invalid-token", COMPANY_ID, PurchasePolicyType.OR);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenInactiveCompany_WhenChangePurchasePolicyType_ThenError() {
+        service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+        Response<Void> response = service.changePurchasePolicyType(OWNER_TOKEN, COMPANY_ID, PurchasePolicyType.OR);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenCompanyNotFound_WhenChangePurchasePolicyType_ThenError() {
+        Response<Void> response = service.changePurchasePolicyType(OWNER_TOKEN, 999, PurchasePolicyType.OR);
+        assertTrue(response.isError());
+    }
+
+    @Test
+    void GivenTwoThreadsRaceToChangePurchasePolicyType_WhenChangePurchasePolicyType_ThenFinalStateIsValid() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Void>> f1 = executor.submit(() -> {
+            start.await();
+            return service.changePurchasePolicyType(OWNER_TOKEN, COMPANY_ID, PurchasePolicyType.OR);
+        });
+        Future<Response<Void>> f2 = executor.submit(() -> {
+            start.await();
+            return service.changePurchasePolicyType(OWNER_TOKEN, COMPANY_ID, PurchasePolicyType.AND);
+        });
+
+        start.countDown();
+        f1.get();
+        f2.get();
+        executor.shutdown();
+
+        PurchasePolicy finalPolicy = companyRepo.findById(COMPANY_ID).getPurchasePolicy();
+        assertTrue(finalPolicy instanceof AndPurchasePolicy || finalPolicy instanceof OrPurchasePolicy,
+                "Final policy must be a valid type regardless of thread ordering");
+    }
+
+    @Test
+    void GivenTwoThreadsRaceToChangePolicyType_WhenChangeDiscountPolicyType_ThenFinalStateIsValid() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Void>> f1 = executor.submit(() -> {
+            start.await();
+            return service.changeDiscountPolicyType(OWNER_TOKEN, COMPANY_ID, DiscountPolicyType.MAX);
+        });
+        Future<Response<Void>> f2 = executor.submit(() -> {
+            start.await();
+            return service.changeDiscountPolicyType(OWNER_TOKEN, COMPANY_ID, DiscountPolicyType.SUM);
+        });
+
+        start.countDown();
+        f1.get();
+        f2.get();
+        executor.shutdown();
+
+        DiscountPolicy finalPolicy = companyRepo.findById(COMPANY_ID).getDiscountPolicy();
+        assertTrue(finalPolicy instanceof SumDiscountPolicy || finalPolicy instanceof MaxDiscountPolicy,
+                "Final policy must be a valid type regardless of thread ordering");
     }
 
 }

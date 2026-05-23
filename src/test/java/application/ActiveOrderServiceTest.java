@@ -10,14 +10,16 @@ import domain.activeOrder.ActiveOrder;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dataType.TicketStatus;
+import domain.dataType.PermissionType;
 import domain.dto.ActiveOrderDTO;
-import domain.dto.EventMapDTO;
 import domain.dto.SeatingTicketDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.Order;
 import domain.event.OrderStatus;
 import domain.user.IUserRepo;
+import domain.user.Member;
+import domain.webQueue.WebQueue;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,7 +28,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import com.vaadin.flow.shared.Registration;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -40,6 +45,10 @@ class ActiveOrderServiceTest {
     private ActiveOrderRepoImpl activeOrderRepo;
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
+    private INotifier notifier;
+    private IUserRepo userRepo;
+    private CompanyService companyService;
+    private EventCompanyManageService companyEventService;
 
     private String validToken;
     private Integer eventId;
@@ -54,13 +63,13 @@ class ActiveOrderServiceTest {
     void setUp() {
         LoggerSetup.setup();
         TokenService tokenService = new TokenService();
-        IUserRepo userRepo = new UserRepo();
+        userRepo = new UserRepo();
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         ISuspensionRepo suspensionRepo = new SuspensionRepoImpl();
         IAccessValidator accessValidator=new AccessValidator(suspensionRepo);
         auth = new Auth(tokenService, userRepo, passwordEncoder);
-
-        userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
+        notifier = Mockito.spy(new VaadinNotifier(userRepo));
+        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
 
         userService.registerUser(
                 "",
@@ -85,11 +94,11 @@ class ActiveOrderServiceTest {
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
 
-        CompanyService companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
+        companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
         companyService.createProductionCompany(validToken, companyId,
                 "test-company", "testC@company.com", "054-5556677", "leumi");
 
-        EventCompanyManageService companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator);
+        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
 
         Response<Integer> r = companyEventService.createEvent(
                 validToken,
@@ -139,12 +148,13 @@ class ActiveOrderServiceTest {
                 paymentSystem,
                 ticketSupply,
                 accessValidator,
+                notifier,
                 capacity
         );
     }
     @Test
     void GivenInvalidToken_WhenEnterPurchase_ThenErrorReturned() {
-        Response<EventMapDTO> response = service.enterEventPurchase("", companyId, eventId);
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase("", companyId, eventId);
 
         assertNull(response.getValue());
         assertEquals("Invalid token", response.getMessage());
@@ -152,7 +162,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenNonExistingEvent_WhenEnterPurchase_ThenEventNotFound() {
-        Response<EventMapDTO> response = service.enterEventPurchase(validToken, companyId, -1);
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase(validToken, companyId, -1);
 
         assertNull(response.getValue());
         assertEquals("Event not found", response.getMessage());
@@ -160,7 +170,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenWrongCompany_WhenEnterPurchase_ThenMismatchError() {
-        Response<EventMapDTO> response = service.enterEventPurchase(validToken, 999, eventId);
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase(validToken, 999, eventId);
 
         assertNull(response.getValue());
         assertEquals("The selected event does not belong to the company", response.getMessage());
@@ -168,7 +178,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenFutureSaleWithoutLottery_WhenEnterPurchase_ThenSaleNotStarted() {
-        Response<EventMapDTO> response = service.enterEventPurchase(validToken, companyId, eventId);
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase(validToken, companyId, eventId);
 
         assertNull(response.getValue());
         assertEquals("The sale for this event has not started yet", response.getMessage());
@@ -176,7 +186,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenValidEvent_WhenEnterPurchase_ThenReturnEventMap() {
-        Response<EventMapDTO> response =
+        Response<EnterPurchaseDTO> response =
                 service.enterEventPurchase(validToken, companyId, concurrentEventId);
 
         assertNotNull(response.getValue());
@@ -201,7 +211,7 @@ class ActiveOrderServiceTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(usersCount);
         CountDownLatch start = new CountDownLatch(1);
-        List<Future<Response<EventMapDTO>>> futures = new ArrayList<>();
+        List<Future<Response<EnterPurchaseDTO>>> futures = new ArrayList<>();
 
         for (String token : tokens) {
             futures.add(executor.submit(() -> {
@@ -215,8 +225,8 @@ class ActiveOrderServiceTest {
         int success = 0;
         int queued = 0;
 
-        for (Future<Response<EventMapDTO>> future : futures) {
-            Response<EventMapDTO> response = future.get();
+        for (Future<Response<EnterPurchaseDTO>> future : futures) {
+            Response<EnterPurchaseDTO> response = future.get();
             if (response.getValue() != null) success++;
             if ("Event is full, user added to waiting queue".equals(response.getMessage())) queued++;
         }
@@ -247,7 +257,7 @@ class ActiveOrderServiceTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(usersCount);
         CountDownLatch start = new CountDownLatch(1);
-        List<Future<Response<EventMapDTO>>> futures = new ArrayList<>();
+        List<Future<Response<EnterPurchaseDTO>>> futures = new ArrayList<>();
 
         for (String token : tokens) {
             futures.add(executor.submit(() -> {
@@ -261,10 +271,17 @@ class ActiveOrderServiceTest {
         int success = 0;
         int queued = 0;
 
-        for (Future<Response<EventMapDTO>> future : futures) {
-            Response<EventMapDTO> response = future.get();
-            if (response.getValue() != null) success++;
-            if (response.getMessage() != null && response.getMessage().startsWith("Event is full")) queued++;
+        for (Future<Response<EnterPurchaseDTO>> future : futures) {
+            Response<EnterPurchaseDTO> response = future.get();
+            EnterPurchaseDTO dto = response.getValue();
+
+            if (dto != null && !dto.isWaitingInQueue()) {
+                success++;
+            }
+
+            if (dto != null && dto.isWaitingInQueue()) {
+                queued++;
+            }
         }
 
         executor.shutdown();
@@ -288,7 +305,7 @@ class ActiveOrderServiceTest {
             ));
             String fillerToken = userService.login(email, "pass").getValue();
 
-            Response<EventMapDTO> fillerResp =
+            Response<EnterPurchaseDTO> fillerResp =
                     service.enterEventPurchase(fillerToken, companyId, concurrentEventId);
             assertNotNull(fillerResp.getValue(),
                     "Filler user " + i + " should have received the map (slot available)");
@@ -313,35 +330,40 @@ class ActiveOrderServiceTest {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
 
-        Future<Response<EventMapDTO>> futureA = executor.submit(() -> {
+        Future<Response<EnterPurchaseDTO>> futureA = executor.submit(() -> {
             start.await();
             return service.enterEventPurchase(tokenA, companyId, concurrentEventId);
         });
-        Future<Response<EventMapDTO>> futureB = executor.submit(() -> {
+        Future<Response<EnterPurchaseDTO>> futureB = executor.submit(() -> {
             start.await();
             return service.enterEventPurchase(tokenB, companyId, concurrentEventId);
         });
 
         start.countDown();
 
-        Response<EventMapDTO> responseA = futureA.get();
-        Response<EventMapDTO> responseB = futureB.get();
+        Response<EnterPurchaseDTO> responseA = futureA.get();
+        Response<EnterPurchaseDTO> responseB = futureB.get();
         executor.shutdown();
 
         int success = 0;
-        int queued  = 0;
+        int queued = 0;
 
-        if (responseA.getValue() != null) success++; else queued++;
-        if (responseB.getValue() != null) success++; else queued++;
+        EnterPurchaseDTO dtoA = responseA.getValue();
+        EnterPurchaseDTO dtoB = responseB.getValue();
+
+        if (dtoA != null && dtoA.isWaitingInQueue()) queued++;
+        else if (dtoA != null) success++;
+
+        if (dtoB != null && dtoB.isWaitingInQueue()) queued++;
+        else if (dtoB != null) success++;
 
         // The critical race-condition assertion: two threads must never both win the last slot
         assertEquals(1, success);
         assertEquals(1, queued);
 
         // Confirm the loser has a real queue position (not an error response)
-        Response<EventMapDTO> loser = (responseA.getValue() == null) ? responseA : responseB;
-        assertTrue(loser.getMessage().startsWith("Event is full"),
-                "Losing racer should receive a queue confirmation, got: " + loser.getMessage());
+        Response<EnterPurchaseDTO> loser = responseA.getValue().isWaitingInQueue() ? responseA : responseB;
+        assertTrue(loser.getValue().isWaitingInQueue());
     }
     @Test
     void GivenNullTicketSupplyRequest_WhenIssueTickets_ThenInvalidRequestReturned() {
@@ -1515,7 +1537,7 @@ class ActiveOrderServiceTest {
 
         String newToken = userService.login(newEmail, "pass").getValue();
 
-        Response<EventMapDTO> enterResponse =
+        Response<EnterPurchaseDTO> enterResponse =
                 service.enterEventPurchase(newToken, companyId, concurrentEventId);
 
         assertNotNull(enterResponse.getValue(),
@@ -1694,7 +1716,7 @@ class ActiveOrderServiceTest {
             String token = userService.login(email, "pass").getValue();
             tokens.add(token);
 
-            Response<EventMapDTO> enterResponse =
+            Response<EnterPurchaseDTO> enterResponse =
                     service.enterEventPurchase(token, companyId, concurrentEventId);
 
             assertNotNull(enterResponse.getValue(),
@@ -1804,7 +1826,7 @@ class ActiveOrderServiceTest {
             String token = userService.login(email, "pass").getValue();
             tokens.add(token);
 
-            Response<EventMapDTO> enterResponse =
+            Response<EnterPurchaseDTO> enterResponse =
                     service.enterEventPurchase(token, companyId, concurrentEventId);
 
             assertNotNull(enterResponse.getValue(),
@@ -2033,7 +2055,7 @@ class ActiveOrderServiceTest {
             String token = userService.login(email, "pass").getValue();
             tokens.add(token);
 
-            Response<EventMapDTO> enterResponse =
+            Response<EnterPurchaseDTO> enterResponse =
                     service.enterEventPurchase(token, companyId, concurrentEventId);
 
             assertNotNull(enterResponse.getValue(),
@@ -2122,7 +2144,7 @@ class ActiveOrderServiceTest {
             String token = userService.login(email, "pass").getValue();
             tokens.add(token);
 
-            Response<EventMapDTO> enterResponse =
+            Response<EnterPurchaseDTO> enterResponse =
                     service.enterEventPurchase(token, companyId, concurrentEventId);
 
             assertNotNull(enterResponse.getValue());
@@ -2472,7 +2494,7 @@ class ActiveOrderServiceTest {
 
         ExecutorService enterExecutor = Executors.newFixedThreadPool(usersCount);
         CountDownLatch enterStart = new CountDownLatch(1);
-        Map<String, Future<Response<EventMapDTO>>> enterFutures = new HashMap<>();
+        Map<String, Future<Response<EnterPurchaseDTO>>> enterFutures = new HashMap<>();
 
         for (String token : tokens) {
             enterFutures.put(token, enterExecutor.submit(() -> {
@@ -2487,15 +2509,14 @@ class ActiveOrderServiceTest {
         List<String> queuedTokens = new ArrayList<>();
 
         for (String token : tokens) {
-            Response<EventMapDTO> response = enterFutures.get(token).get();
+            Response<EnterPurchaseDTO> response = enterFutures.get(token).get();
+            EnterPurchaseDTO dto = response.getValue();
 
-            if (response.getValue() != null) {
+            if (dto != null && !dto.isWaitingInQueue()) {
                 admittedTokens.add(token);
-            } else if (response.getMessage() != null &&
-                    response.getMessage().startsWith("Event is full")) {
+            }
+            if (dto != null && dto.isWaitingInQueue()) {
                 queuedTokens.add(token);
-            } else {
-                fail("Unexpected enter response: " + response.getMessage());
             }
         }
 
@@ -2615,5 +2636,615 @@ class ActiveOrderServiceTest {
 
         Mockito.verify(ticketSupply, Mockito.times(expectedCapacity))
                 .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+    private int createSoldOutTestEvent(String nameSuffix) {
+        Response<Integer> r = companyEventService.createEvent(
+                validToken,
+                companyId,
+                LocalDateTime.now().plusDays(5),
+                "Sold Out Test Event " + nameSuffix,
+                LocalDateTime.now().minusMinutes(5),
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS
+        );
+        assertNotNull(r.getValue(), "create event setup failed: " + r.getMessage());
+        int id = r.getValue();
+
+        ElementPositionDTO stage = new ElementPositionDTO(10, 20);
+        List<ElementPositionDTO> entries = List.of(new ElementPositionDTO(0, 0));
+        List<StandingZoneDTO> standingZones = List.of(
+                new StandingZoneDTO(2, "floor", 100.0, new ElementPositionDTO(1, 1)));
+        List<SeatingZoneDTO> seatingZones = List.of(
+                new SeatingZoneDTO(1, 1, "tribune", 150.0, new ElementPositionDTO(5, 5)));
+
+        companyEventService.DefineVenueAndSeatingMap(validToken, id, stage, entries, standingZones, seatingZones);
+        return id;
+    }
+
+    @Test
+    void GivenEventSoldOutAfterFinalPurchase_WhenCheckoutAndPayment_ThenFounderReceivesSoldOutNotification() {
+        int soldOutEventId = createSoldOutTestEvent("sold-out-1");
+
+        service.enterEventPurchase(validToken, companyId, soldOutEventId);
+        Map<String, List<SeatingTicketDTO>> seating =
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, soldOutEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-soldout");
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNotNull(checkoutResponse.getValue(),
+                "Checkout should succeed. Message: " + checkoutResponse.getMessage());
+        assertTrue(eventRepo.findById(soldOutEventId).isSoldOut(),
+                "Event should be sold out after final purchase");
+
+        Member founder = userRepo.findUserByEmail("testuser1@gmail.com");
+        List<NotifyDTO> delayed = founder.getDelayedNotifications();
+        assertEquals(1, delayed.size(),
+                "Founder should receive exactly one delayed sold-out notification");
+
+        NotifyDTO notification = delayed.get(0);
+        assertEquals(NotifyType.GENERAL_POPUP, notification.getType());
+        assertEquals(soldOutEventId, notification.getPayload().getEventId().intValue());
+        assertTrue(notification.getPayload().getMessage().contains("sold out"),
+                "Notification message should mention sold out: "
+                        + notification.getPayload().getMessage());
+    }
+
+    @Test
+    void GivenEventStillHasAvailableTickets_WhenCheckoutAndPayment_ThenNoSoldOutNotificationSent() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-not-soldout");
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNotNull(checkoutResponse.getValue(),
+                "Checkout should succeed. Message: " + checkoutResponse.getMessage());
+        assertFalse(eventRepo.findById(concurrentEventId).isSoldOut(),
+                "Event should still have capacity after a small purchase");
+
+        Member founder = userRepo.findUserByEmail("testuser1@gmail.com");
+        assertTrue(founder.getDelayedNotifications().isEmpty(),
+                "No sold-out notification should be sent when the event still has capacity");
+    }
+
+    @Test
+    void GivenSoldOutEventWithExtraOwnerAndManager_WhenCheckoutAndPayment_ThenAllOwnersAndManagersReceiveNotification() {
+        userService.registerUser("", new UserDTO(
+                "owner2@gmail.com", "Alice", "Owner", "pw2",
+                1, 1, 1990, "TLV", "050-000-0002"));
+        userService.registerUser("", new UserDTO(
+                "manager1@gmail.com", "Bob", "Manager", "pw3",
+                1, 1, 1990, "TLV", "050-000-0003"));
+
+        String owner2Token = userService.login("owner2@gmail.com", "pw2").getValue();
+        String manager1Token = userService.login("manager1@gmail.com", "pw3").getValue();
+        int owner2Id = auth.getUserId(owner2Token).getValue();
+        int manager1Id = auth.getUserId(manager1Token).getValue();
+
+        Response<Boolean> reqOwner = companyService.requestAppointOwner(validToken, companyId, owner2Id);
+        assertNotNull(reqOwner.getValue(),
+                "request appoint owner setup failed: " + reqOwner.getMessage());
+        Response<Boolean> acceptOwner = companyService.respondToOwnerAppointment(owner2Token, companyId, true);
+        assertNotNull(acceptOwner.getValue(),
+                "accept owner setup failed: " + acceptOwner.getMessage());
+
+        Response<Boolean> reqManager = companyService.requestAppointManager(
+                validToken, companyId, manager1Id,
+                Set.of(PermissionType.MANAGE_EVENTS_INVENTORY));
+        assertNotNull(reqManager.getValue(),
+                "request appoint manager setup failed: " + reqManager.getMessage());
+        Response<Boolean> acceptManager = companyService.respondToManagerAppointment(manager1Token, companyId, true);
+        assertNotNull(acceptManager.getValue(),
+                "accept manager setup failed: " + acceptManager.getMessage());
+
+        int soldOutEventId = createSoldOutTestEvent("sold-out-3");
+
+        service.enterEventPurchase(validToken, companyId, soldOutEventId);
+        Map<String, List<SeatingTicketDTO>> seating =
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, soldOutEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-multi");
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNotNull(checkoutResponse.getValue(),
+                "Checkout should succeed. Message: " + checkoutResponse.getMessage());
+
+        Member founder = userRepo.findUserByEmail("testuser1@gmail.com");
+        Member owner2 = userRepo.findUserByEmail("owner2@gmail.com");
+        Member manager1 = userRepo.findUserByEmail("manager1@gmail.com");
+
+        assertEquals(1, founder.getDelayedNotifications().size(),
+                "Founder should receive exactly one sold-out notification");
+        assertEquals(1, owner2.getDelayedNotifications().size(),
+                "Additional owner should receive exactly one sold-out notification");
+        assertEquals(1, manager1.getDelayedNotifications().size(),
+                "Manager should receive exactly one sold-out notification");
+
+        assertEquals(NotifyType.GENERAL_POPUP, founder.getDelayedNotifications().get(0).getType());
+        assertEquals(NotifyType.GENERAL_POPUP, owner2.getDelayedNotifications().get(0).getType());
+        assertEquals(NotifyType.GENERAL_POPUP, manager1.getDelayedNotifications().get(0).getType());
+    }
+
+    @Test
+    void GivenIssuanceFailedAfterPayment_WhenCheckoutAndPayment_ThenNoSoldOutNotificationSent() {
+        int soldOutEventId = createSoldOutTestEvent("sold-out-4");
+
+        service.enterEventPurchase(validToken, companyId, soldOutEventId);
+        Map<String, List<SeatingTicketDTO>> seating =
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, soldOutEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-refund");
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
+                .thenReturn(true);
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(false);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(checkoutResponse.getValue(),
+                "Checkout must fail when ticket issuance fails");
+        assertFalse(eventRepo.findById(soldOutEventId).isSoldOut(),
+                "Tickets released back, event must not be sold out");
+
+        Member founder = userRepo.findUserByEmail("testuser1@gmail.com");
+        assertTrue(founder.getDelayedNotifications().isEmpty(),
+                "No sold-out notification should be sent when tickets are released back");
+    }
+
+    @Test
+    void GivenSoldOutEventAndOwnerOnline_WhenCheckoutAndPayment_ThenOwnerReceivesRealtimeBroadcast() throws InterruptedException {
+        String founderEmail = "testuser1@gmail.com";
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> received = new AtomicReference<>();
+
+        Registration registration = Broadcaster.registerUser(founderEmail, dto -> {
+            received.set(dto);
+            latch.countDown();
+        });
+
+        try {
+            int soldOutEventId = createSoldOutTestEvent("realtime");
+
+            service.enterEventPurchase(validToken, companyId, soldOutEventId);
+            Map<String, List<SeatingTicketDTO>> seating =
+                    Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+            Map<String, Integer> standing = Map.of("floor", 2);
+
+            Response<Integer> selectResponse =
+                    service.userSelectTickets(validToken, soldOutEventId, seating, standing);
+            assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+
+            Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                    .thenReturn("payment-realtime");
+            TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+            Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+            Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                    .thenReturn(supplyResult);
+
+            PaymentDetailsDTO paymentDetails =
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+            Response<Integer> checkoutResponse =
+                    service.checkoutAndPayment(validToken, selectResponse.getValue(), paymentDetails);
+
+            assertNotNull(checkoutResponse.getValue(),
+                    "Checkout should succeed. Message: " + checkoutResponse.getMessage());
+
+            assertTrue(latch.await(2, TimeUnit.SECONDS),
+                    "Online owner must receive the sold-out broadcast in real time");
+            assertNotNull(received.get());
+            assertEquals(NotifyType.GENERAL_POPUP, received.get().getType());
+            assertEquals(soldOutEventId, received.get().getPayload().getEventId().intValue());
+
+            Member founder = userRepo.findUserByEmail(founderEmail);
+            assertTrue(founder.getDelayedNotifications().isEmpty(),
+                    "Real-time delivery must not fall back to the delayed-notifications list");
+        } finally {
+            registration.remove();
+        }
+    }
+
+    @Test
+    void GivenNotifierThrows_WhenSoldOutCheckoutAndPayment_ThenPurchaseStillSucceeds() {
+        Mockito.doThrow(new RuntimeException("notify boom"))
+                .when(notifier).notifyMemberById(Mockito.any(Integer.class), Mockito.any(NotifyDTO.class));
+
+        int soldOutEventId = createSoldOutTestEvent("notify-throws");
+
+        service.enterEventPurchase(validToken, companyId, soldOutEventId);
+        Map<String, List<SeatingTicketDTO>> seating =
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, soldOutEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-notify-throws");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, selectResponse.getValue(), paymentDetails);
+
+        assertNotNull(checkoutResponse.getValue(),
+                "Purchase must succeed even when the notifier throws. Message: "
+                        + checkoutResponse.getMessage());
+        assertEquals("Purchase completed successfully", checkoutResponse.getMessage());
+        assertEquals(1, eventRepo.findById(soldOutEventId).getOrders().size(),
+                "The order must be persisted regardless of notification failure");
+        assertTrue(eventRepo.findById(soldOutEventId).isSoldOut(),
+                "Event must still be marked sold out after a successful purchase");
+        Mockito.verify(notifier, Mockito.atLeastOnce())
+                .notifyMemberById(Mockito.any(Integer.class), Mockito.any(NotifyDTO.class));
+    }
+
+    @Test
+    void GivenSecondToLastPurchase_WhenCheckoutAndPayment_ThenNoNotificationUntilLastPurchase() {
+        Response<Integer> createResp = companyEventService.createEvent(
+                validToken,
+                companyId,
+                LocalDateTime.now().plusDays(5),
+                "Boundary Event",
+                LocalDateTime.now().minusMinutes(5),
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS
+        );
+        assertNotNull(createResp.getValue(), "create event setup failed: " + createResp.getMessage());
+        int boundaryEventId = createResp.getValue();
+
+        ElementPositionDTO stage = new ElementPositionDTO(10, 20);
+        List<ElementPositionDTO> entries = List.of(new ElementPositionDTO(0, 0));
+        List<StandingZoneDTO> standingZones = List.of(
+                new StandingZoneDTO(2, "floor", 100.0, new ElementPositionDTO(1, 1)));
+        List<SeatingZoneDTO> seatingZones = List.of(
+                new SeatingZoneDTO(1, 2, "tribune", 150.0, new ElementPositionDTO(5, 5)));
+        companyEventService.DefineVenueAndSeatingMap(
+                validToken, boundaryEventId, stage, entries, standingZones, seatingZones);
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-boundary");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        // Purchase 1 — buy both seats only; standing zone untouched, event NOT sold out
+        service.enterEventPurchase(validToken, companyId, boundaryEventId);
+        Map<String, List<SeatingTicketDTO>> firstSeating = Map.of("tribune",
+                List.of(new SeatingTicketDTO(0, 0), new SeatingTicketDTO(0, 1)));
+        Response<Integer> firstSelect = service.userSelectTickets(
+                validToken, boundaryEventId, firstSeating, new HashMap<>());
+        assertNotNull(firstSelect.getValue(), "first select failed: " + firstSelect.getMessage());
+
+        Response<Integer> firstCheckout =
+                service.checkoutAndPayment(validToken, firstSelect.getValue(), paymentDetails);
+        assertNotNull(firstCheckout.getValue(),
+                "first checkout should succeed. Message: " + firstCheckout.getMessage());
+        assertFalse(eventRepo.findById(boundaryEventId).isSoldOut(),
+                "Event should NOT be sold out while standing zone has capacity");
+
+        Member founderAfterFirst = userRepo.findUserByEmail("testuser1@gmail.com");
+        assertTrue(founderAfterFirst.getDelayedNotifications().isEmpty(),
+                "No notification should be sent before the event is fully drained");
+
+        // Purchase 2 — buy both standing tickets; event becomes sold out
+        service.enterEventPurchase(validToken, companyId, boundaryEventId);
+        Response<Integer> secondSelect = service.userSelectTickets(
+                validToken, boundaryEventId, new HashMap<>(), Map.of("floor", 2));
+        assertNotNull(secondSelect.getValue(), "second select failed: " + secondSelect.getMessage());
+
+        Response<Integer> secondCheckout =
+                service.checkoutAndPayment(validToken, secondSelect.getValue(), paymentDetails);
+        assertNotNull(secondCheckout.getValue(),
+                "second checkout should succeed. Message: " + secondCheckout.getMessage());
+        assertTrue(eventRepo.findById(boundaryEventId).isSoldOut(),
+                "Event should be sold out after final purchase");
+
+        Member founderAfterFinal = userRepo.findUserByEmail("testuser1@gmail.com");
+        assertEquals(1, founderAfterFinal.getDelayedNotifications().size(),
+                "Exactly one notification should fire — on the final purchase");
+        NotifyDTO notification = founderAfterFinal.getDelayedNotifications().get(0);
+        assertEquals(NotifyType.GENERAL_POPUP, notification.getType());
+        assertEquals(boundaryEventId, notification.getPayload().getEventId().intValue());
+    }
+
+    @Test
+    void GivenManagersAppointedByDifferentOwners_WhenCheckoutAndPayment_ThenAllManagersInTreeReceiveNotification() {
+        userService.registerUser("", new UserDTO(
+                "owner2@gmail.com", "Alice", "Owner", "pw2",
+                1, 1, 1990, "TLV", "050-000-0002"));
+        userService.registerUser("", new UserDTO(
+                "manager1@gmail.com", "Bob", "Manager", "pw3",
+                1, 1, 1990, "TLV", "050-000-0003"));
+        userService.registerUser("", new UserDTO(
+                "manager2@gmail.com", "Carol", "Manager", "pw4",
+                1, 1, 1990, "TLV", "050-000-0004"));
+
+        String owner2Token = userService.login("owner2@gmail.com", "pw2").getValue();
+        String manager1Token = userService.login("manager1@gmail.com", "pw3").getValue();
+        String manager2Token = userService.login("manager2@gmail.com", "pw4").getValue();
+        int owner2Id = auth.getUserId(owner2Token).getValue();
+        int manager1Id = auth.getUserId(manager1Token).getValue();
+        int manager2Id = auth.getUserId(manager2Token).getValue();
+
+        Response<Boolean> reqOwner = companyService.requestAppointOwner(validToken, companyId, owner2Id);
+        assertNotNull(reqOwner.getValue(), "request appoint owner setup failed");
+        Response<Boolean> acceptOwner = companyService.respondToOwnerAppointment(owner2Token, companyId, true);
+        assertNotNull(acceptOwner.getValue(), "accept owner setup failed");
+
+        Response<Boolean> reqManager1 = companyService.requestAppointManager(
+                validToken, companyId, manager1Id, Set.of(PermissionType.MANAGE_EVENTS_INVENTORY));
+        assertNotNull(reqManager1.getValue(), "request appoint manager1 setup failed");
+        Response<Boolean> acceptManager1 = companyService.respondToManagerAppointment(manager1Token, companyId, true);
+        assertNotNull(acceptManager1.getValue(), "accept manager1 setup failed");
+
+        Response<Boolean> reqManager2 = companyService.requestAppointManager(
+                owner2Token, companyId, manager2Id, Set.of(PermissionType.MANAGE_POLICIES));
+        assertNotNull(reqManager2.getValue(), "request appoint manager2 setup failed");
+        Response<Boolean> acceptManager2 = companyService.respondToManagerAppointment(manager2Token, companyId, true);
+        assertNotNull(acceptManager2.getValue(), "accept manager2 setup failed");
+
+        int soldOutEventId = createSoldOutTestEvent("sold-out-5");
+        service.enterEventPurchase(validToken, companyId, soldOutEventId);
+        Map<String, List<SeatingTicketDTO>> seating = Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 2);
+        Response<Integer> selectResponse = service.userSelectTickets(validToken, soldOutEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed");
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-tree");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+        PaymentDetailsDTO paymentDetails = new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+
+        userService.cleanDelayedNotifications("testuser1@gmail.com");
+        userService.cleanDelayedNotifications("owner2@gmail.com");
+        userService.cleanDelayedNotifications("manager1@gmail.com");
+        userService.cleanDelayedNotifications("manager2@gmail.com");
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, selectResponse.getValue(), paymentDetails);
+        assertNotNull(checkoutResponse.getValue(), "Checkout should succeed");
+
+        Member founder = userRepo.findUserByEmail("testuser1@gmail.com");
+        Member owner2 = userRepo.findUserByEmail("owner2@gmail.com");
+        Member manager1 = userRepo.findUserByEmail("manager1@gmail.com");
+        Member manager2 = userRepo.findUserByEmail("manager2@gmail.com");
+
+        assertEquals(1, founder.getDelayedNotifications().size(), "Founder should receive the notification");
+        assertEquals(1, owner2.getDelayedNotifications().size(), "Extra owner should receive the notification");
+        assertEquals(1, manager1.getDelayedNotifications().size(), "Manager1 (appointed by founder) should receive the notification");
+        assertEquals(1, manager2.getDelayedNotifications().size(), "Manager2 (appointed by another owner) should also receive the notification");
+    }
+    @Test
+    void GivenSoldOutEventWithWaitingUser_WhenSomeoneCheckouts_ThenWaitingUserPromotedAndNotified() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(100);
+
+        Response<Integer> eventResp = companyEventService.createEvent(validToken, companyId,
+                LocalDateTime.now().plusDays(1), "Isolated Queue Event",
+                LocalDateTime.now().minusMinutes(10), false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
+
+        assertNotNull(eventResp.getValue(), "Event creation failed: " + eventResp.getMessage());
+        int isolatedEventId = eventResp.getValue();
+
+        companyEventService.DefineVenueAndSeatingMap(validToken, isolatedEventId,
+                new ElementPositionDTO(10, 20), List.of(new ElementPositionDTO(0,0)),
+                List.of(new StandingZoneDTO(capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-123");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        String firstFillerToken = null;
+        int firstFillerOrderId = -1;
+        for (int i = 0; i < capacity; i++) {
+            String uniqueEmail = "filler_" + UUID.randomUUID() + "@test.com";
+            String uniquePhone = "050-888-77" + String.format("%02d", (i % 100));
+
+            Response<Boolean> regResp = userService.registerUser("", new UserDTO(uniqueEmail, "f", "l", "p", 1, 1, 2000, "Israel", uniquePhone));
+
+            assertNotNull(regResp.getValue(), "Registration failed for filler " + i + ". Server says: " + regResp.getMessage());
+            assertTrue(regResp.getValue(), "Registration returned false for filler " + i);
+
+            String token = userService.login(uniqueEmail, "p").getValue();
+            assertNotNull(token, "Login failed for filler " + i);
+
+            Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(token, companyId, isolatedEventId);
+            assertNotNull(enterResp.getValue(), "Enter event failed for filler " + i + ". Server says: " + enterResp.getMessage());
+
+            Response<Integer> selectResp = service.userSelectTickets(token, isolatedEventId, new HashMap<>(), Map.of("floor", 1));
+            assertNotNull(selectResp.getValue(), "Ticket selection failed for filler " + i + ". Server says: " + selectResp.getMessage());
+
+            if (i == 0) {
+                firstFillerToken = token;
+                firstFillerOrderId = selectResp.getValue();
+            }
+        }
+
+        // Register waiting user
+        String waiterEmail = "waiter_" + UUID.randomUUID() + "@test.com";
+        Response<Boolean> waiterRegResp = userService.registerUser("", new UserDTO(waiterEmail, "w", "w", "pass", 1, 1, 2000, "Israel", "050-123-4567"));
+        assertNotNull(waiterRegResp.getValue(), "Waiter registration failed: " + waiterRegResp.getMessage());
+
+        String waitingToken = userService.login(waiterEmail, "pass").getValue();
+
+        Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(waitingToken, companyId, isolatedEventId);
+        assertNotNull(enterResp.getValue(), "Waiter enter event failed: " + enterResp.getMessage());
+        assertTrue(enterResp.getValue().isWaitingInQueue(), "User should be in queue");
+
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotif = new AtomicReference<>();
+        Registration registration = Broadcaster.registerTab(waitingToken, n -> {
+            receivedNotif.set(n);
+            latch.countDown();
+        });
+
+        // Act
+        PaymentDetailsDTO payment = new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+        Response<Integer> checkoutResp = service.checkoutAndPayment(firstFillerToken, firstFillerOrderId, payment);
+
+        assertNotNull(checkoutResp.getValue(), "Checkout failed, promoteNextInQueue will not be triggered. Server says: " + checkoutResp.getMessage());
+
+        // Assert
+        assertTrue(latch.await(5, TimeUnit.SECONDS), "Waiting user should have been notified via Tab");
+        assertNotNull(receivedNotif.get());
+        assertEquals(NotifyType.QUEUE_EVENT_TURN_ARRIVED, receivedNotif.get().getType());
+        assertEquals(isolatedEventId, receivedNotif.get().getPayload().getEventId());
+
+        registration.remove();
+    }
+    @Test
+    void GivenExpiredOrderInFullEvent_WhenCleanupRuns_ThenWaitingUserPromotedAndNotified() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(100);
+
+        Response<Integer> eventResp = companyEventService.createEvent(validToken, companyId,
+                LocalDateTime.now().plusDays(1), "Cleanup Queue Event",
+                LocalDateTime.now().minusMinutes(10), false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
+
+        assertNotNull(eventResp.getValue(), "Event creation failed: " + eventResp.getMessage());
+        int isolatedEventId = eventResp.getValue();
+
+        companyEventService.DefineVenueAndSeatingMap(validToken, isolatedEventId,
+                new ElementPositionDTO(10, 20), List.of(new ElementPositionDTO(0,0)),
+                List.of(new StandingZoneDTO(capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
+
+        String firstFillerToken = null;
+        int firstFillerOrderId = -1;
+
+        // Fill capacity to the limit with unique users
+        for (int i = 0; i < capacity; i++) {
+            String uniqueEmail = "cleanup_filler_" + UUID.randomUUID() + "@test.com";
+            String uniquePhone = "050-888-77" + String.format("%02d", (i % 100));
+
+            Response<Boolean> regResp = userService.registerUser("", new UserDTO(uniqueEmail, "f", "l", "p", 1, 1, 2000, "Israel", uniquePhone));
+            assertNotNull(regResp.getValue(), "Registration failed for filler " + i + ". Server says: " + regResp.getMessage());
+
+            String token = userService.login(uniqueEmail, "p").getValue();
+            Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(token, companyId, isolatedEventId);
+            Response<Integer> selectResp = service.userSelectTickets(token, isolatedEventId, new HashMap<>(), Map.of("floor", 1));
+
+            if (i == 0) {
+                firstFillerToken = token;
+                firstFillerOrderId = selectResp.getValue();
+            }
+        }
+
+        // Register waiting user
+        String waiterEmail = "waiter_cleanup_" + UUID.randomUUID() + "@test.com";
+        Response<Boolean> waiterRegResp = userService.registerUser("", new UserDTO(waiterEmail, "w", "w", "pass", 1, 1, 2000, "Israel", "050-765-4321"));
+        assertNotNull(waiterRegResp.getValue(), "Waiter registration failed: " + waiterRegResp.getMessage());
+        String waitingToken = userService.login(waiterEmail, "pass").getValue();
+
+        Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(waitingToken, companyId, isolatedEventId);
+        assertNotNull(enterResp.getValue(), "Waiter enter event failed: " + enterResp.getMessage());
+        assertTrue(enterResp.getValue().isWaitingInQueue(), "User should be in queue");
+
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotif = new AtomicReference<>();
+        Registration registration = Broadcaster.registerTab(waitingToken, n -> {
+            receivedNotif.set(n);
+            latch.countDown();
+        });
+
+        // Force expiration for the first user's active order using the class helper method
+        forceExpireOrder(firstFillerOrderId);
+
+        // Act
+        service.cleanupExpiredOrders();
+
+        // Assert
+        assertTrue(latch.await(5, TimeUnit.SECONDS), "Waiting user should have been notified via Tab after cleanup process");
+        assertNotNull(receivedNotif.get());
+        assertEquals(NotifyType.QUEUE_EVENT_TURN_ARRIVED, receivedNotif.get().getType());
+        assertEquals(isolatedEventId, receivedNotif.get().getPayload().getEventId());
+
+        registration.remove();
     }
 }

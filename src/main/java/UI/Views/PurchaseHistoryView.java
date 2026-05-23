@@ -6,6 +6,7 @@ import UI.Presenters.PurchaseHistoryPresenter;
 import application.EventCompanyManageService;
 import application.Response;
 
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.H4;
@@ -35,9 +36,8 @@ public class PurchaseHistoryView extends VerticalLayout {
 
         add(new H2("My Purchase History"));
 
-        String token = (String) VaadinSession
-                .getCurrent()
-                .getAttribute("token");
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
 
         Response<List<PurchaseHistoryDTO>> response =
                 presenter.getPurchaseHistory(token);

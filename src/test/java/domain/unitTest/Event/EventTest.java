@@ -1,14 +1,19 @@
 package domain.unitTest.Event;
 
 import domain.dataType.CategoryEvent;
+import domain.dataType.ElementPosition;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
 import domain.event.Event;
 import domain.event.EventMap;
+import domain.event.StandingZone;
+import domain.event.Zone;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -65,6 +70,72 @@ class EventTest {
 
         // Assert
         assertFalse(event.isAvailableForSale(), "Event should not be available - no map and date is in the future.");
+    }
+
+    @Test
+    void GivenEventWithoutMap_WhenIsSoldOut_ThenReturnFalse() {
+        Event event = new Event(
+                companyId, creatorId, LocalDateTime.now().plusDays(10),
+                "Test Event", LocalDateTime.now().minusHours(1), false,
+                GeographicalArea.CENTER, CategoryEvent.SPORTS);
+
+        assertFalse(event.isSoldOut(), "Event without a map cannot be sold out");
+    }
+
+    @Test
+    void GivenStandingZoneWithAvailableTickets_WhenIsSoldOut_ThenReturnFalse() {
+        StandingZone zone = new StandingZone(
+                "floor", 100.0, 5, new ElementPosition(0, 0), new AtomicInteger(0));
+        EventMap map = new EventMap(
+                new ElementPosition(0, 0), List.of(), List.<Zone>of(zone));
+
+        Event event = new Event(
+                companyId, creatorId, LocalDateTime.now().plusDays(10),
+                "Test Event", LocalDateTime.now().minusHours(1), false,
+                GeographicalArea.CENTER, CategoryEvent.SPORTS);
+        event.setMap(map);
+
+        assertFalse(event.isSoldOut(),
+                "Event with available tickets in any zone should not be sold out");
+    }
+
+    @Test
+    void GivenAllStandingTicketsSold_WhenIsSoldOut_ThenReturnTrue() {
+        StandingZone zone = new StandingZone(
+                "floor", 100.0, 2, new ElementPosition(0, 0), new AtomicInteger(0));
+        List<Integer> bookedTickets = zone.bookTickets(2);
+        zone.markTicketsAsSold(bookedTickets);
+
+        EventMap map = new EventMap(
+                new ElementPosition(0, 0), List.of(), List.<Zone>of(zone));
+
+        Event event = new Event(
+                companyId, creatorId, LocalDateTime.now().plusDays(10),
+                "Test Event", LocalDateTime.now().minusHours(1), false,
+                GeographicalArea.CENTER, CategoryEvent.SPORTS);
+        event.setMap(map);
+
+        assertTrue(event.isSoldOut(),
+                "Event with every ticket marked SOLD should be sold out");
+    }
+
+    @Test
+    void GivenAllStandingTicketsLockedAndNoneAvailable_WhenIsSoldOut_ThenReturnTrue() {
+        StandingZone zone = new StandingZone(
+                "floor", 100.0, 2, new ElementPosition(0, 0), new AtomicInteger(0));
+        zone.bookTickets(2); // LOCKED state, no SOLD transition; available is now 0
+
+        EventMap map = new EventMap(
+                new ElementPosition(0, 0), List.of(), List.<Zone>of(zone));
+
+        Event event = new Event(
+                companyId, creatorId, LocalDateTime.now().plusDays(10),
+                "Test Event", LocalDateTime.now().minusHours(1), false,
+                GeographicalArea.CENTER, CategoryEvent.SPORTS);
+        event.setMap(map);
+
+        assertTrue(event.isSoldOut(),
+                "Event should be sold out when no ticket is AVAILABLE, even if some are still LOCKED");
     }
 
     @Test

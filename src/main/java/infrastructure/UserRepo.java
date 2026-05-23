@@ -11,6 +11,9 @@ import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.stereotype.Repository;
+
+@Repository
 
 public class UserRepo implements IUserRepo {
     private final ConcurrentHashMap<Integer, Member> usersPerId = new ConcurrentHashMap<>();
@@ -93,6 +96,14 @@ public class UserRepo implements IUserRepo {
             emailById.remove(member.getIdentifier());
             usersPerId.remove(userId);
         }
+    }
+    @Override
+    public String getUserEmail(Integer userId) {
+        Member member = usersPerId.get(userId);
+        if (member != null) {
+            return member.getIdentifier();
+        }
+        throw new NoSuchElementException("User not found with ID: " + userId);
     }
 
 }

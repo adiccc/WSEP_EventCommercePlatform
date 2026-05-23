@@ -1,5 +1,7 @@
 package application;
 
+import DTO.NotifyDTO;
+import DTO.NotifyType;
 import DTO.QueueEntryResultDTO;
 import Log.LoggerSetup;
 import domain.Suspension.ISuspensionRepo;
@@ -16,10 +18,7 @@ import org.mockito.Mockito;
 
 import java.time.LocalDate;
 import java.util.*;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -35,6 +34,7 @@ class UserServiceTest {
     private ICompanyRepo companyRepo;
     private IEventRepo eventRepo;
     private String ADMIN_TOKEN;
+    private INotifier notifier;
 
     @BeforeEach
     void setUp() {
@@ -47,11 +47,12 @@ class UserServiceTest {
         passwordEncoder = new PasswordEncoderUtil();
         String adminEmail = "admin@admin.com";
         auth = new Auth(realTokenService, userRepo, passwordEncoder, Set.of(adminEmail));
-        userService = new UserService(realTokenService, auth, userRepo, passwordEncoder);
+        notifier = new VaadinNotifier(userRepo);
+        userService = new UserService(realTokenService, auth, userRepo, passwordEncoder,notifier);
         companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem, suspensionRepo);
+        adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem, suspensionRepo,notifier);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
     }
@@ -437,17 +438,32 @@ class UserServiceTest {
 
         Response<QueueEntryResultDTO> guest1 = userService.enter();
         Response<QueueEntryResultDTO> guest2 = userService.enter();
+
         assertFalse(guest1.getValue().isAdmitted(), "Guest 1 should be waiting");
-        assertFalse(guest2.getValue().isAdmitted(), "Guest 2 should be waiting");
+        String uuid1 = guest1.getValue().getToken();
 
         assertEquals(2, WebQueue.getInstance().getWaitingCount());
+        CountDownLatch latch = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<NotifyDTO> receivedNotif = new java.util.concurrent.atomic.AtomicReference<>();
 
+        com.vaadin.flow.shared.Registration registration = Broadcaster.registerTab(uuid1, notification -> {
+            receivedNotif.set(notification);
+            latch.countDown();
+        });
+
+        // Act
         userService.logout(activeToken);
 
+        // Assert
         assertEquals(1, WebQueue.getInstance().getActiveCount(), "System should be full again");
         assertEquals(1, WebQueue.getInstance().getWaitingCount(), "Only one guest should remain in the queue");
-    }
 
+        assertTrue(latch.await(2, TimeUnit.SECONDS), "Tab should have received the broadcast within 2 seconds");
+        assertNotNull(receivedNotif.get());
+        assertEquals(NotifyType.QUEUE_WEB_TURN_ARRIVED, receivedNotif.get().getType());
+
+        registration.remove();
+    }
     @Test
     void GivenOneSpotLeft_WhenConcurrentEnter_ThenOneAdmittedOneQueued() throws Exception {
         WebQueue.resetForTesting();
@@ -586,5 +602,292 @@ class UserServiceTest {
 
         assertEquals(guestCount, success, "All guests should receive unique tokens");
     }
+    @Test
+    void GivenNullOrBlankEmail_WhenGetOrCleanDelayedNotifications_ThenErrorInvalidEmail() {
+        // GET Tests
+        Response<List<DTO.NotifyDTO>> getNull = userService.getDelayedNotifications(null);
+        Response<List<DTO.NotifyDTO>> getBlank = userService.getDelayedNotifications("   ");
+        assertTrue(getNull.isError());
+        assertEquals("Invalid email address", getNull.getMessage());
+        assertTrue(getBlank.isError());
 
+        // CLEAN Tests
+        Response<Boolean> cleanNull = userService.cleanDelayedNotifications(null);
+        Response<Boolean> cleanBlank = userService.cleanDelayedNotifications("   ");
+        assertTrue(cleanNull.isError());
+        assertEquals("Invalid email address", cleanNull.getMessage());
+        assertTrue(cleanBlank.isError());
+    }
+
+    @Test
+    void GivenValidEmailWithRealDelayedNotifications_WhenGetAndClean_ThenFlowSucceeds() {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String email = dto.getEmail();
+
+        DTO.NotifyDTO realNotification1 = new DTO.NotifyDTO(
+                DTO.NotifyType.GENERAL_POPUP,
+                new DTO.NotifyPayload("Welcome back!")
+        );
+        DTO.NotifyDTO realNotification2 = new DTO.NotifyDTO(
+                DTO.NotifyType.GENERAL_POPUP,
+                new DTO.NotifyPayload("Your event was canceled.", 101,null)
+        );
+
+        notifier.notifyUser(email, realNotification1);
+        notifier.notifyUser(email, realNotification2);
+
+        assertEquals(2, userRepo.findUserByEmail(email).getDelayedNotifications().size());
+
+        Response<List<DTO.NotifyDTO>> getResponse = userService.getDelayedNotifications(email);
+
+        // Assert 1
+        assertNotNull(getResponse.getValue());
+        assertEquals(2, getResponse.getValue().size(), "UI should receive 2 notifications");
+        assertFalse(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
+
+        Response<Boolean> cleanResponse = userService.cleanDelayedNotifications(email);
+
+        // Assert 2
+        assertTrue(cleanResponse.getValue());
+        assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty(), "DB should be empty after clean");
+    }
+
+    @Test
+    void GivenOfflineUser_WhenNotifiedAndLogsIn_ThenNotificationsFlowWorks() {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String email = dto.getEmail();
+
+        DTO.NotifyDTO offlineNotification = new DTO.NotifyDTO(
+                DTO.NotifyType.GENERAL_POPUP,
+                new DTO.NotifyPayload("You missed this while offline!")
+        );
+
+        notifier.notifyUser(email, offlineNotification);
+        assertEquals(1, userRepo.findUserByEmail(email).getDelayedNotifications().size());
+
+        // Act & Assert
+        Response<String> loginResponse = userService.login(email, "Password123!");
+        assertNotNull(loginResponse.getValue(), "Login should succeed");
+
+        Response<List<DTO.NotifyDTO>> getResponse = userService.getDelayedNotifications(email);
+        assertEquals(1, getResponse.getValue().size());
+
+        Response<Boolean> cleanResponse = userService.cleanDelayedNotifications(email);
+        assertTrue(cleanResponse.getValue());
+
+        assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
+    }
+
+    @Test
+    void GivenSameUser_WhenConcurrentCleanNotifications_ThenHandledSafelyWithoutCrashing() throws Exception {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String email = dto.getEmail();
+
+        notifier.notifyUser(email, new DTO.NotifyDTO(
+                DTO.NotifyType.GENERAL_POPUP,
+                new DTO.NotifyPayload("Spam message")
+        ));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        // Act
+        Future<Response<Boolean>> future1 = executor.submit(() -> {
+            start.await();
+            return userService.cleanDelayedNotifications(email);
+        });
+        Future<Response<Boolean>> future2 = executor.submit(() -> {
+            start.await();
+            return userService.cleanDelayedNotifications(email);
+        });
+
+        start.countDown();
+        Response<Boolean> res1 = future1.get();
+        Response<Boolean> res2 = future2.get();
+        executor.shutdown();
+
+        // Assert
+        boolean success1 = res1.getValue() != null && res1.getValue();
+        boolean success2 = res2.getValue() != null && res2.getValue();
+
+        assertTrue(success1 || success2, "At least one thread should successfully process the cleaning");
+        assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
+    }
+
+    @Test
+    void GivenUserLoggingIn_WhenConcurrentNotificationSent_ThenNoDataLost() throws Exception {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String email = dto.getEmail();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        // Act
+        Future<Response<Boolean>> cleanFuture = executor.submit(() -> {
+            start.await();
+            return userService.cleanDelayedNotifications(email);
+        });
+
+        Future<Void> notifyFuture = executor.submit(() -> {
+            start.await();
+            DTO.NotifyDTO concurrentNotification = new DTO.NotifyDTO(
+                    DTO.NotifyType.GENERAL_POPUP,
+                    new DTO.NotifyPayload("System update!")
+            );
+            notifier.notifyUser(email, concurrentNotification);
+            return null;
+        });
+
+        start.countDown();
+
+        Response<Boolean> cleanRes = cleanFuture.get();
+        notifyFuture.get();
+        executor.shutdown();
+
+        // Assert
+        assertNotNull(cleanRes, "Service should return a structured response, not throw an unhandled exception");
+        Member memberAfterChaos = userRepo.findUserByEmail(email);
+        assertNotNull(memberAfterChaos);
+        assertNotNull(memberAfterChaos.getDelayedNotifications());
+    }
+
+    @Test
+    void GivenUserWithDelayedNotifications_WhenAdminRemovesUser_ThenLoginFailsAndDataInaccessible() {
+        // Arrange
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String email = dto.getEmail();
+        int userId = userRepo.findUserByEmail(email).getUserId();
+
+        notifier.notifyUser(email, new DTO.NotifyDTO(
+                DTO.NotifyType.GENERAL_POPUP,
+                new DTO.NotifyPayload("You have a new private message!")
+        ));
+        assertFalse(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
+
+        // Act
+        Response<Boolean> adminRes = adminService.removeUser(ADMIN_TOKEN, userId);
+        assertTrue(adminRes.getValue(), "Admin should successfully remove the user");
+
+        // Assert
+        Response<String> loginResponse = userService.login(email, "Password123!");
+        assertTrue(loginResponse.isError());
+        assertNull(loginResponse.getValue(), "Blocked user should not get a token");
+    }
+    @Test
+    void GivenUsersInQueue_WhenGuestLeavesStore_ThenNextInLineNotifiedViaTab() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(1);
+        userService.enter();
+        String guestToken1 = userService.continueAsGuest().getValue();
+
+        Response<QueueEntryResultDTO> guest2 = userService.enter();
+        String uuid2 = guest2.getValue().getToken();
+
+        CountDownLatch latch = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<NotifyDTO> receivedNotif = new java.util.concurrent.atomic.AtomicReference<>();
+        com.vaadin.flow.shared.Registration registration = Broadcaster.registerTab(uuid2, notification -> {
+            receivedNotif.set(notification);
+            latch.countDown();
+        });
+
+        // Act
+        userService.leaveStore(guestToken1);
+
+        // Assert
+        assertTrue(latch.await(2, TimeUnit.SECONDS), "Tab 2 should have received the broadcast");
+        assertNotNull(receivedNotif.get());
+        assertEquals(NotifyType.QUEUE_WEB_TURN_ARRIVED, receivedNotif.get().getType());
+        assertEquals(1, WebQueue.getInstance().getActiveCount());
+
+        registration.remove();
+    }
+
+    @Test
+    void GivenMultipleQueuedUsers_WhenActiveUsersLeave_ThenNotifiedInFIFOOrder() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(2);
+        userService.enter();
+        String token1 = userService.continueAsGuest().getValue();
+        userService.enter();
+        String token2 = userService.continueAsGuest().getValue();
+
+        String uuid3 = userService.enter().getValue().getToken();
+        String uuid4 = userService.enter().getValue().getToken();
+
+        CountDownLatch latch3 = new CountDownLatch(1);
+        CountDownLatch latch4 = new CountDownLatch(1);
+        com.vaadin.flow.shared.Registration reg3 = Broadcaster.registerTab(uuid3, n -> latch3.countDown());
+        com.vaadin.flow.shared.Registration reg4 = Broadcaster.registerTab(uuid4, n -> latch4.countDown());
+
+        // Act 1
+        userService.leaveStore(token1);
+
+        // Assert 1
+        assertTrue(latch3.await(2, TimeUnit.SECONDS), "Tab 3 must be notified first");
+        assertEquals(1, latch4.getCount(), "Tab 4 must NOT be notified yet");
+
+        // Act 2
+        userService.leaveStore(token2);
+
+        // Assert 2
+        assertTrue(latch4.await(2, TimeUnit.SECONDS), "Tab 4 must be notified second");
+
+        reg3.remove();
+        reg4.remove();
+    }
+    @Test
+    void GivenWaitingUser_WhenPollingQueueStatus_ThenStatusReturnedButNoNotificationSent() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(1);
+        userService.enter();
+
+        Response<QueueEntryResultDTO> queuedUser = userService.enter();
+        String uuid = queuedUser.getValue().getToken();
+        CountDownLatch latch = new CountDownLatch(1);
+        com.vaadin.flow.shared.Registration registration = Broadcaster.registerTab(uuid, n -> latch.countDown());
+
+        // Act
+        Response<QueueEntryResultDTO> status = userService.getQueueStatus(uuid);
+
+        // Assert
+        assertFalse(status.getValue().isAdmitted(), "User should still be waiting");
+
+        boolean notificationFired = latch.await(500, TimeUnit.MILLISECONDS);
+        assertFalse(notificationFired, "Polling getQueueStatus must NOT trigger a WebSocket notification");
+
+        registration.remove();
+    }
+    @Test
+    void GivenEmptySystem_WhenUserEntersImmediately_ThenNoTurnArrivedNotificationSent() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(10);
+
+        String prospectiveUuid = UUID.randomUUID().toString(); // effective id for testing
+        CountDownLatch latch = new CountDownLatch(1);
+        com.vaadin.flow.shared.Registration registration = Broadcaster.registerTab(prospectiveUuid, n -> latch.countDown());
+
+        // Act
+        Response<QueueEntryResultDTO> response = userService.enter();
+
+        // Assert
+        assertTrue(response.getValue().isAdmitted(), "User should be admitted immediately");
+
+        boolean notificationFired = latch.await(500, TimeUnit.MILLISECONDS);
+        assertFalse(notificationFired, "Immediately admitted users should NOT receive a 'Turn Arrived' push notification");
+
+        registration.remove();
+    }
 }

@@ -59,4 +59,28 @@ public class EventDetailsDTO {
     public String getName() {
         return eventName;
     }
+
+    public String getCategoryEvent() {
+        return categoryEvent;
+    }
+
+    public String getLocation() {
+        return eventLocation;
+    }
+
+    public String getSaleStartDate() {
+        return saleStartDate;
+    }
+
+    public int getCompanyId() {
+        return companyId;
+    }
+
+    public String getPurchasePolicy() {
+        return purchasePolicy;
+    }
+
+    public String getDiscountPolicy() {
+        return discountPolicy;
+    }
 }

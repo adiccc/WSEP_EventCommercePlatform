@@ -2,6 +2,8 @@ package application;
 
 import DTO.*;
 import Log.LoggerSetup;
+import com.vaadin.copilot.SpringIntegration;
+import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
@@ -9,6 +11,7 @@ import domain.company.ICompanyRepo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.OrderDTO;
+import domain.dto.SuspensionDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
@@ -23,14 +26,14 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import domain.event.Order;
 import domain.dto.EventMapDTO;
+import Exception.OptimisticLockingFailureException;
 
 import java.util.*;
 
 import java.time.LocalDateTime;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -57,6 +60,8 @@ class AdminServiceTest {
     private List<ElementPositionDTO> entries;
     private List<StandingZoneDTO> standingZones;
     private List<SeatingZoneDTO> seatingZones;
+    private INotifier notifier;
+    private IAuth auth;
 
     private static final String ADMIN_EMAIL = "admin@bgu.ac.il";
     private static final String USER_EMAIL = "user@bgu.ac.il";
@@ -80,18 +85,18 @@ class AdminServiceTest {
         ticketSupply = Mockito.mock(ITicketSupply.class);
 
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
-        IAuth auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(ADMIN_EMAIL));
+        auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(ADMIN_EMAIL));
         accessValidator = new AccessValidator(suspensionRepo);
+        notifier = new VaadinNotifier(userRepo);
+        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
 
-        userService = new UserService(tokenService, auth, userRepo, passwordEncoder);
-
-        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem,suspensionRepo);
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem,suspensionRepo,notifier);
 
         IActiveOrderRepo activeOrderRepo =new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo = new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,accessValidator,100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,accessValidator,notifier,100);
 
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
         companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
 
         UserDTO adminDTO = new UserDTO(ADMIN_EMAIL, "Admin", "User", PASSWORD, 1, 1, 1990, "City", "050-000-0000");
@@ -245,112 +250,241 @@ class AdminServiceTest {
     }
 
     @Test
-    void GivenValidInputs_WhenCloseCompanyByAdmin_ThenCompanyAndEventsClosed() {
-        // Arrange
-        int orderId = createCompletedOrderThroughPurchaseFlow(adminToken, eventId, 1);
-
-        // Mock the external payment system to simulate a successful refund process
+    void GivenValidInputs_WhenCloseCompanyByAdmin_ThenCompanyAndEventsClosed() throws InterruptedException {
+        // Arrange: Create an order and mock payment success
+        int orderId = createCompletedOrderThroughPurchaseFlow(nonAdminToken, eventId, 1);
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
-        // Act: Admin requests to close the company
-        Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
 
-        // Assert: Check response indicates success
-        assertTrue(response.getValue());
-        assertEquals("Company closed successfully", response.getMessage());
+        // Arrange: Extract identifiers to set up specific WebSocket listeners
+        Event event = eventRepo.findById(eventId);
+        String buyerIdentifier = event.findOrderById(orderId).getUserIdentifier();
+        int ownerId = companyRepo.findById(companyId).getCompanyPermission().getOwnerIds().iterator().next();
 
-        // Assert: Verify the company status was updated to inactive
-        Company updatedCompany = companyRepo.findById(companyId);
-        assertFalse(updatedCompany.isActive());
+        // Arrange: Setup listeners (simulating virtual browsers connected via WebSockets)
+        CountDownLatch buyerLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> buyerNotification = new AtomicReference<>();
+        Registration buyerReg = Broadcaster.registerUser(buyerIdentifier, dto -> {
+            buyerNotification.set(dto);
+            buyerLatch.countDown();
+        });
 
-        // Assert: Verify the associated future events are canceled (inactive)
-        Event updatedEvent = eventRepo.findById(eventId);
-        assertFalse(updatedEvent.isActive());
+        CountDownLatch ownerLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> ownerNotification = new AtomicReference<>();
+        String ownerIdentifier = auth.getUserEmail(adminToken).getValue();
+        Registration ownerReg = Broadcaster.registerUser(ownerIdentifier, dto -> {
+            ownerNotification.set(dto);
+            ownerLatch.countDown();
+        });
 
-        // Assert: Verify the order was marked for a refund
-        Order updatedOrder = updatedEvent.findOrderById(orderId);
-        assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
+        try {
+            // Act: Admin requests to close the company
+            Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
+
+            // Assert: assertions for database state and response
+            assertTrue(response.getValue());
+            assertEquals("Company closed successfully", response.getMessage());
+            assertFalse(companyRepo.findById(companyId).isActive());
+            assertFalse(eventRepo.findById(eventId).isActive());
+            assertEquals(OrderStatus.REFUNDED, eventRepo.findById(eventId).findOrderById(orderId).getStatus());
+
+            // Assert: Notification verifications (awaiting background execution)
+            assertTrue(buyerLatch.await(2000, TimeUnit.MILLISECONDS), "Buyer notification timeout");
+            assertTrue(buyerNotification.get().getPayload().getMessage().contains("Refund processed"));
+
+            assertTrue(ownerLatch.await(2000, TimeUnit.MILLISECONDS), "Owner notification timeout");
+            assertTrue(ownerNotification.get().getPayload().getMessage().contains("Company"));
+
+        } finally {
+            // Cleanup: Remove listeners to prevent memory leaks and test interference
+            buyerReg.remove();
+            ownerReg.remove();
+        }
     }
 
     @Test
-    void GivenNonAdminToken_WhenCloseCompany_ThenErrorUnauthorized() {
-        // Act: Attempt closure with the company owner's token (not a system admin)
-        Response<Boolean> response = adminService.closeCompanyByAdmin(nonAdminToken, companyId);
+    void GivenNonAdminToken_WhenCloseCompany_ThenErrorUnauthorized() throws InterruptedException {
+        // Arrange: Retrieve the correct string identifier for the company owner
+        String ownerIdentifier = auth.getUserIdentifier(adminToken).getValue();
+        CountDownLatch shouldNotFire = new CountDownLatch(1);
+        Registration reg = Broadcaster.registerUser(ownerIdentifier, dto -> shouldNotFire.countDown());
 
-        // Assert: Operation should be blocked
-        assertTrue(response.isError());
-        assertTrue(response.getMessage().contains("Unauthorized"));
+        try {
+            // Act: Attempt closure with non-admin
+            Response<Boolean> response = adminService.closeCompanyByAdmin(nonAdminToken, companyId);
 
-        // Assert: Verify the company remains active
-        Company unchangedCompany = companyRepo.findById(companyId);
-        assertTrue(unchangedCompany.isActive());
+            // Assert: Verify expected failure
+            assertTrue(response.isError());
+            assertTrue(response.getMessage().contains("Unauthorized"));
+            assertTrue(companyRepo.findById(companyId).isActive());
+
+            // Assert: Ensure latch times out, meaning no notification was dispatched to the real owner
+            assertFalse(shouldNotFire.await(500, TimeUnit.MILLISECONDS), "Notification was wrongly sent on unauthorized access");
+        } finally {
+            reg.remove();
+        }
     }
 
     @Test
-    void GivenNonExistCompany_WhenCloseCompany_ThenErrorNotFound() {
-        // Act: Attempt to close a company ID that does not exist in the repo
-        Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, 9999);
+    void GivenNonExistCompany_WhenCloseCompany_ThenErrorNotFound() throws InterruptedException {
+        // Arrange: Listen to the admin identifier since the company doesn't exist
+        String adminIdentifier = auth.getUserIdentifier(adminToken).getValue();
+        CountDownLatch shouldNotFire = new CountDownLatch(1);
+        Registration reg = Broadcaster.registerUser(adminIdentifier, dto -> shouldNotFire.countDown());
 
-        // Assert: Verify standard not found error
-        assertTrue(response.isError());
-        assertEquals("Company not found", response.getMessage());
+        try {
+            // Act: Attempt to close non-existent company
+            Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, 9999);
+
+            // Assert
+            assertTrue(response.isError());
+            assertEquals("Company not found", response.getMessage());
+
+            // Assert: Ensure no notifications were dispatched
+            assertFalse(shouldNotFire.await(500, TimeUnit.MILLISECONDS));
+        } finally {
+            reg.remove();
+        }
     }
 
     @Test
-    void GivenCloseAlreadyClosedCompany_WhenCloseCompany_ThenErrorAlreadyClosed() {
-        // Arrange: Deactivate the pre-existing company first
+    void GivenCloseAlreadyClosedCompany_WhenCloseCompany_ThenErrorAlreadyClosed() throws InterruptedException {
+        // Arrange: Deactivate company first
         companyService.deactivateCompany(adminToken, companyId);
 
-        // Act: Attempt to close it again
-        Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
+        // Arrange: Retrieve correct owner identifier
+        String ownerIdentifier = auth.getUserIdentifier(adminToken).getValue();
+        CountDownLatch shouldNotFire = new CountDownLatch(1);
+        Registration reg = Broadcaster.registerUser(ownerIdentifier, dto -> shouldNotFire.countDown());
 
-        // Assert: System should detect the state and prevent redundant operations
-        assertTrue(response.isError());
-        assertEquals("Company is already closed", response.getMessage());
+        try {
+            // Act
+            Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
+
+            // Assert
+            assertTrue(response.isError());
+            assertEquals("Company is already closed", response.getMessage());
+
+            // Assert: Verify no notifications were dispatched
+            assertFalse(shouldNotFire.await(500, TimeUnit.MILLISECONDS));
+        } finally {
+            reg.remove();
+        }
     }
 
     @Test
-    void GivenInvalidToken_WhenCloseCompany_ThenErrorUnauthorized() {
-        // Act: Use a logged out token on the active company
+    void GivenInvalidToken_WhenCloseCompany_ThenErrorUnauthorized() throws InterruptedException {
+        // Arrange: Retrieve identifier before logging out the token
+        String ownerIdentifier = auth.getUserIdentifier(adminToken).getValue();
         userService.logout(adminToken);
-        Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
 
-        // Assert: Operation should be blocked
-        assertTrue(response.isError());
-        assertEquals("Unauthorized: admin access required", response.getMessage());
+        CountDownLatch shouldNotFire = new CountDownLatch(1);
+        Registration reg = Broadcaster.registerUser(ownerIdentifier, dto -> shouldNotFire.countDown());
 
-        // Assert: Company remains active
-        assertTrue(companyRepo.findById(companyId).isActive());
+        try {
+            // Act
+            Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
+
+            // Assert
+            assertTrue(response.isError());
+            assertEquals("Unauthorized: admin access required", response.getMessage());
+            assertTrue(companyRepo.findById(companyId).isActive());
+
+            // Assert: Verify no notifications were dispatched
+            assertFalse(shouldNotFire.await(500, TimeUnit.MILLISECONDS));
+        } finally {
+            reg.remove();
+        }
     }
-
     @Test
-    void GivenNotActivePaymentSystem_WhenCloseCompany_ThenCompanyClosedAndFailureHandled() {
-        // Arrange: Add an order to the existing event to test the refund mechanism
-        int orderId = createCompletedOrderThroughPurchaseFlow(adminToken, eventId, 1);
-
-        // Mock the external payment system to return false, simulating a refund failure
+    void GivenNotActivePaymentSystem_WhenCloseCompany_ThenCompanyClosedAndFailureHandled() throws InterruptedException {
+        // Arrange: Create order using nonAdminToken to cleanly separate buyer from owner
+        int orderId = createCompletedOrderThroughPurchaseFlow(nonAdminToken, eventId, 1);
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(false);
 
-        // Act: The system admin requests to close the company
-        Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
+        Event event = eventRepo.findById(eventId);
+        String buyerIdentifier = event.findOrderById(orderId).getUserIdentifier();
 
-        // Assert: The main company closure operation should succeed despite the refund
-        // failure
-        assertTrue(response.getValue());
-        assertEquals("Company closed successfully", response.getMessage());
+        // Arrange: Setup listener for the specific buyer
+        CountDownLatch buyerLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> buyerNotification = new AtomicReference<>();
+        Registration buyerReg = Broadcaster.registerUser(buyerIdentifier, dto -> {
+            buyerNotification.set(dto);
+            buyerLatch.countDown();
+        });
 
-        // Assert: Verify the company status was updated to inactive
-        Company updatedCompany = companyRepo.findById(companyId);
-        assertFalse(updatedCompany.isActive());
+        try {
+            // Act
+            Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
 
-        // Assert: Verify the future event was canceled (inactive)
-        Event updatedEvent = eventRepo.findById(eventId);
-        assertFalse(updatedEvent.isActive());
+            // Assert:
+            assertTrue(response.getValue());
+            assertFalse(companyRepo.findById(companyId).isActive());
+            assertFalse(eventRepo.findById(eventId).isActive());
+            assertEquals(domain.event.OrderStatus.REFUND_REQUIRED, eventRepo.findById(eventId).findOrderById(orderId).getStatus());
 
-        // Assert: The refund failed, so the order status remains REFUND_REQUIRED
-        Order updatedOrder = updatedEvent.findOrderById(orderId);
-        assertEquals(domain.event.OrderStatus.REFUND_REQUIRED, updatedOrder.getStatus());
+            // Assert: Verify failure notification was correctly sent to the buyer
+            assertTrue(buyerLatch.await(2000, TimeUnit.MILLISECONDS), "Buyer notification timeout");
+            assertTrue(buyerNotification.get().getPayload().getMessage().contains("Refund failed"));
+
+        } finally {
+            buyerReg.remove();
+        }
     }
 
+    @Test
+    void GivenConcurrentRequests_WhenCloseCompany_ThenActionPerformedOnceAndNotificationsSentOnce() throws Exception {
+        // Arrange: Create a completed order using a regular user (nonAdminToken) to cleanly separate buyer from owner
+        int orderId = createCompletedOrderThroughPurchaseFlow(nonAdminToken, eventId, 1);
+
+        // Arrange: Mock the external payment system to simulate a successful refund process
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+
+        // Arrange: Retrieve the correct string identifier for the company owner (Admin in this setup)
+        String ownerIdentifier = auth.getUserIdentifier(adminToken).getValue();
+
+        // Arrange: Use an AtomicInteger to safely count exact notification occurrences across background threads
+        AtomicInteger notificationCount = new AtomicInteger(0);
+        Registration ownerReg = Broadcaster.registerUser(ownerIdentifier, dto -> {
+            notificationCount.incrementAndGet();
+        });
+
+        // Arrange: Prepare a real multithreading environment with 2 concurrent threads
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        // Arrange: Define the exact task both threads will try to execute simultaneously
+        Callable<Response<Boolean>> closureTask = () -> adminService.closeCompanyByAdmin(adminToken, companyId);
+
+        try {
+            // Act: Fire two requests at the exact same time to simulate real-world concurrency
+            Future<Response<Boolean>> future1 = executor.submit(closureTask);
+            Future<Response<Boolean>> future2 = executor.submit(closureTask);
+
+            // Wait for both threads to finish and collect their responses
+            Response<Boolean> response1 = future1.get();
+            Response<Boolean> response2 = future2.get();
+
+            // Assert:
+            boolean success1 = Boolean.TRUE.equals(response1.getValue());
+            boolean success2 = Boolean.TRUE.equals(response2.getValue());
+
+            // Assert: Exactly one thread must succeed (XOR operator). The other must fail cleanly.
+            assertTrue(success1 ^ success2, "Exactly one concurrent request should succeed, and the other must fail");
+
+            // Assert: Ensure the company is actually closed in the database
+            assertFalse(companyRepo.findById(companyId).isActive(), "Company should be inactive after closure");
+
+            // Wait briefly to allow background notification threads to finish processing
+            Thread.sleep(1000);
+
+            // Assert: Verify the notification was sent exactly once despite the concurrent assault
+            assertEquals(1, notificationCount.get(), "Notification should be sent exactly once despite concurrent attempts");
+
+        } finally {
+            // Cleanup: Shut down the thread pool and remove the listener to prevent memory leaks
+            executor.shutdown();
+            ownerReg.remove();
+        }
+    }
     // ============================================================
     // II.6.1  Remove User from System - Acceptance Tests
     // ============================================================
@@ -363,7 +497,7 @@ class AdminServiceTest {
     }
 
     private int createCompletedOrderThroughPurchaseFlow(String buyerToken, int eventId, int ticketCount) {
-        Response<EventMapDTO> enterResponse =
+        Response<EnterPurchaseDTO> enterResponse =
                 activeOrderService.enterEventPurchase(buyerToken, companyId, eventId);
 
         assertNotNull(enterResponse.getValue(), "enterEventPurchase failed: " + enterResponse.getMessage());
@@ -1401,6 +1535,137 @@ class AdminServiceTest {
         assertEquals(1, successfulUnsuspensions, "The unsuspend operation should succeed");
 
         executor.shutdown();
+    }
+
+    @Test
+    void GivenSystemAdminAndExistingSuspensions_WhenViewUserSuspensions_ThenSuspensionsReturnedSuccessfully() {
+        // Arrange
+        Response<Boolean> firstSuspendResponse =
+                adminService.SuspendUser(adminToken, userIdNotSuspened);
+
+        assertTrue(firstSuspendResponse.getValue());
+
+        // Act
+        Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(adminToken);
+
+        // Assert
+        assertNotNull(response);
+        assertTrue(response.getValue() != null);
+        assertFalse(response.getValue().isEmpty());
+
+        List<SuspensionDTO> suspensions = response.getValue();
+
+        assertTrue(
+                suspensions.stream()
+                        .anyMatch(suspension -> suspension.getUserId() == userIdNotSuspened),
+                "Suspensions list should contain the suspended user"
+        );
+
+        assertTrue(response.getMessage().contains("succeeded"));
+    }
+
+    @Test
+    void GivenSystemAdminAndNoSuspensions_WhenViewUserSuspensions_ThenEmptyListReturned() {
+        // Act
+        Response<List<SuspensionDTO>> response =
+                adminService.getAllUsersSuspensions(adminToken);
+
+        // Assert
+        assertNotNull(response);
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue().isEmpty());
+
+        assertTrue(response.getMessage().contains("succeeded"));
+    }
+
+    @Test
+    void GivenLoggedOutAdmin_WhenViewUserSuspensions_ThenUserIsNotLoggedInErrorReturned() {
+        // Arrange
+        adminService.SuspendUser(adminToken, userIdNotSuspened);
+        userService.logout(adminToken);
+
+        // Act
+        Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(adminToken);
+
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("getAllUsersSuspensions failed : user is not admin", response.getMessage());
+    }
+
+    @Test
+    void GivenNonAdminUser_WhenViewUserSuspensions_ThenPermissionDeniedErrorReturned() {
+        // Arrange
+        adminService.SuspendUser(adminToken, userIdNotSuspened);
+
+        // Act
+        Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(nonAdminToken);
+
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("getAllUsersSuspensions failed : user is not admin", response.getMessage());
+    }
+
+    @Test
+    void GivenSystemAdminAndTemporarySuspension_WhenViewUserSuspensions_ThenTemporarySuspensionDetailsReturned() {
+        // Arrange
+        int suspensionDuration = 7;
+
+        Response<Boolean> suspendResponse =
+                adminService.SuspendUser(adminToken, userIdNotSuspened, suspensionDuration);
+
+        assertTrue(suspendResponse.getValue());
+
+        // Act
+        Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(adminToken);
+
+        // Assert
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue().isEmpty());
+
+        SuspensionDTO suspension = response.getValue().stream()
+                .filter(s -> s.getUserId() == userIdNotSuspened)
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(userIdNotSuspened, suspension.getUserId());
+        assertNotNull(suspension.getEndDate());
+        assertNotNull(suspension.getStartDate());
+
+        assertTrue(suspension.getEndDate().isAfter(LocalDateTime.now()), "Temporary suspension end time should be in the future");
+    }
+    @Test
+    void GivenSystemAdminAndCancelledSuspension_WhenViewUserSuspensions_ThenCancelledSuspensionDetailsReturned() {
+        // Arrange
+        Response<Boolean> suspendResponse =
+                adminService.SuspendUser(adminToken, userIdNotSuspened);
+
+        assertTrue(suspendResponse.getValue());
+        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+
+        Response<Boolean> unsuspendResponse =
+                adminService.UnsuspendUser(adminToken, userIdNotSuspened);
+
+        assertTrue(unsuspendResponse.getValue());
+        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+
+        // Act
+        Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(adminToken);
+
+        // Assert
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue().isEmpty());
+
+        SuspensionDTO suspension = response.getValue().stream()
+                .filter(s -> s.getUserId() == userIdNotSuspened)
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(userIdNotSuspened, suspension.getUserId());
+
+        Member member = userRepo.findById(userIdNotSuspened);
+        assertFalse(member.isSuspended());
+
+        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
     }
 
 }
