@@ -1,5 +1,7 @@
 package UI;
 
+import com.vaadin.flow.component.page.AppShellConfigurator;
+import com.vaadin.flow.component.page.Push;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
@@ -14,7 +16,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * Vaadin 24 auto-configures itself via spring-boot-starter — no @EnableVaadin needed.
  */
 @SpringBootApplication(scanBasePackages = {"UI", "application", "infrastructure"})
-public class App {
+@Push
+public class App implements AppShellConfigurator {
 
     public static void main(String[] args) {
         SpringApplication.run(App.class, args);

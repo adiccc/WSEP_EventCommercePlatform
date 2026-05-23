@@ -2,6 +2,7 @@ package UI.Views;
 
 import DTO.NotifyDTO;
 import DTO.NotifyType;
+import application.ActiveOrderService;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.*;
@@ -13,19 +14,24 @@ import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 import com.vaadin.flow.shared.Registration;
 import infrastructure.Broadcaster;
+import com.vaadin.flow.router.BeforeLeaveEvent;
+import com.vaadin.flow.router.BeforeLeaveObserver;
 
 @Route(value = "waiting/:companyId/:eventId/:position", layout = MainLayout.class)
 @PageTitle("Waiting Queue")
 @AnonymousAllowed
-public class WaitingQueueEventView extends VerticalLayout implements BeforeEnterObserver {
-
+public class WaitingQueueEventView extends VerticalLayout implements BeforeEnterObserver, BeforeLeaveObserver {
     private int companyId;
     private int eventId;
     private int position;
 
     private Registration eventQueueRegistration;
+    private boolean leavingToPurchase = false;
+    private final ActiveOrderService activeOrderService;
 
-    public WaitingQueueEventView() {
+    public WaitingQueueEventView(ActiveOrderService activeOrderService) {
+        this.activeOrderService = activeOrderService;
+
         setSizeFull();
         setPadding(true);
         setSpacing(true);
@@ -49,6 +55,54 @@ public class WaitingQueueEventView extends VerticalLayout implements BeforeEnter
 
         build();
         registerToEventQueueNotifications();
+        saveEventQueueDataInBrowser();
+    }
+
+    @Override
+    public void beforeLeave(BeforeLeaveEvent event) {
+        if (leavingToPurchase) {
+            System.out.println("Leaving to purchase - not cancelling event queue");
+            return;
+        }
+
+        System.out.println("Leaving waiting queue - cancelling event queue");
+        cancelEventQueueEntry();
+    }
+
+    private void cancelEventQueueEntry() {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+
+        if (tabId == null || tabId.isBlank()) {
+            return;
+        }
+
+        String token = (String) VaadinSession.getCurrent()
+                .getAttribute("eventQueueTabId_" + tabId);
+
+        if (token == null || token.isBlank()) {
+            return;
+        }
+
+        System.out.println("UI CANCEL EVENT QUEUE:");
+        System.out.println("tabId = " + tabId);
+        System.out.println("token = " + token);
+        System.out.println("eventId = " + eventId);
+
+        var response = activeOrderService.cancelEventQueueEntry(token, eventId);
+
+        System.out.println("cancel response = " + response.getValue()
+                + ", message = " + response.getMessage());
+
+        VaadinSession.getCurrent().setAttribute("eventQueueTabId_" + tabId, null);
+        VaadinSession.getCurrent().setAttribute("eventQueueCompanyId_" + tabId, null);
+        VaadinSession.getCurrent().setAttribute("eventQueueEventId_" + tabId, null);
+
+        UI.getCurrent().getPage().executeJs(
+                """
+                sessionStorage.removeItem("eventCommerceEventQueueToken");
+                sessionStorage.removeItem("eventCommerceEventQueueEventId");
+                """
+        );
     }
 
     private void registerToEventQueueNotifications() {
@@ -106,12 +160,19 @@ public class WaitingQueueEventView extends VerticalLayout implements BeforeEnter
         VaadinSession.getCurrent().setAttribute("eventQueueAdmitted_" + tabId, true);
         VaadinSession.getCurrent().setAttribute("eventQueueCompanyId_" + tabId, companyId);
         VaadinSession.getCurrent().setAttribute("eventQueueEventId_" + tabId, eventId);
+        VaadinSession.getCurrent().setAttribute("eventQueueTabId_" + tabId, null);
 
+        UI.getCurrent().getPage().executeJs(
+                """
+                sessionStorage.removeItem("eventCommerceEventQueueToken");
+                sessionStorage.removeItem("eventCommerceEventQueueEventId");
+                """
+        );
         showSuccess(getMessageOrDefault(
                 notification,
                 "Your turn has arrived. Redirecting to ticket selection."
         ));
-
+        leavingToPurchase = true;
         UI.getCurrent().navigate("purchase/" + companyId + "/" + eventId);
     }
 
@@ -140,14 +201,14 @@ public class WaitingQueueEventView extends VerticalLayout implements BeforeEnter
                 .set("color", "var(--lumo-secondary-text-color)")
                 .set("margin-top", "0");
 
-        Button refresh = new Button("Try Again", e ->
-                UI.getCurrent().navigate("purchase/" + companyId + "/" + eventId)
-        );
+        Button refresh = new Button("Try Again", e -> {
+            leavingToPurchase = true;
+            UI.getCurrent().navigate("purchase/" + companyId + "/" + eventId);
+        });
 
         Button back = new Button("Back to Event", e -> {
             unregisterFromBroadcaster();
-            String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
-            VaadinSession.getCurrent().setAttribute("eventQueueTabId_" + tabId, null);
+            cancelEventQueueEntry();
             UI.getCurrent().navigate("event/" + companyId + "/" + eventId);
         });
 
@@ -163,6 +224,30 @@ public class WaitingQueueEventView extends VerticalLayout implements BeforeEnter
         }
 
         return notification.getPayload().getMessage();
+    }
+
+    private void saveEventQueueDataInBrowser() {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+
+        if (tabId == null || tabId.isBlank()) {
+            return;
+        }
+
+        String token = (String) VaadinSession.getCurrent()
+                .getAttribute("eventQueueTabId_" + tabId);
+
+        if (token == null || token.isBlank()) {
+            return;
+        }
+
+        UI.getCurrent().getPage().executeJs(
+                """
+                sessionStorage.setItem("eventCommerceEventQueueToken", $0);
+                sessionStorage.setItem("eventCommerceEventQueueEventId", $1);
+                """,
+                token,
+                String.valueOf(eventId)
+        );
     }
 
     private void showSuccess(String text) {

@@ -2,6 +2,7 @@ package UI.Views;
 
 import DTO.NotifyType;
 import DTO.QueueEntryResultDTO;
+import application.ActiveOrderService;
 import application.IAuth;
 import application.Response;
 import application.UserService;
@@ -31,10 +32,13 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
     private final IAuth auth;
     private final UserService userService;
     private Registration userBroadcasterRegistration;
+    private final ActiveOrderService activeOrderService;
 
-    public MainLayout(IAuth auth, UserService userService) {
+    public MainLayout(IAuth auth, UserService userService, ActiveOrderService activeOrderService) {
         this.auth = auth;
         this.userService = userService;
+        this.activeOrderService = activeOrderService;
+
         registerToBroadcaster();
         createHeader();
         createDrawer();
@@ -43,14 +47,73 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
-        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
-
         Boolean webQueueAdmitted =
-                (Boolean) VaadinSession.getCurrent()
-                        .getAttribute("webQueueAdmitted_" + tabId);
+                (Boolean) VaadinSession.getCurrent().getAttribute("webQueueAdmitted_" + getCurrentTabId());
+
         if (!Boolean.TRUE.equals(webQueueAdmitted)) {
             event.rerouteTo("");
+            return;
         }
+
+        cancelEventQueueIfNeeded(event);
+    }
+
+    private String getCurrentTabId() {
+        UI ui = UI.getCurrent();
+
+        if (ui == null) {
+            return null;
+        }
+
+        return ui.getElement().getProperty("currentTabId");
+    }
+
+    private void cancelEventQueueIfNeeded(BeforeEnterEvent event) {
+        String tabId = getCurrentTabId();
+
+        if (tabId == null || tabId.isBlank()) {
+            return;
+        }
+
+        String eventQueueToken = (String) VaadinSession.getCurrent()
+                .getAttribute("eventQueueTabId_" + tabId);
+
+        Integer eventId = (Integer) VaadinSession.getCurrent()
+                .getAttribute("eventQueueEventId_" + tabId);
+
+        if (eventQueueToken == null || eventQueueToken.isBlank() || eventId == null) {
+            return;
+        }
+
+        String targetPath = event.getLocation().getPath();
+
+        String purchasePath = "purchase/"
+                + VaadinSession.getCurrent().getAttribute("eventQueueCompanyId_" + tabId)
+                + "/"
+                + eventId;
+
+        String waitingPrefix = "waiting/"
+                + VaadinSession.getCurrent().getAttribute("eventQueueCompanyId_" + tabId)
+                + "/"
+                + eventId;
+
+        if (targetPath.equals(purchasePath) || targetPath.startsWith(waitingPrefix)) {
+            return;
+        }
+
+        activeOrderService.cancelEventQueueEntry(eventQueueToken, eventId);
+
+        VaadinSession.getCurrent().setAttribute("eventQueueTabId_" + tabId, null);
+        VaadinSession.getCurrent().setAttribute("eventQueueCompanyId_" + tabId, null);
+        VaadinSession.getCurrent().setAttribute("eventQueueEventId_" + tabId, null);
+        VaadinSession.getCurrent().setAttribute("eventQueueAdmitted_" + tabId, null);
+
+        UI.getCurrent().getPage().executeJs(
+                """
+                sessionStorage.removeItem("eventCommerceEventQueueToken");
+                sessionStorage.removeItem("eventCommerceEventQueueEventId");
+                """
+        );
     }
 
     private void registerBrowserCloseHandler() {
@@ -80,7 +143,18 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
                         if (!token) {
                             return;
                         }
-    
+                        const eventQueueToken = sessionStorage.getItem("eventCommerceEventQueueToken");
+                        const eventQueueEventId = sessionStorage.getItem("eventCommerceEventQueueEventId");
+                
+                        if (eventQueueToken && eventQueueEventId) {
+                            navigator.sendBeacon(
+                                "/api/session/cancel-event-queue",
+                                new Blob(
+                                    [eventQueueToken + ":" + eventQueueEventId],
+                                    { type: "text/plain" }
+                                )
+                            );
+                        }
                         navigator.sendBeacon(
                             "/api/session/close-tab",
                             new Blob([token], { type: "text/plain" })

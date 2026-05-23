@@ -749,6 +749,32 @@ public class ActiveOrderService {
         cleanupScheduler.shutdown();
     }
 
+    public Response<Boolean> cancelEventQueueEntry(String token, int eventId) {
+        return RetryHelper.executeWithRetry(() -> {
+            if (token == null || token.isBlank()) {
+                return new Response<>(false, "Invalid token");
+            }
+
+            try {
+                Event event = eventRepo.findById(eventId);
+
+                boolean removed = event.getEventQueue().remove(token);
+
+                if (removed) {
+                    eventRepo.store(event);
+                }
+
+                return new Response<>(
+                        removed,
+                        removed ? "Removed from event queue" : "User was not waiting in event queue"
+                );
+
+            } catch (NoSuchElementException e) {
+                return new Response<>(false, "Event not found");
+            }
+        });
+    }
+
 
     private void promoteNextInQueue(int eventId) {
         String nextToken = dequeueNextToken(eventId);

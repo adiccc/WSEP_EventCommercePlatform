@@ -54,4 +54,8 @@ public class EventQueue {
     public boolean isEmpty() {
         return waitingUsers.isEmpty();
     }
+
+    public boolean remove(String token) {
+        return waitingUsers.remove(token);
+    }
 }
