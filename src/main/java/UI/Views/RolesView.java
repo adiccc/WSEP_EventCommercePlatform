@@ -16,6 +16,7 @@ import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.IntegerField;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.router.*;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
@@ -369,7 +370,8 @@ public class RolesView extends VerticalLayout implements BeforeEnterObserver {
     // ── Shared helpers ───────────────────────────────────────────────────────
 
     private String getToken() {
-        return (String) VaadinSession.getCurrent().getAttribute("token");
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        return (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
     }
 
     private void showSuccess(String message) {

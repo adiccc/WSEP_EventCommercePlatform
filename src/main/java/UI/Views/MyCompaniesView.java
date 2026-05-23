@@ -2,6 +2,7 @@ package UI.Views;
 
 import UI.Presenters.MyCompaniesPresenter;
 import application.CompanyService;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.html.*;
 import com.vaadin.flow.component.orderedlayout.FlexLayout;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
@@ -42,7 +43,8 @@ public class MyCompaniesView extends VerticalLayout {
     private void buildPage() {
         removeAll();
 
-        String token = (String) VaadinSession.getCurrent().getAttribute("token");
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
 
         H2 title = new H2("My Companies");
         title.getStyle().set("margin-bottom", "0");

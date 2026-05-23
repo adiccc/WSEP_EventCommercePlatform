@@ -270,7 +270,7 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
             SideNavItem notifications = new SideNavItem("Notifications", "notifications");
             notifications.setPrefixComponent(VaadinIcon.ENVELOPE.create());
 
-            SideNavItem company = new SideNavItem("My Company", "manage");
+            SideNavItem company = new SideNavItem("My Companies", "my-companies");
             company.setPrefixComponent(VaadinIcon.OFFICE.create());
 
             SideNavItem logout = new SideNavItem("Logout", "logout");
