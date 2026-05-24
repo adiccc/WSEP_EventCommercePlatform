@@ -199,6 +199,8 @@ public class CompanyService {
                 int userId = auth.getUserId(token).getValue();
                 Company company = companyRepo.findById(companyId);
                 return Response.ok(company.getUserRoleName(userId));
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("getUserRoleInCompany failed: " + e.getMessage());
                 return Response.error("Could not determine role: " + e.getMessage());
@@ -218,6 +220,8 @@ public class CompanyService {
                 int userId = auth.getUserId(token).getValue();
                 Company company = companyRepo.findById(companyId);
                 return Response.ok(company.getManagerPermissions(userId));
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 logger.severe("getMyPermissions failed: " + e.getMessage());
                 return Response.error("Could not retrieve permissions: " + e.getMessage());
