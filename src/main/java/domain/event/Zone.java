@@ -1,7 +1,9 @@
 package domain.event;
 
 import DTO.ElementPositionDTO;
+import DTO.PurchasedTicketDTO;
 import domain.dataType.ElementPosition;
+import domain.dataType.TicketStatus;
 
 import java.util.List;
 
@@ -34,5 +36,7 @@ public abstract class Zone {
     public abstract boolean containsTicketId(int ticketId);
     abstract void releaseTickets(List<Integer> ticketIds) ;
     public abstract void markTicketsAsSold(List<Integer> ticketIds);
+    public abstract List<PurchasedTicketDTO> getPurchasedTicketDetails(List<Integer> ticketIds);
+    public abstract TicketStatus getTicketStatus(int ticketId);
     public abstract boolean hasAvailableTickets();
 }

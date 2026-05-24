@@ -1,5 +1,7 @@
 package domain.event;
+import DTO.PurchasedTicketDTO;
 import domain.dataType.ElementPosition;
+import domain.dataType.TicketStatus;
 import domain.dto.SeatingTicketDTO;
 
 import java.util.ArrayList;
@@ -138,6 +140,27 @@ public class EventMap {
         }
     }
 
+
+    public List<PurchasedTicketDTO> getPurchasedTicketDetails(List<Integer> ticketIds) {
+        List<PurchasedTicketDTO> result = new ArrayList<>();
+
+        for (Zone zone : zones) {
+            result.addAll(zone.getPurchasedTicketDetails(ticketIds));
+        }
+        return result;
+    }
+
+    public TicketStatus getTicketStatus(int ticketId) {
+        for (Zone zone : zones) {
+            if (zone.containsTicketId(ticketId)) {
+                return zone.getTicketStatus(ticketId);
+            }
+        }
+
+        throw new IllegalArgumentException("Ticket does not exist in event map: " + ticketId);
+    }
+
+
     public boolean isSoldOut() {
         for (Zone zone : zones) {
             if (zone.hasAvailableTickets()) {
@@ -146,4 +169,5 @@ public class EventMap {
         }
         return true;
     }
+
 }

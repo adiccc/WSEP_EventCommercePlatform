@@ -1,5 +1,6 @@
 package domain.event;
 
+import DTO.PurchasedTicketDTO;
 import DTO.DiscountDTO;
 import DTO.PurchaseRuleDTO;
 import domain.dataType.CategoryEvent;
@@ -370,5 +371,13 @@ public class Event {
         if( !purchasePolicy.isSatisfied(userDTO, 0,projected)) {
             throw new IllegalArgumentException("Purchase policy not satisfied for user " + userDTO.getUserId() + " and quantity " + projected);
         }
+    }
+
+    public List<PurchasedTicketDTO> getPurchasedTicketDetails(List<Integer> ticketIds) {
+        if (eventMap == null) {
+            throw new IllegalStateException("Event map is not defined");
+        }
+
+        return eventMap.getPurchasedTicketDetails(ticketIds);
     }
 }

@@ -743,8 +743,65 @@ class AdminServiceTest {
     void GivenAdminAndOrdersExist_WhenGetGlobalOrdersByBuyers_ThenReturnFilteredOrders() {
         // Arrange
         Event event = eventRepo.findById(eventId);
-        Order order1 = new Order(1, "buyer1@bgu.ac.il", eventId, List.of(1, 2), 100.0, "pay123");
-        Order order2 = new Order(2, "buyer2@bgu.ac.il", eventId, List.of(3, 4), 100.0, "pay456");
+        Order order1 = new Order(
+                1,
+                "buyer1@bgu.ac.il",
+                eventId,
+                "Test Event",
+                "2026-01-01T20:00",
+                "TEL_AVIV",
+                List.of(
+                        new PurchasedTicketDTO(
+                                1,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                50.0
+                        ),
+                        new PurchasedTicketDTO(
+                                2,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                50.0
+                        )
+                ),
+                List.of(1, 2),
+                100.0,
+                "pay123"
+        );
+
+        Order order2 = new Order(
+                2,
+                "buyer2@bgu.ac.il",
+                eventId,
+                "Test Event",
+                "2026-01-01T20:00",
+                "TEL_AVIV",
+                List.of(
+                        new PurchasedTicketDTO(
+                                3,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                50.0
+                        ),
+                        new PurchasedTicketDTO(
+                                4,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                50.0
+                        )
+                ),
+                List.of(3, 4),
+                100.0,
+                "pay456"
+        );
         event.getOrders().add(order1);
         event.getOrders().add(order2);
         eventRepo.store(event);
@@ -766,7 +823,35 @@ class AdminServiceTest {
     void GivenAdminAndOrdersExist_WhenGetGlobalOrdersByCompaniesAndEvents_ThenReturnFilteredOrders() {
         // Arrange
         Event event = eventRepo.findById(eventId);
-        Order order1 = new Order(3, "company_buyer@bgu.ac.il", eventId, List.of(5, 6), 150.0, "pay789");
+        Order order1 = new Order(
+                3,
+                "company_buyer@bgu.ac.il",
+                eventId,
+                "Test Event",
+                "2026-01-01T20:00",
+                "TEL_AVIV",
+                List.of(
+                        new PurchasedTicketDTO(
+                                5,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                75.0
+                        ),
+                        new PurchasedTicketDTO(
+                                6,
+                                "floor",
+                                "STANDING",
+                                null,
+                                null,
+                                75.0
+                        )
+                ),
+                List.of(5, 6),
+                150.0,
+                "pay789"
+        );
         event.getOrders().add(order1);
         eventRepo.store(event);
 
@@ -851,7 +936,37 @@ class AdminServiceTest {
     void GivenConcurrentCompanyClosure_WhenGetGlobalOrders_ThenSystemRemainsStable() throws Exception {
         // Arrange
         Event event = eventRepo.findById(eventId);
-        event.getOrders().add(new Order(999, "race_buyer@bgu.ac.il", eventId, List.of(1, 2), 100.0, "pay123"));
+        event.getOrders().add(
+                new Order(
+                        999,
+                        "race_buyer@bgu.ac.il",
+                        eventId,
+                        "Test Event",
+                        "2026-01-01T20:00",
+                        "TEL_AVIV",
+                        List.of(
+                                new PurchasedTicketDTO(
+                                        1,
+                                        "floor",
+                                        "STANDING",
+                                        null,
+                                        null,
+                                        50.0
+                                ),
+                                new PurchasedTicketDTO(
+                                        2,
+                                        "floor",
+                                        "STANDING",
+                                        null,
+                                        null,
+                                        50.0
+                                )
+                        ),
+                        List.of(1, 2),
+                        100.0,
+                        "pay123"
+                )
+        );
         eventRepo.store(event);
 
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
