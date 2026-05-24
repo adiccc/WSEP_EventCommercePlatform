@@ -95,6 +95,14 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
             add(back, buildGuestCompanyHeader(displayName));
         }
 
+        // Show role-based management actions
+        String role = presenter.getUserRole(token, companyId);
+        if ("FOUNDER".equals(role) || "OWNER".equals(role)) {
+            add(buildOwnerActions());
+        } else if ("MANAGER".equals(role)) {
+            add(buildManagerActions());
+        }
+
         // Filter section
         add(buildFilterSection(token));
 
@@ -155,6 +163,32 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
                 .set("font-size", "0.85rem")
                 .set("color", "var(--lumo-secondary-text-color)");
         return chip;
+    }
+
+    // ── Role-based action bars ────────────────────────────────────────────────
+
+    private HorizontalLayout buildOwnerActions() {
+        Button rolesBtn = new Button("👥 View Roles & Permissions",
+                e -> getUI().ifPresent(ui -> ui.navigate("company/" + companyId + "/roles")));
+        rolesBtn.getElement().setAttribute("theme", "primary");
+
+        HorizontalLayout bar = new HorizontalLayout(rolesBtn);
+        bar.getStyle()
+                .set("padding", "0.5rem 0")
+                .set("margin-bottom", "0.25rem");
+        return bar;
+    }
+
+    private HorizontalLayout buildManagerActions() {
+        Button rolesBtn = new Button("🔑 My Permissions",
+                e -> getUI().ifPresent(ui -> ui.navigate("company/" + companyId + "/roles")));
+        rolesBtn.getElement().setAttribute("theme", "contrast");
+
+        HorizontalLayout bar = new HorizontalLayout(rolesBtn);
+        bar.getStyle()
+                .set("padding", "0.5rem 0")
+                .set("margin-bottom", "0.25rem");
+        return bar;
     }
 
     // ── Filter section ────────────────────────────────────────────────────────

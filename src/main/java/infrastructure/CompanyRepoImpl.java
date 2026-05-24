@@ -2,6 +2,7 @@ package infrastructure;
 
 import domain.company.Company;
 import domain.company.ICompanyRepo;
+import domain.dto.CompanyDTO;
 import Exception.OptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 
@@ -75,6 +76,18 @@ public class CompanyRepoImpl implements ICompanyRepo {
         }
         logger.info("getAll: returned " + copies.size() + " companies");
         return copies;
+    }
+
+    @Override
+    public List<CompanyDTO> findByUserRole(int userId) {
+        List<CompanyDTO> result = new ArrayList<>();
+        for (Company c : companies.values()) {
+            if (!"MEMBER".equals(c.getUserRoleName(userId))) {
+                result.add(new CompanyDTO(c.getCompanyId(), c.getCompanyName(), c.isActive()));
+            }
+        }
+        logger.info("findByUserRole: found " + result.size() + " companies for userId " + userId);
+        return result;
     }
 
     @Override

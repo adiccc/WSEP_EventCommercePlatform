@@ -29,6 +29,15 @@ public class CompanyPresenter {
     }
 
     /**
+     * Returns the current user's role in the company:
+     * "FOUNDER", "OWNER", "MANAGER", or "MEMBER".
+     */
+    public String getUserRole(String token, int companyId) {
+        Response<String> response = companyService.getUserRoleInCompany(token, companyId);
+        return response.getValue() != null ? response.getValue() : "MEMBER";
+    }
+
+    /**
      * Returns events for a specific company filtered by the given filter.
      * Any filter field left null means "no restriction on that field".
      */

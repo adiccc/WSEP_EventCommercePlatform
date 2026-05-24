@@ -6,6 +6,7 @@ import DTO.StandingZoneDTO;
 import application.*;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
+import domain.dataType.PermissionType;
 import domain.dto.UserDTO;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -13,13 +14,15 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Logger;
 
 /**
  * Runs once at startup and seeds the in-memory repos with demo data:
- *   - 3 registered users (each becomes founder of their companies)
+ *   - 5 registered users
  *   - 10 production companies
- *   - 20 events (2 per company, varied category / area)
+ *   - 20 events (2 per company, each with a map so they are active)
+ *   - dave is Owner of company 1, eve is Manager of company 1
  *
  * Remove or disable this class before connecting a real database.
  */
@@ -31,13 +34,16 @@ public class DataSeeder implements ApplicationRunner {
     private final UserService userService;
     private final CompanyService companyService;
     private final EventCompanyManageService eventService;
+    private final IAuth auth;
 
     public DataSeeder(UserService userService,
                       CompanyService companyService,
-                      EventCompanyManageService eventService) {
+                      EventCompanyManageService eventService,
+                      IAuth auth) {
         this.userService = userService;
         this.companyService = companyService;
         this.eventService = eventService;
+        this.auth = auth;
     }
 
     @Override
@@ -47,14 +53,20 @@ public class DataSeeder implements ApplicationRunner {
         // ── 1. Register users ─────────────────────────────────────────────────
         String guest = guestToken();
 
-        registerUser(guest, "alice@demo.com",  "Alice",   "Cohen",   "Alice123!", "123 Main St",  "050-123-4567");
-        registerUser(guest, "bob@demo.com",    "Bob",     "Levi",    "Bob1234!",  "456 Elm Ave",  "052-234-5678");
-        registerUser(guest, "charlie@demo.com","Charlie", "Mizrahi", "Charlie1!", "789 Oak Rd",   "054-345-6789");
+        registerUser(guest, "alice@demo.com",  "Alice",   "Cohen",   "Alice123!", "123 Main St", "050-123-4567");
+        registerUser(guest, "bob@demo.com",    "Bob",     "Levi",    "Bob1234!",  "456 Elm Ave", "052-234-5678");
+        registerUser(guest, "charlie@demo.com","Charlie", "Mizrahi", "Charlie1!", "789 Oak Rd",  "054-345-6789");
+        registerUser(guest, "dave@demo.com",   "Dave",    "Ben-David","Dave123!",  "10 Pine St",  "053-456-7890");
+        registerUser(guest, "eve@demo.com",    "Eve",     "Shapiro", "Eve1234!",  "20 Cedar Ave","058-567-8901");
 
-        // ── 2. Login as each user and create companies ─────────────────────────
+        // ── 2. Login as each user ─────────────────────────────────────────────
         String aliceToken   = login("alice@demo.com",   "Alice123!");
         String bobToken     = login("bob@demo.com",     "Bob1234!");
         String charlieToken = login("charlie@demo.com", "Charlie1!");
+        String daveToken    = login("dave@demo.com",    "Dave123!");
+        String eveToken     = login("eve@demo.com",     "Eve1234!");
+
+        // ── 3. Create companies ───────────────────────────────────────────────
 
         // Alice owns companies 1–4
         createCompany(aliceToken,   1, "SoundWave Events",    "soundwave@events.com",  "050-111-0001", "IL-1234-001");
@@ -72,7 +84,17 @@ public class DataSeeder implements ApplicationRunner {
         createCompany(charlieToken, 9, "Theater Arts Group",  "arts@theatergroup.com", "054-333-0002", "IL-9012-002");
         createCompany(charlieToken,10, "Open Air Fest",       "open@airfest.com",      "054-333-0003", "IL-9012-003");
 
-        // ── 3. Create events (2 per company) ──────────────────────────────────
+        // ── 4. Appoint dave as Owner of company 1, eve as Manager ─────────────
+        int daveId = auth.getUserId(daveToken).getValue();
+        int eveId  = auth.getUserId(eveToken).getValue();
+
+        appointOwner(aliceToken, daveToken, 1, daveId);
+        appointManager(aliceToken, eveToken, 1, eveId,
+                Set.of(PermissionType.MANAGE_EVENTS_INVENTORY,
+                       PermissionType.VIEW_ORDERS_HISTORY,
+                       PermissionType.CREATE_EVENT));
+
+        // ── 5. Create events (2 per company, each activated via map) ──────────
         LocalDateTime base = LocalDateTime.now();
 
         // Company 1 — SoundWave Events
@@ -115,7 +137,7 @@ public class DataSeeder implements ApplicationRunner {
         createEvent(charlieToken,10, "Sunset Open Air",      base.plusMonths(1),  CategoryEvent.FESTIVAL,   GeographicalArea.SOUTH);
         createEvent(charlieToken,10, "Food & Music Weekend", base.plusMonths(3),  CategoryEvent.FESTIVAL,   GeographicalArea.SOUTH);
 
-        log.info("=== DataSeeder: done — 3 users, 10 companies, 20 events ===");
+        log.info("=== DataSeeder: done — 5 users, 10 companies, 20 events ===");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -161,6 +183,37 @@ public class DataSeeder implements ApplicationRunner {
         }
     }
 
+    private void appointOwner(String ownerToken, String appointeeToken,
+                              int companyId, int appointeeId) {
+        var req = companyService.requestAppointOwner(ownerToken, companyId, appointeeId);
+        if (req.getValue() == null || !req.getValue()) {
+            log.warning("DataSeeder: appoint owner request failed — " + req.getMessage());
+            return;
+        }
+        var res = companyService.respondToOwnerAppointment(appointeeToken, companyId, true);
+        if (res.getValue() == null || !res.getValue()) {
+            log.warning("DataSeeder: appoint owner response failed — " + res.getMessage());
+        } else {
+            log.info("DataSeeder: appointed user " + appointeeId + " as Owner of company " + companyId);
+        }
+    }
+
+    private void appointManager(String ownerToken, String appointeeToken,
+                                int companyId, int appointeeId,
+                                Set<PermissionType> permissions) {
+        var req = companyService.requestAppointManager(ownerToken, companyId, appointeeId, permissions);
+        if (req.getValue() == null || !req.getValue()) {
+            log.warning("DataSeeder: appoint manager request failed — " + req.getMessage());
+            return;
+        }
+        var res = companyService.respondToManagerAppointment(appointeeToken, companyId, true);
+        if (res.getValue() == null || !res.getValue()) {
+            log.warning("DataSeeder: appoint manager response failed — " + res.getMessage());
+        } else {
+            log.info("DataSeeder: appointed user " + appointeeId + " as Manager of company " + companyId);
+        }
+    }
+
     private void createEvent(String token, int companyId, String name,
                              LocalDateTime date, CategoryEvent category, GeographicalArea area) {
         LocalDateTime saleStart = date.minusWeeks(3);
@@ -171,14 +224,11 @@ public class DataSeeder implements ApplicationRunner {
         }
         int eventId = r.getValue();
         log.info("DataSeeder: created event [" + name + "] id=" + eventId);
-
-        // Add a simple standing-zone map so the event becomes active
         activateEvent(token, eventId, name);
     }
 
     /**
-     * Creates a minimal seating map for the event.
-     * Without a map, events stay inactive and won't appear in search results.
+     * Creates a minimal seating map so the event becomes active.
      */
     private void activateEvent(String token, int eventId, String eventName) {
 

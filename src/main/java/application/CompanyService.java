@@ -166,6 +166,7 @@ public class CompanyService {
                 for (Map.Entry<Integer, HierarchyDTO> entry : company.getCompanyPermission().getCompanyTree().entrySet()) {
                     managersPermissions.put(entry.getKey(), entry.getValue().getAllPermissions());
                 }
+
                 RolesPermissionsTreeDTO tree = new RolesPermissionsTreeDTO(
                         company.getCompanyPermission().getFounderId(),
                         company.getCompanyPermission().getOwnerIds(),
@@ -182,6 +183,48 @@ public class CompanyService {
             } catch (Exception e) {
                 logger.severe("Unexpected error in viewRolesAndPermissionsTree for companyId: " + companyId + ". Error: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Returns the calling user's role within the given company:
+     * "FOUNDER", "OWNER", "MANAGER", or "MEMBER".
+     */
+    public Response<String> getUserRoleInCompany(String token, int companyId) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                String role = auth.getRole(token).getValue();
+                if (role == null) return Response.error("Invalid or expired token");
+                int userId = auth.getUserId(token).getValue();
+                Company company = companyRepo.findById(companyId);
+                return Response.ok(company.getUserRoleName(userId));
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("getUserRoleInCompany failed: " + e.getMessage());
+                return Response.error("Could not determine role: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Returns the set of PermissionTypes granted to the calling user as a manager in the company.
+     * Returns an empty set if the user is not a manager.
+     */
+    public Response<Set<PermissionType>> getMyPermissions(String token, int companyId) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                String role = auth.getRole(token).getValue();
+                if (role == null) return Response.error("Invalid or expired token");
+                int userId = auth.getUserId(token).getValue();
+                Company company = companyRepo.findById(companyId);
+                return Response.ok(company.getManagerPermissions(userId));
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("getMyPermissions failed: " + e.getMessage());
+                return Response.error("Could not retrieve permissions: " + e.getMessage());
             }
         });
     }
@@ -825,6 +868,34 @@ public class CompanyService {
                 throw e;
             } catch (Exception e) {
                 logger.severe("Unexpected error in removeManagerAppointment: " + e.getMessage());
+                return Response.error("Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Returns companies where the calling user holds a role (FOUNDER, OWNER, or MANAGER).
+     * Delegates filtering to the repository.
+     */
+    public Response<List<CompanyDTO>> getMyCompanies(String token) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("getMyCompanies called");
+            try {
+                String role = auth.getRole(token).getValue();
+                if (role == null) {
+                    return Response.error("Invalid or expired token");
+                }
+                int userId = auth.getUserId(token).getValue();
+                if (userId == -1) {
+                    return Response.error("Guests do not have company roles");
+                }
+                List<CompanyDTO> result = companyRepo.findByUserRole(userId);
+                logger.info("getMyCompanies succeeded, found " + result.size() + " companies for user " + userId);
+                return Response.ok(result);
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("getMyCompanies failed: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
         });

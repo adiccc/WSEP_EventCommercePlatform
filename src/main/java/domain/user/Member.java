@@ -75,6 +75,8 @@ public class Member extends User{
     public String getPassword() {
         return password;
     }
+    public String getFirstName() { return firstName; }
+    public String getLastName() { return lastName; }
 
     public boolean isActive() { return activationStatus == ActivationStatus.ACTIVE; }
     public void deactivate() { this.activationStatus=ActivationStatus.INACTIVE; }
