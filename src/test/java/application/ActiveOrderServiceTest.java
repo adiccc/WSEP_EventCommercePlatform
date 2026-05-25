@@ -95,7 +95,7 @@ class ActiveOrderServiceTest {
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
 
-        companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
+        companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator,notifier);
         companyService.createProductionCompany(validToken, companyId,
                 "test-company", "testC@company.com", "054-5556677", "leumi");
 

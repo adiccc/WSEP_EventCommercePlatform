@@ -75,7 +75,7 @@ class LotteryServiceTest {
         notifier = new VaadinNotifier(userRepo);
 
         UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
-        CompanyService companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
+        CompanyService companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator,notifier);
          eventCompanyManageService =
                 new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
 

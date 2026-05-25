@@ -97,7 +97,7 @@ class AdminServiceTest {
         activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,accessValidator,notifier,100);
 
         eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
-        companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
+        companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator,notifier);
 
         UserDTO adminDTO = new UserDTO(ADMIN_EMAIL, "Admin", "User", PASSWORD, 1, 1, 1990, "City", "050-000-0000");
         UserDTO userDTO = new UserDTO(USER_EMAIL, "Regular", "User", PASSWORD, 1, 1, 1990, "City", "050-111-1111");

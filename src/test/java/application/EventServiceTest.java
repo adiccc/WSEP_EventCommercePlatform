@@ -74,7 +74,7 @@ class EventServiceTest {
         userService.registerUser(validToken,userDTO);
         validToken=userService.login("user1@test.com","mytest").getValue();
         GUEST_TOKEN = userService.continueAsGuest().getValue();
-        CompanyService companyService=new CompanyService(auth,companyRepo,userRepo,accessValidator);
+        CompanyService companyService=new CompanyService(auth,companyRepo,userRepo,accessValidator,notifier);
         Response<Company> c1=companyService.createProductionCompany(validToken,company1,"test-company","testC@company.com","054-5556677","leumi");
 
         // Active event (company1)
