@@ -11,6 +11,7 @@ import domain.policy.PurchasePolicyType;
 import domain.dto.CompanyDetailsDTO;
 import domain.dto.EventDTO;
 import domain.dto.OrderDTO;
+import domain.dto.SalesReportDTO;
 
 import java.util.List;
 import java.util.Set;
@@ -76,5 +77,10 @@ public class CompanyPresenter {
     /** Returns all orders for the company's events. Requires VIEW_ORDERS_HISTORY permission. */
     public Response<List<OrderDTO>> getOrdersByCompany(String token, int companyId) {
         return eventCompanyManageService.getOrdersByCompany(token, companyId);
+    }
+
+    /** Generates a sales report for the company. Requires GENERATE_SALES_REPORTS permission. */
+    public Response<SalesReportDTO> generateSalesReport(String token, int companyId) {
+        return eventCompanyManageService.generateSalesReports(companyId, token);
     }
 }
