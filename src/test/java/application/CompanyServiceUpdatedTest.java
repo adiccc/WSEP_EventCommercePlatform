@@ -1688,7 +1688,7 @@ class CompanyServiceUpdatedTest {
 
     @Test
     void GivenOwnerRemovesManager_WhenRemoveManagerAppointment_ThenKickoutSent() {
-        addSecondManager(); // adds manager2@test.com (assumes this method exists in your test class)
+        addSecondManager();
 
         service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
         Mockito.verify(notifier, Mockito.times(1)).notifyUser(
