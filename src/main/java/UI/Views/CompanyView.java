@@ -3,7 +3,10 @@ package UI.Views;
 import DTO.PurchaseRuleDTO;
 import UI.Presenters.CompanyPresenter;
 import application.CompanyService;
+import application.EventCompanyManageService;
 import application.EventService;
+import domain.dto.OrderDTO;
+import domain.dto.SalesReportDTO;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
@@ -64,8 +67,8 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
     // Loaded once from the URL parameter
     private int companyId;
 
-    public CompanyView(CompanyService companyService, EventService eventService) {
-        this.presenter = new CompanyPresenter(companyService, eventService);
+    public CompanyView(CompanyService companyService, EventService eventService, EventCompanyManageService eventCompanyManageService) {
+        this.presenter = new CompanyPresenter(companyService, eventService, eventCompanyManageService);
         setPadding(true);
         setSpacing(true);
     }
@@ -187,7 +190,15 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
                 e -> openPurchasePolicyDialog(token));
         policyBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
 
-        HorizontalLayout bar = new HorizontalLayout(rolesBtn, policyBtn);
+        Button ordersBtn = new Button("📦 View Order History",
+                e -> openOrderHistoryDialog(token));
+        ordersBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+
+        Button salesBtn = new Button("📊 Sales Report",
+                e -> openSalesReportDialog(token));
+        salesBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+
+        HorizontalLayout bar = new HorizontalLayout(rolesBtn, policyBtn, ordersBtn, salesBtn);
         bar.getStyle()
                 .set("padding", "0.5rem 0")
                 .set("margin-bottom", "0.25rem");
@@ -213,6 +224,18 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
                     e -> openPurchasePolicyDialog(token));
             policyBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
             bar.add(policyBtn);
+        }
+        if (perms != null && perms.contains(PermissionType.VIEW_ORDERS_HISTORY)) {
+            Button ordersBtn = new Button("📦 View Order History",
+                    e -> openOrderHistoryDialog(token));
+            ordersBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+            bar.add(ordersBtn);
+        }
+        if (perms != null && perms.contains(PermissionType.GENERATE_SALES_REPORTS)) {
+            Button salesBtn = new Button("📊 Sales Report",
+                    e -> openSalesReportDialog(token));
+            salesBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+            bar.add(salesBtn);
         }
 
         return bar;
@@ -474,6 +497,102 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
         dialog.getFooter().add(closeBtn);
 
         dialog.open();
+    }
+
+    // ── Order History Dialog ──────────────────────────────────────────────────
+
+    private void openOrderHistoryDialog(String token) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Order History");
+        dialog.setWidth("750px");
+
+        var response = presenter.getOrdersByCompany(token, companyId);
+        List<OrderDTO> orders = response.getValue();
+
+        VerticalLayout content = new VerticalLayout();
+        content.setPadding(false);
+
+        if (orders == null || orders.isEmpty()) {
+            content.add(new Paragraph("No orders found for this company."));
+        } else {
+            Grid<OrderDTO> grid = new Grid<>(OrderDTO.class, false);
+            grid.addColumn(OrderDTO::getOrderId).setHeader("Order ID").setSortable(true).setFlexGrow(0).setWidth("100px");
+            grid.addColumn(OrderDTO::getUserIdentifier).setHeader("Customer").setSortable(true).setFlexGrow(2);
+            grid.addColumn(OrderDTO::getEventId).setHeader("Event ID").setSortable(true).setFlexGrow(0).setWidth("100px");
+            grid.addColumn(o -> o.getTickets().size()).setHeader("Tickets").setFlexGrow(0).setWidth("90px");
+            grid.addColumn(o -> String.format("₪%.2f", o.getTotalSum())).setHeader("Total").setSortable(true).setFlexGrow(1);
+            grid.addColumn(o -> o.getStatus() != null ? o.getStatus().toString() : "").setHeader("Status").setSortable(true).setFlexGrow(1);
+            grid.setItems(orders);
+            grid.setWidthFull();
+            grid.setHeight("400px");
+            content.add(grid);
+        }
+
+        dialog.add(content);
+        Button closeBtn = new Button("Close", e -> dialog.close());
+        closeBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        dialog.getFooter().add(closeBtn);
+        dialog.open();
+    }
+
+    // ── Sales Report Dialog ───────────────────────────────────────────────────
+
+    private void openSalesReportDialog(String token) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Sales Report");
+        dialog.setWidth("700px");
+
+        VerticalLayout content = new VerticalLayout();
+        content.setPadding(false);
+
+        var response = presenter.generateSalesReport(token, companyId);
+        SalesReportDTO report = response.getValue();
+
+        if (report == null) {
+            content.add(new Paragraph(response.getMessage() != null ? response.getMessage() : "Could not generate sales report."));
+        } else {
+            HorizontalLayout summary = new HorizontalLayout();
+            summary.setSpacing(true);
+            summary.add(summaryCard("Total Revenue", String.format("₪%.2f", report.getTotalRevenue())));
+            summary.add(summaryCard("Total Tickets Sold", String.valueOf(report.getTotalTicketsSold())));
+            content.add(summary);
+
+            if (report.getEventRecords() != null && !report.getEventRecords().isEmpty()) {
+                content.add(new H4("Breakdown by Event"));
+                Grid<domain.dto.EventSalesRecordDTO> grid = new Grid<>(domain.dto.EventSalesRecordDTO.class, false);
+                grid.addColumn(domain.dto.EventSalesRecordDTO::getEventId).setHeader("Event ID").setSortable(true).setFlexGrow(0).setWidth("100px");
+                grid.addColumn(domain.dto.EventSalesRecordDTO::getEventName).setHeader("Event Name").setSortable(true).setFlexGrow(2);
+                grid.addColumn(domain.dto.EventSalesRecordDTO::getCreatorId).setHeader("Creator ID").setSortable(true).setFlexGrow(0).setWidth("110px");
+                grid.addColumn(domain.dto.EventSalesRecordDTO::getNumTicketsSold).setHeader("Tickets Sold").setSortable(true).setFlexGrow(1);
+                grid.addColumn(r -> String.format("₪%.2f", r.getRevenue())).setHeader("Revenue").setSortable(true).setFlexGrow(1);
+                grid.setItems(report.getEventRecords());
+                grid.setWidthFull();
+                grid.setHeight("300px");
+                content.add(grid);
+            }
+        }
+
+        dialog.add(content);
+        Button closeBtn = new Button("Close", e -> dialog.close());
+        closeBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        dialog.getFooter().add(closeBtn);
+        dialog.open();
+    }
+
+    private VerticalLayout summaryCard(String label, String value) {
+        VerticalLayout card = new VerticalLayout();
+        card.setPadding(true);
+        card.setSpacing(false);
+        card.getStyle()
+                .set("background", "var(--lumo-contrast-5pct)")
+                .set("border-radius", "var(--lumo-border-radius-l)")
+                .set("min-width", "160px");
+        Span lbl = new Span(label);
+        lbl.getStyle().set("font-size", "0.8rem").set("color", "var(--lumo-secondary-text-color)");
+        Span val = new Span(value);
+        val.getStyle().set("font-size", "1.4rem").set("font-weight", "bold");
+        card.add(lbl, val);
+        return card;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ package UI.Presenters;
 
 import DTO.PurchaseRuleDTO;
 import application.CompanyService;
+import application.EventCompanyManageService;
 import application.EventService;
 import application.Response;
 import domain.dataType.EventSearchFilter;
@@ -9,6 +10,8 @@ import domain.dataType.PermissionType;
 import domain.policy.PurchasePolicyType;
 import domain.dto.CompanyDetailsDTO;
 import domain.dto.EventDTO;
+import domain.dto.OrderDTO;
+import domain.dto.SalesReportDTO;
 
 import java.util.List;
 import java.util.Set;
@@ -21,10 +24,12 @@ public class CompanyPresenter {
 
     private final CompanyService companyService;
     private final EventService eventService;
+    private final EventCompanyManageService eventCompanyManageService;
 
-    public CompanyPresenter(CompanyService companyService, EventService eventService) {
+    public CompanyPresenter(CompanyService companyService, EventService eventService, EventCompanyManageService eventCompanyManageService) {
         this.companyService = companyService;
         this.eventService = eventService;
+        this.eventCompanyManageService = eventCompanyManageService;
     }
 
     /** Returns full company details including contact info and future events. */
@@ -67,5 +72,15 @@ public class CompanyPresenter {
     /** Removes a purchase rule from the company policy. */
     public Response<Boolean> removeRuleFromCompany(String token, int companyId, PurchaseRuleDTO ruleDTO) {
         return companyService.removeRuleFromCompany(token, companyId, ruleDTO);
+    }
+
+    /** Returns all orders for the company's events. Requires VIEW_ORDERS_HISTORY permission. */
+    public Response<List<OrderDTO>> getOrdersByCompany(String token, int companyId) {
+        return eventCompanyManageService.getOrdersByCompany(token, companyId);
+    }
+
+    /** Generates a sales report for the company. Requires GENERATE_SALES_REPORTS permission. */
+    public Response<SalesReportDTO> generateSalesReport(String token, int companyId) {
+        return eventCompanyManageService.generateSalesReports(companyId, token);
     }
 }
