@@ -13,6 +13,7 @@ public class ActiveOrder {
     private LocalDateTime checkoutStartedAt;
     private long version;
     private STAGE stage;
+    private Double approvedCheckoutPrice;
     private static final int SELECTING_TICKETS_TIMEOUT_MINUTES = 5;
     private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
 
@@ -25,6 +26,7 @@ public class ActiveOrder {
         this.createdAt = LocalDateTime.now();
         this.checkoutStartedAt = null;
         this.stage = STAGE.SELECTING_TICKETS;
+        this.approvedCheckoutPrice = null;
     }
 
     public ActiveOrder(ActiveOrder activeOrder) {
@@ -36,6 +38,7 @@ public class ActiveOrder {
         this.checkoutStartedAt = activeOrder.checkoutStartedAt;
         this.version = activeOrder.version;
         this.stage = activeOrder.stage;
+        this.approvedCheckoutPrice = activeOrder.approvedCheckoutPrice;
 
     }
 
@@ -102,6 +105,7 @@ public class ActiveOrder {
 
     public void setTickets(List<Integer> newTickets) {
         this.tickets = new ArrayList<>(newTickets);
+        clearApprovedCheckoutPrice();
     }
 
     public LocalDateTime getCheckoutStartedAt() {
@@ -139,5 +143,29 @@ public class ActiveOrder {
     
     public String getUserIdentifier() {
         return userIdentifier;
+    }
+
+    public void setApprovedCheckoutPrice(double approvedCheckoutPrice) {
+        if (approvedCheckoutPrice < 0) {
+            throw new IllegalArgumentException("Approved checkout price cannot be negative");
+        }
+
+        this.approvedCheckoutPrice = approvedCheckoutPrice;
+    }
+
+    public boolean hasApprovedCheckoutPrice() {
+        return approvedCheckoutPrice != null;
+    }
+
+    public double getApprovedCheckoutPrice() {
+        if (approvedCheckoutPrice == null) {
+            throw new IllegalStateException("Checkout price was not approved");
+        }
+
+        return approvedCheckoutPrice;
+    }
+
+    public void clearApprovedCheckoutPrice() {
+        this.approvedCheckoutPrice = null;
     }
 }

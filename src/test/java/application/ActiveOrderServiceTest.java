@@ -1263,7 +1263,12 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -1308,7 +1313,12 @@ class ActiveOrderServiceTest {
                 .thenReturn(null);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -1360,7 +1370,12 @@ class ActiveOrderServiceTest {
                 .thenReturn(true);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -1415,7 +1430,12 @@ class ActiveOrderServiceTest {
                 .thenReturn(true);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -1470,7 +1490,12 @@ class ActiveOrderServiceTest {
                 .thenReturn(false);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -1514,7 +1539,7 @@ class ActiveOrderServiceTest {
         forceExpireOrder(activeOrderId);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -1564,7 +1589,7 @@ class ActiveOrderServiceTest {
         int activeOrderId = activeOrderRepo.findOrderByUserId(userEmail).getId();
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -1590,7 +1615,7 @@ class ActiveOrderServiceTest {
         String invalidToken = "not-a-real-token";
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(invalidToken, 999, paymentDetails);
@@ -1624,6 +1649,14 @@ class ActiveOrderServiceTest {
 
         int activeOrderId = selectResponse.getValue();
 
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(
+                checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before concurrent payment."
+        );
+
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenAnswer(invocation -> "payment-" + UUID.randomUUID());
 
@@ -1642,7 +1675,7 @@ class ActiveOrderServiceTest {
                 start.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
                 return service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
             }));
@@ -1732,7 +1765,16 @@ class ActiveOrderServiceTest {
             assertNotNull(selectResponse.getValue(),
                     "select failed for user " + i + ": " + selectResponse.getMessage());
 
-            activeOrderIds.add(selectResponse.getValue());
+            int activeOrderId = selectResponse.getValue();
+            activeOrderIds.add(activeOrderId);
+
+            Response<CheckoutPriceDTO> checkoutPriceResponse =
+                    service.prepareCheckout(token, activeOrderId);
+
+            assertNotNull(
+                    checkoutPriceResponse.getValue(),
+                    "checkout price preparation failed for user " + i + ": " + checkoutPriceResponse.getMessage()
+            );
         }
 
         assertEquals(usersCount, activeOrderIds.stream().distinct().count(),
@@ -1762,7 +1804,7 @@ class ActiveOrderServiceTest {
                 start.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
                 return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
             }));
@@ -1842,7 +1884,18 @@ class ActiveOrderServiceTest {
             assertNotNull(selectResponse.getValue(),
                     "select failed for user " + i + ": " + selectResponse.getMessage());
 
-            activeOrderIds.add(selectResponse.getValue());
+            int activeOrderId = selectResponse.getValue();
+
+            Response<CheckoutPriceDTO> checkoutPriceResponse =
+                    service.prepareCheckout(token, activeOrderId);
+
+            assertNotNull(
+                    checkoutPriceResponse.getValue(),
+                    "Checkout price should be prepared before payment for user " + i + ": "
+                            + checkoutPriceResponse.getMessage()
+            );
+
+            activeOrderIds.add(activeOrderId);
         }
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
@@ -1869,7 +1922,7 @@ class ActiveOrderServiceTest {
                 start.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
                 return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
             }));
@@ -1945,7 +1998,18 @@ class ActiveOrderServiceTest {
             assertNotNull(selectResponse.getValue(),
                     "select failed for user " + i + ": " + selectResponse.getMessage());
 
-            activeOrderIds.add(selectResponse.getValue());
+            int activeOrderId = selectResponse.getValue();
+
+            Response<CheckoutPriceDTO> checkoutPriceResponse =
+                    service.prepareCheckout(token, activeOrderId);
+
+            assertNotNull(
+                    checkoutPriceResponse.getValue(),
+                    "Checkout price should be prepared before payment for user " + i + ": "
+                            + checkoutPriceResponse.getMessage()
+            );
+
+            activeOrderIds.add(activeOrderId);
         }
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
@@ -1983,7 +2047,7 @@ class ActiveOrderServiceTest {
                 start.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
                 return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
             }));
@@ -2069,7 +2133,18 @@ class ActiveOrderServiceTest {
             assertNotNull(selectResponse.getValue(),
                     "select failed: " + selectResponse.getMessage());
 
-            activeOrderIds.add(selectResponse.getValue());
+            int activeOrderId = selectResponse.getValue();
+
+            Response<CheckoutPriceDTO> checkoutPriceResponse =
+                    service.prepareCheckout(token, activeOrderId);
+
+            assertNotNull(
+                    checkoutPriceResponse.getValue(),
+                    "Checkout price should be prepared before payment for user " + i + ": "
+                            + checkoutPriceResponse.getMessage()
+            );
+
+            activeOrderIds.add(activeOrderId);
         }
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any()))
@@ -2092,7 +2167,7 @@ class ActiveOrderServiceTest {
             futures.add(executor.submit(() -> {
                 start.await();
                 return service.checkoutAndPayment(token, orderId,
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1));
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null));
             }));
         }
 
@@ -2179,7 +2254,7 @@ class ActiveOrderServiceTest {
             futures.add(executor.submit(() -> {
                 start.await();
                 return service.checkoutAndPayment(token, orderId,
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1));
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null));
             }));
         }
 
@@ -2220,7 +2295,7 @@ class ActiveOrderServiceTest {
         String tokenB = userService.login(emailB, "pass").getValue();
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(tokenB, orderId, paymentDetails);
@@ -2250,7 +2325,7 @@ class ActiveOrderServiceTest {
         eventRepo.store(event);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2286,6 +2361,14 @@ class ActiveOrderServiceTest {
                 "setup select failed: " + selectResponse.getMessage());
 
         int activeOrderId = selectResponse.getValue();
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(
+                checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: "
+                        + checkoutPriceResponse.getMessage()
+        );
 
         ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
         List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
@@ -2302,7 +2385,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(true);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2342,12 +2425,20 @@ class ActiveOrderServiceTest {
                 "setup select failed: " + selectResponse.getMessage());
 
         int activeOrderId = selectResponse.getValue();
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(
+                checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: "
+                        + checkoutPriceResponse.getMessage()
+        );
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenThrow(new RuntimeException("payment service unavailable"));
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2382,12 +2473,20 @@ class ActiveOrderServiceTest {
                 "setup select failed: " + selectResponse.getMessage());
 
         int activeOrderId = selectResponse.getValue();
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(
+                checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: "
+                        + checkoutPriceResponse.getMessage()
+        );
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("   ");
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2410,7 +2509,7 @@ class ActiveOrderServiceTest {
     @Test
     void GivenNonExistingActiveOrder_WhenCheckoutAndPayment_ThenNotFoundAndNoExternalServicesCalled() {
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, 999999, paymentDetails);
@@ -2443,12 +2542,20 @@ class ActiveOrderServiceTest {
                 "setup select failed: " + selectResponse.getMessage());
 
         int activeOrderId = selectResponse.getValue();
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(
+                checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: "
+                        + checkoutPriceResponse.getMessage()
+        );
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, activeOrderId, null);
 
         assertNull(response.getValue());
-        assertEquals("Failed to complete purchase", response.getMessage());
+        assertEquals("Payment rejected", response.getMessage());
 
         assertNotNull(activeOrderRepo.findById(activeOrderId),
                 "Active order should remain when payment details are null");
@@ -2542,8 +2649,18 @@ class ActiveOrderServiceTest {
             );
             assertNotNull(selectResponse.getValue(),
                     "ticket selection failed: " + selectResponse.getMessage());
+            int activeOrderId = selectResponse.getValue();
 
-            activeOrderIds.add(selectResponse.getValue());
+            Response<CheckoutPriceDTO> checkoutPriceResponse =
+                    service.prepareCheckout(token, activeOrderId);
+
+            assertNotNull(
+                    checkoutPriceResponse.getValue(),
+                    "Checkout price should be prepared before payment: "
+                            + checkoutPriceResponse.getMessage()
+            );
+
+            activeOrderIds.add(activeOrderId);
         }
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
@@ -2567,7 +2684,7 @@ class ActiveOrderServiceTest {
                 checkoutStart.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111111111", 1);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111111111", 1, null);
                 return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
             }));
         }
@@ -2676,6 +2793,14 @@ class ActiveOrderServiceTest {
                 service.userSelectTickets(validToken, soldOutEventId, seating, standing);
         assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
         int activeOrderId = selectResponse.getValue();
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(
+                checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: "
+                        + checkoutPriceResponse.getMessage()
+        );
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-soldout");
@@ -2686,7 +2811,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2719,6 +2844,14 @@ class ActiveOrderServiceTest {
                 service.userSelectTickets(validToken, concurrentEventId, seating, standing);
         assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
         int activeOrderId = selectResponse.getValue();
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(
+                checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: "
+                        + checkoutPriceResponse.getMessage()
+        );
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-not-soldout");
@@ -2729,7 +2862,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2785,6 +2918,14 @@ class ActiveOrderServiceTest {
                 service.userSelectTickets(validToken, soldOutEventId, seating, standing);
         assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
         int activeOrderId = selectResponse.getValue();
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(
+                checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: "
+                        + checkoutPriceResponse.getMessage()
+        );
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-multi");
@@ -2795,7 +2936,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2832,6 +2973,14 @@ class ActiveOrderServiceTest {
                 service.userSelectTickets(validToken, soldOutEventId, seating, standing);
         assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
         int activeOrderId = selectResponse.getValue();
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(
+                checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: "
+                        + checkoutPriceResponse.getMessage()
+        );
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-refund");
@@ -2844,7 +2993,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2877,23 +3026,35 @@ class ActiveOrderServiceTest {
             Map<String, List<SeatingTicketDTO>> seating =
                     Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
             Map<String, Integer> standing = Map.of("floor", 2);
-
             Response<Integer> selectResponse =
                     service.userSelectTickets(validToken, soldOutEventId, seating, standing);
             assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
 
+            int activeOrderId = selectResponse.getValue();
+
+            Response<CheckoutPriceDTO> checkoutPriceResponse =
+                    service.prepareCheckout(validToken, activeOrderId);
+
+            assertNotNull(
+                    checkoutPriceResponse.getValue(),
+                    "Checkout price should be prepared before payment: "
+                            + checkoutPriceResponse.getMessage()
+            );
+
             Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                     .thenReturn("payment-realtime");
+
+
             TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
             Mockito.when(supplyResult.isSuccess()).thenReturn(true);
             Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
                     .thenReturn(supplyResult);
 
             PaymentDetailsDTO paymentDetails =
-                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
             Response<Integer> checkoutResponse =
-                    service.checkoutAndPayment(validToken, selectResponse.getValue(), paymentDetails);
+                    service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
 
             assertNotNull(checkoutResponse.getValue(),
                     "Checkout should succeed. Message: " + checkoutResponse.getMessage());
@@ -2928,6 +3089,17 @@ class ActiveOrderServiceTest {
                 service.userSelectTickets(validToken, soldOutEventId, seating, standing);
         assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
 
+        int activeOrderId = selectResponse.getValue();
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(
+                checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: "
+                        + checkoutPriceResponse.getMessage()
+        );
+
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-notify-throws");
         TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
@@ -2936,10 +3108,10 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> checkoutResponse =
-                service.checkoutAndPayment(validToken, selectResponse.getValue(), paymentDetails);
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
 
         assertNotNull(checkoutResponse.getValue(),
                 "Purchase must succeed even when the notifier throws. Message: "
@@ -2984,7 +3156,7 @@ class ActiveOrderServiceTest {
         Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
                 .thenReturn(supplyResult);
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         // Purchase 1 — buy both seats only; standing zone untouched, event NOT sold out
         service.enterEventPurchase(validToken, companyId, boundaryEventId);
@@ -2993,9 +3165,19 @@ class ActiveOrderServiceTest {
         Response<Integer> firstSelect = service.userSelectTickets(
                 validToken, boundaryEventId, firstSeating, new HashMap<>());
         assertNotNull(firstSelect.getValue(), "first select failed: " + firstSelect.getMessage());
+        int firstActiveOrderId = firstSelect.getValue();
+
+        Response<CheckoutPriceDTO> firstCheckoutPriceResponse =
+                service.prepareCheckout(validToken, firstActiveOrderId);
+
+        assertNotNull(
+                firstCheckoutPriceResponse.getValue(),
+                "First checkout price should be prepared before payment: "
+                        + firstCheckoutPriceResponse.getMessage()
+        );
 
         Response<Integer> firstCheckout =
-                service.checkoutAndPayment(validToken, firstSelect.getValue(), paymentDetails);
+                service.checkoutAndPayment(validToken, firstActiveOrderId, paymentDetails);
         assertNotNull(firstCheckout.getValue(),
                 "first checkout should succeed. Message: " + firstCheckout.getMessage());
         assertFalse(eventRepo.findById(boundaryEventId).isSoldOut(),
@@ -3010,9 +3192,19 @@ class ActiveOrderServiceTest {
         Response<Integer> secondSelect = service.userSelectTickets(
                 validToken, boundaryEventId, new HashMap<>(), Map.of("floor", 2));
         assertNotNull(secondSelect.getValue(), "second select failed: " + secondSelect.getMessage());
+        int secondActiveOrderId = secondSelect.getValue();
+
+        Response<CheckoutPriceDTO> secondCheckoutPriceResponse =
+                service.prepareCheckout(validToken, secondActiveOrderId);
+
+        assertNotNull(
+                secondCheckoutPriceResponse.getValue(),
+                "Second checkout price should be prepared before payment: "
+                        + secondCheckoutPriceResponse.getMessage()
+        );
 
         Response<Integer> secondCheckout =
-                service.checkoutAndPayment(validToken, secondSelect.getValue(), paymentDetails);
+                service.checkoutAndPayment(validToken, secondActiveOrderId, paymentDetails);
         assertNotNull(secondCheckout.getValue(),
                 "second checkout should succeed. Message: " + secondCheckout.getMessage());
         assertTrue(eventRepo.findById(boundaryEventId).isSoldOut(),
@@ -3068,6 +3260,16 @@ class ActiveOrderServiceTest {
         Map<String, Integer> standing = Map.of("floor", 2);
         Response<Integer> selectResponse = service.userSelectTickets(validToken, soldOutEventId, seating, standing);
         assertNotNull(selectResponse.getValue(), "setup failed");
+        int activeOrderId = selectResponse.getValue();
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(
+                checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: "
+                        + checkoutPriceResponse.getMessage()
+        );
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-tree");
@@ -3075,7 +3277,7 @@ class ActiveOrderServiceTest {
         Mockito.when(supplyResult.isSuccess()).thenReturn(true);
         Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
                 .thenReturn(supplyResult);
-        PaymentDetailsDTO paymentDetails = new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+        PaymentDetailsDTO paymentDetails = new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         userService.cleanDelayedNotifications("testuser1@gmail.com");
         userService.cleanDelayedNotifications("owner2@gmail.com");
@@ -3083,7 +3285,7 @@ class ActiveOrderServiceTest {
         userService.cleanDelayedNotifications("manager2@gmail.com");
 
         Response<Integer> checkoutResponse =
-                service.checkoutAndPayment(validToken, selectResponse.getValue(), paymentDetails);
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
         assertNotNull(checkoutResponse.getValue(), "Checkout should succeed");
 
         Member founder = userRepo.findUserByEmail("testuser1@gmail.com");
@@ -3143,6 +3345,15 @@ class ActiveOrderServiceTest {
             if (i == 0) {
                 firstFillerToken = token;
                 firstFillerOrderId = selectResp.getValue();
+
+                Response<CheckoutPriceDTO> checkoutPriceResponse =
+                        service.prepareCheckout(firstFillerToken, firstFillerOrderId);
+
+                assertNotNull(
+                        checkoutPriceResponse.getValue(),
+                        "Checkout price should be prepared before payment: "
+                                + checkoutPriceResponse.getMessage()
+                );
             }
         }
 
@@ -3165,7 +3376,7 @@ class ActiveOrderServiceTest {
         });
 
         // Act
-        PaymentDetailsDTO payment = new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+        PaymentDetailsDTO payment = new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
         Response<Integer> checkoutResp = service.checkoutAndPayment(firstFillerToken, firstFillerOrderId, payment);
 
         assertNotNull(checkoutResp.getValue(), "Checkout failed, promoteNextInQueue will not be triggered. Server says: " + checkoutResp.getMessage());

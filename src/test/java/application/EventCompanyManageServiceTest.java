@@ -183,9 +183,18 @@ class EventCompanyManageServiceTest {
 
         Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
                 .thenReturn(supplyResult);
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                activeOrderService.prepareCheckout(buyerToken, activeOrderId);
+
+        assertNotNull(
+                checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: "
+                        + checkoutPriceResponse.getMessage()
+        );
+
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         Response<Integer> checkoutResponse =
                 activeOrderService.checkoutAndPayment(
