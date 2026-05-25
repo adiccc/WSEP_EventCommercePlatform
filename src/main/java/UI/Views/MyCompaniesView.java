@@ -3,10 +3,18 @@ package UI.Views;
 import UI.Presenters.MyCompaniesPresenter;
 import application.CompanyService;
 import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.*;
+import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexLayout;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.textfield.EmailField;
+import com.vaadin.flow.component.textfield.IntegerField;
+import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
@@ -55,7 +63,15 @@ public class MyCompaniesView extends VerticalLayout {
                 .set("color", "var(--lumo-secondary-text-color)")
                 .set("margin-top", "0");
 
-        add(title, subtitle);
+        Button createBtn = new Button("+ Create Company", e -> openCreateCompanyDialog(token));
+        createBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        HorizontalLayout header = new HorizontalLayout(title, createBtn);
+        header.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+        header.setJustifyContentMode(JustifyContentMode.BETWEEN);
+        header.setWidthFull();
+
+        add(header, subtitle);
 
         var response = presenter.getMyCompanies(token);
         List<CompanyDTO> companies = response.getValue();
@@ -180,5 +196,89 @@ public class MyCompaniesView extends VerticalLayout {
             case "MANAGER" -> "#8E44AD";
             default        -> "#888888";
         };
+    }
+
+    // ── Create Company Dialog ─────────────────────────────────────────────────
+
+    private void openCreateCompanyDialog(String token) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Create Company");
+        dialog.setWidth("440px");
+
+        IntegerField companyIdField = new IntegerField("Company ID");
+        companyIdField.setWidthFull();
+        companyIdField.setMin(1);
+
+        TextField nameField = new TextField("Company Name");
+        nameField.setWidthFull();
+
+        EmailField emailField = new EmailField("Contact Email");
+        emailField.setWidthFull();
+
+        TextField phoneField = new TextField("Phone");
+        phoneField.setWidthFull();
+
+        TextField bankField = new TextField("Bank Account");
+        bankField.setWidthFull();
+
+        VerticalLayout content = new VerticalLayout(
+                companyIdField, nameField, emailField, phoneField, bankField);
+        content.setPadding(false);
+        dialog.add(content);
+
+        Button cancelBtn = new Button("Cancel", e -> dialog.close());
+        cancelBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        Button createBtn = new Button("Create", e -> {
+            Integer id = companyIdField.getValue();
+            String name = nameField.getValue();
+            String email = emailField.getValue();
+            String phone = phoneField.getValue();
+            String bank = bankField.getValue();
+
+            if (id == null || id < 1) {
+                showError("Please enter a valid Company ID.");
+                return;
+            }
+            if (name == null || name.isBlank()) {
+                showError("Company name is required.");
+                return;
+            }
+            if (email == null || email.isBlank()) {
+                showError("Contact email is required.");
+                return;
+            }
+            if (phone == null || phone.isBlank()) {
+                showError("Phone is required.");
+                return;
+            }
+            if (bank == null || bank.isBlank()) {
+                showError("Bank account is required.");
+                return;
+            }
+
+            var result = presenter.createCompany(token, id, name, email, phone, bank);
+            dialog.close();
+            if (result.getValue() != null) {
+                showSuccess("Company \"" + name + "\" created successfully.");
+                buildPage();
+            } else {
+                showError(result.getMessage());
+            }
+        });
+        createBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        dialog.getFooter().add(cancelBtn, createBtn);
+        dialog.open();
+    }
+
+    private void showSuccess(String message) {
+        Notification n = Notification.show(message, 3000, Notification.Position.TOP_CENTER);
+        n.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+    }
+
+    private void showError(String message) {
+        Notification n = Notification.show(message, 4000, Notification.Position.TOP_CENTER);
+        n.addThemeVariants(NotificationVariant.LUMO_ERROR);
     }
 }
