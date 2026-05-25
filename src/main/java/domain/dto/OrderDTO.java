@@ -42,4 +42,20 @@ public class OrderDTO {
     public int getOrderId() {
         return orderId;
     }
+
+    public Integer getEventId() {
+        return eventId;
+    }
+
+    public List<Integer> getTickets() {
+        return tickets;
+    }
+
+    public double getTotalSum() {
+        return totalSum;
+    }
+
+    public OrderStatus getStatus() {
+        return status;
+    }
 }

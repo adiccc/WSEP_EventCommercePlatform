@@ -90,8 +90,8 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
         String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
         String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
         // Back button
-        Button back = new Button("← All Companies",
-                e -> getUI().ifPresent(ui -> ui.navigate("")));
+        Button back = new Button("← My Companies",
+                e -> getUI().ifPresent(ui -> ui.navigate("my-companies")));
         back.getElement().setAttribute("theme", "tertiary");
 
         // Load and display company header.
