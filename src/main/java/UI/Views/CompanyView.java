@@ -1,15 +1,21 @@
 package UI.Views;
 
+import DTO.PurchaseRuleDTO;
 import UI.Presenters.CompanyPresenter;
 import application.CompanyService;
 import application.EventService;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.html.*;
+import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.*;
@@ -18,11 +24,14 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dataType.CategoryEvent;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
+import domain.dataType.PermissionType;
+import domain.policy.PurchasePolicyType;
 import com.vaadin.flow.component.UI;
 import domain.dto.CompanyDetailsDTO;
 import domain.dto.EventDTO;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * Company page — shows company details and its upcoming events.
@@ -168,11 +177,17 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
     // ── Role-based action bars ────────────────────────────────────────────────
 
     private HorizontalLayout buildOwnerActions() {
+        String token = getToken();
+
         Button rolesBtn = new Button("👥 View Roles & Permissions",
                 e -> getUI().ifPresent(ui -> ui.navigate("company/" + companyId + "/roles")));
         rolesBtn.getElement().setAttribute("theme", "primary");
 
-        HorizontalLayout bar = new HorizontalLayout(rolesBtn);
+        Button policyBtn = new Button("📋 Manage Purchase Policy",
+                e -> openPurchasePolicyDialog(token));
+        policyBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+
+        HorizontalLayout bar = new HorizontalLayout(rolesBtn, policyBtn);
         bar.getStyle()
                 .set("padding", "0.5rem 0")
                 .set("margin-bottom", "0.25rem");
@@ -180,6 +195,8 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
     }
 
     private HorizontalLayout buildManagerActions() {
+        String token = getToken();
+
         Button rolesBtn = new Button("🔑 My Permissions",
                 e -> getUI().ifPresent(ui -> ui.navigate("company/" + companyId + "/roles")));
         rolesBtn.getElement().setAttribute("theme", "contrast");
@@ -188,6 +205,16 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
         bar.getStyle()
                 .set("padding", "0.5rem 0")
                 .set("margin-bottom", "0.25rem");
+
+        var permResponse = presenter.getMyPermissions(token, companyId);
+        Set<PermissionType> perms = permResponse.getValue();
+        if (perms != null && perms.contains(PermissionType.MANAGE_POLICIES)) {
+            Button policyBtn = new Button("📋 Manage Purchase Policy",
+                    e -> openPurchasePolicyDialog(token));
+            policyBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+            bar.add(policyBtn);
+        }
+
         return bar;
     }
 
@@ -291,5 +318,178 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
         } else {
             eventGrid.setItems(List.of());
         }
+    }
+
+    // ── Purchase Policy Dialog ────────────────────────────────────────────────
+
+    private void openPurchasePolicyDialog(String token) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Manage Purchase Policy");
+        dialog.setWidth("480px");
+
+        VerticalLayout content = new VerticalLayout();
+        content.setPadding(false);
+
+        // ── Current policy display ────────────────────────────────────────────
+        H4 currentHeader = new H4("Current Policy");
+        currentHeader.getStyle().set("margin-bottom", "0.25rem");
+
+        Paragraph policyDescription = new Paragraph();
+        policyDescription.getStyle()
+                .set("background", "var(--lumo-contrast-5pct)")
+                .set("border-radius", "var(--lumo-border-radius-m)")
+                .set("padding", "0.6rem 1rem")
+                .set("font-family", "monospace")
+                .set("white-space", "pre-wrap")
+                .set("width", "100%");
+
+        Runnable refreshPolicy = () -> {
+            var r = presenter.getCompany(token, companyId);
+            if (r.getValue() != null && r.getValue().getPurchasePolicy() != null) {
+                policyDescription.setText(r.getValue().getPurchasePolicy());
+            } else {
+                policyDescription.setText("No rules defined.");
+            }
+        };
+        refreshPolicy.run();
+
+        content.add(currentHeader, policyDescription);
+
+        // ── Policy type selector ──────────────────────────────────────────────
+        H4 typeHeader = new H4("Policy Type");
+        typeHeader.getStyle().set("margin-bottom", "0.25rem");
+
+        ComboBox<PurchasePolicyType> typeBox = new ComboBox<>("Policy Type");
+        typeBox.setItems(PurchasePolicyType.values());
+        typeBox.setWidthFull();
+
+        Button changeTypeBtn = new Button("Change Policy Type", e -> {
+            PurchasePolicyType selected = typeBox.getValue();
+            if (selected == null) {
+                showError("Please select a policy type.");
+                return;
+            }
+            var result = presenter.changePurchasePolicyType(token, companyId, selected);
+            if (result.getMessage() != null && result.getValue() == null
+                    && result.getMessage().toLowerCase().contains("error")) {
+                showError(result.getMessage());
+            } else {
+                showSuccess("Policy type changed to " + selected);
+                refreshPolicy.run();
+            }
+        });
+        changeTypeBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        content.add(typeHeader, typeBox, changeTypeBtn);
+
+        // ── Add rule ──────────────────────────────────────────────────────────
+        Hr divider = new Hr();
+        H4 addHeader = new H4("Add Rule");
+        addHeader.getStyle().set("margin-bottom", "0.25rem");
+
+        ComboBox<PurchaseRuleDTO.Type> ruleTypeBox = new ComboBox<>("Rule Type");
+        ruleTypeBox.setItems(
+                PurchaseRuleDTO.Type.MIN_AGE,
+                PurchaseRuleDTO.Type.MAX_TICKETS,
+                PurchaseRuleDTO.Type.MIN_TICKETS);
+        ruleTypeBox.setWidthFull();
+
+        IntegerField ruleValueField = new IntegerField("Value");
+        ruleValueField.setMin(1);
+        ruleValueField.setWidthFull();
+        ruleValueField.setHelperText("e.g. min age = 18, max tickets = 4");
+
+        Button addRuleBtn = new Button("Add Rule", e -> {
+            PurchaseRuleDTO.Type ruleType = ruleTypeBox.getValue();
+            Integer val = ruleValueField.getValue();
+            if (ruleType == null) {
+                showError("Please select a rule type.");
+                return;
+            }
+            if (val == null || val < 1) {
+                showError("Please enter a valid value (minimum 1).");
+                return;
+            }
+            PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(ruleType, val);
+            var result = presenter.addRuleToCompany(token, companyId, ruleDTO);
+            if (result.getValue() != null && result.getValue()) {
+                showSuccess("Rule added successfully.");
+                ruleTypeBox.clear();
+                ruleValueField.clear();
+                refreshPolicy.run();
+            } else {
+                showError(result.getMessage());
+            }
+        });
+        addRuleBtn.addThemeVariants(ButtonVariant.LUMO_SUCCESS);
+
+        content.add(divider, addHeader, ruleTypeBox, ruleValueField, addRuleBtn);
+
+        // ── Remove rule ───────────────────────────────────────────────────────
+        Hr divider2 = new Hr();
+        H4 removeHeader = new H4("Remove Rule");
+        removeHeader.getStyle().set("margin-bottom", "0.25rem");
+
+        ComboBox<PurchaseRuleDTO.Type> removeTypeBox = new ComboBox<>("Rule Type");
+        removeTypeBox.setItems(
+                PurchaseRuleDTO.Type.MIN_AGE,
+                PurchaseRuleDTO.Type.MAX_TICKETS,
+                PurchaseRuleDTO.Type.MIN_TICKETS);
+        removeTypeBox.setWidthFull();
+
+        IntegerField removeValueField = new IntegerField("Value");
+        removeValueField.setMin(1);
+        removeValueField.setWidthFull();
+
+        Button removeRuleBtn = new Button("Remove Rule", e -> {
+            PurchaseRuleDTO.Type ruleType = removeTypeBox.getValue();
+            Integer val = removeValueField.getValue();
+            if (ruleType == null) {
+                showError("Please select a rule type.");
+                return;
+            }
+            if (val == null || val < 1) {
+                showError("Please enter a valid value.");
+                return;
+            }
+            PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(ruleType, val);
+            var result = presenter.removeRuleFromCompany(token, companyId, ruleDTO);
+            if (result.getValue() != null && result.getValue()) {
+                showSuccess("Rule removed successfully.");
+                removeTypeBox.clear();
+                removeValueField.clear();
+                refreshPolicy.run();
+            } else {
+                showError(result.getMessage());
+            }
+        });
+        removeRuleBtn.addThemeVariants(ButtonVariant.LUMO_ERROR);
+
+        content.add(divider2, removeHeader, removeTypeBox, removeValueField, removeRuleBtn);
+
+        dialog.add(content);
+
+        Button closeBtn = new Button("Close", e -> dialog.close());
+        closeBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        dialog.getFooter().add(closeBtn);
+
+        dialog.open();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private String getToken() {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        return (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
+    }
+
+    private void showSuccess(String message) {
+        Notification n = Notification.show(message, 3000, Notification.Position.TOP_CENTER);
+        n.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+    }
+
+    private void showError(String message) {
+        Notification n = Notification.show(message, 4000, Notification.Position.TOP_CENTER);
+        n.addThemeVariants(NotificationVariant.LUMO_ERROR);
     }
 }

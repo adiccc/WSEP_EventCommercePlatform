@@ -1,13 +1,17 @@
 package UI.Presenters;
 
+import DTO.PurchaseRuleDTO;
 import application.CompanyService;
 import application.EventService;
 import application.Response;
 import domain.dataType.EventSearchFilter;
+import domain.dataType.PermissionType;
+import domain.policy.PurchasePolicyType;
 import domain.dto.CompanyDetailsDTO;
 import domain.dto.EventDTO;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * Presenter for CompanyView.
@@ -43,5 +47,25 @@ public class CompanyPresenter {
      */
     public Response<List<EventDTO>> searchEvents(String token, int companyId, EventSearchFilter filter) {
         return eventService.searchCompanyEvents(token, companyId, filter);
+    }
+
+    /** Returns the manager's granted permissions in this company. */
+    public Response<Set<PermissionType>> getMyPermissions(String token, int companyId) {
+        return companyService.getMyPermissions(token, companyId);
+    }
+
+    /** Changes the company-level purchase policy type (AND / OR). */
+    public Response<Void> changePurchasePolicyType(String token, int companyId, PurchasePolicyType policyType) {
+        return companyService.changePurchasePolicyType(token, companyId, policyType);
+    }
+
+    /** Adds a purchase rule to the company policy. */
+    public Response<Boolean> addRuleToCompany(String token, int companyId, PurchaseRuleDTO ruleDTO) {
+        return companyService.addRuleToCompany(token, companyId, ruleDTO);
+    }
+
+    /** Removes a purchase rule from the company policy. */
+    public Response<Boolean> removeRuleFromCompany(String token, int companyId, PurchaseRuleDTO ruleDTO) {
+        return companyService.removeRuleFromCompany(token, companyId, ruleDTO);
     }
 }
