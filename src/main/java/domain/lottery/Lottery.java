@@ -66,6 +66,11 @@ public class Lottery {
         if (registered.isEmpty()) {
             return Collections.emptyMap();
         }
+        // If winners have already been drawn, return the existing winners.
+        // This ensures that the same winners are returned if drawWinners is called multiple times.
+        if (!winners.isEmpty()) {
+            return Collections.unmodifiableMap(winners);
+        }
 
         List<Integer> selectedUsers;
 

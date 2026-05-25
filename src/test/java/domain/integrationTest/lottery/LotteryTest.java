@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -20,50 +21,75 @@ class LotteryTest {
     }
 
     @Test
-    void GivenNoRegisteredUsers_WhenDrawWinners_ThenWinnersListIsEmpty() {
-        // Arrange: No users added to lottery.getRegistered()
+    void GivenNoRegisteredUsers_WhenDrawWinners_ThenReturnedMapIsEmpty() {
+        // Arrange: No users registered
 
         // Act
-        lottery.drawWinners();
+        Map<Integer, String> winnersMap = lottery.drawWinners();
 
         // Assert
-        assertTrue(lottery.getWinners().isEmpty(), "Winners list should be empty when no one registered");
+        assertTrue(winnersMap.isEmpty(), "Returned map should be empty when no one registered");
+        assertTrue(lottery.getWinners().isEmpty(), "Internal winners list should also be empty");
     }
 
     @Test
-    void GivenLessOrEqualRegisteredThanCapacity_WhenDrawWinners_ThenAllWin() {
+    void GivenLessOrEqualRegisteredThanCapacity_WhenDrawWinners_ThenAllWinAndReceiveValidCodes() {
         // Arrange: 2 users registered, capacity is 3
-        lottery.getRegistered().add(101);
-        lottery.getRegistered().add(102);
+        lottery.registerUserToLottery(101);
+        lottery.registerUserToLottery(102);
 
         // Act
-        lottery.drawWinners();
+        Map<Integer, String> winnersMap = lottery.drawWinners();
 
-        // Assert
-        assertEquals(2, lottery.getWinners().size(), "All registered users should win");
-        assertTrue(lottery.getWinners().contains(101));
-        assertTrue(lottery.getWinners().contains(102));
+        // Assert: Check winning status
+        assertEquals(2, winnersMap.size(), "All registered users should win");
+        assertTrue(winnersMap.containsKey(101), "User 101 should be a winner");
+        assertTrue(winnersMap.containsKey(102), "User 102 should be a winner");
+
+        // Assert: Validate code generation logic
+        for (String code : winnersMap.values()) {
+            assertNotNull(code, "Generated code must not be null");
+            assertEquals(7, code.length(), "Code should be exactly 7 characters (6 chars + 1 hyphen)");
+            assertTrue(code.contains("-"), "Code must contain a hyphen for readability");
+        }
     }
 
     @Test
-    void GivenMoreRegisteredThanCapacity_WhenDrawWinners_ThenWinnersEqualToCapacity() {
+    void GivenMoreRegisteredThanCapacity_WhenDrawWinners_ThenWinnersEqualToCapacityAndCodesAreUnique() {
         // Arrange: 5 users registered, capacity is 3
-        lottery.getRegistered().add(101);
-        lottery.getRegistered().add(102);
-        lottery.getRegistered().add(103);
-        lottery.getRegistered().add(104);
-        lottery.getRegistered().add(105);
+        lottery.registerUserToLottery(101);
+        lottery.registerUserToLottery(102);
+        lottery.registerUserToLottery(103);
+        lottery.registerUserToLottery(104);
+        lottery.registerUserToLottery(105);
 
         // Act
-        lottery.drawWinners();
+        Map<Integer, String> winnersMap = lottery.drawWinners();
 
-        // Assert
-        assertEquals(capacity, lottery.getWinners().size(), "Winners count must exactly match the capacity");
+        // Assert: Check capacity enforcement
+        assertEquals(capacity, winnersMap.size(), "Winners count must exactly match the capacity");
 
-        // Ensure all winners are from the registered list
-        for (Integer winnerId : lottery.getWinners()) {
+        // Assert: Ensure all winners are originally from the registered list
+        for (Integer winnerId : winnersMap.keySet()) {
             assertTrue(lottery.getRegistered().contains(winnerId), "Winner must be from the registered users");
         }
+
+        // Assert: Verify uniqueness of generated codes
+        long uniqueCodes = winnersMap.values().stream().distinct().count();
+        assertEquals(winnersMap.size(), uniqueCodes, "All generated access codes must be entirely unique");
+    }
+
+    @Test
+    void GivenWinnerWithCode_WhenCodeMatchesUser_ThenValidationReturnsCorrectBoolean() {
+        // Arrange: Register one user and perform the draw
+        lottery.registerUserToLottery(101);
+        Map<Integer, String> winnersMap = lottery.drawWinners();
+        String assignedCode = winnersMap.get(101);
+
+        // Act & Assert: Test the validation function scenarios
+        assertTrue(lottery.codeMatchesUser(101, assignedCode), "Validation should succeed for correct user and code pair");
+        assertFalse(lottery.codeMatchesUser(101, "WRONG-CODE"), "Validation should fail for an incorrect code");
+        assertFalse(lottery.codeMatchesUser(999, assignedCode), "Validation should fail for an unregistered user");
     }
 
 }

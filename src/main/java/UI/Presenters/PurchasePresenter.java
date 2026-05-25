@@ -22,11 +22,13 @@ public class PurchasePresenter {
             String token,
             int companyId,
             int eventId,
+            String code
     ) {
         return activeOrderService.enterEventPurchase(
                 token,
                 companyId,
                 eventId,
+                code
         );
     }
 

@@ -129,6 +129,10 @@ public class LotteryService {
         try {
             // Retrieve the lottery from the database
             Lottery lottery = lotteryRepo.findById(lotteryId);
+            if (!lottery.getWinners().isEmpty()) {
+                logger.log(Level.INFO, "Lottery ID " + lotteryId + " was already drawn.");
+                return;
+            }
             // Perform the domain logic to select winners
             Map<Integer,String> winners = lottery.drawWinners();
             //Save the updated lottery state (with the populated winners list) back to the database
