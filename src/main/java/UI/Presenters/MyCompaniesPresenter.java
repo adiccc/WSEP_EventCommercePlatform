@@ -2,6 +2,7 @@ package UI.Presenters;
 
 import application.CompanyService;
 import application.Response;
+import domain.company.Company;
 import domain.dto.CompanyDTO;
 
 import java.util.List;
@@ -27,5 +28,11 @@ public class MyCompaniesPresenter {
     public String getUserRole(String token, int companyId) {
         var r = companyService.getUserRoleInCompany(token, companyId);
         return r.getValue() != null ? r.getValue() : "MEMBER";
+    }
+
+    /** Creates a new production company with the given details. */
+    public Response<Company> createCompany(String token, int companyId, String companyName,
+                                           String email, String phone, String bankAccount) {
+        return companyService.createProductionCompany(token, companyId, companyName, email, phone, bankAccount);
     }
 }
