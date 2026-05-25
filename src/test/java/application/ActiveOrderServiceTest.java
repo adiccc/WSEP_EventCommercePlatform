@@ -3499,7 +3499,7 @@ class ActiveOrderServiceTest {
             String token = userService.login(uniqueEmail, "p").getValue();
             assertNotNull(token, "Login failed for filler " + i);
 
-            Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(token, companyId, isolatedEventId);
+            Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(token, companyId, isolatedEventId,null);
             assertNotNull(enterResp.getValue(), "Enter event failed for filler " + i + ". Server says: " + enterResp.getMessage());
 
             Response<Integer> selectResp = service.userSelectTickets(token, isolatedEventId, new HashMap<>(), Map.of("floor", 1));
@@ -3527,7 +3527,7 @@ class ActiveOrderServiceTest {
 
         String waitingToken = userService.login(waiterEmail, "pass").getValue();
 
-        Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(waitingToken, companyId, isolatedEventId);
+        Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(waitingToken, companyId, isolatedEventId,null);
         assertNotNull(enterResp.getValue(), "Waiter enter event failed: " + enterResp.getMessage());
         assertTrue(enterResp.getValue().isWaitingInQueue(), "User should be in queue");
 
@@ -3581,7 +3581,7 @@ class ActiveOrderServiceTest {
             assertNotNull(regResp.getValue(), "Registration failed for filler " + i + ". Server says: " + regResp.getMessage());
 
             String token = userService.login(uniqueEmail, "p").getValue();
-            Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(token, companyId, isolatedEventId);
+            Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(token, companyId, isolatedEventId,null);
             Response<Integer> selectResp = service.userSelectTickets(token, isolatedEventId, new HashMap<>(), Map.of("floor", 1));
 
             if (i == 0) {
@@ -3596,7 +3596,7 @@ class ActiveOrderServiceTest {
         assertNotNull(waiterRegResp.getValue(), "Waiter registration failed: " + waiterRegResp.getMessage());
         String waitingToken = userService.login(waiterEmail, "pass").getValue();
 
-        Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(waitingToken, companyId, isolatedEventId);
+        Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(waitingToken, companyId, isolatedEventId,null);
         assertNotNull(enterResp.getValue(), "Waiter enter event failed: " + enterResp.getMessage());
         assertTrue(enterResp.getValue().isWaitingInQueue(), "User should be in queue");
 
