@@ -13,6 +13,10 @@ public class TicketSupplyProxy implements ITicketSupply {
 
     @Override
     public TicketSupplyResultDTO issue(TicketSupplyRequestDTO request) {
+//        if (request.getTickets().size() == 3) {
+//            return new TicketSupplyResultDTO(false, List.of());
+//        }
+
         List<String> issuedCodes = new ArrayList<>();
 
         for (int i = 0; i < request.getTickets().size(); i++) {

@@ -8,13 +8,18 @@ public class PaymentDetailsDTO {
     private int numberOfPayments;
     private String couponCode;
 
-    public PaymentDetailsDTO(String cardNumber, String expirationDate, String cvv,
-                             String cardHolderId, int numberOfPayments) {
+    public PaymentDetailsDTO(String cardNumber,
+                             String expirationDate,
+                             String cvv,
+                             String cardHolderId,
+                             int numberOfPayments,
+                             String couponCode) {
         this.cardNumber = cardNumber;
         this.expirationDate = expirationDate;
         this.cvv = cvv;
         this.cardHolderId = cardHolderId;
         this.numberOfPayments = numberOfPayments;
+        this.couponCode = normalizeCouponCode(couponCode);
     }
 
     public String getCardNumber() {
@@ -39,5 +44,13 @@ public class PaymentDetailsDTO {
 
     public String getCouponCode() {
         return couponCode;
+    }
+
+    private String normalizeCouponCode(String couponCode) {
+        if (couponCode == null || couponCode.isBlank()) {
+            return null;
+        }
+
+        return couponCode.trim();
     }
 }

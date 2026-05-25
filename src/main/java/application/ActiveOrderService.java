@@ -1,12 +1,6 @@
 package application;
 
-import DTO.EnterPurchaseDTO;
-import DTO.NotifyDTO;
-import DTO.NotifyPayload;
-import DTO.NotifyType;
-import DTO.PaymentDetailsDTO;
-import DTO.TicketSupplyRequestDTO;
-import DTO.TicketSupplyResultDTO;
+import DTO.*;
 
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
@@ -343,6 +337,108 @@ public class ActiveOrderService {
 
     });}
 
+    public Response<CheckoutPriceDTO> prepareCheckout(String token, int activeOrderId) {
+        return prepareCheckoutPrice(token, activeOrderId, null);
+    }
+
+    public Response<CheckoutPriceDTO> applyCheckoutCoupon(
+            String token,
+            int activeOrderId,
+            String couponCode) {
+
+        return prepareCheckoutPrice(token, activeOrderId, couponCode);
+    }
+
+    private Response<CheckoutPriceDTO> prepareCheckoutPrice(
+            String token,
+            int activeOrderId,
+            String couponCode) {
+
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "prepareCheckoutPrice called");
+
+            try {
+                String role = auth.getRole(token).getValue();
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid token");
+                    return new Response<>(null, "Invalid token");
+                }
+
+                String userIdentifier = token;
+
+                if (role.equals("MEMBER")) {
+                    userIdentifier = auth.getUserEmail(token).getValue();
+
+                    if (userIdentifier == null) {
+                        logger.log(Level.SEVERE, "not a valid user email");
+                        return new Response<>(null, "not a valid user email");
+                    }
+
+                    if (!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())) {
+                        logger.severe("User does not have write access");
+                        return new Response<>(null, "user does not have write access.");
+                    }
+                }
+
+                ActiveOrder activeOrder = activeOrderRepo.findById(activeOrderId);
+
+                if (!activeOrder.getUserIdentifier().equals(userIdentifier)) {
+                    return new Response<>(null, "Active order does not belong to user");
+                }
+
+                Event event = eventRepo.findById(activeOrder.getEventId());
+
+                if (!event.isActive()) {
+                    return new Response<>(null, "Event is not active");
+                }
+
+                if (!activeOrder.hasTickets()) {
+                    return new Response<>(null, "Active order has no selected tickets");
+                }
+
+                if (activeOrder.isExpired()) {
+                    return new Response<>(null, "Active order expired");
+                }
+
+                Company company = companyRepo.findById(event.getCompanyId());
+
+                double originalPrice = event.getEventMap()
+                        .calculateTotalPriceBeforeDiscount(activeOrder.getTickets());
+
+                double priceAfterEventDiscounts = event.calculateFinalTotalPrice(
+                        activeOrder.getTickets(),
+                        couponCode
+                );
+
+                double finalPrice = company.getDiscountPolicy().apply(
+                        priceAfterEventDiscounts,
+                        activeOrder.getTickets().size(),
+                        couponCode
+                );
+
+                activeOrder.setApprovedCheckoutPrice(finalPrice);
+                activeOrderRepo.store(activeOrder);
+
+                CheckoutPriceDTO checkoutPrice = new CheckoutPriceDTO(
+                        originalPrice,
+                        finalPrice,
+                        event.getDiscountPolicy().describe(),
+                        company.getDiscountPolicy().describe()
+                );
+
+                return new Response<>(checkoutPrice, "Checkout price prepared successfully");
+
+            } catch (NoSuchElementException e) {
+                return new Response<>(null, "Event or active order not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to prepare checkout price: " + e.getMessage());
+                return new Response<>(null, "Failed to prepare checkout price");
+            }
+        });
+    }
+
     public Response<Integer> checkoutAndPayment(
             String token,
             int activeOrderId,
@@ -411,16 +507,11 @@ public class ActiveOrderService {
 
                 Company company = companyRepo.findById(event.getCompanyId());
 
-                double totalAfterEventDiscounts = event.calculateFinalTotalPrice(
-                        activeOrder.getTickets(),
-                        paymentDetails.getCouponCode()
-                );
+                if (!activeOrder.hasApprovedCheckoutPrice()) {
+                    return new Response<>(null, "Checkout price was not approved");
+                }
 
-                double total = company.getDiscountPolicy().apply(
-                        totalAfterEventDiscounts,
-                        activeOrder.getTickets().size(),
-                        paymentDetails.getCouponCode()
-                );
+                double total = activeOrder.getApprovedCheckoutPrice();
 
                 String paymentConfirmationId = paymentSystem.pay(total, paymentDetails);
 

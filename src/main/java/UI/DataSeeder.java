@@ -1,5 +1,6 @@
 package UI;
 
+import DTO.DiscountDTO;
 import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
@@ -12,6 +13,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -30,6 +32,7 @@ import java.util.logging.Logger;
 public class DataSeeder implements ApplicationRunner {
 
     private static final Logger log = Logger.getLogger(DataSeeder.class.getName());
+    private int seededEventCounter = 0;
 
     private final UserService userService;
     private final CompanyService companyService;
@@ -216,7 +219,7 @@ public class DataSeeder implements ApplicationRunner {
 
     private void createEvent(String token, int companyId, String name,
                              LocalDateTime date, CategoryEvent category, GeographicalArea area) {
-        LocalDateTime saleStart = date.minusWeeks(3);
+        LocalDateTime saleStart = getDemoSaleStart(date);
         var r = eventService.createEvent(token, companyId, date, name, saleStart, false, area, category);
         if (r.getValue() == null) {
             log.warning("DataSeeder: event creation failed [" + name + "] — " + r.getMessage());
@@ -224,7 +227,35 @@ public class DataSeeder implements ApplicationRunner {
         }
         int eventId = r.getValue();
         log.info("DataSeeder: created event [" + name + "] id=" + eventId);
+        if ("Rock Under the Stars".equals(name)) {
+            addDemoCoupon(token, eventId, "ROCK50");
+        }
         activateEvent(token, eventId, name);
+    }
+
+    private LocalDateTime getDemoSaleStart(LocalDateTime eventDate) {
+        seededEventCounter++;
+
+        if (seededEventCounter % 3 == 0) {
+            return LocalDateTime.now().plusDays(2);
+        }
+
+        return LocalDateTime.now().minusDays(1);
+    }
+    private void addDemoCoupon(String token, int eventId, String couponCode) {
+        DiscountDTO coupon = new DiscountDTO(
+                couponCode,
+                50.0,
+                LocalDate.now().plusMonths(1)
+        );
+
+        var r = eventService.addDiscountToEvent(token, eventId, coupon);
+
+        if (r.getValue() == null || !r.getValue()) {
+            log.warning("DataSeeder: coupon creation failed for event " + eventId + " — " + r.getMessage());
+        } else {
+            log.info("DataSeeder: added demo coupon [" + couponCode + "] to event " + eventId);
+        }
     }
 
     /**
