@@ -4,7 +4,7 @@ import DTO.*;
 import Log.LoggerSetup;
 
 import java.util.*;
-
+import org.mockito.ArgumentCaptor;
 import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.ActiveOrder;
 import domain.dataType.CategoryEvent;
@@ -50,7 +50,7 @@ class ActiveOrderServiceTest {
     private CompanyService companyService;
     private EventCompanyManageService companyEventService;
     private LotteryService lotteryService;
-
+    private LotteryRepoImpl lotteryRepo;
     private String validToken;
     private Integer eventId;
     private Integer concurrentEventId;
@@ -90,7 +90,7 @@ class ActiveOrderServiceTest {
         eventRepo = new EventRepoImpl();
         activeOrderRepo = new ActiveOrderRepoImpl();
         CompanyRepoImpl companyRepo = new CompanyRepoImpl();
-        LotteryRepoImpl lotteryRepo = new LotteryRepoImpl();
+        lotteryRepo = new LotteryRepoImpl();
 
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
@@ -3774,5 +3774,115 @@ class ActiveOrderServiceTest {
         assertEquals(isolatedEventId, receivedNotif.get().getPayload().getEventId());
 
         registration.remove();
+    }
+
+    private String extractLotteryCodeFromNotification(NotifyDTO notification) {
+        String message = notification.getPayload().getMessage();
+
+        String marker = "Your code is: ";
+        int index = message.indexOf(marker);
+
+        assertTrue(index >= 0, "Lottery notification should contain generated code");
+
+        return message.substring(index + marker.length()).trim();
+    }
+    @Test
+    void GivenInvalidLotteryCode_WhenValidateLotteryCode_ThenReturnFalse() throws Exception {
+        int lotteryEventId = companyEventService.createEvent(
+                validToken,
+                companyId,
+                LocalDateTime.now().plusDays(5),
+                "Acceptance Lottery Event Invalid Code",
+                LocalDateTime.now().plusSeconds(2),
+                true,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS
+        ).getValue();
+
+        lotteryService.createLottery(
+                validToken,
+                lotteryEventId,
+                1,
+                LocalDateTime.now().plusSeconds(1),
+                5
+        );
+
+        lotteryService.registerUserToLottery(validToken, lotteryEventId);
+        lotteryService.drawLottery(lotteryEventId);
+
+        Thread.sleep(2500);
+
+        Response<Boolean> response =
+                service.validateLotteryCode(
+                        validToken,
+                        companyId,
+                        lotteryEventId,
+                        "BAD-CODE"
+                );
+
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue());
+        assertEquals("Invalid lottery code", response.getMessage());
+    }
+
+    @Test
+    void GivenValidLotteryCode_WhenValidateLotteryCode_ThenReturnTrue() throws Exception {
+        int lotteryEventId = companyEventService.createEvent(
+                validToken,
+                companyId,
+                LocalDateTime.now().plusDays(5),
+                "Acceptance Lottery Event Valid Code",
+                LocalDateTime.now().plusSeconds(2),
+                true,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS
+        ).getValue();
+
+        lotteryService.createLottery(
+                validToken,
+                lotteryEventId,
+                1,
+                LocalDateTime.now().plusSeconds(1),
+                5
+        );
+
+        lotteryService.registerUserToLottery(validToken, lotteryEventId);
+        lotteryService.drawLottery(lotteryEventId);
+
+        int userId = auth.getUserId(validToken).getValue();
+
+        ArgumentCaptor<NotifyDTO> notificationCaptor =
+                ArgumentCaptor.forClass(NotifyDTO.class);
+
+        Mockito.verify(notifier, Mockito.atLeastOnce())
+                .notifyMemberById(
+                        Mockito.eq(userId),
+                        notificationCaptor.capture()
+                );
+
+        NotifyDTO lotteryNotification =
+                notificationCaptor.getAllValues()
+                        .stream()
+                        .filter(n -> n.getPayload() != null
+                                && n.getPayload().getMessage() != null
+                                && n.getPayload().getMessage().contains("Your code is: "))
+                        .findFirst()
+                        .orElseThrow();
+
+        String validCode = extractLotteryCodeFromNotification(lotteryNotification);
+
+        Thread.sleep(2500);
+
+        Response<Boolean> response =
+                service.validateLotteryCode(
+                        validToken,
+                        companyId,
+                        lotteryEventId,
+                        validCode
+                );
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue());
+        assertEquals("Lottery code is valid", response.getMessage());
     }
 }

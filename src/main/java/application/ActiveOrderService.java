@@ -356,6 +356,87 @@ public class ActiveOrderService {
         });
     }
 
+    public Response<Boolean> validateLotteryCode(String token, int companyId, int eventId, String code) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "validateLotteryCode called");
+
+            try {
+                String role = auth.getRole(token).getValue();
+
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Lottery code validation failed: invalid token");
+                    return new Response<>(null, "Invalid token");
+                }
+
+                Integer userId = auth.getUserId(token).getValue();
+
+                if (!accessValidator.hasWriteAccess(userId)) {
+                    logger.log(Level.SEVERE, "Lottery code validation failed: user does not have write access");
+                    return new Response<>(null, "User does not have write access");
+                }
+
+                Event event = eventRepo.findById(eventId);
+
+                if (event.getCompanyId() != companyId) {
+                    logger.log(Level.SEVERE, "Lottery code validation failed: event does not belong to company");
+                    return new Response<>(null, "The selected event does not belong to the company");
+                }
+
+                if (!event.isActive()) {
+                    logger.log(Level.SEVERE, "Lottery code validation failed: event is not active");
+                    return new Response<>(null, "The selected event is not active");
+                }
+
+                LocalDateTime now = LocalDateTime.now();
+
+                if (event.getSaleStartDate().isAfter(now)) {
+                    logger.log(Level.INFO, "Lottery code validation stopped: sale has not started yet");
+                    return new Response<>(null, "The sale for this event has not started yet");
+                }
+
+                if (!event.hasLottery()) {
+                    logger.log(Level.INFO, "Lottery code validation completed: lottery code is not required");
+                    return new Response<>(true, "Lottery code is not required");
+                }
+
+                Lottery lottery = lotteryRepo.findById(eventId);
+
+                LocalDateTime lotteryEndTime =
+                        event.getSaleStartDate().plusHours(lottery.getExpirationTime());
+
+                if (!now.isBefore(lotteryEndTime)) {
+                    logger.log(Level.INFO, "Lottery code validation completed: lottery exclusive period has ended");
+                    return new Response<>(true, "Lottery period has ended. Everyone can purchase tickets");
+                }
+
+                if (code == null || code.isBlank()) {
+                    logger.log(Level.INFO, "Lottery code validation failed: missing lottery code");
+                    return new Response<>(false, "Please enter your lottery code");
+                }
+
+                if (!lottery.codeMatchesUser(userId, code)) {
+                    logger.log(Level.INFO, "Lottery code validation failed: invalid lottery code");
+                    return new Response<>(false, "Invalid lottery code");
+                }
+
+                logger.log(Level.INFO, "Lottery code validation completed successfully");
+                return new Response<>(true, "Lottery code is valid");
+
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "Lottery code validation failed: event or lottery not found");
+                return new Response<>(null, "Event or lottery not found");
+
+            } catch (OptimisticLockingFailureException e) {
+                logger.log(Level.WARNING, "Lottery code validation failed due to optimistic locking");
+                throw e;
+
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Lottery code validation failed: " + e.getMessage());
+                return new Response<>(null, "Failed to validate lottery code: " + e.getMessage());
+            }
+        });
+    }
+
     public Response<TicketSupplyResultDTO> issueTickets(TicketSupplyRequestDTO request) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "issueTickets called");
