@@ -671,8 +671,21 @@ public class ActiveOrderService {
 
                     if (refundApproved) {
                         order.markRefunded();
+                        try {
+                            // Notify the user about the refund
+                            NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId() + " in event " + event.getId() + " because ticket issuance failed", event.getId(), null);
+                            notifier.notifyUser(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
+                        } catch (Exception e) {
+                            logger.log(Level.WARNING, "Failed to notify user about successful refund: " + e.getMessage());
+                        }
                     } else {
                         order.markRefundRequired();
+                        try {
+                            NotifyPayload payload = new NotifyPayload("Refund for order " + order.getOrderId() + " in event " + event.getId() + " because ticket issuance failed has been failed, please contact support", event.getId(), null);
+                            notifier.notifyUser(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
+                        } catch (Exception e) {
+                            logger.log(Level.WARNING, "Failed to notify user about required refund: " + e.getMessage());
+                        }
                     }
 
                     shouldReleaseTickets = true;

@@ -1562,6 +1562,10 @@ class ActiveOrderServiceTest {
         Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
         Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
         Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
+        Mockito.verify(notifier).notifyUser(
+                Mockito.eq(auth.getUserEmail(validToken).getValue()),
+                Mockito.any(NotifyDTO.class)
+        );
     }
 
     @Test
@@ -1619,6 +1623,10 @@ class ActiveOrderServiceTest {
         Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
         Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
         Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
+        Mockito.verify(notifier).notifyUser(
+                Mockito.eq(auth.getUserEmail(validToken).getValue()),
+                Mockito.any(NotifyDTO.class)
+        );
     }
 
     @Test
@@ -1678,6 +1686,10 @@ class ActiveOrderServiceTest {
         Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
         Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
         Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
+        Mockito.verify(notifier).notifyUser(
+                Mockito.eq(auth.getUserEmail(validToken).getValue()),
+                Mockito.any(NotifyDTO.class)
+        );
     }
 
     @Test
@@ -1791,6 +1803,70 @@ class ActiveOrderServiceTest {
 
         Mockito.verify(ticketSupply, Mockito.never())
                 .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+
+    @Test
+    void GivenTicketIssuanceFailureAndRefundApproved_WhenCheckoutAndPayment_ThenRefundNotificationSent() {
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+
+        assertNotNull(selectResponse.getValue(),
+                "setup failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(
+                Mockito.anyDouble(),
+                Mockito.any(PaymentDetailsDTO.class))
+        ).thenReturn("payment-123");
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+
+        Mockito.when(supplyResult.isSuccess()).thenReturn(false);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        Mockito.when(paymentSystem.refund(
+                Mockito.eq("payment-123"),
+                Mockito.anyDouble())
+        ).thenReturn(true);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO(
+                        "1234",
+                        "12/30",
+                        "123",
+                        "111",
+                        1,
+                        null
+                );
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(checkoutPriceResponse.getValue());
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(checkoutResponse.getValue());
+        assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
+
+        Mockito.verify(notifier).notifyUser(
+                Mockito.eq(auth.getUserEmail(validToken).getValue()),
+                Mockito.argThat((NotifyDTO dto) ->
+                        dto != null
+                                && dto.getPayload() != null
+                                && dto.getPayload().getMessage()
+                                .contains("Refund processed")
+                )
+        );
     }
 
 
@@ -3167,8 +3243,11 @@ class ActiveOrderServiceTest {
                 "Tickets released back, event must not be sold out");
 
         Member founder = userRepo.findUserByEmail("testuser1@gmail.com");
-        assertTrue(founder.getDelayedNotifications().isEmpty(),
-                "No sold-out notification should be sent when tickets are released back");
+        assertFalse(
+                founder.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getPayload().getMessage().toLowerCase().contains("sold out")),
+                "No sold-out notification should be sent when tickets are released back"
+        );
     }
 
     @Test
