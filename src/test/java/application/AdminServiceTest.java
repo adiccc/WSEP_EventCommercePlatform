@@ -85,7 +85,7 @@ class AdminServiceTest {
         ticketSupply = Mockito.mock(ITicketSupply.class);
 
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
-        auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(ADMIN_EMAIL));
+        auth = new Auth(tokenService, Set.of(ADMIN_EMAIL));
         accessValidator = new AccessValidator(suspensionRepo);
         notifier = new VaadinNotifier();
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
@@ -124,7 +124,7 @@ class AdminServiceTest {
 
         userService.registerUser(null, new UserDTO("notSuspenededUser@gmail.com","notSuspenededUser","test","test",1,1,2000,"test-addtess","050-000-0032"));
         userNotSusToken = userService.login("notSuspenededUser@gmail.com","test").getValue();
-        userIdNotSuspened=auth.getUserId(userNotSusToken).getValue();
+        userIdNotSuspened=userService.getUserId(userNotSusToken).getValue();
 
     }
 

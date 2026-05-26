@@ -248,7 +248,7 @@ public class UserService {
                     return new Response<>(false, "Logout failed");
                 }
                 WebQueue.getInstance().notifyUserLeft();
-                logger.info("leaveStore successful for token: " + token);
+                logger.info("leaveStore successful");
                 return response;
             } catch (OptimisticLockingFailureException e) {
                 throw e;
@@ -355,7 +355,6 @@ public class UserService {
                 if (email == null) {
                     return new Response<>(-1, "Email extraction failed");
                 }
-
                 Member member = userRepo.findUserByEmail(email);
                 if (member != null) {
                     return new Response<>(member.getUserId(), "Retrieved member ID");

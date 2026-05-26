@@ -56,7 +56,7 @@ public class LotteryService {
             logger.log(Level.INFO, "createLottery called");
 
             // check valid token
-            int userId = auth.getUserId(token).getValue();
+            int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
@@ -161,7 +161,7 @@ public class LotteryService {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "registerUserToLottery called");
 
-            int userId = auth.getUserId(token).getValue();
+            int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("User is not logged in");
                 return new Response<>(false, "User is not logged in");
@@ -215,6 +215,14 @@ public class LotteryService {
                 return new Response<>(false, "Failed to register user to lottery: " + e.getMessage());
             }
         });
+    }
+    private int getUserIdFromToken(String token) {
+        String email = auth.getUserEmail(token).getValue();
+        if (email != null) {
+            Member m = userRepo.findUserByEmail(email);
+            if (m != null) return m.getUserId();
+        }
+        return -1;
     }
 
     // Helper method to send a real-time notification or save it as delayed if the user is offline.

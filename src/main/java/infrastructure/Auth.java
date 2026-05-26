@@ -61,7 +61,7 @@ public class Auth implements IAuth {
             }
             cleanExpiredLoggedOutTokens();
             logger.info("Logout successful for username: " + tokenService.extractUsername(token));
-            return new Response<>(true, "Logout successful for username: " + tokenService.extractUsername(token));
+            return new Response<>(true, "Logout successful");
         } catch (Exception e) {
             logger.severe("Logout failed for token: " + token + ". Error: " + e.getMessage());
             return new Response<>(false, "Logout failed due to server error");

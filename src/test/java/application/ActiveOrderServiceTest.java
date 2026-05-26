@@ -68,8 +68,8 @@ class ActiveOrderServiceTest {
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         ISuspensionRepo suspensionRepo = new SuspensionRepoImpl();
         IAccessValidator accessValidator=new AccessValidator(suspensionRepo);
-        auth = new Auth(tokenService, userRepo, passwordEncoder);
-        notifier = Mockito.spy(new VaadinNotifier());
+        auth = new Auth(tokenService);
+        notifier = Mockito.spy(new VaadinNotifier(userRepo));
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
 
         userService.registerUser(
@@ -99,6 +99,7 @@ class ActiveOrderServiceTest {
         companyService.createProductionCompany(validToken, companyId,
                 "test-company", "testC@company.com", "054-5556677", "leumi");
 
+        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier,userRepo);
         companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier,userRepo);
 
         Response<Integer> r = companyEventService.createEvent(
@@ -136,6 +137,7 @@ class ActiveOrderServiceTest {
         companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId, stage, entries, standingZones, seatingZones);
 
         lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator,notifier,userRepo);
+        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator,notifier,userRepo);
         lotteryService.createLottery(validToken, eventId, 10,
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
@@ -150,6 +152,7 @@ class ActiveOrderServiceTest {
                 ticketSupply,
                 accessValidator,
                 notifier,
+                userRepo,
                 userRepo,
                 capacity
         );
@@ -3200,8 +3203,8 @@ class ActiveOrderServiceTest {
 
         String owner2Token = userService.login("owner2@gmail.com", "pw2").getValue();
         String manager1Token = userService.login("manager1@gmail.com", "pw3").getValue();
-        int owner2Id = auth.getUserId(owner2Token).getValue();
-        int manager1Id = auth.getUserId(manager1Token).getValue();
+        int owner2Id = userService.getUserId(owner2Token).getValue();
+        int manager1Id = userService.getUserId(manager1Token).getValue();
 
         Response<Boolean> reqOwner = companyService.requestAppointOwner(validToken, companyId, owner2Id);
         assertNotNull(reqOwner.getValue(),
@@ -3551,9 +3554,9 @@ class ActiveOrderServiceTest {
         String owner2Token = userService.login("owner2@gmail.com", "pw2").getValue();
         String manager1Token = userService.login("manager1@gmail.com", "pw3").getValue();
         String manager2Token = userService.login("manager2@gmail.com", "pw4").getValue();
-        int owner2Id = auth.getUserId(owner2Token).getValue();
-        int manager1Id = auth.getUserId(manager1Token).getValue();
-        int manager2Id = auth.getUserId(manager2Token).getValue();
+        int owner2Id = userService.getUserId(owner2Token).getValue();
+        int manager1Id = userService.getUserId(manager1Token).getValue();
+        int manager2Id = userService.getUserId(manager2Token).getValue();
 
         Response<Boolean> reqOwner = companyService.requestAppointOwner(validToken, companyId, owner2Id);
         assertNotNull(reqOwner.getValue(), "request appoint owner setup failed");
@@ -3850,7 +3853,7 @@ class ActiveOrderServiceTest {
         lotteryService.registerUserToLottery(validToken, lotteryEventId);
         lotteryService.drawLottery(lotteryEventId);
 
-        int userId = auth.getUserId(validToken).getValue();
+        int userId = userService.getUserId(validToken).getValue();
 
         ArgumentCaptor<NotifyDTO> notificationCaptor =
                 ArgumentCaptor.forClass(NotifyDTO.class);

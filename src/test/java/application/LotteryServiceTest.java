@@ -56,6 +56,7 @@ class LotteryServiceTest {
     private String notPermission;
     private EventCompanyManageService eventCompanyManageService;
     private INotifier notifier;
+    private UserService userService;
 
     @BeforeEach
     void setUp() {
@@ -63,7 +64,8 @@ class LotteryServiceTest {
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
         tokenService = new TokenService();
-        auth = new Auth(tokenService, userRepo, passwordEncoder);
+        auth = new Auth(tokenService);
+        userService = new UserService(tokenService,auth,userRepo,passwordEncoder,notifier);
         suspensionRepo= new SuspensionRepoImpl();
         accessValidator=new AccessValidator(suspensionRepo);
 
@@ -456,7 +458,7 @@ class LotteryServiceTest {
 
         lotteryService.createLottery(validToken, eventId, 5, lotteryDate_X, 24L);
 
-        int userId = auth.getUserId(validToken).getValue();
+        int userId = userService.getUserId(validToken).getValue();
 
         // Act
         Response<Boolean> response =
