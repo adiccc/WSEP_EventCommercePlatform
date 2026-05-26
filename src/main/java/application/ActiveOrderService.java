@@ -18,7 +18,6 @@ import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
 import domain.user.IUserRepo;
 import domain.user.Member;
-import infrastructure.UserRepo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -43,6 +42,7 @@ public class ActiveOrderService {
     private final IActiveOrderRepo activeOrderRepo;
     private final ICompanyRepo companyRepo;
     private final ILotteryRepo lotteryRepo;
+    private final IUserRepo userRepo;
     private final IAuth auth;
     private final IAccessValidator accessValidator;
     private final IPaymentSystem paymentSystem;
@@ -64,11 +64,13 @@ public class ActiveOrderService {
             IAccessValidator accessValidator,
             INotifier notifier,
             IUserRepo userRepo,
+            IUserRepo userRepo,
             @Value("${active-order.capacity:20}") int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
         this.lotteryRepo = lotteryRepo;
+        this.userRepo = userRepo;
         this.auth = auth;
         this.paymentSystem = paymentSystem;
         this.ticketSupply = ticketSupply;
@@ -108,9 +110,7 @@ public class ActiveOrderService {
                 logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
             }
-
-            Integer userId = auth.getUserId(token).getValue();
-
+            int userId = getUserIdFromToken(token);
             if (!accessValidator.hasWriteAccess(userId)) {
                 logger.severe("User does not have write access");
                 return new Response<>(null, "user does not have write access.");
@@ -250,13 +250,13 @@ public class ActiveOrderService {
 
             try {
                 String role = auth.getRole(token).getValue();
-
                 if (role == null) {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
 
-                Integer userId = auth.getUserId(token).getValue();
+
+                int userId = getUserIdFromToken(token);
 
                 if (!accessValidator.hasWriteAccess(userId)) {
                     logger.severe("User does not have write access");
@@ -347,7 +347,7 @@ public class ActiveOrderService {
                     return new Response<>(null, "Invalid token");
                 }
 
-                Integer userId = auth.getUserId(token).getValue();
+                int userId =getUserIdFromToken(token);
 
                 if (!accessValidator.hasWriteAccess(userId)) {
                     logger.log(Level.SEVERE, "Lottery code validation failed: user does not have write access");
@@ -441,42 +441,42 @@ public class ActiveOrderService {
         });
     }
 
-    public Response<Integer> userSelectTickets(String identifier, Integer eventId,
-            Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
-        return RetryHelper.executeWithRetry(() -> {
-            logger.log(Level.INFO, "userSelectTickets called");
-            String role = auth.getRole(identifier).getValue();
-            if (role == null) {
-                logger.log(Level.SEVERE, "identifier is null");
-                return new Response<>(null, "Invalid identifier supplied");
-            }
-            if (!accessValidator.hasWriteAccess(auth.getUserId(identifier).getValue())) {
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
-            }
-            try {
-                int totalSeatingTickets = seatingZones.values().stream()
-                        .mapToInt(List::size)
-                        .sum();
+    public Response<Integer> userSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
+        return RetryHelper.executeWithRetry(()->{
+        logger.log(Level.INFO, "userSelectTickets called");
+        String role = auth.getRole(identifier).getValue();
+        if(role == null){
+            logger.log(Level.SEVERE, "identifier is null");
+            return new Response<>(null, "Invalid identifier supplied");
+        }
+        if(!accessValidator.hasWriteAccess(getUserIdFromToken(identifier))){
+            logger.severe("User does not have write access");
+            return new Response<>(null, "user does not have write access.");
+        }
+        try {
+            int totalSeatingTickets = seatingZones.values().stream()
+                    .mapToInt(List::size)
+                    .sum();
 
-                int totalStandingTickets = standingZones.values().stream()
-                        .mapToInt(Integer::intValue)
-                        .sum();
-                int totalTickets = totalSeatingTickets + totalStandingTickets;
-                Event e = this.eventRepo.findById(eventId);
-                Response<UserDTO> userResponse = auth.getUserDTO(identifier);
-                e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
-                int totalUserTickets = 0;
-                if (userResponse.getValue() != null) {
-                    totalUserTickets = e.countUserTickets(userResponse.getValue());
-                }
-                Company c = companyRepo.findById(e.getCompanyId());
-                c.quantityExceedsPolicy(userResponse.getValue(), totalTickets, totalUserTickets);
-                ActiveOrder newActiveOrder;
-                try {
-                    String userIdentifier = role.equals("MEMBER")
-                            ? auth.getUserEmail(identifier).getValue()
-                            : identifier;
+
+            int totalStandingTickets = standingZones.values().stream()
+                    .mapToInt(Integer::intValue)
+                    .sum();
+            int totalTickets = totalSeatingTickets + totalStandingTickets;
+            Event e = this.eventRepo.findById(eventId);
+            Response<UserDTO> userResponse = auth.getUserDTO(identifier);
+            e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
+            int totalUserTickets = 0;
+            if(userResponse.getValue()!=null){
+                totalUserTickets = e.countUserTickets(userResponse.getValue());
+            }
+            Company c = companyRepo.findById(e.getCompanyId());
+            c.quantityExceedsPolicy(userResponse.getValue(), totalTickets,totalUserTickets);
+            ActiveOrder newActiveOrder;
+            try {
+                String userIdentifier = role.equals("MEMBER")
+                        ? auth.getUserEmail(identifier).getValue()
+                        : identifier;
 
                     ActiveOrderDTO activeOrderDTO = activeOrderRepo
                             .findActiveOrderByUserAndEvent(userIdentifier, eventId)
@@ -507,11 +507,18 @@ public class ActiveOrderService {
                 return new Response<>(null, "Failed to select tickets : " + e.getMessage());
             }
 
-        });
-    }
+    });}
 
     public Response<CheckoutPriceDTO> prepareCheckout(String token, int activeOrderId) {
         return prepareCheckoutPrice(token, activeOrderId, null);
+    }
+        private Response<UserDTO> getUserDTOFromToken(String token) {
+            String email = auth.getUserEmail(token).getValue();
+            if (email != null) {
+                Member m = userRepo.findUserByEmail(email);
+                if (m != null) return new Response<>(m.getUserDTO(), "User found");
+            }
+            return new Response<>(null, "User not found");
     }
 
     public Response<CheckoutPriceDTO> applyCheckoutCoupon(
@@ -547,7 +554,7 @@ public class ActiveOrderService {
                         return new Response<>(null, "not a valid user email");
                     }
 
-                    if (!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())) {
+                    if (!accessValidator.hasWriteAccess(getUserIdFromToken(token))) {
                         logger.severe("User does not have write access");
                         return new Response<>(null, "user does not have write access.");
                     }
@@ -639,7 +646,7 @@ public class ActiveOrderService {
                         return new Response<>(null, "not a valid user email");
 
                     }
-                    if (!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())) {
+                    if(!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())){
                         logger.severe("User does not have write access");
                         return new Response<>(null, "user does not have write access.");
                     }
@@ -882,12 +889,13 @@ public class ActiveOrderService {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "memberProceedActiveOrder called");
             try {
-                int userId = auth.getUserId(token).getValue();
-                if (userId == -1) {
+                int userId = getUserIdFromToken(token);
+                if(userId == -1){
                     logger.log(Level.SEVERE, "user not logged in");
                     return new Response<>(null, "user not logged in");
                 }
-                if (!accessValidator.hasWriteAccess(userId)) {
+                int userId =getUserIdFromToken(token);
+                if(!accessValidator.hasWriteAccess(userId)){
                     logger.severe("User does not have write access");
                     return new Response<>(null, "user does not have write access.");
                 }
@@ -930,7 +938,7 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
-                if (!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())) {
+                if(!accessValidator.hasWriteAccess(getUserIdFromToken(token))){
                     logger.severe("User does not have write access");
                     return new Response<>(null, "user does not have write access.");
                 }
@@ -979,7 +987,7 @@ public class ActiveOrderService {
                     return new Response<>(null, "Edit would result in negative ticket count");
                 }
 
-                UserDTO userDTO = auth.getUserDTO(token).getValue();
+                UserDTO userDTO = getUserDTOFromToken(token).getValue();
                 event.quantityTotalExceedsPolicy(userDTO, projected); // throws if exceeded
                 Company company = companyRepo.findById(event.getCompanyId());
                 company.quantityExceedsPolicy(userDTO, 0, projected); // throws if exceeded
@@ -1164,8 +1172,15 @@ public class ActiveOrderService {
             }
         }
     }
-
-    // Helper method to send a real-time notification or save it as delayed if the
+        private int getUserIdFromToken(String token) {
+        String email = auth.getUserEmail(token).getValue();
+        if (email != null) {
+            Member m = userRepo.findUserByEmail(email);
+            if (m != null) return m.getUserId();
+        }
+        return -1; //for guest or invalid
+    }
+     // Helper method to send a real-time notification or save it as delayed if the
     // user is offline.
     private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() -> {
