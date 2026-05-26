@@ -32,10 +32,10 @@ import static DTO.NotifyType.GENERAL_POPUP;
 
 @Service
 public class AdminService {
-    private IEventRepo eventRepo;
-    private IPaymentSystem paymentSystem;
-    private ICompanyRepo companyRepo;
-    private ISuspensionRepo suspensionRepo;
+    private final IEventRepo eventRepo;
+    private final IPaymentSystem paymentSystem;
+    private final ICompanyRepo companyRepo;
+    private final ISuspensionRepo suspensionRepo;
     private static final Logger logger = Logger.getLogger(AdminService.class.getName());
 
     private final IAuth auth;
@@ -253,7 +253,6 @@ public class AdminService {
 
     /**
      * Removes a member from the platform entirely.
-     *
      * Effects:
      * - Member account is deactivated (isActive = false)
      * - If the user is the founder of a company → removal is blocked (return error)

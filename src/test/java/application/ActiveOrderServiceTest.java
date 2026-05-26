@@ -1072,7 +1072,7 @@ class ActiveOrderServiceTest {
     @Test
     void GivenSameSeatInRemoveAndAdd_WhenEditTicketSelection_ThenRejected() {
         service.enterEventPurchase(validToken, companyId, concurrentEventId);
-        int orderId = service.userSelectTickets(
+        service.userSelectTickets(
                 validToken, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))),
                 new HashMap<>()).getValue();
