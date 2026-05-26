@@ -3856,8 +3856,8 @@ class ActiveOrderServiceTest {
                 ArgumentCaptor.forClass(NotifyDTO.class);
 
         Mockito.verify(notifier, Mockito.atLeastOnce())
-                .notifyMemberById(
-                        Mockito.eq(userId),
+                .notifyUser(
+                        Mockito.eq(userRepo.getUserEmail(userId)),
                         notificationCaptor.capture()
                 );
 
