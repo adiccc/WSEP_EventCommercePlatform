@@ -356,6 +356,79 @@ public class ActiveOrderService {
         });
     }
 
+    public Response<Boolean> validateLotteryCode(
+            String token,
+            int companyId,
+            int eventId,
+            String code
+    ) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "validateLotteryCode called");
+
+            try {
+                String role = auth.getRole(token).getValue();
+
+                if (role == null) {
+                    return new Response<>(null, "Invalid token");
+                }
+
+                Integer userId = auth.getUserId(token).getValue();
+
+                if (!accessValidator.hasWriteAccess(userId)) {
+                    return new Response<>(null, "User does not have write access");
+                }
+
+                Event event = eventRepo.findById(eventId);
+
+                if (event.getCompanyId() != companyId) {
+                    return new Response<>(null, "The selected event does not belong to the company");
+                }
+
+                if (!event.isActive()) {
+                    return new Response<>(null, "The selected event is not active");
+                }
+
+                LocalDateTime now = LocalDateTime.now();
+
+                if (event.getSaleStartDate().isAfter(now)) {
+                    return new Response<>(null, "The sale for this event has not started yet");
+                }
+
+                if (!event.hasLottery()) {
+                    return new Response<>(true, "Lottery code is not required");
+                }
+
+                Lottery lottery = lotteryRepo.findById(eventId);
+
+                LocalDateTime lotteryEndTime =
+                        event.getSaleStartDate().plusHours(lottery.getExpirationTime());
+
+                if (!now.isBefore(lotteryEndTime)) {
+                    return new Response<>(true, "Lottery period has ended. Everyone can purchase tickets");
+                }
+
+                if (code == null || code.isBlank()) {
+                    return new Response<>(false, "Please enter your lottery code");
+                }
+
+                if (!lottery.codeMatchesUser(userId, code)) {
+                    return new Response<>(false, "Invalid lottery code");
+                }
+
+                return new Response<>(true, "Lottery code is valid");
+
+            } catch (NoSuchElementException e) {
+                return new Response<>(null, "Event or lottery not found");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                return new Response<>(null, "Failed to validate lottery code: " + e.getMessage());
+            }
+        });
+    }
+
     public Response<TicketSupplyResultDTO> issueTickets(TicketSupplyRequestDTO request) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "issueTickets called");

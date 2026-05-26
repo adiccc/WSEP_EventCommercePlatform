@@ -1,6 +1,7 @@
 package UI.Views;
 
 import UI.Presenters.EventDetailsPresenter;
+import UI.Presenters.PurchasePresenter;
 import application.EventService;
 import application.Response;
 import com.vaadin.flow.component.button.Button;
@@ -21,21 +22,21 @@ import com.vaadin.flow.component.notification.Notification;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Map;
 
 @Route(value = "event/:companyId/:eventId", layout = MainLayout.class)
 @PageTitle("Event Details — EventCommerce")
 @AnonymousAllowed
 public class EventDetailsView extends VerticalLayout implements BeforeEnterObserver {
-
+    private final PurchasePresenter purchasePresenter;
     private final EventDetailsPresenter presenter;
-    private final ActiveOrderService activeOrderService;
     private int companyId;
     private int eventId;
 
     public EventDetailsView(EventService eventService, ActiveOrderService activeOrderService) {
 
         this.presenter = new EventDetailsPresenter(eventService);
-        this.activeOrderService = activeOrderService;
+        this.purchasePresenter = new PurchasePresenter(activeOrderService);
 
         setSpacing(true);
         setPadding(true);
@@ -165,7 +166,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
 
         Response<Boolean> response =
-                activeOrderService.isRequiredLotteryCode(token, companyId, eventId);
+                purchasePresenter.isRequiredLotteryCode(token, companyId, eventId);
 
         if (response.getValue() == null) {
             Notification.show(response.getMessage());
@@ -192,19 +193,48 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         TextField codeField = new TextField("Lottery code");
         codeField.setWidthFull();
         codeField.setClearButtonVisible(true);
-
+        codeField.addValueChangeListener(e -> {
+            codeField.setInvalid(false);
+            codeField.setErrorMessage(null);
+        });
         Button submit = new Button("Continue", e -> {
             String code = codeField.getValue();
 
             if (code == null || code.isBlank()) {
-                Notification.show("Please enter your lottery code");
+                codeField.setInvalid(true);
+                codeField.setErrorMessage("Please enter your lottery code");
+                return;
+            }
+
+            String cleanedCode = code.trim();
+
+            String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+            String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
+
+            Response<Boolean> response =
+                    purchasePresenter.validateLotteryCode(
+                            token,
+                            companyId,
+                            eventId,
+                            cleanedCode
+                    );
+
+            if (response.getValue() == null) {
+                Notification.show(response.getMessage());
+                return;
+            }
+
+            if (!response.getValue()) {
+                codeField.setInvalid(true);
+                codeField.setErrorMessage(response.getMessage());
                 return;
             }
 
             dialog.close();
 
             UI.getCurrent().navigate(
-                    "purchase/" + companyId + "/" + eventId + "?lotteryCode=" + code
+                    "purchase/" + companyId + "/" + eventId,
+                    QueryParameters.simple(Map.of("lotteryCode", cleanedCode))
             );
         });
 

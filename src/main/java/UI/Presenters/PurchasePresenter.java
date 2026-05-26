@@ -53,4 +53,17 @@ public class PurchasePresenter {
     public Map<String, Integer> createEmptyStandingSelection() {
         return new HashMap<>();
     }
+
+    public Response<Boolean> isRequiredLotteryCode(String token, int companyId, int eventId) {
+        return activeOrderService.isRequiredLotteryCode(token, companyId, eventId);
+    }
+
+    public Response<Boolean> validateLotteryCode(
+            String token,
+            int companyId,
+            int eventId,
+            String code
+    ) {
+        return activeOrderService.validateLotteryCode(token, companyId, eventId, code);
+    }
 }

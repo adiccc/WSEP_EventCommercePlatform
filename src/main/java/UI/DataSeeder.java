@@ -5,6 +5,8 @@ import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import application.*;
+import domain.event.IEventRepo;
+import domain.event.Event;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dataType.PermissionType;
@@ -12,7 +14,9 @@ import domain.dto.UserDTO;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
-
+import domain.lottery.ILotteryRepo;
+import domain.lottery.Lottery;
+import java.util.Map;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -33,20 +37,25 @@ public class DataSeeder implements ApplicationRunner {
 
     private static final Logger log = Logger.getLogger(DataSeeder.class.getName());
     private int seededEventCounter = 0;
-
+    private final ILotteryRepo lotteryRepo;
     private final UserService userService;
     private final CompanyService companyService;
     private final EventCompanyManageService eventService;
     private final IAuth auth;
+    private final IEventRepo eventRepo;
 
     public DataSeeder(UserService userService,
                       CompanyService companyService,
                       EventCompanyManageService eventService,
-                      IAuth auth) {
+                      IAuth auth,
+                      ILotteryRepo lotteryRepo,
+                      IEventRepo eventRepo) {
         this.userService = userService;
         this.companyService = companyService;
         this.eventService = eventService;
         this.auth = auth;
+        this.lotteryRepo = lotteryRepo;
+        this.eventRepo = eventRepo;
     }
 
     @Override
@@ -105,7 +114,7 @@ public class DataSeeder implements ApplicationRunner {
         createEvent(aliceToken, 1, "Electronic Night Vol.3", base.plusMonths(2),  CategoryEvent.FESTIVAL,   GeographicalArea.CENTER);
 
         // Company 2 — Stadium Live
-        createEvent(aliceToken, 2, "Champions Finals",       base.plusDays(20),   CategoryEvent.SPORTS,     GeographicalArea.JERUSALEM);
+        createEvent(aliceToken, 2, "Champions Finals", base.plusDays(20), CategoryEvent.SPORTS, GeographicalArea.JERUSALEM, true, true, List.of(auth.getUserId(aliceToken).getValue(), auth.getUserId(bobToken).getValue()));
         createEvent(aliceToken, 2, "All-Star Weekend",       base.plusMonths(3),  CategoryEvent.SPORTS,     GeographicalArea.JERUSALEM);
 
         // Company 3 — Festival Nation
@@ -217,10 +226,35 @@ public class DataSeeder implements ApplicationRunner {
         }
     }
 
-    private void createEvent(String token, int companyId, String name,
-                             LocalDateTime date, CategoryEvent category, GeographicalArea area) {
-        LocalDateTime saleStart = getDemoSaleStart(date);
-        var r = eventService.createEvent(token, companyId, date, name, saleStart, false, area, category);
+    private void createEvent(String token, int companyId, String name, LocalDateTime date, CategoryEvent category, GeographicalArea area) {
+        createEvent(token, companyId, name, date, category, area, false, false, List.of());
+    }
+
+    private void createEvent(String token,
+                             int companyId,
+                             String name,
+                             LocalDateTime date,
+                             CategoryEvent category,
+                             GeographicalArea area,
+                             boolean hasLottery,
+                             boolean forceSaleStarted,
+                             List<Integer> demoLotteryWinnerUserIds) {
+
+        LocalDateTime saleStart = forceSaleStarted
+                ? LocalDateTime.now().minusMinutes(5)
+                : getDemoSaleStart(date);
+
+        var r = eventService.createEvent(
+                token,
+                companyId,
+                date,
+                name,
+                saleStart,
+                hasLottery,
+                area,
+                category
+        );
+
         if (r.getValue() == null) {
             log.warning("DataSeeder: event creation failed [" + name + "] — " + r.getMessage());
             return;
@@ -231,6 +265,56 @@ public class DataSeeder implements ApplicationRunner {
             addDemoCoupon(token, eventId, "ROCK50");
         }
         activateEvent(token, eventId, name);
+
+        if (hasLottery) {
+            seedDemoLottery(eventId, name, demoLotteryWinnerUserIds);
+        }
+    }
+
+    private void seedDemoLottery(int eventId,
+                                 String eventName,
+                                 List<Integer> winnerUserIds) {
+
+        if (winnerUserIds == null || winnerUserIds.isEmpty()) {
+            log.warning("DataSeeder: lottery requested for [" + eventName + "] but no demo winners supplied");
+            return;
+        }
+
+        int capacity = winnerUserIds.size();
+
+        LocalDateTime registerWindow = LocalDateTime.now().minusMinutes(1);
+
+        long expirationTimeHours = 24;
+
+        Lottery lottery = new Lottery(
+                eventId,
+                capacity,
+                registerWindow,
+                expirationTimeHours
+        );
+
+        for (Integer userId : winnerUserIds) {
+            lottery.registerUserToLottery(userId);
+        }
+
+        Map<Integer, String> winners = lottery.drawWinners();
+
+        lotteryRepo.store(lottery);
+
+        Event event = eventRepo.findById(eventId);
+        event.setActive(true);
+        eventRepo.store(event);
+
+        log.info("DataSeeder: seeded lottery for [" + eventName + "] eventId=" + eventId);
+        log.info("DataSeeder: activated lottery event [" + eventName + "] eventId=" + eventId);
+        for (Map.Entry<Integer, String> entry : winners.entrySet()) {
+            log.info(
+                    "DataSeeder: lottery winner for [" + eventName + "] userId="
+                            + entry.getKey()
+                            + " code="
+                            + entry.getValue()
+            );
+        }
     }
 
     private LocalDateTime getDemoSaleStart(LocalDateTime eventDate) {
