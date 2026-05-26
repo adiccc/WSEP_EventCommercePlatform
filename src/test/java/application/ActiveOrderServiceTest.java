@@ -1288,6 +1288,59 @@ class ActiveOrderServiceTest {
         assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.SOLD);
         Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
         Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
+
+        Member buyer = userRepo.findUserByEmail("testuser1@gmail.com");
+        assertEquals(1, buyer.getDelayedNotifications().size(),
+                "Buyer should receive exactly one purchase-confirmation notification");
+        NotifyDTO confirmation = buyer.getDelayedNotifications().get(0);
+        assertEquals(NotifyType.GENERAL_POPUP, confirmation.getType());
+        assertTrue(confirmation.getPayload().getMessage().contains("completed successfully"),
+                "Confirmation message should state the order completed successfully: "
+                        + confirmation.getPayload().getMessage());
+        assertEquals(concurrentEventId, confirmation.getPayload().getEventId().intValue());
+    }
+
+    @Test
+    void GivenConfirmationNotificationThrows_WhenCheckoutAndPayment_ThenPurchaseStillSucceeds() {
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-confirm-throws");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        // Force ONLY the confirmation notification (notifyUser) to blow up
+        Mockito.doThrow(new RuntimeException("confirmation boom"))
+                .when(notifier).notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class));
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+        assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
+
+        Response<Integer> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNotNull(checkoutResponse.getValue(),
+                "Purchase must succeed even when the confirmation notification throws. Message: "
+                        + checkoutResponse.getMessage());
+        assertEquals("Purchase completed successfully", checkoutResponse.getMessage());
+        assertEquals(1, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "The order must be persisted even when the confirmation notification fails");
+        assertThrows(NoSuchElementException.class,
+                () -> activeOrderRepo.findById(activeOrderId),
+                "Active order should still be deleted after a successful checkout");
     }
 
     @Test
@@ -2780,6 +2833,25 @@ class ActiveOrderServiceTest {
         return id;
     }
 
+    private long countSoldOutNotifications(Member member) {
+        long count = 0;
+        for (NotifyDTO n : member.getDelayedNotifications()) {
+            if (n.getPayload().getMessage().contains("is sold out")) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private NotifyDTO firstSoldOutNotification(Member member) {
+        for (NotifyDTO n : member.getDelayedNotifications()) {
+            if (n.getPayload().getMessage().contains("is sold out")) {
+                return n;
+            }
+        }
+        return null;
+    }
+
     @Test
     void GivenEventSoldOutAfterFinalPurchase_WhenCheckoutAndPayment_ThenFounderReceivesSoldOutNotification() {
         int soldOutEventId = createSoldOutTestEvent("sold-out-1");
@@ -2822,11 +2894,11 @@ class ActiveOrderServiceTest {
                 "Event should be sold out after final purchase");
 
         Member founder = userRepo.findUserByEmail("testuser1@gmail.com");
-        List<NotifyDTO> delayed = founder.getDelayedNotifications();
-        assertEquals(1, delayed.size(),
-                "Founder should receive exactly one delayed sold-out notification");
+        assertEquals(1, countSoldOutNotifications(founder),
+                "Founder should receive exactly one sold-out notification");
 
-        NotifyDTO notification = delayed.get(0);
+        NotifyDTO notification = firstSoldOutNotification(founder);
+        assertNotNull(notification);
         assertEquals(NotifyType.GENERAL_POPUP, notification.getType());
         assertEquals(soldOutEventId, notification.getPayload().getEventId().intValue());
         assertTrue(notification.getPayload().getMessage().contains("sold out"),
@@ -2873,7 +2945,7 @@ class ActiveOrderServiceTest {
                 "Event should still have capacity after a small purchase");
 
         Member founder = userRepo.findUserByEmail("testuser1@gmail.com");
-        assertTrue(founder.getDelayedNotifications().isEmpty(),
+        assertEquals(0, countSoldOutNotifications(founder),
                 "No sold-out notification should be sent when the event still has capacity");
     }
 
@@ -2948,16 +3020,16 @@ class ActiveOrderServiceTest {
         Member owner2 = userRepo.findUserByEmail("owner2@gmail.com");
         Member manager1 = userRepo.findUserByEmail("manager1@gmail.com");
 
-        assertEquals(1, founder.getDelayedNotifications().size(),
+        assertEquals(1, countSoldOutNotifications(founder),
                 "Founder should receive exactly one sold-out notification");
-        assertEquals(1, owner2.getDelayedNotifications().size(),
+        assertEquals(1, countSoldOutNotifications(owner2),
                 "Additional owner should receive exactly one sold-out notification");
-        assertEquals(1, manager1.getDelayedNotifications().size(),
+        assertEquals(1, countSoldOutNotifications(manager1),
                 "Manager should receive exactly one sold-out notification");
 
-        assertEquals(NotifyType.GENERAL_POPUP, founder.getDelayedNotifications().get(0).getType());
-        assertEquals(NotifyType.GENERAL_POPUP, owner2.getDelayedNotifications().get(0).getType());
-        assertEquals(NotifyType.GENERAL_POPUP, manager1.getDelayedNotifications().get(0).getType());
+        assertEquals(NotifyType.GENERAL_POPUP, firstSoldOutNotification(founder).getType());
+        assertEquals(NotifyType.GENERAL_POPUP, firstSoldOutNotification(owner2).getType());
+        assertEquals(NotifyType.GENERAL_POPUP, firstSoldOutNotification(manager1).getType());
     }
 
     @Test
@@ -3184,8 +3256,8 @@ class ActiveOrderServiceTest {
                 "Event should NOT be sold out while standing zone has capacity");
 
         Member founderAfterFirst = userRepo.findUserByEmail("testuser1@gmail.com");
-        assertTrue(founderAfterFirst.getDelayedNotifications().isEmpty(),
-                "No notification should be sent before the event is fully drained");
+        assertEquals(0, countSoldOutNotifications(founderAfterFirst),
+                "No sold-out notification should be sent before the event is fully drained");
 
         // Purchase 2 — buy both standing tickets; event becomes sold out
         service.enterEventPurchase(validToken, companyId, boundaryEventId);
@@ -3211,9 +3283,10 @@ class ActiveOrderServiceTest {
                 "Event should be sold out after final purchase");
 
         Member founderAfterFinal = userRepo.findUserByEmail("testuser1@gmail.com");
-        assertEquals(1, founderAfterFinal.getDelayedNotifications().size(),
-                "Exactly one notification should fire — on the final purchase");
-        NotifyDTO notification = founderAfterFinal.getDelayedNotifications().get(0);
+        assertEquals(1, countSoldOutNotifications(founderAfterFinal),
+                "Exactly one sold-out notification should fire — on the final purchase");
+        NotifyDTO notification = firstSoldOutNotification(founderAfterFinal);
+        assertNotNull(notification);
         assertEquals(NotifyType.GENERAL_POPUP, notification.getType());
         assertEquals(boundaryEventId, notification.getPayload().getEventId().intValue());
     }
@@ -3293,10 +3366,10 @@ class ActiveOrderServiceTest {
         Member manager1 = userRepo.findUserByEmail("manager1@gmail.com");
         Member manager2 = userRepo.findUserByEmail("manager2@gmail.com");
 
-        assertEquals(1, founder.getDelayedNotifications().size(), "Founder should receive the notification");
-        assertEquals(1, owner2.getDelayedNotifications().size(), "Extra owner should receive the notification");
-        assertEquals(1, manager1.getDelayedNotifications().size(), "Manager1 (appointed by founder) should receive the notification");
-        assertEquals(1, manager2.getDelayedNotifications().size(), "Manager2 (appointed by another owner) should also receive the notification");
+        assertEquals(1, countSoldOutNotifications(founder), "Founder should receive the sold-out notification");
+        assertEquals(1, countSoldOutNotifications(owner2), "Extra owner should receive the sold-out notification");
+        assertEquals(1, countSoldOutNotifications(manager1), "Manager1 (appointed by founder) should receive the sold-out notification");
+        assertEquals(1, countSoldOutNotifications(manager2), "Manager2 (appointed by another owner) should also receive the sold-out notification");
     }
     @Test
     void GivenSoldOutEventWithWaitingUser_WhenSomeoneCheckouts_ThenWaitingUserPromotedAndNotified() throws Exception {

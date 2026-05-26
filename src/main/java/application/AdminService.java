@@ -151,7 +151,7 @@ public class AdminService {
                 return new Response<>(false, "User not found");
             }catch(Exception e){
                 logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
-                return new Response<>(false,"UnsuspendUser faild due to serer error: "+e.getMessage());
+                return new Response<>(false,"UnsuspendUser failed due to serer error: "+e.getMessage());
             }
         });
     }

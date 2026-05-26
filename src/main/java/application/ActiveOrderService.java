@@ -45,7 +45,7 @@ public class ActiveOrderService {
     private final IPaymentSystem paymentSystem;
     private final ITicketSupply ticketSupply;
     private final INotifier notifier;
-    private int capacity;
+    private final int capacity;
     private final ScheduledExecutorService cleanupScheduler;
 
     @Autowired
