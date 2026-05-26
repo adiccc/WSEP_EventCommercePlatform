@@ -69,7 +69,7 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
                 .orElse(null);
 
         if (lotteryCode != null && !lotteryCode.isBlank()) {
-            lotteryCode = lotteryCode.trim().toUpperCase();
+            lotteryCode = lotteryCode.trim();
 
             VaadinSession.getCurrent().setAttribute(
                     lotteryCodeKey,
