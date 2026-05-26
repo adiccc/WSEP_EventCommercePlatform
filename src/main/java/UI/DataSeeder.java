@@ -241,7 +241,7 @@ public class DataSeeder implements ApplicationRunner {
                              List<Integer> demoLotteryWinnerUserIds) {
 
         LocalDateTime saleStart = forceSaleStarted
-                ? LocalDateTime.now().minusMinutes(5)
+                ? LocalDateTime.now().minusMinutes(55)
                 : getDemoSaleStart(date);
 
         var r = eventService.createEvent(
@@ -284,7 +284,7 @@ public class DataSeeder implements ApplicationRunner {
 
         LocalDateTime registerWindow = LocalDateTime.now().minusMinutes(1);
 
-        long expirationTimeHours = 24;
+        long expirationTimeHours = 1;
 
         Lottery lottery = new Lottery(
                 eventId,
