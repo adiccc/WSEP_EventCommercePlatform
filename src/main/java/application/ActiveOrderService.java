@@ -45,7 +45,7 @@ public class ActiveOrderService {
     private final IPaymentSystem paymentSystem;
     private final ITicketSupply ticketSupply;
     private final INotifier notifier;
-    private int capacity;
+    private final int capacity;
     private final ScheduledExecutorService cleanupScheduler;
 
     @Autowired
@@ -690,6 +690,21 @@ public class ActiveOrderService {
 
                     shouldReleaseTickets = true;
                     return new Response<>(null, "Ticket issuance failed");
+                }
+
+                try {
+                    NotifyDTO confirmation = new NotifyDTO(
+                            NotifyType.GENERAL_POPUP,
+                            new NotifyPayload(
+                                    "Your order #" + order.getOrderId() + " for \""
+                                            + event.getName() + "\" was completed successfully.",
+                                    event.getId(),event.getCompanyId()));
+                    String recipientIdentifier = auth.getUserIdentifier(token).getValue();
+                    if (recipientIdentifier != null) {
+                        notifier.notifyUser(recipientIdentifier, confirmation);
+                    }
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Purchase confirmation notification failed: " + e.getMessage());
                 }
 
                 return new Response<>(order.getOrderId(), "Purchase completed successfully");
