@@ -10,7 +10,7 @@ import application.ActiveOrderService;
 import com.vaadin.flow.component.UI;
 import application.Response;
 import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.UI;
+import domain.dataType.TicketStatus;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.*;
 import com.vaadin.flow.component.notification.Notification;
@@ -265,9 +265,9 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
                     .set("grid-template-columns", "repeat(" + zone.getCols() + ", 32px)")
                     .set("gap", "4px");
 
-            for (int r = 1; r <= zone.getRows(); r++) {
-                for (int c = 1; c <= zone.getCols(); c++) {
-                    Button seat = new Button(r + "-" + c);
+            for (int r = 0; r < zone.getRows(); r++) {
+                for (int c = 0; c < zone.getCols(); c++) {
+                    Button seat = new Button((r + 1) + "-" + (c + 1));
 
                     seat.setWidth("28px");
                     seat.setHeight("28px");
@@ -275,13 +275,39 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
                     seat.getStyle()
                             .set("font-size", "10px")
                             .set("padding", "0")
-                            .set("min-width", "28px")
-                            .set("background", "#4CAF50")
-                            .set("color", "white");
+                            .set("min-width", "28px");
 
                     String zoneName = zone.getName();
                     int finalR = r;
                     int finalC = c;
+
+                    TicketStatus status = zone.getTicketStatus(finalR, finalC);
+
+                    if (status == TicketStatus.SOLD) {
+                        seat.getStyle()
+                                .set("background", "#9E9E9E")
+                                .set("color", "white");
+
+                        seat.setEnabled(false);
+                        seat.getElement().setProperty("title", "Sold");
+                        grid.add(seat);
+                        continue;
+                    }
+
+                    if (status == TicketStatus.LOCKED) {
+                        seat.getStyle()
+                                .set("background", "#BDBDBD")
+                                .set("color", "white");
+
+                        seat.setEnabled(false);
+                        seat.getElement().setProperty("title", "Already selected by another user");
+                        grid.add(seat);
+                        continue;
+                    }
+
+                    seat.getStyle()
+                            .set("background", "#4CAF50")
+                            .set("color", "white");
 
                     seat.addClickListener(e -> {
                         List<SeatingTicketDTO> list =
@@ -337,7 +363,12 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
                     .set("margin", "0 0 6px 0")
                     .set("font-size", "14px");
 
-            Span capacity = new Span("Price: " + zone.getPrice());
+            Span capacity = new Span(
+                    "Price: " + zone.getPrice()
+                            + " | Available: " + zone.getAvailable()
+                            + "/" + zone.getCapacty()
+            );
+
             capacity.getStyle()
                     .set("display", "block")
                     .set("font-size", "12px")
@@ -345,10 +376,15 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
 
             IntegerField amount = new IntegerField("Tickets");
             amount.setMin(0);
-            amount.setMax(zone.getCapacty());
+            amount.setMax(zone.getAvailable());
             amount.setValue(0);
             amount.setStepButtonsVisible(true);
             amount.setWidthFull();
+
+            if (zone.getAvailable() == 0) {
+                amount.setEnabled(false);
+                amount.setValue(0);
+            }
 
             amount.addValueChangeListener(e -> {
                 Integer value = e.getValue();
@@ -382,6 +418,11 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         Button continueBtn = new Button("Continue to Checkout");
 
         continueBtn.addClickListener(e -> {
+            if (getSelectedTicketsCount() == 0) {
+                Notification.show("Please select at least one ticket before continuing to checkout");
+                return;
+            }
+
             Response<Integer> res =
                     presenter.selectTickets(
                             token,
@@ -403,6 +444,22 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         return box;
     }
 
+    private int getSelectedTicketsCount() {
+        int total = 0;
+
+        for (List<SeatingTicketDTO> seats : selectedSeats.values()) {
+            total += seats.size();
+        }
+
+        for (Integer amount : selectedStanding.values()) {
+            if (amount != null) {
+                total += amount;
+            }
+        }
+
+        return total;
+    }
+
     private void refreshSummary() {
         selectedSummary.removeAll();
 
@@ -413,7 +470,7 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
                 total++;
 
                 selectedSummary.add(new Span(
-                        entry.getKey() + " seat " + seat.getRow() + "-" + seat.getCol()
+                        entry.getKey() + " seat " + (seat.getRow() + 1) + "-" + (seat.getCol() + 1)
                 ));
             }
         }
