@@ -32,7 +32,7 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
 
     private static final int OFFSET_X = 50;
     private static final int OFFSET_Y = 50;
-
+    private String lotteryCode;
     private int companyId;
     private int eventId;
 
@@ -56,6 +56,30 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
     public void beforeEnter(BeforeEnterEvent event) {
         companyId = Integer.parseInt(event.getRouteParameters().get("companyId").orElse("0"));
         eventId = Integer.parseInt(event.getRouteParameters().get("eventId").orElse("0"));
+
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String lotteryCodeKey = "lotteryCode_" + companyId + "_" + eventId + "_" + tabId;
+
+        lotteryCode = event.getLocation()
+                .getQueryParameters()
+                .getParameters()
+                .getOrDefault("lotteryCode", List.of())
+                .stream()
+                .findFirst()
+                .orElse(null);
+
+        if (lotteryCode != null && !lotteryCode.isBlank()) {
+            lotteryCode = lotteryCode.trim().toUpperCase();
+
+            VaadinSession.getCurrent().setAttribute(
+                    lotteryCodeKey,
+                    lotteryCode
+            );
+        } else {
+            lotteryCode = (String) VaadinSession.getCurrent()
+                    .getAttribute(lotteryCodeKey);
+        }
+
         load(event);
     }
 
@@ -64,11 +88,20 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
 
         String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
         String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
-        Response<EnterPurchaseDTO> response =
-                presenter.enterPurchase(token, companyId, eventId, null);
+        Response<EnterPurchaseDTO> response = presenter.enterPurchase(token, companyId, eventId, lotteryCode);
 
         if (response.getValue() == null) {
-            add(new Paragraph("Error: " + response.getMessage()));
+            Notification.show(response.getMessage());
+
+            Button back = new Button("Back to Event", e ->
+                    UI.getCurrent().navigate("event/" + companyId + "/" + eventId)
+            );
+
+            add(
+                    new Paragraph("Error: " + response.getMessage()),
+                    back
+            );
+
             return;
         }
 
@@ -78,8 +111,7 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
             VaadinSession.getCurrent().setAttribute("eventQueueEventId_" + tabId, eventId);
 
             event.rerouteTo(
-                    "waiting/" + companyId + "/" + eventId + "/" +
-                            response.getValue().getQueuePosition()
+                    "waiting/" + companyId + "/" + eventId + "/" + response.getValue().getQueuePosition()
             );
             return;
         }
