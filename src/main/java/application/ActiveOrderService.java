@@ -573,7 +573,7 @@ public class ActiveOrderService {
                             new NotifyPayload(
                                     "Your order #" + order.getOrderId() + " for \""
                                             + event.getName() + "\" was completed successfully.",
-                                    event.getId()));
+                                    event.getId(),event.getCompanyId()));
                     String recipientIdentifier = auth.getUserIdentifier(token).getValue();
                     if (recipientIdentifier != null) {
                         notifier.notifyUser(recipientIdentifier, confirmation);
