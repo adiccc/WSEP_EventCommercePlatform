@@ -24,7 +24,7 @@ public class Event {
     private final EventQueue eventQueue;
     private LocalDateTime date;
     private final String name;
-    private final LocalDateTime saleStartDate;
+    private LocalDateTime saleStartDate;
     private final boolean hasLottery;
     private PurchasePolicy purchasePolicy;
     private DiscountPolicy discountPolicy;
@@ -34,10 +34,11 @@ public class Event {
     private List<Order> orders;
     private long version;
 
-    public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate, boolean hasLottery, GeographicalArea location, CategoryEvent categoryEvent) {
+    public Event(int companyId, int creatorId, LocalDateTime date, String name, LocalDateTime saleStartDate,
+            boolean hasLottery, GeographicalArea location, CategoryEvent categoryEvent) {
         this.eventMap = null;
-        this.companyId=companyId;
-        this.creatorId=creatorId;
+        this.companyId = companyId;
+        this.creatorId = creatorId;
         this.date = date;
         this.name = name;
         this.saleStartDate = saleStartDate;
@@ -55,10 +56,10 @@ public class Event {
         this.version = 0;
     }
 
-    public Event(Event event){
-        if(event.eventMap==null){
-            this.eventMap=null;
-        }else{
+    public Event(Event event) {
+        if (event.eventMap == null) {
+            this.eventMap = null;
+        } else {
             this.eventMap = new EventMap(event.eventMap);
         }
         this.companyId = event.companyId;
@@ -67,15 +68,15 @@ public class Event {
         this.name = event.name;
         this.saleStartDate = event.saleStartDate;
         this.hasLottery = event.hasLottery;
-        this.purchasePolicy=event.purchasePolicy.copyPolicy();
-        this.discountPolicy=event.discountPolicy.copyPolicy();
-        this.id=event.id;
+        this.purchasePolicy = event.purchasePolicy.copyPolicy();
+        this.discountPolicy = event.discountPolicy.copyPolicy();
+        this.id = event.id;
         this.eventQueue = new EventQueue(event.eventQueue);
         this.active = event.active;
         this.location = event.location;
         this.categoryEvent = event.categoryEvent;
-        this.orders=new ArrayList<>();
-        for(Order order : event.orders){
+        this.orders = new ArrayList<>();
+        for (Order order : event.orders) {
             this.orders.add(new Order(order));
         }
         this.version = event.version;
@@ -84,15 +85,18 @@ public class Event {
     public long getVersion() {
         return version;
     }
+
     public void setVersion(long version) {
         this.version = version;
     }
+
     public List<Order> getOrders() {
-         if(orders==null){
-             orders = new ArrayList<>();
-         }
-         return orders;
+        if (orders == null) {
+            orders = new ArrayList<>();
+        }
+        return orders;
     }
+
     public Order findOrderById(int orderId) {
         for (Order order : orders) {
             if (order.getOrderId() == orderId) {
@@ -105,9 +109,11 @@ public class Event {
     public int getCompanyId() {
         return companyId;
     }
-    public int getCreatorId(){
+
+    public int getCreatorId() {
         return creatorId;
     }
+
     public void setCreatorId(int creatorId) {
         this.creatorId = creatorId;
     }
@@ -135,6 +141,7 @@ public class Event {
     public LocalDateTime getSaleStartDate() {
         return saleStartDate;
     }
+
     public boolean hasLottery() {
         return hasLottery;
     }
@@ -146,6 +153,7 @@ public class Event {
     public void setActive(boolean active) {
         this.active = active;
     }
+
     public void setDate(LocalDateTime date) {
         this.date = date;
     }
@@ -183,7 +191,8 @@ public class Event {
     }
 
     public boolean matches(EventSearchFilter filter) {
-        if (!isActive() || !isFuture()) return false;
+        if (!isActive() || !isFuture())
+            return false;
 
         if (filter.getKeyword() != null && !filter.getKeyword().isEmpty()) {
             if (!name.toLowerCase().contains(filter.getKeyword().toLowerCase()))
@@ -208,7 +217,6 @@ public class Event {
         return true;
     }
 
-
     private boolean matchesPrice(EventSearchFilter filter) {
         if (filter.getMinPrice() == null && filter.getMaxPrice() == null)
             return true;
@@ -228,8 +236,10 @@ public class Event {
 
     @Override
     public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
+        if (this == obj)
+            return true;
+        if (obj == null || getClass() != obj.getClass())
+            return false;
 
         Event other = (Event) obj;
         return id == (other.id) && version == other.version;
@@ -252,13 +262,19 @@ public class Event {
     }
 
     public void changePurchasePolicyType(PurchasePolicyType policyType) {
-        if (purchasePolicy.getPolicyType() == policyType) return;
+        if (purchasePolicy.getPolicyType() == policyType)
+            return;
         PurchasePolicy newPolicy;
         switch (policyType) {
-            case OR:  newPolicy = new OrPurchasePolicy();  break;
-            default:  newPolicy = new AndPurchasePolicy(); break;
+            case OR:
+                newPolicy = new OrPurchasePolicy();
+                break;
+            default:
+                newPolicy = new AndPurchasePolicy();
+                break;
         }
-        for (Purchase p : purchasePolicy.getRules()) newPolicy.addRule(p.copy());
+        for (Purchase p : purchasePolicy.getRules())
+            newPolicy.addRule(p.copy());
         this.purchasePolicy = newPolicy;
     }
 
@@ -266,23 +282,31 @@ public class Event {
         List<Discount> current = discountPolicy.getDiscounts();
         DiscountPolicy newPolicy;
         switch (policyType) {
-            case MAX: newPolicy = new MaxDiscountPolicy(); break;
-            default:  newPolicy = new SumDiscountPolicy(); break;
+            case MAX:
+                newPolicy = new MaxDiscountPolicy();
+                break;
+            default:
+                newPolicy = new SumDiscountPolicy();
+                break;
         }
-        for (Discount d : current) newPolicy.addDiscount(d.copy());
+        for (Discount d : current)
+            newPolicy.addDiscount(d.copy());
         this.discountPolicy = newPolicy;
     }
 
     public void quantityExceedsPolicy(UserDTO user, int quantity) {
         int ticketsBoughtForEvent = countUserTickets(user);
-        if( !purchasePolicy.isSatisfied(user, quantity,ticketsBoughtForEvent)) {
-            throw new IllegalArgumentException("Purchase policy not satisfied for user " + user.getUserId() + " and quantity " + quantity);
+        if (!purchasePolicy.isSatisfied(user, quantity, ticketsBoughtForEvent)) {
+            throw new IllegalArgumentException(
+                    "Purchase policy not satisfied for user " + user.getUserId() + " and quantity " + quantity);
         }
     }
 
-    public List<Integer> bookTickets(Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
-        return eventMap.bookTickets(seatingZones,standingZones);
+    public List<Integer> bookTickets(Map<String, List<SeatingTicketDTO>> seatingZones,
+            Map<String, Integer> standingZones) {
+        return eventMap.bookTickets(seatingZones, standingZones);
     }
+
     public double calculateFinalTotalPrice(List<Integer> ticketIds, String couponCode) {
         if (eventMap == null) {
             throw new IllegalStateException("Event map is not defined");
@@ -306,7 +330,7 @@ public class Event {
     }
 
     public int countStandingInZone(String zone, List<Integer> currentTickets) {
-        return eventMap.countStandingInZone(zone,currentTickets);
+        return eventMap.countStandingInZone(zone, currentTickets);
     }
 
     public List<Integer> findSeatingTicketIds(Map<String, List<SeatingTicketDTO>> seatingToRemove) {
@@ -358,7 +382,7 @@ public class Event {
     }
 
     public int countUserTickets(UserDTO user) {
-        int ticketsBoughtForEvent =0;
+        int ticketsBoughtForEvent = 0;
         for (Order order : orders) {
             if (order.getUserIdentifier().equals(user.getEmail())) {
                 ticketsBoughtForEvent += order.getTickets().size();
@@ -368,8 +392,9 @@ public class Event {
     }
 
     public void quantityTotalExceedsPolicy(UserDTO userDTO, int projected) {
-        if( !purchasePolicy.isSatisfied(userDTO, 0,projected)) {
-            throw new IllegalArgumentException("Purchase policy not satisfied for user " + userDTO.getUserId() + " and quantity " + projected);
+        if (!purchasePolicy.isSatisfied(userDTO, 0, projected)) {
+            throw new IllegalArgumentException(
+                    "Purchase policy not satisfied for user " + userDTO.getUserId() + " and quantity " + projected);
         }
     }
 
@@ -380,4 +405,9 @@ public class Event {
 
         return eventMap.getPurchasedTicketDetails(ticketIds);
     }
+
+    public void setSaleStartDateForTest(LocalDateTime saleStartDate) {
+        this.saleStartDate = saleStartDate;
+    }
+
 }

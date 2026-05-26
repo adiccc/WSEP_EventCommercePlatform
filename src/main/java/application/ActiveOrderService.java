@@ -92,7 +92,7 @@ public class ActiveOrderService {
         return this.capacity;
     }
 
-    public Response<EnterPurchaseDTO> enterEventPurchase(String token, int companyId, int eventId) {
+    public Response<EnterPurchaseDTO> enterEventPurchase(String token, int companyId, int eventId,String code) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "enterEventPurchase called");
             cleanupExpiredOrders();
@@ -153,16 +153,25 @@ public class ActiveOrderService {
 
                 if (e.hasLottery()) {
                     Lottery l = lotteryRepo.findById(eventId);
-                    int code = userId; // the code of each user who registered to the lottery is his ID because there ara no notifications in the system
 
                     LocalDateTime lotteryEndTime =
                             e.getSaleStartDate().plusHours(l.getExpirationTime());
 
-                    if (!l.getWinners().contains(code)) {
-                        if (LocalDateTime.now().isBefore(lotteryEndTime)) {
+                    boolean lotteryOnlyPeriod =
+                            LocalDateTime.now().isBefore(lotteryEndTime);
+
+                    if (lotteryOnlyPeriod) {
+                        if (code == null || code.isBlank()) {
                             return new Response<>(
                                     null,
-                                    "User is not a lottery winner and lottery registration is still open"
+                                    "Lottery code is required for this event"
+                            );
+                        }
+
+                        if (!l.codeMatchesUser(userId, code)) {
+                            return new Response<>(
+                                    null,
+                                    "Invalid lottery code"
                             );
                         }
                     }
@@ -239,6 +248,109 @@ public class ActiveOrderService {
                 return new Response<>(
                         null,
                         "Failed to enter event purchase  : " + e.getMessage()
+                );
+            }
+        });
+    }
+
+
+    public Response<Boolean> isRequiredLotteryCode(String token, int companyId, int eventId) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "isRequiredLotteryCode called");
+
+            try {
+                String role = auth.getRole(token).getValue();
+
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid token");
+                    return new Response<>(null, "Invalid token");
+                }
+
+                Integer userId = auth.getUserId(token).getValue();
+
+                if (!accessValidator.hasWriteAccess(userId)) {
+                    logger.severe("User does not have write access");
+                    return new Response<>(
+                            null,
+                            "User does not have write access"
+                    );
+                }
+
+                Event event = eventRepo.findById(eventId);
+
+                if (event.getCompanyId() != companyId) {
+                    logger.log(Level.SEVERE, "The selected event does not belong to the company");
+                    return new Response<>(
+                            null,
+                            "The selected event does not belong to the company"
+                    );
+                }
+
+                if (!event.isActive()) {
+                    logger.log(Level.SEVERE, "The selected event is not active");
+                    return new Response<>(
+                            null,
+                            "The selected event is not active"
+                    );
+                }
+
+                LocalDateTime now = LocalDateTime.now();
+
+                if (event.getSaleStartDate().isAfter(now)) {
+                    logger.log(Level.INFO, "The sale for this event has not started yet");
+                    return new Response<>(
+                            null,
+                            "The sale for this event has not started yet"
+                    );
+                }
+
+                if (!event.hasLottery()) {
+                    logger.log(Level.INFO, "Event does not have lottery");
+                    return new Response<>(
+                            false,
+                            "This event does not require a lottery code"
+                    );
+                }
+
+                Lottery lottery = lotteryRepo.findById(eventId);
+
+                LocalDateTime lotteryEndTime =
+                        event.getSaleStartDate()
+                                .plusHours(lottery.getExpirationTime());
+
+                if (!now.isBefore(lotteryEndTime)) {
+                    logger.log(Level.INFO, "Lottery exclusive purchase period has ended");
+                    return new Response<>(
+                            false,
+                            "Lottery period has ended. Everyone can purchase tickets"
+                    );
+                }
+
+                logger.log(Level.INFO, "Lottery code is required for this event");
+                return new Response<>(
+                        true,
+                        "Lottery code is required to purchase tickets for this event"
+                );
+
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "Event or lottery not found: " + e.getMessage());
+                return new Response<>(
+                        null,
+                        "Event or lottery not found"
+                );
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                logger.log(
+                        Level.SEVERE,
+                        "Failed to check lottery code requirement: " + e.getMessage()
+                );
+
+                return new Response<>(
+                        null,
+                        "Failed to check lottery code requirement: " + e.getMessage()
                 );
             }
         });

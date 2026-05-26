@@ -21,12 +21,14 @@ public class PurchasePresenter {
     public Response<EnterPurchaseDTO> enterPurchase(
             String token,
             int companyId,
-            int eventId
+            int eventId,
+            String code
     ) {
         return activeOrderService.enterEventPurchase(
                 token,
                 companyId,
-                eventId
+                eventId,
+                code
         );
     }
 

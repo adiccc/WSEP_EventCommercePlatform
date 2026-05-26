@@ -157,7 +157,7 @@ class EventCompanyManageServiceTest {
 
     private int createCompletedOrderThroughPurchaseFlow(String buyerToken, int eventId, int ticketCount) {
         Response<EnterPurchaseDTO> enterResponse =
-                activeOrderService.enterEventPurchase(buyerToken, companyId, eventId);
+                activeOrderService.enterEventPurchase(buyerToken, companyId, eventId,null);
 
         assertNotNull(enterResponse.getValue(),
                 "enterEventPurchase failed: " + enterResponse.getMessage());
