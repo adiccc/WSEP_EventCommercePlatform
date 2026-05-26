@@ -69,7 +69,7 @@ class ActiveOrderServiceTest {
         ISuspensionRepo suspensionRepo = new SuspensionRepoImpl();
         IAccessValidator accessValidator=new AccessValidator(suspensionRepo);
         auth = new Auth(tokenService);
-        notifier = Mockito.spy(new VaadinNotifier(userRepo));
+        notifier = Mockito.spy(new VaadinNotifier());
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
 
         userService.registerUser(
@@ -152,7 +152,6 @@ class ActiveOrderServiceTest {
                 ticketSupply,
                 accessValidator,
                 notifier,
-                userRepo,
                 userRepo,
                 capacity
         );

@@ -50,7 +50,6 @@ public class ActiveOrderService {
     private final INotifier notifier;
     private final int capacity;
     private final ScheduledExecutorService cleanupScheduler;
-    private final IUserRepo userRepo;
 
     @Autowired
     public ActiveOrderService(
@@ -64,13 +63,11 @@ public class ActiveOrderService {
             IAccessValidator accessValidator,
             INotifier notifier,
             IUserRepo userRepo,
-            IUserRepo userRepo,
             @Value("${active-order.capacity:20}") int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
         this.lotteryRepo = lotteryRepo;
-        this.userRepo = userRepo;
         this.auth = auth;
         this.paymentSystem = paymentSystem;
         this.ticketSupply = ticketSupply;
@@ -464,7 +461,7 @@ public class ActiveOrderService {
                     .sum();
             int totalTickets = totalSeatingTickets + totalStandingTickets;
             Event e = this.eventRepo.findById(eventId);
-            Response<UserDTO> userResponse = auth.getUserDTO(identifier);
+            Response<UserDTO> userResponse = getUserDTOFromToken(identifier);
             e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
             int totalUserTickets = 0;
             if(userResponse.getValue()!=null){
@@ -646,7 +643,7 @@ public class ActiveOrderService {
                         return new Response<>(null, "not a valid user email");
 
                     }
-                    if(!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())){
+                    if(!accessValidator.hasWriteAccess(getUserIdFromToken(token))){
                         logger.severe("User does not have write access");
                         return new Response<>(null, "user does not have write access.");
                     }
@@ -894,7 +891,6 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "user not logged in");
                     return new Response<>(null, "user not logged in");
                 }
-                int userId =getUserIdFromToken(token);
                 if(!accessValidator.hasWriteAccess(userId)){
                     logger.severe("User does not have write access");
                     return new Response<>(null, "user does not have write access.");

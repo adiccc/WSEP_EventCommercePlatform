@@ -39,7 +39,6 @@ public class EventCompanyManageService {
     private final INotifier notifier;
     private final IUserRepo userRepo;
     AtomicInteger ticketIdGenerator = new AtomicInteger(1);
-    private final IUserRepo userRepo;
 
 
 
@@ -52,7 +51,6 @@ public class EventCompanyManageService {
         this.paymentSystem = paymentSystem;
         this.accessValidator = accessValidator;
         this.notifier = notifier;
-        this.userRepo = userRepo;
         this.userRepo = userRepo;
     }
 
