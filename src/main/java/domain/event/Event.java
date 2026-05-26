@@ -295,7 +295,10 @@ public class Event {
     }
 
     public void quantityExceedsPolicy(UserDTO user, int quantity) {
-        int ticketsBoughtForEvent = countUserTickets(user);
+        int ticketsBoughtForEvent = 0;
+        if(user!=null){
+            ticketsBoughtForEvent = countUserTickets(user);
+        }
         if (!purchasePolicy.isSatisfied(user, quantity, ticketsBoughtForEvent)) {
             throw new IllegalArgumentException(
                     "Purchase policy not satisfied for user " + user.getUserId() + " and quantity " + quantity);

@@ -406,8 +406,10 @@ public class ActiveOrderService {
             Event e = this.eventRepo.findById(eventId);
             Response<UserDTO> userResponse = auth.getUserDTO(identifier);
             e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
-
-            int totalUserTickets = e.countUserTickets(userResponse.getValue());
+            int totalUserTickets = 0;
+            if(userResponse.getValue()!=null){
+                totalUserTickets = e.countUserTickets(userResponse.getValue());
+            }
             Company c = companyRepo.findById(e.getCompanyId());
             c.quantityExceedsPolicy(userResponse.getValue(), totalTickets,totalUserTickets);
             ActiveOrder newActiveOrder;
