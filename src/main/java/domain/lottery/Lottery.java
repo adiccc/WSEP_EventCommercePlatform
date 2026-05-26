@@ -10,7 +10,6 @@ public class Lottery {
                        // lottery
     private int capacity;
     private List<Integer> registered;
-//    private List<Integer> winners;
     private Map<Integer, String> winners; // userId -> code
     private LocalDateTime registerWindow; // the time window for users to register for the lottery
     private long expirationTime; // after this time all the users will be able to buy tickets for the event, and
