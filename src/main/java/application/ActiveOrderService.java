@@ -16,6 +16,8 @@ import domain.event.Order;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
+import domain.user.Member;
+import infrastructure.UserRepo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -47,6 +49,7 @@ public class ActiveOrderService {
     private final INotifier notifier;
     private final int capacity;
     private final ScheduledExecutorService cleanupScheduler;
+    private final UserRepo userRepo;
 
     @Autowired
     public ActiveOrderService(
@@ -59,6 +62,7 @@ public class ActiveOrderService {
             ITicketSupply ticketSupply,
             IAccessValidator accessValidator,
             INotifier notifier,
+            UserRepo userRepo,
             @Value("${active-order.capacity:20}") int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
@@ -70,6 +74,7 @@ public class ActiveOrderService {
         this.accessValidator = accessValidator;
         this.notifier = notifier;
         this.capacity = capacity;
+        this.userRepo = userRepo;
         this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "active-order-cleanup");
             t.setDaemon(true);
@@ -757,7 +762,7 @@ public class ActiveOrderService {
                         try {
                             // Notify the user about the refund
                             NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId() + " in event " + event.getId() + " because ticket issuance failed", event.getId(), null);
-                            notifier.notifyUser(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
+                            sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
                         } catch (Exception e) {
                             logger.log(Level.WARNING, "Failed to notify user about successful refund: " + e.getMessage());
                         }
@@ -765,7 +770,7 @@ public class ActiveOrderService {
                         order.markRefundRequired();
                         try {
                             NotifyPayload payload = new NotifyPayload("Refund for order " + order.getOrderId() + " in event " + event.getId() + " because ticket issuance failed has been failed, please contact support", event.getId(), null);
-                            notifier.notifyUser(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
+                            sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
                         } catch (Exception e) {
                             logger.log(Level.WARNING, "Failed to notify user about required refund: " + e.getMessage());
                         }
@@ -784,7 +789,7 @@ public class ActiveOrderService {
                                     event.getId(),event.getCompanyId()));
                     String recipientIdentifier = auth.getUserIdentifier(token).getValue();
                     if (recipientIdentifier != null) {
-                        notifier.notifyUser(recipientIdentifier, confirmation);
+                        sendOrSaveNotification(recipientIdentifier, confirmation);
                     }
                 } catch (Exception e) {
                     logger.log(Level.WARNING, "Purchase confirmation notification failed: " + e.getMessage());
@@ -1183,10 +1188,35 @@ public class ActiveOrderService {
 
         for (Integer userId : recipientIds) {
             try {
-                notifier.notifyMemberById(userId, payload);
+                sendOrSaveNotification(userRepo.getUserEmail(userId), payload);
             } catch (Exception e) {
                 logger.log(Level.WARNING, "Sold-out notify failed for user " + userId + ": " + e.getMessage());
             }
+        }
+    }
+
+
+     //Helper method to send a real-time notification or save it as delayed if the user is offline.
+    private void sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
+        try {
+                Member member = userRepo.findUserByEmail(userIdentifier);
+                if (member == null) {
+                    logger.warning("User not found for identifier: " + userIdentifier);
+                    return;
+                }
+            // Attempt to send in real-time
+            boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
+
+            // If delivery failed (user is offline), save as delayed notification
+            if (!isDelivered) {
+                member.addDelayedNotification(notifyDTO);
+                userRepo.store(member);
+                logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
+            }
+        } catch (OptimisticLockingFailureException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.warning("Failed to send or save notification for " + userIdentifier + ": " + e.getMessage());
         }
     }
 }

@@ -19,8 +19,8 @@ public class VaadinNotifier implements INotifier {
 
 
     @Override
-    public void notifyUser(String userIdentifier, NotifyDTO notification) {
-        boolean isSentRealTime = Broadcaster.broadcastToUser(userIdentifier, notification);
+    public boolean notifyUser(String userIdentifier, NotifyDTO notification) {
+        return Broadcaster.broadcastToUser(userIdentifier, notification);
     }
 
     @Override
