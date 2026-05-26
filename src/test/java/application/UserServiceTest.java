@@ -47,7 +47,7 @@ class UserServiceTest {
         passwordEncoder = new PasswordEncoderUtil();
         String adminEmail = "admin@admin.com";
         auth = new Auth(realTokenService, userRepo, passwordEncoder, Set.of(adminEmail));
-        notifier = new VaadinNotifier(userRepo);
+        notifier = new VaadinNotifier();
         userService = new UserService(realTokenService, auth, userRepo, passwordEncoder,notifier);
         companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
@@ -635,8 +635,15 @@ class UserServiceTest {
                 new DTO.NotifyPayload("Your event was canceled.", 101,null)
         );
 
-        notifier.notifyUser(email, realNotification1);
-        notifier.notifyUser(email, realNotification2);
+        boolean result1 = notifier.notifyUser(email, realNotification1);
+        assertFalse(result1, "Notification should not be delivered immediately to offline user");
+        Member mem = userRepo.findUserByEmail(email);
+        mem.addDelayedNotification(realNotification1);
+
+        boolean result2 = notifier.notifyUser(email, realNotification2);
+        assertFalse(result2, "Notification should not be delivered immediately to offline user");
+        mem.addDelayedNotification(realNotification2);
+        userRepo.store(mem);
 
         assertEquals(2, userRepo.findUserByEmail(email).getDelayedNotifications().size());
 
@@ -666,8 +673,11 @@ class UserServiceTest {
                 new DTO.NotifyPayload("You missed this while offline!")
         );
 
-        notifier.notifyUser(email, offlineNotification);
-        assertEquals(1, userRepo.findUserByEmail(email).getDelayedNotifications().size());
+        boolean result = notifier.notifyUser(email, offlineNotification);
+        assertFalse(result, "Notification should not be delivered immediately to offline user");
+        Member mem = userRepo.findUserByEmail(email);
+        mem.addDelayedNotification(offlineNotification);
+        userRepo.store(mem);
 
         // Act & Assert
         Response<String> loginResponse = userService.login(email, "Password123!");
@@ -767,10 +777,16 @@ class UserServiceTest {
         String email = dto.getEmail();
         int userId = userRepo.findUserByEmail(email).getUserId();
 
-        notifier.notifyUser(email, new DTO.NotifyDTO(
+        NotifyDTO offlineNotification = new DTO.NotifyDTO(
                 DTO.NotifyType.GENERAL_POPUP,
                 new DTO.NotifyPayload("You have a new private message!")
-        ));
+        );
+
+        boolean result = notifier.notifyUser(email, offlineNotification);
+        assertFalse(result, "Notification should not be delivered immediately to offline user");
+        Member mem = userRepo.findUserByEmail(email);
+        mem.addDelayedNotification(offlineNotification);
+        userRepo.store(mem);
         assertFalse(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
 
         // Act

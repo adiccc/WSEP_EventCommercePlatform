@@ -90,15 +90,14 @@ public class ActiveOrderService {
                         logger.log(Level.SEVERE, "Cleanup failed: " + ex.getMessage());
                     }
                 },
-                30, 30, TimeUnit.SECONDS
-        );
+                30, 30, TimeUnit.SECONDS);
     }
 
     public int getCapacity() {
         return this.capacity;
     }
 
-    public Response<EnterPurchaseDTO> enterEventPurchase(String token, int companyId, int eventId,String code) {
+    public Response<EnterPurchaseDTO> enterEventPurchase(String token, int companyId, int eventId, String code) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "enterEventPurchase called");
             cleanupExpiredOrders();
@@ -139,8 +138,8 @@ public class ActiveOrderService {
                         ? auth.getUserEmail(token).getValue()
                         : token;
 
-                Optional<ActiveOrder> existingOrder =
-                        activeOrderRepo.findActiveOrderByUserAndEvent(userIdentifier, eventId);
+                Optional<ActiveOrder> existingOrder = activeOrderRepo.findActiveOrderByUserAndEvent(userIdentifier,
+                        eventId);
 
                 if (existingOrder.isPresent()) {
                     logger.log(Level.INFO,
@@ -151,34 +150,28 @@ public class ActiveOrderService {
                                     new EventMapDTO(e.getMap()),
                                     new ActiveOrderDTO(existingOrder.get()),
                                     true,
-                                    false, null
-                            ),
-                            "Existing active order found"
-                    );
+                                    false, null),
+                            "Existing active order found");
                 }
 
                 if (e.hasLottery()) {
                     Lottery l = lotteryRepo.findById(eventId);
 
-                    LocalDateTime lotteryEndTime =
-                            e.getSaleStartDate().plusHours(l.getExpirationTime());
+                    LocalDateTime lotteryEndTime = e.getSaleStartDate().plusHours(l.getExpirationTime());
 
-                    boolean lotteryOnlyPeriod =
-                            LocalDateTime.now().isBefore(lotteryEndTime);
+                    boolean lotteryOnlyPeriod = LocalDateTime.now().isBefore(lotteryEndTime);
 
                     if (lotteryOnlyPeriod) {
                         if (code == null || code.isBlank()) {
                             return new Response<>(
                                     null,
-                                    "Lottery code is required for this event"
-                            );
+                                    "Lottery code is required for this event");
                         }
 
                         if (!l.codeMatchesUser(userId, code)) {
                             return new Response<>(
                                     null,
-                                    "Invalid lottery code"
-                            );
+                                    "Invalid lottery code");
                         }
                     }
                 }
@@ -193,10 +186,8 @@ public class ActiveOrderService {
                                         null,
                                         false,
                                         true,
-                                        position
-                                ),
-                                "User is still waiting in queue. Position: " + position
-                        );
+                                        position),
+                                "User is still waiting in queue. Position: " + position);
                     }
 
                     e.getEventQueue().enqueue(token);
@@ -210,16 +201,13 @@ public class ActiveOrderService {
                                     null,
                                     false,
                                     true,
-                                    position
-                            ),
-                            "Event is full, user added to waiting queue. Position: " + position
-                    );
+                                    position),
+                            "Event is full, user added to waiting queue. Position: " + position);
                 }
 
                 int orderId = idGenerator.getAndIncrement();
 
-                ActiveOrder newActiveOrder =
-                        new ActiveOrder(orderId, userIdentifier, eventId, new ArrayList<>());
+                ActiveOrder newActiveOrder = new ActiveOrder(orderId, userIdentifier, eventId, new ArrayList<>());
 
                 logger.log(Level.INFO,
                         "Creating active order with ID: " + newActiveOrder.getId()
@@ -235,10 +223,8 @@ public class ActiveOrderService {
                         new EnterPurchaseDTO(
                                 new EventMapDTO(e.getMap()),
                                 new ActiveOrderDTO(newActiveOrder),
-                                false, false, null
-                        ),
-                        "Event map retrieved successfully"
-                );
+                                false, false, null),
+                        "Event map retrieved successfully");
 
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
@@ -253,12 +239,10 @@ public class ActiveOrderService {
                 logger.log(Level.SEVERE, "Failed to enter event purchase : " + e.getMessage());
                 return new Response<>(
                         null,
-                        "Failed to enter event purchase  : " + e.getMessage()
-                );
+                        "Failed to enter event purchase  : " + e.getMessage());
             }
         });
     }
-
 
     public Response<Boolean> isRequiredLotteryCode(String token, int companyId, int eventId) {
         return RetryHelper.executeWithRetry(() -> {
@@ -278,8 +262,7 @@ public class ActiveOrderService {
                     logger.severe("User does not have write access");
                     return new Response<>(
                             null,
-                            "User does not have write access"
-                    );
+                            "User does not have write access");
                 }
 
                 Event event = eventRepo.findById(eventId);
@@ -288,16 +271,14 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "The selected event does not belong to the company");
                     return new Response<>(
                             null,
-                            "The selected event does not belong to the company"
-                    );
+                            "The selected event does not belong to the company");
                 }
 
                 if (!event.isActive()) {
                     logger.log(Level.SEVERE, "The selected event is not active");
                     return new Response<>(
                             null,
-                            "The selected event is not active"
-                    );
+                            "The selected event is not active");
                 }
 
                 LocalDateTime now = LocalDateTime.now();
@@ -306,44 +287,38 @@ public class ActiveOrderService {
                     logger.log(Level.INFO, "The sale for this event has not started yet");
                     return new Response<>(
                             null,
-                            "The sale for this event has not started yet"
-                    );
+                            "The sale for this event has not started yet");
                 }
 
                 if (!event.hasLottery()) {
                     logger.log(Level.INFO, "Event does not have lottery");
                     return new Response<>(
                             false,
-                            "This event does not require a lottery code"
-                    );
+                            "This event does not require a lottery code");
                 }
 
                 Lottery lottery = lotteryRepo.findById(eventId);
 
-                LocalDateTime lotteryEndTime =
-                        event.getSaleStartDate()
-                                .plusHours(lottery.getExpirationTime());
+                LocalDateTime lotteryEndTime = event.getSaleStartDate()
+                        .plusHours(lottery.getExpirationTime());
 
                 if (!now.isBefore(lotteryEndTime)) {
                     logger.log(Level.INFO, "Lottery exclusive purchase period has ended");
                     return new Response<>(
                             false,
-                            "Lottery period has ended. Everyone can purchase tickets"
-                    );
+                            "Lottery period has ended. Everyone can purchase tickets");
                 }
 
                 logger.log(Level.INFO, "Lottery code is required for this event");
                 return new Response<>(
                         true,
-                        "Lottery code is required to purchase tickets for this event"
-                );
+                        "Lottery code is required to purchase tickets for this event");
 
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "Event or lottery not found: " + e.getMessage());
                 return new Response<>(
                         null,
-                        "Event or lottery not found"
-                );
+                        "Event or lottery not found");
 
             } catch (OptimisticLockingFailureException e) {
                 throw e;
@@ -351,13 +326,11 @@ public class ActiveOrderService {
             } catch (Exception e) {
                 logger.log(
                         Level.SEVERE,
-                        "Failed to check lottery code requirement: " + e.getMessage()
-                );
+                        "Failed to check lottery code requirement: " + e.getMessage());
 
                 return new Response<>(
                         null,
-                        "Failed to check lottery code requirement: " + e.getMessage()
-                );
+                        "Failed to check lottery code requirement: " + e.getMessage());
             }
         });
     }
@@ -407,8 +380,7 @@ public class ActiveOrderService {
 
                 Lottery lottery = lotteryRepo.findById(eventId);
 
-                LocalDateTime lotteryEndTime =
-                        event.getSaleStartDate().plusHours(lottery.getExpirationTime());
+                LocalDateTime lotteryEndTime = event.getSaleStartDate().plusHours(lottery.getExpirationTime());
 
                 if (!now.isBefore(lotteryEndTime)) {
                     logger.log(Level.INFO, "Lottery code validation completed: lottery exclusive period has ended");
@@ -469,74 +441,74 @@ public class ActiveOrderService {
         });
     }
 
-    public Response<Integer>userSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
-        return RetryHelper.executeWithRetry(()->{
-        logger.log(Level.INFO, "userSelectTickets called");
-        String role = auth.getRole(identifier).getValue();
-        if(role == null){
-            logger.log(Level.SEVERE, "identifier is null");
-            return new Response<>(null, "Invalid identifier supplied");
-        }
-        if(!accessValidator.hasWriteAccess(auth.getUserId(identifier).getValue())){
-            logger.severe("User does not have write access");
-            return new Response<>(null, "user does not have write access.");
-        }
-        try {
-            int totalSeatingTickets = seatingZones.values().stream()
-                    .mapToInt(List::size)
-                    .sum();
-
-            int totalStandingTickets = standingZones.values().stream()
-                    .mapToInt(Integer::intValue)
-                    .sum();
-            int totalTickets = totalSeatingTickets + totalStandingTickets;
-            Event e = this.eventRepo.findById(eventId);
-            Response<UserDTO> userResponse = auth.getUserDTO(identifier);
-            e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
-            int totalUserTickets = 0;
-            if(userResponse.getValue()!=null){
-                totalUserTickets = e.countUserTickets(userResponse.getValue());
+    public Response<Integer> userSelectTickets(String identifier, Integer eventId,
+            Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "userSelectTickets called");
+            String role = auth.getRole(identifier).getValue();
+            if (role == null) {
+                logger.log(Level.SEVERE, "identifier is null");
+                return new Response<>(null, "Invalid identifier supplied");
             }
-            Company c = companyRepo.findById(e.getCompanyId());
-            c.quantityExceedsPolicy(userResponse.getValue(), totalTickets,totalUserTickets);
-            ActiveOrder newActiveOrder;
+            if (!accessValidator.hasWriteAccess(auth.getUserId(identifier).getValue())) {
+                logger.severe("User does not have write access");
+                return new Response<>(null, "user does not have write access.");
+            }
             try {
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(identifier).getValue()
-                        : identifier;
+                int totalSeatingTickets = seatingZones.values().stream()
+                        .mapToInt(List::size)
+                        .sum();
 
-                ActiveOrderDTO activeOrderDTO =
-                        activeOrderRepo.findActiveOrderByUserAndEvent(userIdentifier, eventId)
-                                .map(ActiveOrderDTO::new)
-                                .orElseThrow(() -> new NoSuchElementException(
-                                        "Active order not found for user"
-                                ));
+                int totalStandingTickets = standingZones.values().stream()
+                        .mapToInt(Integer::intValue)
+                        .sum();
+                int totalTickets = totalSeatingTickets + totalStandingTickets;
+                Event e = this.eventRepo.findById(eventId);
+                Response<UserDTO> userResponse = auth.getUserDTO(identifier);
+                e.quantityExceedsPolicy(userResponse.getValue(), totalTickets);
+                int totalUserTickets = 0;
+                if (userResponse.getValue() != null) {
+                    totalUserTickets = e.countUserTickets(userResponse.getValue());
+                }
+                Company c = companyRepo.findById(e.getCompanyId());
+                c.quantityExceedsPolicy(userResponse.getValue(), totalTickets, totalUserTickets);
+                ActiveOrder newActiveOrder;
+                try {
+                    String userIdentifier = role.equals("MEMBER")
+                            ? auth.getUserEmail(identifier).getValue()
+                            : identifier;
 
-                newActiveOrder = activeOrderRepo.findById(activeOrderDTO.getId());
+                    ActiveOrderDTO activeOrderDTO = activeOrderRepo
+                            .findActiveOrderByUserAndEvent(userIdentifier, eventId)
+                            .map(ActiveOrderDTO::new)
+                            .orElseThrow(() -> new NoSuchElementException(
+                                    "Active order not found for user"));
+
+                    newActiveOrder = activeOrderRepo.findById(activeOrderDTO.getId());
+                } catch (NoSuchElementException ex) {
+                    logger.log(Level.SEVERE, "Active order not found for user");
+                    return new Response<>(null, "Active order not found for user");
+                }
+                List<Integer> tickets = e.bookTickets(seatingZones, standingZones);
+                newActiveOrder.setTickets(tickets);
+                newActiveOrder.proceedToCheckout();
+                this.eventRepo.store(e);
+                activeOrderRepo.store(newActiveOrder);
+
+                logger.log(Level.INFO, "Tickets selected successfully");
+                return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
+                return new Response<>(null, "Event not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to select tickets : " + e.getMessage());
+                return new Response<>(null, "Failed to select tickets : " + e.getMessage());
             }
-            catch (NoSuchElementException ex) {
-                logger.log(Level.SEVERE, "Active order not found for user");
-                return new Response<>(null, "Active order not found for user");
-            }
-            List<Integer> tickets = e.bookTickets(seatingZones,standingZones);
-            newActiveOrder.setTickets(tickets);
-            newActiveOrder.proceedToCheckout();
-            this.eventRepo.store(e);
-            activeOrderRepo.store(newActiveOrder);
 
-            logger.log(Level.INFO, "Tickets selected successfully");
-            return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
-        } catch (NoSuchElementException e) {
-            logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
-            return new Response<>(null, "Event not found");
-        } catch (OptimisticLockingFailureException e) {
-            throw e;
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Failed to select tickets : " + e.getMessage());
-            return new Response<>(null, "Failed to select tickets : " + e.getMessage());
-        }
-
-    });}
+        });
+    }
 
     public Response<CheckoutPriceDTO> prepareCheckout(String token, int activeOrderId) {
         return prepareCheckoutPrice(token, activeOrderId, null);
@@ -608,14 +580,12 @@ public class ActiveOrderService {
 
                 double priceAfterEventDiscounts = event.calculateFinalTotalPrice(
                         activeOrder.getTickets(),
-                        couponCode
-                );
+                        couponCode);
 
                 double finalPrice = company.getDiscountPolicy().apply(
                         priceAfterEventDiscounts,
                         activeOrder.getTickets().size(),
-                        couponCode
-                );
+                        couponCode);
 
                 activeOrder.setApprovedCheckoutPrice(finalPrice);
                 activeOrderRepo.store(activeOrder);
@@ -624,8 +594,7 @@ public class ActiveOrderService {
                         originalPrice,
                         finalPrice,
                         event.getDiscountPolicy().describe(),
-                        company.getDiscountPolicy().describe()
-                );
+                        company.getDiscountPolicy().describe());
 
                 return new Response<>(checkoutPrice, "Checkout price prepared successfully");
 
@@ -658,25 +627,25 @@ public class ActiveOrderService {
 
             try {
                 String role = auth.getRole(token).getValue();
-                if(role == null){
+                if (role == null) {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
-                String userIdentifier=token; //for Guest
-                if(role.equals("MEMBER")) { //if it's a member should be email
-                    userIdentifier=auth.getUserEmail(token).getValue();
+                String userIdentifier = token; // for Guest
+                if (role.equals("MEMBER")) { // if it's a member should be email
+                    userIdentifier = auth.getUserEmail(token).getValue();
                     if (userIdentifier == null) {
                         logger.log(Level.SEVERE, "not a valid user email");
                         return new Response<>(null, "not a valid user email");
 
                     }
-                    if(!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())){
+                    if (!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())) {
                         logger.severe("User does not have write access");
                         return new Response<>(null, "user does not have write access.");
                     }
                 }
                 activeOrder = activeOrderRepo.findById(activeOrderId);
-                if (!(activeOrder.getUserIdentifier().equals(userIdentifier))) { //userIdentifier
+                if (!(activeOrder.getUserIdentifier().equals(userIdentifier))) { // userIdentifier
                     return new Response<>(null, "Active order does not belong to user");
                 }
 
@@ -734,8 +703,7 @@ public class ActiveOrderService {
                         event.getPurchasedTicketDetails(activeOrder.getTickets()),
                         activeOrder.getTickets(),
                         total,
-                        paymentConfirmationId
-                );
+                        paymentConfirmationId);
 
                 shouldDeleteActiveOrder = true;
 
@@ -743,8 +711,7 @@ public class ActiveOrderService {
 
                 try {
                     TicketSupplyResultDTO issueResult = ticketSupply.issue(
-                            new TicketSupplyRequestDTO(activeOrder.getTickets())
-                    );
+                            new TicketSupplyRequestDTO(activeOrder.getTickets()));
 
                     if (issueResult == null || !issueResult.isSuccess()) {
                         issuanceFailed = true;
@@ -762,15 +729,21 @@ public class ActiveOrderService {
                         order.markRefunded();
                         try {
                             // Notify the user about the refund
-                            NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId() + " in event " + event.getId() + " because ticket issuance failed", event.getId(), null);
+                            NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId()
+                                    + " in event " + event.getId() + " because ticket issuance failed", event.getId(),
+                                    null);
                             sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
                         } catch (Exception e) {
-                            logger.log(Level.WARNING, "Failed to notify user about successful refund: " + e.getMessage());
+                            logger.log(Level.WARNING,
+                                    "Failed to notify user about successful refund: " + e.getMessage());
                         }
                     } else {
                         order.markRefundRequired();
                         try {
-                            NotifyPayload payload = new NotifyPayload("Refund for order " + order.getOrderId() + " in event " + event.getId() + " because ticket issuance failed has been failed, please contact support", event.getId(), null);
+                            NotifyPayload payload = new NotifyPayload(
+                                    "Refund for order " + order.getOrderId() + " in event " + event.getId()
+                                            + " because ticket issuance failed has been failed, please contact support",
+                                    event.getId(), null);
                             sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
                         } catch (Exception e) {
                             logger.log(Level.WARNING, "Failed to notify user about required refund: " + e.getMessage());
@@ -787,7 +760,7 @@ public class ActiveOrderService {
                             new NotifyPayload(
                                     "Your order #" + order.getOrderId() + " for \""
                                             + event.getName() + "\" was completed successfully.",
-                                    event.getId(),event.getCompanyId()));
+                                    event.getId(), event.getCompanyId()));
                     String recipientIdentifier = auth.getUserIdentifier(token).getValue();
                     if (recipientIdentifier != null) {
                         sendOrSaveNotification(recipientIdentifier, confirmation);
@@ -875,7 +848,6 @@ public class ActiveOrderService {
         });
     }
 
-
     public void cleanupExpiredOrders() {
         logger.log(Level.INFO, "cleanupExpiredOrders running");
         List<ActiveOrder> expired = activeOrderRepo.findExpired(LocalDateTime.now());
@@ -888,15 +860,14 @@ public class ActiveOrderService {
                         ActiveOrder current = activeOrderRepo.findById(expiredOrder.getId());
                         Event event = eventRepo.findById(current.getEventId());
                         event.releaseTickets(current.getTickets());
-                        eventRepo.store(event);                  // optimistic lock check
+                        eventRepo.store(event); // optimistic lock check
                         activeOrderRepo.delete(current.getId());
                         promoteNextInQueue(event.getId());
                         return new Response<>(true, "expired");
-                    }  catch (NoSuchElementException e) {
+                    } catch (NoSuchElementException e) {
                         // order already gone — user placed it before cleanup hit. Fine.
                         return new Response<>(true, "already removed");
-                    }
-                    catch (OptimisticLockingFailureException e) {
+                    } catch (OptimisticLockingFailureException e) {
                         throw e;
                     }
                 });
@@ -907,23 +878,22 @@ public class ActiveOrderService {
         }
     }
 
-
     public Response<ActiveOrderDTO> memberProceedAnActiveOrder(String token) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "memberProceedActiveOrder called");
             try {
                 int userId = auth.getUserId(token).getValue();
-                if(userId == -1){
+                if (userId == -1) {
                     logger.log(Level.SEVERE, "user not logged in");
                     return new Response<>(null, "user not logged in");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
+                if (!accessValidator.hasWriteAccess(userId)) {
                     logger.severe("User does not have write access");
                     return new Response<>(null, "user does not have write access.");
                 }
                 String userEmail = auth.getUserEmail(token).getValue();
                 ActiveOrderDTO order = activeOrderRepo.findOrderByUserId(userEmail);
-                if (!order.getUserIdentifier().equals(auth.getUserEmail(token).getValue())) { //email for member
+                if (!order.getUserIdentifier().equals(auth.getUserEmail(token).getValue())) { // email for member
                     logger.log(Level.SEVERE, "Unauthorized access to active order");
                     return new Response<>(null, "Unauthorized access to active order");
                 }
@@ -947,7 +917,6 @@ public class ActiveOrderService {
         });
     }
 
-
     public Response<ActiveOrderDTO> editTicketSelection(
             String token,
             Map<String, List<SeatingTicketDTO>> seatingToRemove,
@@ -961,7 +930,7 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
-                if(!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())){
+                if (!accessValidator.hasWriteAccess(auth.getUserId(token).getValue())) {
                     logger.severe("User does not have write access");
                     return new Response<>(null, "user does not have write access.");
                 }
@@ -993,9 +962,11 @@ public class ActiveOrderService {
 
                 int projected = currentTickets.size();
                 if (seatingToRemove != null)
-                    for (List<SeatingTicketDTO> l : seatingToRemove.values()) projected -= l.size();
+                    for (List<SeatingTicketDTO> l : seatingToRemove.values())
+                        projected -= l.size();
                 if (seatingToAdd != null)
-                    for (List<SeatingTicketDTO> l : seatingToAdd.values()) projected += l.size();
+                    for (List<SeatingTicketDTO> l : seatingToAdd.values())
+                        projected += l.size();
                 if (standingDesired != null) {
                     for (Map.Entry<String, Integer> e : standingDesired.entrySet()) {
                         if (e.getValue() < 0)
@@ -1011,7 +982,7 @@ public class ActiveOrderService {
                 UserDTO userDTO = auth.getUserDTO(token).getValue();
                 event.quantityTotalExceedsPolicy(userDTO, projected); // throws if exceeded
                 Company company = companyRepo.findById(event.getCompanyId());
-                company.quantityExceedsPolicy(userDTO, 0,projected); // throws if exceeded
+                company.quantityExceedsPolicy(userDTO, 0, projected); // throws if exceeded
 
                 if (seatingToRemove != null && !seatingToRemove.isEmpty()) {
                     List<Integer> ids = event.findSeatingTicketIds(seatingToRemove);
@@ -1048,7 +1019,6 @@ public class ActiveOrderService {
 
                 eventRepo.store(event);
                 activeOrderRepo.store(order);
-
 
                 logger.log(Level.INFO, "Selection updated successfully");
                 return new Response<>(new ActiveOrderDTO(order), "Selection updated successfully");
@@ -1090,8 +1060,7 @@ public class ActiveOrderService {
 
                 return new Response<>(
                         removed,
-                        removed ? "Removed from event queue" : "User was not waiting in event queue"
-                );
+                        removed ? "Removed from event queue" : "User was not waiting in event queue");
 
             } catch (NoSuchElementException e) {
                 return new Response<>(false, "Event not found");
@@ -1101,20 +1070,22 @@ public class ActiveOrderService {
         });
     }
 
-
     private void promoteNextInQueue(int eventId) {
         String nextToken = dequeueNextToken(eventId);
         boolean created;
         if (nextToken != null) {
-            created =  createActiveOrderForToken(nextToken, eventId);
-            if(created){
-                try{
-                    NotifyPayload payload = new NotifyPayload("Your turn for event " + eventId + " has arrived!",eventId,null);
-                    NotifyDTO notifyDTO = new NotifyDTO(NotifyType.QUEUE_EVENT_TURN_ARRIVED,payload);
+            created = createActiveOrderForToken(nextToken, eventId);
+            if (created) {
+                try {
+                    NotifyPayload payload = new NotifyPayload("Your turn for event " + eventId + " has arrived!",
+                            eventId, null);
+                    NotifyDTO notifyDTO = new NotifyDTO(NotifyType.QUEUE_EVENT_TURN_ARRIVED, payload);
                     notifier.notifyTab(nextToken, notifyDTO);
-                    logger.info("Notified tab " + nextToken + " that their turn for event " + eventId + " has arrived.");
-                } catch (Exception e){
-                    logger.log(Level.WARNING,"Failed to notify tab " + nextToken + " about queue turn: " + e.getMessage());
+                    logger.info(
+                            "Notified tab " + nextToken + " that their turn for event " + eventId + " has arrived.");
+                } catch (Exception e) {
+                    logger.log(Level.WARNING,
+                            "Failed to notify tab " + nextToken + " about queue turn: " + e.getMessage());
                 }
             }
 
@@ -1132,8 +1103,7 @@ public class ActiveOrderService {
                 String nextToken = event.getEventQueue().dequeue();
                 eventRepo.store(event);
                 return new Response<>(nextToken, "Token dequeued successfully");
-            }
-            catch (OptimisticLockingFailureException e) {
+            } catch (OptimisticLockingFailureException e) {
                 throw e;
             }
         }).getValue();
@@ -1184,8 +1154,7 @@ public class ActiveOrderService {
 
         NotifyDTO payload = new NotifyDTO(
                 NotifyType.GENERAL_POPUP,
-                new NotifyPayload("Event \"" + persisted.getName() + "\" is sold out.", eventId,null)
-        );
+                new NotifyPayload("Event \"" + persisted.getName() + "\" is sold out.", eventId, null));
 
         for (Integer userId : recipientIds) {
             try {
@@ -1196,28 +1165,40 @@ public class ActiveOrderService {
         }
     }
 
-
-     //Helper method to send a real-time notification or save it as delayed if the user is offline.
-    private void sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
-        try {
+    // Helper method to send a real-time notification or save it as delayed if the
+    // user is offline.
+    private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
                 Member member = userRepo.findUserByEmail(userIdentifier);
+
                 if (member == null) {
                     logger.warning("User not found for identifier: " + userIdentifier);
-                    return;
+                    return new Response<>(null, "User not found");
                 }
-            // Attempt to send in real-time
-            boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
 
-            // If delivery failed (user is offline), save as delayed notification
-            if (!isDelivered) {
-                member.addDelayedNotification(notifyDTO);
-                userRepo.store(member);
-                logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
+                boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
+
+                if (!isDelivered) {
+                    member.addDelayedNotification(notifyDTO);
+                    userRepo.store(member);
+
+                    logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
+                    return new Response<>(null, "Notification saved as delayed");
+                }
+
+                return new Response<>(null, "Notification sent successfully");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                logger.warning("Failed to send or save notification for "
+                        + userIdentifier + ": " + e.getMessage());
+
+                return new Response<>(null, "Failed to send or save notification");
             }
-        } catch (OptimisticLockingFailureException e) {
-            throw e;
-        } catch (Exception e) {
-            logger.warning("Failed to send or save notification for " + userIdentifier + ": " + e.getMessage());
-        }
+        });
     }
+
 }

@@ -575,28 +575,38 @@ public class AdminService {
             }
         });
     }
+    // Helper method to send a real-time notification or save it as delayed if the user is offline.
+    private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                Member member = userRepo.findUserByEmail(userIdentifier);
 
-    //Helper method to send a real-time notification or save it as delayed if the user is offline.
-    private void sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
-        try {
-            Member member = userRepo.findUserByEmail(userIdentifier);
-            if (member == null) {
-                logger.warning("User not found for identifier: " + userIdentifier);
-                return;
-            }
-            // Attempt to send in real-time
-            boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
+                if (member == null) {
+                    logger.warning("User not found for identifier: " + userIdentifier);
+                    return new Response<>(null, "User not found");
+                }
 
-            // If delivery failed (user is offline), save as delayed notification
-            if (!isDelivered) {
-                member.addDelayedNotification(notifyDTO);
-                userRepo.store(member);
-                logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
+                boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
+
+                if (!isDelivered) {
+                    member.addDelayedNotification(notifyDTO);
+                    userRepo.store(member);
+
+                    logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
+                    return new Response<>(null, "Notification saved as delayed");
+                }
+
+                return new Response<>(null, "Notification sent successfully");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                logger.warning("Failed to send or save notification for "
+                        + userIdentifier + ": " + e.getMessage());
+
+                return new Response<>(null, "Failed to send or save notification");
             }
-        } catch (OptimisticLockingFailureException e) {
-            throw e;
-        } catch (Exception e) {
-            logger.warning("Failed to send or save notification for " + userIdentifier + ": " + e.getMessage());
-        }
+        });
     }
 }
