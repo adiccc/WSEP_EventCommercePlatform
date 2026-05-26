@@ -1468,7 +1468,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 2);
 
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Response<Integer> selectResponse =
                 service.userSelectTickets(validToken, concurrentEventId, seating, standing);
         assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
