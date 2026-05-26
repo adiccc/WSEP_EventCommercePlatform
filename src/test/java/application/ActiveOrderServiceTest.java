@@ -49,6 +49,7 @@ class ActiveOrderServiceTest {
     private IUserRepo userRepo;
     private CompanyService companyService;
     private EventCompanyManageService companyEventService;
+    private LotteryService lotteryService;
 
     private String validToken;
     private Integer eventId;
@@ -134,7 +135,7 @@ class ActiveOrderServiceTest {
         companyEventService.DefineVenueAndSeatingMap(validToken, eventId, stage, entries, standingZones, seatingZones);
         companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId, stage, entries, standingZones, seatingZones);
 
-        LotteryService lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator);
+        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator,notifier);
         lotteryService.createLottery(validToken, eventId, 10,
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
@@ -154,7 +155,7 @@ class ActiveOrderServiceTest {
     }
     @Test
     void GivenInvalidToken_WhenEnterPurchase_ThenErrorReturned() {
-        Response<EnterPurchaseDTO> response = service.enterEventPurchase("", companyId, eventId);
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase("", companyId, eventId,null);
 
         assertNull(response.getValue());
         assertEquals("Invalid token", response.getMessage());
@@ -162,7 +163,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenNonExistingEvent_WhenEnterPurchase_ThenEventNotFound() {
-        Response<EnterPurchaseDTO> response = service.enterEventPurchase(validToken, companyId, -1);
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase(validToken, companyId, -1,null);
 
         assertNull(response.getValue());
         assertEquals("Event not found", response.getMessage());
@@ -170,7 +171,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenWrongCompany_WhenEnterPurchase_ThenMismatchError() {
-        Response<EnterPurchaseDTO> response = service.enterEventPurchase(validToken, 999, eventId);
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase(validToken, 999, eventId,null);
 
         assertNull(response.getValue());
         assertEquals("The selected event does not belong to the company", response.getMessage());
@@ -178,7 +179,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenFutureSaleWithoutLottery_WhenEnterPurchase_ThenSaleNotStarted() {
-        Response<EnterPurchaseDTO> response = service.enterEventPurchase(validToken, companyId, eventId);
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase(validToken, companyId, eventId,null);
 
         assertNull(response.getValue());
         assertEquals("The sale for this event has not started yet", response.getMessage());
@@ -187,7 +188,7 @@ class ActiveOrderServiceTest {
     @Test
     void GivenValidEvent_WhenEnterPurchase_ThenReturnEventMap() {
         Response<EnterPurchaseDTO> response =
-                service.enterEventPurchase(validToken, companyId, concurrentEventId);
+                service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
         assertNotNull(response.getValue());
         assertEquals("Event map retrieved successfully", response.getMessage());
@@ -216,7 +217,7 @@ class ActiveOrderServiceTest {
         for (String token : tokens) {
             futures.add(executor.submit(() -> {
                 start.await();
-                return service.enterEventPurchase(token, companyId, concurrentEventId);
+                return service.enterEventPurchase(token, companyId, concurrentEventId,null);
             }));
         }
 
@@ -262,7 +263,7 @@ class ActiveOrderServiceTest {
         for (String token : tokens) {
             futures.add(executor.submit(() -> {
                 start.await();
-                return service.enterEventPurchase(token, companyId, concurrentEventId);
+                return service.enterEventPurchase(token, companyId, concurrentEventId,null);
             }));
         }
 
@@ -306,7 +307,7 @@ class ActiveOrderServiceTest {
             String fillerToken = userService.login(email, "pass").getValue();
 
             Response<EnterPurchaseDTO> fillerResp =
-                    service.enterEventPurchase(fillerToken, companyId, concurrentEventId);
+                    service.enterEventPurchase(fillerToken, companyId, concurrentEventId,null);
             assertNotNull(fillerResp.getValue(),
                     "Filler user " + i + " should have received the map (slot available)");
         }
@@ -332,11 +333,11 @@ class ActiveOrderServiceTest {
 
         Future<Response<EnterPurchaseDTO>> futureA = executor.submit(() -> {
             start.await();
-            return service.enterEventPurchase(tokenA, companyId, concurrentEventId);
+            return service.enterEventPurchase(tokenA, companyId, concurrentEventId,null);
         });
         Future<Response<EnterPurchaseDTO>> futureB = executor.submit(() -> {
             start.await();
-            return service.enterEventPurchase(tokenB, companyId, concurrentEventId);
+            return service.enterEventPurchase(tokenB, companyId, concurrentEventId,null);
         });
 
         start.countDown();
@@ -365,6 +366,168 @@ class ActiveOrderServiceTest {
         Response<EnterPurchaseDTO> loser = responseA.getValue().isWaitingInQueue() ? responseA : responseB;
         assertTrue(loser.getValue().isWaitingInQueue());
     }
+
+    @Test
+    void GivenLotteryEventDuringExclusivePeriodAndNullCode_WhenEnterPurchase_ThenCodeRequired() {
+        Event event = eventRepo.findById(eventId);
+        event.setSaleStartDateForTest(LocalDateTime.now().minusHours(2));
+        eventRepo.store(event);
+
+        Response<EnterPurchaseDTO> response =
+                service.enterEventPurchase(validToken, companyId, eventId, null);
+
+        assertNull(response.getValue());
+        assertEquals("Lottery code is required for this event", response.getMessage());
+    }
+
+    @Test
+    void GivenLotteryEventDuringExclusivePeriodAndBlankCode_WhenEnterPurchase_ThenCodeRequired() {
+        Event event = eventRepo.findById(eventId);
+        event.setSaleStartDateForTest(LocalDateTime.now().minusHours(2));
+        eventRepo.store(event);
+
+        Response<EnterPurchaseDTO> response =
+                service.enterEventPurchase(validToken, companyId, eventId, "   ");
+
+        assertNull(response.getValue());
+        assertEquals("Lottery code is required for this event", response.getMessage());
+    }
+
+    @Test
+    void GivenLotteryEventDuringExclusivePeriodAndInvalidCode_WhenEnterPurchase_ThenInvalidCode() {
+        Event event = eventRepo.findById(eventId);
+        event.setSaleStartDateForTest(LocalDateTime.now().minusHours(2));
+        eventRepo.store(event);
+
+        Response<EnterPurchaseDTO> response =
+                service.enterEventPurchase(validToken, companyId, eventId, "wrong-code");
+
+        assertNull(response.getValue());
+        assertEquals("Invalid lottery code", response.getMessage());
+    }
+
+
+    @Test
+    void GivenInvalidToken_WhenIsRequiredLotteryCode_ThenReturnInvalidTokenError() {
+        // Act
+        Response<Boolean> response = service.isRequiredLotteryCode("invalid-token", companyId, eventId);
+
+        // Assert
+        assertNull(response.getValue(), "Value should be null for invalid token");
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingEvent_WhenIsRequiredLotteryCode_ThenReturnEventNotFoundError() {
+        // Act
+        Response<Boolean> response = service.isRequiredLotteryCode(validToken, companyId, 99999);
+
+        // Assert
+        assertNull(response.getValue(), "Value should be null when event does not exist");
+        assertEquals("Event or lottery not found", response.getMessage());
+    }
+
+    @Test
+    void GivenEventBelongsToAnotherCompany_WhenIsRequiredLotteryCode_ThenReturnCompanyMismatchError() {
+        // Act: Use a different company ID
+        Response<Boolean> response = service.isRequiredLotteryCode(validToken, 999, eventId);
+
+        // Assert
+        assertNull(response.getValue(), "Value should be null for company mismatch");
+        assertEquals("The selected event does not belong to the company", response.getMessage());
+    }
+
+    @Test
+    void GivenInactiveEvent_WhenIsRequiredLotteryCode_ThenReturnInactiveEventError() {
+        // Arrange: Make the event inactive
+        Event event = eventRepo.findById(concurrentEventId);
+        event.setActive(false);
+        eventRepo.store(event);
+
+        // Act
+        Response<Boolean> response = service.isRequiredLotteryCode(validToken, companyId, concurrentEventId);
+
+        // Assert
+        assertNull(response.getValue(), "Value should be null when event is inactive");
+        assertEquals("The selected event is not active", response.getMessage());
+    }
+
+    @Test
+    void GivenSaleNotStarted_WhenIsRequiredLotteryCode_ThenReturnSaleNotStartedError() {
+        // Arrange: 'eventId' was created in setUp with saleStartDate in the future
+
+        // Act
+        Response<Boolean> response = service.isRequiredLotteryCode(validToken, companyId, eventId);
+
+        // Assert
+        assertNull(response.getValue(), "Value should be null when sale has not started");
+        assertEquals("The sale for this event has not started yet", response.getMessage());
+    }
+
+    @Test
+    void GivenEventWithoutLottery_WhenIsRequiredLotteryCode_ThenReturnFalse() {
+        // Arrange: 'concurrentEventId' was created in setUp with hasLottery = false and sale already started
+
+        // Act
+        Response<Boolean> response = service.isRequiredLotteryCode(validToken, companyId, concurrentEventId);
+
+        // Assert
+        assertNotNull(response.getValue(), "Value should not be null");
+        assertFalse(response.getValue(), "Should return false since the event has no lottery");
+        assertEquals("This event does not require a lottery code", response.getMessage());
+    }
+
+    @Test
+    void GivenActiveLotteryPeriod_WhenIsRequiredLotteryCode_ThenReturnTrue() {
+        // 1. Create event legally (Sale start date in the future)
+        int activeEventId = companyEventService.createEvent(
+                validToken, companyId, LocalDateTime.now().plusDays(10), "Time Travel Event",
+                LocalDateTime.now().plusDays(2), true, GeographicalArea.CENTER, CategoryEvent.SPORTS
+        ).getValue();
+
+        // 2. Create the lottery (Expiration = 5 hours)
+        lotteryService.createLottery(validToken, activeEventId, 50, LocalDateTime.now().plusDays(1), 5L);
+
+        // 3. Move the sale start date 2 hours into the past
+        Event event = eventRepo.findById(activeEventId);
+        event.setSaleStartDateForTest(LocalDateTime.now().minusHours(2));
+        eventRepo.store(event);
+
+        // Act: Since sale started 2h ago and lottery is exclusive for 5h, we are inside the active period
+        Response<Boolean> response = service.isRequiredLotteryCode(validToken, companyId, activeEventId);
+
+        // Assert
+        assertNotNull(response.getValue(), "Value should not be null");
+        assertTrue(response.getValue(), "Lottery code MUST be required during the exclusive period");
+        assertEquals("Lottery code is required to purchase tickets for this event", response.getMessage());
+    }
+
+    @Test
+    void GivenExpiredLotteryPeriod_WhenIsRequiredLotteryCode_ThenReturnFalse() {
+        // 1. Create event legally
+        int expiredEventId = companyEventService.createEvent(
+                validToken, companyId, LocalDateTime.now().plusDays(10), "Time Travel Event",
+                LocalDateTime.now().plusDays(2), true, GeographicalArea.CENTER, CategoryEvent.SPORTS
+        ).getValue();
+
+        // 2. Create the lottery (Expiration = 1 hour)
+        lotteryService.createLottery(validToken, expiredEventId, 50, LocalDateTime.now().plusDays(1), 1L);
+
+        // 3. Move the sale start date 3 hours into the past
+        // Since expiration is 1h, the lottery has expired
+        Event event = eventRepo.findById(expiredEventId);
+        event.setSaleStartDateForTest(LocalDateTime.now().minusHours(3));
+        eventRepo.store(event);
+
+        // Act
+        Response<Boolean> response = service.isRequiredLotteryCode(validToken, companyId, expiredEventId);
+
+        // Assert
+        assertNotNull(response.getValue(), "Value should not be null");
+        assertFalse(response.getValue(), "Lottery code MUST NOT be required after the exclusive period ends");
+        assertEquals("Lottery period has ended. Everyone can purchase tickets", response.getMessage());
+    }
+
     @Test
     void GivenNullTicketSupplyRequest_WhenIssueTickets_ThenInvalidRequestReturned() {
         Response<TicketSupplyResultDTO> response = service.issueTickets(null);
@@ -465,7 +628,7 @@ class ActiveOrderServiceTest {
     void GivenValidStandingRequest_WhenUserSelectTickets_ThenOrderIdReturned() {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 3);
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Response<Integer> response = service.userSelectTickets(validToken, concurrentEventId, seating, standing);
 
         assertNotNull(response.getValue());
@@ -476,7 +639,7 @@ class ActiveOrderServiceTest {
     void GivenExpiredTimeViewingMap_WhenUserSelectTickets_ThenFailureReturned() {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 3);
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         String userEmail = auth.getUserEmail(validToken).getValue();
         int orderId = activeOrderRepo.findOrderByUserId(userEmail).getId();
         forceExpireOrder(orderId);
@@ -493,7 +656,7 @@ class ActiveOrderServiceTest {
         // "floor" zone capacity is 200
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 201);
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Response<Integer> response = service.userSelectTickets(validToken, concurrentEventId, seating, standing);
 
         assertNull(response.getValue());
@@ -504,7 +667,7 @@ class ActiveOrderServiceTest {
     void GivenNonExistentStandingZoneName_WhenUserSelectTickets_ThenFailureReturned() {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("no-such-zone", 1);
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Response<Integer> response = service.userSelectTickets(validToken, concurrentEventId, seating, standing);
 
         assertNull(response.getValue());
@@ -535,7 +698,7 @@ class ActiveOrderServiceTest {
                 start.await();
                 Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
                 Map<String, Integer> standing = Map.of("floor", ticketsPerUser);
-                service.enterEventPurchase(t, companyId, concurrentEventId);
+                service.enterEventPurchase(t, companyId, concurrentEventId,null);
                 return service.userSelectTickets(t, concurrentEventId, seating, standing);
             }));
         }
@@ -583,7 +746,7 @@ class ActiveOrderServiceTest {
                 start.await();
                 Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
                 Map<String, Integer> standing = Map.of("floor", ticketsPerUser);
-                service.enterEventPurchase(t, companyId, concurrentEventId);
+                service.enterEventPurchase(t, companyId, concurrentEventId,null);
                 return service.userSelectTickets(t, concurrentEventId, seating, standing);
             }));
         }
@@ -615,7 +778,7 @@ class ActiveOrderServiceTest {
     void GivenOnlyNonExpiredOrders_WhenCleanupExpiredOrders_ThenAllOrdersRemain() {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 5);
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Response<Integer> r = service.userSelectTickets(validToken, concurrentEventId, seating, standing);
         assertNotNull(r.getValue());
 
@@ -627,7 +790,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenSingleExpiredOrder_WhenCleanupExpiredOrders_ThenOrderRemovedAndTicketsReleased() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Response<Integer> initial = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 20));
         assertNotNull(initial.getValue(), "Booking failed: " + initial.getMessage());
@@ -645,7 +808,7 @@ class ActiveOrderServiceTest {
                 1, 1, 2000, "Israel", "050-999-8888"
         ));
         String newToken = userService.login(email, "pass").getValue();
-        service.enterEventPurchase(newToken, companyId, concurrentEventId);
+        service.enterEventPurchase(newToken, companyId, concurrentEventId,null);
         Response<Integer> rebook = service.userSelectTickets(
                 newToken, concurrentEventId, new HashMap<>(), Map.of("floor", 20));
         assertNotNull(rebook.getValue(),
@@ -667,11 +830,11 @@ class ActiveOrderServiceTest {
         userService.registerUser("", new UserDTO(emailB, "b", "b", "pass", 1, 1, 2000, "Israel", "050-100-2001"));
         String tokenA = userService.login(emailA, "pass").getValue();
         String tokenB = userService.login(emailB, "pass").getValue();
-        service.enterEventPurchase(tokenA, companyId, concurrentEventId);
+        service.enterEventPurchase(tokenA, companyId, concurrentEventId,null);
         int orderA = service.userSelectTickets(
                 tokenA, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
         forceExpireOrder(orderA);   // only A is "expired"
-        service.enterEventPurchase(tokenB, companyId, concurrentEventId); //also cleanup orderA
+        service.enterEventPurchase(tokenB, companyId, concurrentEventId,null); //also cleanup orderA
         int orderB = service.userSelectTickets(
                 tokenB, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
 
@@ -692,7 +855,7 @@ class ActiveOrderServiceTest {
                     email, "f" + i, "l" + i, "pass",
                     1, 1, 2000, "Israel", "050-300-4000"));
             String token = userService.login(email, "pass").getValue();
-            service.enterEventPurchase(token, companyId, concurrentEventId);
+            service.enterEventPurchase(token, companyId, concurrentEventId,null);
             int id = service.userSelectTickets(
                     token, concurrentEventId, new HashMap<>(), Map.of("floor", 10)).getValue();
             orderIds.add(id);
@@ -711,7 +874,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = Map.of("tribune", List.of(seat));
         Map<String, Integer> standing = new HashMap<>();
 
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Response<Integer> initial = service.userSelectTickets(
                 validToken, concurrentEventId, seating, standing);
         assertNotNull(initial.getValue());
@@ -729,7 +892,7 @@ class ActiveOrderServiceTest {
                 1, 1, 2000, "Israel", "050-444-5555"
         ));
         String newToken = userService.login(email, "pass").getValue();
-        service.enterEventPurchase(newToken, companyId, concurrentEventId);
+        service.enterEventPurchase(newToken, companyId, concurrentEventId,null);
         Response<Integer> rebook = service.userSelectTickets(
                 newToken, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))),
@@ -740,13 +903,13 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenExpiredAndNonExpiredOrdersForSameUser_WhenCleanupExpiredOrders_ThenUserCanCreateNewOrder() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Response<Integer> first = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
         assertNotNull(first.getValue());
 
         service.cleanupExpiredOrders();
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Response<Integer> second = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
         assertNotNull(second.getValue(),
@@ -771,7 +934,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenValidActiveOrder_WhenMemberProceedActiveOrder_ThenReturnsDTO() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Response<Integer> created = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
         assertNotNull(created.getValue(), "setup failed: " + created.getMessage());
@@ -787,7 +950,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenExpiredActiveOrder_WhenMemberProceedActiveOrder_ThenExpiredError() throws Exception {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Response<Integer> created = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
         assertNotNull(created.getValue());
@@ -808,10 +971,10 @@ class ActiveOrderServiceTest {
         String tokenB = userService.login(emailB, "pass").getValue();
         String userIdA = auth.getUserEmail(validToken).getValue();
         String userIdB = auth.getUserEmail(tokenB).getValue();
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderA = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
-        service.enterEventPurchase(tokenB, companyId, concurrentEventId);
+        service.enterEventPurchase(tokenB, companyId, concurrentEventId,null);
         int orderB = service.userSelectTickets(
                 tokenB, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
 
@@ -827,7 +990,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenSingleUserWithOrder_WhenManyConcurrentProceedCalls_ThenAllReturnSameOrder() throws Exception {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
 
@@ -874,7 +1037,7 @@ class ActiveOrderServiceTest {
             String t = userService.login(email, "pass").getValue();
             tokens.add(t);
             userIds.add(auth.getUserEmail(t).getValue());
-            service.enterEventPurchase(t, companyId, concurrentEventId);
+            service.enterEventPurchase(t, companyId, concurrentEventId,null);
             int oid = service.userSelectTickets(
                     t, concurrentEventId, new HashMap<>(), Map.of("floor", 2)).getValue();
             tokenToOrderId.put(t, oid);
@@ -923,7 +1086,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenExpiredOrder_WhenEditTicketSelection_ThenExpiredError() throws Exception {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
         forceExpireOrder(orderId);
@@ -937,7 +1100,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenStandingDesiredEqualToCurrent_WhenEditTicketSelection_ThenNoChange() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
         int ticketCountBefore = activeOrderRepo.findById(orderId).getTickets().size();
@@ -951,7 +1114,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenStandingDesiredHigher_WhenEditTicketSelection_ThenMoreTicketsBooked() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
 
@@ -964,7 +1127,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenStandingDesiredLower_WhenEditTicketSelection_ThenExtrasReleased() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
 
@@ -978,7 +1141,7 @@ class ActiveOrderServiceTest {
         userService.registerUser("", new UserDTO(
                 email, "x", "y", "pass", 1, 1, 2000, "Israel", "050-000-1111"));
         String otherToken = userService.login(email, "pass").getValue();
-        service.enterEventPurchase(otherToken, companyId, concurrentEventId);
+        service.enterEventPurchase(otherToken, companyId, concurrentEventId,null);
         Response<Integer> rebook = service.userSelectTickets(
                 otherToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3));
         assertNotNull(rebook.getValue(), "released standing tickets must be available again");
@@ -987,7 +1150,7 @@ class ActiveOrderServiceTest {
     @Test
     void GivenSpecificSeatRemoved_WhenEditTicketSelection_ThenSeatReleasedAndRebookable() {
         SeatingTicketDTO seat = new SeatingTicketDTO(0, 0);
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId,
                 Map.of("tribune", List.of(seat)), new HashMap<>()).getValue();
@@ -1005,7 +1168,7 @@ class ActiveOrderServiceTest {
         userService.registerUser("", new UserDTO(
                 email, "s", "g", "pass", 1, 1, 2000, "Israel", "050-222-3333"));
         String otherToken = userService.login(email, "pass").getValue();
-        service.enterEventPurchase(otherToken, companyId, concurrentEventId);
+        service.enterEventPurchase(otherToken, companyId, concurrentEventId,null);
         Response<Integer> rebook = service.userSelectTickets(
                 otherToken, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))),
@@ -1015,7 +1178,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenSpecificSeatAdded_WhenEditTicketSelection_ThenSeatBookedToOrder() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 1)).getValue();
 
@@ -1032,7 +1195,7 @@ class ActiveOrderServiceTest {
         userService.registerUser("", new UserDTO(
                 email, "b", "k", "pass", 1, 1, 2000, "Israel", "050-444-7777"));
         String otherToken = userService.login(email, "pass").getValue();
-        service.enterEventPurchase(otherToken, companyId, concurrentEventId);
+        service.enterEventPurchase(otherToken, companyId, concurrentEventId,null);
         Response<Integer> conflict = service.userSelectTickets(
                 otherToken, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(2, 3))),
@@ -1042,7 +1205,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenSwapSeats_WhenEditTicketSelection_ThenOldReleasedAndNewBooked() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(1, 1))),
@@ -1061,7 +1224,7 @@ class ActiveOrderServiceTest {
         userService.registerUser("", new UserDTO(
                 email, "s", "w", "pass", 1, 1, 2000, "Israel", "050-555-8888"));
         String otherToken = userService.login(email, "pass").getValue();
-        service.enterEventPurchase(otherToken, companyId, concurrentEventId);
+        service.enterEventPurchase(otherToken, companyId, concurrentEventId,null);
         Response<Integer> oldSeat = service.userSelectTickets(
                 otherToken, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(1, 1))),
@@ -1071,8 +1234,8 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenSameSeatInRemoveAndAdd_WhenEditTicketSelection_ThenRejected() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
-        service.userSelectTickets(
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
+        int orderId = service.userSelectTickets(
                 validToken, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))),
                 new HashMap<>()).getValue();
@@ -1090,7 +1253,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenRemoveSeatNotInOrder_WhenEditTicketSelection_ThenError() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))),
@@ -1110,7 +1273,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenNegativeStandingQuantity_WhenEditTicketSelection_ThenError() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
 
@@ -1123,7 +1286,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenEditFromCheckingOut_WhenEditTicketSelection_ThenStageReturnsToSelecting() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
 
@@ -1147,10 +1310,10 @@ class ActiveOrderServiceTest {
         userService.registerUser("", new UserDTO(
                 emailB, "r", "b", "pass", 1, 1, 2000, "Israel", "050-700-8000"));
         String tokenB = userService.login(emailB, "pass").getValue();
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         service.userSelectTickets(validToken, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))), new HashMap<>());
-        service.enterEventPurchase(tokenB, companyId, concurrentEventId);
+        service.enterEventPurchase(tokenB, companyId, concurrentEventId,null);
         service.userSelectTickets(tokenB, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(1, 1))), new HashMap<>());
 
@@ -1192,7 +1355,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenTwoEditsToSameOrderConcurrently_WhenEditTicketSelection_ThenBothEventuallySucceed() throws Exception {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
 
@@ -1238,7 +1401,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 2);
 
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
         Response<Integer> selectResponse =
                 service.userSelectTickets(validToken, concurrentEventId, seating, standing);
@@ -1348,7 +1511,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 2);
 
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
         Response<Integer> selectResponse =
                 service.userSelectTickets(validToken, concurrentEventId, seating, standing);
@@ -1396,7 +1559,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 2);
 
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
         Response<Integer> selectResponse =
                 service.userSelectTickets(validToken, concurrentEventId, seating, standing);
@@ -1459,7 +1622,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 2);
 
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
         Response<Integer> selectResponse =
                 service.userSelectTickets(validToken, concurrentEventId, seating, standing);
@@ -1516,7 +1679,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 2);
 
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
         Response<Integer> selectResponse =
                 service.userSelectTickets(validToken, concurrentEventId, seating, standing);
@@ -1575,7 +1738,7 @@ class ActiveOrderServiceTest {
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 2);
 
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
         Response<Integer> selectResponse =
                 service.userSelectTickets(validToken, concurrentEventId, seating, standing);
@@ -1616,7 +1779,7 @@ class ActiveOrderServiceTest {
         String newToken = userService.login(newEmail, "pass").getValue();
 
         Response<EnterPurchaseDTO> enterResponse =
-                service.enterEventPurchase(newToken, companyId, concurrentEventId);
+                service.enterEventPurchase(newToken, companyId, concurrentEventId,null);
 
         assertNotNull(enterResponse.getValue(),
                 "New user should enter purchase before rebooking. Message: " + enterResponse.getMessage());
@@ -1637,7 +1800,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenActiveOrderHasNoTickets_WhenCheckoutAndPayment_ThenErrorAndActiveOrderRemains() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         String userEmail = auth.getUserEmail(validToken).getValue();
         int activeOrderId = activeOrderRepo.findOrderByUserId(userEmail).getId();
 
@@ -1688,7 +1851,7 @@ class ActiveOrderServiceTest {
     void GivenSameActiveOrder_WhenCheckoutAndPaymentConcurrently_With10Threads_ThenOnlyOneSucceeds() throws Exception {
         int threadCount = 10;
 
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
         Response<Integer> selectResponse = service.userSelectTickets(
                 validToken,
@@ -1803,7 +1966,7 @@ class ActiveOrderServiceTest {
             tokens.add(token);
 
             Response<EnterPurchaseDTO> enterResponse =
-                    service.enterEventPurchase(token, companyId, concurrentEventId);
+                    service.enterEventPurchase(token, companyId, concurrentEventId,null);
 
             assertNotNull(enterResponse.getValue(),
                     "enter failed for user " + i + ": " + enterResponse.getMessage());
@@ -1922,7 +2085,7 @@ class ActiveOrderServiceTest {
             tokens.add(token);
 
             Response<EnterPurchaseDTO> enterResponse =
-                    service.enterEventPurchase(token, companyId, concurrentEventId);
+                    service.enterEventPurchase(token, companyId, concurrentEventId,null);
 
             assertNotNull(enterResponse.getValue(),
                     "enter failed for user " + i + ": " + enterResponse.getMessage());
@@ -2039,7 +2202,7 @@ class ActiveOrderServiceTest {
             String token = userService.login(email, "pass").getValue();
             tokens.add(token);
 
-            service.enterEventPurchase(token, companyId, concurrentEventId);
+            service.enterEventPurchase(token, companyId, concurrentEventId,null);
 
             Response<Integer> selectResponse = service.userSelectTickets(
                     token,
@@ -2173,7 +2336,7 @@ class ActiveOrderServiceTest {
             tokens.add(token);
 
             Response<EnterPurchaseDTO> enterResponse =
-                    service.enterEventPurchase(token, companyId, concurrentEventId);
+                    service.enterEventPurchase(token, companyId, concurrentEventId,null);
 
             assertNotNull(enterResponse.getValue(),
                     "enter failed: " + enterResponse.getMessage());
@@ -2273,7 +2436,7 @@ class ActiveOrderServiceTest {
             tokens.add(token);
 
             Response<EnterPurchaseDTO> enterResponse =
-                    service.enterEventPurchase(token, companyId, concurrentEventId);
+                    service.enterEventPurchase(token, companyId, concurrentEventId,null);
 
             assertNotNull(enterResponse.getValue());
 
@@ -2334,7 +2497,7 @@ class ActiveOrderServiceTest {
     @Test
     void GivenActiveOrderBelongsToAnotherUser_WhenCheckoutAndPayment_ThenFail() {
         // user A
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 2)
         ).getValue();
@@ -2359,7 +2522,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenEventBecomesInactiveAfterTicketSelection_WhenCheckoutAndPayment_ThenFail() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
         Response<Integer> selectResponse = service.userSelectTickets(
                 validToken,
@@ -2401,7 +2564,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenTicketSupplyReturnsNull_WhenCheckoutAndPayment_ThenRefundAndActiveOrderDeleted() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
         Response<Integer> selectResponse = service.userSelectTickets(
                 validToken,
@@ -2465,7 +2628,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenPaymentThrowsException_WhenCheckoutAndPayment_ThenFailAndActiveOrderRemains() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
         Response<Integer> selectResponse = service.userSelectTickets(
                 validToken,
@@ -2513,7 +2676,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenPaymentReturnsBlankConfirmation_WhenCheckoutAndPayment_ThenPaymentRejectedAndActiveOrderRemains() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
         Response<Integer> selectResponse = service.userSelectTickets(
                 validToken,
@@ -2582,7 +2745,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenNullPaymentDetails_WhenCheckoutAndPayment_ThenFailAndActiveOrderRemains() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
         Response<Integer> selectResponse = service.userSelectTickets(
                 validToken,
@@ -2659,7 +2822,7 @@ class ActiveOrderServiceTest {
         for (String token : tokens) {
             enterFutures.put(token, enterExecutor.submit(() -> {
                 enterStart.await();
-                return service.enterEventPurchase(token, companyId, concurrentEventId);
+                return service.enterEventPurchase(token, companyId, concurrentEventId,null);
             }));
         }
 
@@ -2856,7 +3019,7 @@ class ActiveOrderServiceTest {
     void GivenEventSoldOutAfterFinalPurchase_WhenCheckoutAndPayment_ThenFounderReceivesSoldOutNotification() {
         int soldOutEventId = createSoldOutTestEvent("sold-out-1");
 
-        service.enterEventPurchase(validToken, companyId, soldOutEventId);
+        service.enterEventPurchase(validToken, companyId, soldOutEventId,null);
         Map<String, List<SeatingTicketDTO>> seating =
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
         Map<String, Integer> standing = Map.of("floor", 2);
@@ -2908,7 +3071,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenEventStillHasAvailableTickets_WhenCheckoutAndPayment_ThenNoSoldOutNotificationSent() {
-        service.enterEventPurchase(validToken, companyId, concurrentEventId);
+        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
         Map<String, Integer> standing = Map.of("floor", 2);
 
@@ -2981,7 +3144,7 @@ class ActiveOrderServiceTest {
 
         int soldOutEventId = createSoldOutTestEvent("sold-out-3");
 
-        service.enterEventPurchase(validToken, companyId, soldOutEventId);
+        service.enterEventPurchase(validToken, companyId, soldOutEventId,null);
         Map<String, List<SeatingTicketDTO>> seating =
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
         Map<String, Integer> standing = Map.of("floor", 2);
@@ -3036,7 +3199,7 @@ class ActiveOrderServiceTest {
     void GivenIssuanceFailedAfterPayment_WhenCheckoutAndPayment_ThenNoSoldOutNotificationSent() {
         int soldOutEventId = createSoldOutTestEvent("sold-out-4");
 
-        service.enterEventPurchase(validToken, companyId, soldOutEventId);
+        service.enterEventPurchase(validToken, companyId, soldOutEventId,null);
         Map<String, List<SeatingTicketDTO>> seating =
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
         Map<String, Integer> standing = Map.of("floor", 2);
@@ -3094,7 +3257,7 @@ class ActiveOrderServiceTest {
         try {
             int soldOutEventId = createSoldOutTestEvent("realtime");
 
-            service.enterEventPurchase(validToken, companyId, soldOutEventId);
+            service.enterEventPurchase(validToken, companyId, soldOutEventId,null);
             Map<String, List<SeatingTicketDTO>> seating =
                     Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
             Map<String, Integer> standing = Map.of("floor", 2);
@@ -3152,7 +3315,7 @@ class ActiveOrderServiceTest {
 
         int soldOutEventId = createSoldOutTestEvent("notify-throws");
 
-        service.enterEventPurchase(validToken, companyId, soldOutEventId);
+        service.enterEventPurchase(validToken, companyId, soldOutEventId,null);
         Map<String, List<SeatingTicketDTO>> seating =
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
         Map<String, Integer> standing = Map.of("floor", 2);
@@ -3231,7 +3394,7 @@ class ActiveOrderServiceTest {
                 new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
         // Purchase 1 — buy both seats only; standing zone untouched, event NOT sold out
-        service.enterEventPurchase(validToken, companyId, boundaryEventId);
+        service.enterEventPurchase(validToken, companyId, boundaryEventId,null);
         Map<String, List<SeatingTicketDTO>> firstSeating = Map.of("tribune",
                 List.of(new SeatingTicketDTO(0, 0), new SeatingTicketDTO(0, 1)));
         Response<Integer> firstSelect = service.userSelectTickets(
@@ -3260,7 +3423,7 @@ class ActiveOrderServiceTest {
                 "No sold-out notification should be sent before the event is fully drained");
 
         // Purchase 2 — buy both standing tickets; event becomes sold out
-        service.enterEventPurchase(validToken, companyId, boundaryEventId);
+        service.enterEventPurchase(validToken, companyId, boundaryEventId,null);
         Response<Integer> secondSelect = service.userSelectTickets(
                 validToken, boundaryEventId, new HashMap<>(), Map.of("floor", 2));
         assertNotNull(secondSelect.getValue(), "second select failed: " + secondSelect.getMessage());
@@ -3328,7 +3491,7 @@ class ActiveOrderServiceTest {
         assertNotNull(acceptManager2.getValue(), "accept manager2 setup failed");
 
         int soldOutEventId = createSoldOutTestEvent("sold-out-5");
-        service.enterEventPurchase(validToken, companyId, soldOutEventId);
+        service.enterEventPurchase(validToken, companyId, soldOutEventId,null);
         Map<String, List<SeatingTicketDTO>> seating = Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
         Map<String, Integer> standing = Map.of("floor", 2);
         Response<Integer> selectResponse = service.userSelectTickets(validToken, soldOutEventId, seating, standing);
@@ -3409,7 +3572,7 @@ class ActiveOrderServiceTest {
             String token = userService.login(uniqueEmail, "p").getValue();
             assertNotNull(token, "Login failed for filler " + i);
 
-            Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(token, companyId, isolatedEventId);
+            Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(token, companyId, isolatedEventId,null);
             assertNotNull(enterResp.getValue(), "Enter event failed for filler " + i + ". Server says: " + enterResp.getMessage());
 
             Response<Integer> selectResp = service.userSelectTickets(token, isolatedEventId, new HashMap<>(), Map.of("floor", 1));
@@ -3437,7 +3600,7 @@ class ActiveOrderServiceTest {
 
         String waitingToken = userService.login(waiterEmail, "pass").getValue();
 
-        Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(waitingToken, companyId, isolatedEventId);
+        Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(waitingToken, companyId, isolatedEventId,null);
         assertNotNull(enterResp.getValue(), "Waiter enter event failed: " + enterResp.getMessage());
         assertTrue(enterResp.getValue().isWaitingInQueue(), "User should be in queue");
 
@@ -3491,7 +3654,7 @@ class ActiveOrderServiceTest {
             assertNotNull(regResp.getValue(), "Registration failed for filler " + i + ". Server says: " + regResp.getMessage());
 
             String token = userService.login(uniqueEmail, "p").getValue();
-            Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(token, companyId, isolatedEventId);
+            Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(token, companyId, isolatedEventId,null);
             Response<Integer> selectResp = service.userSelectTickets(token, isolatedEventId, new HashMap<>(), Map.of("floor", 1));
 
             if (i == 0) {
@@ -3506,7 +3669,7 @@ class ActiveOrderServiceTest {
         assertNotNull(waiterRegResp.getValue(), "Waiter registration failed: " + waiterRegResp.getMessage());
         String waitingToken = userService.login(waiterEmail, "pass").getValue();
 
-        Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(waitingToken, companyId, isolatedEventId);
+        Response<EnterPurchaseDTO> enterResp = service.enterEventPurchase(waitingToken, companyId, isolatedEventId,null);
         assertNotNull(enterResp.getValue(), "Waiter enter event failed: " + enterResp.getMessage());
         assertTrue(enterResp.getValue().isWaitingInQueue(), "User should be in queue");
 

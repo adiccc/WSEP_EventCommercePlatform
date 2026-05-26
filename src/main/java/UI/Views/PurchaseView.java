@@ -65,7 +65,7 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
         String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
         Response<EnterPurchaseDTO> response =
-                presenter.enterPurchase(token, companyId, eventId);
+                presenter.enterPurchase(token, companyId, eventId, null);
 
         if (response.getValue() == null) {
             add(new Paragraph("Error: " + response.getMessage()));
