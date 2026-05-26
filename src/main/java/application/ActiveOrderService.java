@@ -16,6 +16,7 @@ import domain.event.Order;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
+import domain.user.IUserRepo;
 import domain.user.Member;
 import infrastructure.UserRepo;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,7 +50,7 @@ public class ActiveOrderService {
     private final INotifier notifier;
     private final int capacity;
     private final ScheduledExecutorService cleanupScheduler;
-    private final UserRepo userRepo;
+    private final IUserRepo userRepo;
 
     @Autowired
     public ActiveOrderService(
@@ -62,7 +63,7 @@ public class ActiveOrderService {
             ITicketSupply ticketSupply,
             IAccessValidator accessValidator,
             INotifier notifier,
-            UserRepo userRepo,
+            IUserRepo userRepo,
             @Value("${active-order.capacity:20}") int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
