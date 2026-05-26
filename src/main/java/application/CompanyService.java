@@ -710,14 +710,16 @@ public class CompanyService {
                     Member member = userRepo.findById(userId);
                     member.changeState(new Owner());
                     userRepo.store(member);
-                    NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
-                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                    notifier.notifyUser(member.getIdentifier(), notifyDTO);
-                    logger.info("respondToOwnerAppointment: user " + userId + " accepted and became owner of company " + companyId);
                 } else {
                     logger.info("respondToOwnerAppointment: user " + userId + " rejected appointment for company " + companyId);
                 }
                 companyRepo.store(company);
+                if(accept){ //just after successful save to the repo we are sending the notification!
+                    NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
+                    notifier.notifyMemberById(userId, notifyDTO);
+                    logger.info("respondToOwnerAppointment: user " + userId + " accepted and became owner of company " + companyId);
+                }
                 return Response.ok(accept);
             } catch (NoSuchElementException e) {
                 logger.warning("respondToOwnerAppointment failed: company not found, id: " + companyId);
@@ -819,13 +821,14 @@ public class CompanyService {
                     Member member = userRepo.findById(userId);
                     member.changeState(new Manager());
                     userRepo.store(member);
-                    NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
-                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                    notifier.notifyUser(member.getIdentifier(), notifyDTO);
-                    logger.info("respondToManagerAppointment succeeded for userId: " + userId + ", accepted: " + accept);
-
                 }
                 companyRepo.store(company);
+                if(accept){
+                    NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
+                    notifier.notifyMemberById(userId, notifyDTO);
+                    logger.info("respondToManagerAppointment succeeded for userId: " + userId + ", accepted: " + accept);
+                }
                 return Response.ok(accept);
             } catch (OptimisticLockingFailureException e) {
                 throw e;
@@ -902,10 +905,10 @@ public class CompanyService {
                 if (role == null) {
                     return Response.error("Invalid or expired token");
                 }
-                int userId = auth.getUserId(token).getValue();
-                if (userId == -1) {
+                if (role.equals("GUEST")) {
                     return Response.error("Guests do not have company roles");
                 }
+                int userId = auth.getUserId(token).getValue();
                 List<CompanyDTO> result = companyRepo.findByUserRole(userId);
                 logger.info("getMyCompanies succeeded, found " + result.size() + " companies for user " + userId);
                 return Response.ok(result);

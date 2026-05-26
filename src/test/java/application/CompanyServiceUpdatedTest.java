@@ -1788,5 +1788,153 @@ class CompanyServiceUpdatedTest {
                 Mockito.argThat(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION)
         );
     }
+    @Test
+    void GivenTwoThreadsRaceToInviteSameManager_WhenRequestAppointManager_ThenExactlyOneInviteNotificationSent() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+        });
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+        });
+
+        start.countDown();
+        f1.get();
+        f2.get();
+        executor.shutdown();
+
+        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
+                Mockito.eq("other@test.com"),
+                Mockito.argThat(n -> n.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST)
+        );
+    }
+    @Test
+    void GivenUserAcceptsAndRejectsConcurrently_WhenRespondToOwnerAppointment_ThenAtMostOnePopupSent() throws Exception {
+        // Arrange
+        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+        Mockito.clearInvocations(notifier);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        // Act
+        Future<Response<Boolean>> fAccept = executor.submit(() -> {
+            start.await();
+            return service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+        });
+        Future<Response<Boolean>> fReject = executor.submit(() -> {
+            start.await();
+            return service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, false);
+        });
+
+        start.countDown();
+        Response<Boolean> rAccept = fAccept.get();
+        fReject.get();
+        executor.shutdown();
+
+        // Assert
+        int expectedPopups = (rAccept.getValue() != null && rAccept.getValue() == true) ? 1 : 0;
+
+        Mockito.verify(notifier, Mockito.times(expectedPopups)).notifyUser(
+                Mockito.eq("other@test.com"),
+                Mockito.argThat(n -> n.getType() == NotifyType.GENERAL_POPUP)
+        );
+    }
+    @Test
+    void GivenConcurrentRemoveManagerAndDeactivateCompany_ThenManagerReceivesExactlyOneKickout() throws Exception {
+        Mockito.clearInvocations(notifier);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> fRemove = executor.submit(() -> {
+            start.await();
+            return service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        });
+        Future<Response<Boolean>> fDeactivate = executor.submit(() -> {
+            start.await();
+            return service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+        });
+
+        start.countDown();
+        fRemove.get();
+        fDeactivate.get();
+        executor.shutdown();
+
+        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
+                Mockito.eq("manager@test.com"),
+                Mockito.argThat(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION)
+        );
+    }
+    @Test
+    void GivenTwoDifferentOwnersRaceToAppointSameManager_WhenRequestAppoint_ThenExactlyOneNotificationSent() throws Exception {
+        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_OWNER_ID);
+        service.respondToOwnerAppointment(OTHER_OWNER_TOKEN, COMPANY_ID, true);
+        Mockito.clearInvocations(notifier);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> f1 = executor.submit(() -> {
+            start.await();
+            return service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+        });
+
+        Future<Response<Boolean>> f2 = executor.submit(() -> {
+            start.await();
+            return service.requestAppointManager(OTHER_OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.VIEW_ORDERS_HISTORY));
+        });
+
+        start.countDown();
+        Response<Boolean> r1 = f1.get();
+        Response<Boolean> r2 = f2.get();
+        executor.shutdown();
+
+        int successes = (r1.getValue() != null && r1.getValue() ? 1 : 0) +
+                (r2.getValue() != null && r2.getValue() ? 1 : 0);
+        assertEquals(1, successes, "Only one owner should succeed in creating the pending appointment");
+
+        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
+                Mockito.eq("other@test.com"),
+                Mockito.argThat(n -> n.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST)
+        );
+    }
+    @Test
+    void GivenAuthorizedAndUnauthorizedOwnersRaceToRemoveManager_WhenRemove_ThenExactlyOneKickoutSent() throws Exception {
+        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_OWNER_ID);
+        service.respondToOwnerAppointment(OTHER_OWNER_TOKEN, COMPANY_ID, true);
+        addSecondManager();
+        Mockito.clearInvocations(notifier);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        Future<Response<Boolean>> fUnauthorized = executor.submit(() -> {
+            start.await();
+            return service.removeManagerAppointment(OTHER_OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        });
+
+        Future<Response<Boolean>> fAuthorized = executor.submit(() -> {
+            start.await();
+            return service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        });
+
+        start.countDown();
+        Response<Boolean> rUnauth = fUnauthorized.get();
+        Response<Boolean> rAuth = fAuthorized.get();
+        executor.shutdown();
+
+        assertTrue(rUnauth.isError(), "Unauthorized owner should fail to remove");
+        assertFalse(rAuth.isError(), "Authorized owner should succeed to remove");
+
+        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
+                Mockito.eq("manager@test.com"),
+                Mockito.argThat(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION)
+        );
+    }
 
 }
