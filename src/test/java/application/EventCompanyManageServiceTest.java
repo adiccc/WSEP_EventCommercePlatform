@@ -106,7 +106,7 @@ class EventCompanyManageServiceTest {
         activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,accessValidator,notifier,100);
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete order repo from company service construture
-        companyService=new CompanyService(auth,companyRepo,userRepo,accessValidator);
+        companyService=new CompanyService(auth,companyRepo,userRepo,accessValidator,notifier);
         eventCompanyManageService = new EventCompanyManageService(
                 companyRepo,
                 eventRepo,
@@ -157,7 +157,7 @@ class EventCompanyManageServiceTest {
 
     private int createCompletedOrderThroughPurchaseFlow(String buyerToken, int eventId, int ticketCount) {
         Response<EnterPurchaseDTO> enterResponse =
-                activeOrderService.enterEventPurchase(buyerToken, companyId, eventId);
+                activeOrderService.enterEventPurchase(buyerToken, companyId, eventId,null);
 
         assertNotNull(enterResponse.getValue(),
                 "enterEventPurchase failed: " + enterResponse.getMessage());

@@ -1,6 +1,8 @@
 package application;
 
+import DTO.NotifyDTO;
 import Log.LoggerSetup;
+import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
@@ -12,6 +14,8 @@ import domain.user.Member;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import Exception.OptimisticLockingFailureException;
+
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -21,10 +25,10 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 import org.mockito.Mockito;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Future;
+
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 class LotteryServiceTest {
 
@@ -71,11 +75,11 @@ class LotteryServiceTest {
         notifier = new VaadinNotifier(userRepo);
 
         UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
-        CompanyService companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
+        CompanyService companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator,notifier);
          eventCompanyManageService =
                 new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
 
-        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator);
+        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator,notifier);
 
         // user with permission
         UserDTO user1DTO = new UserDTO(
@@ -270,32 +274,8 @@ class LotteryServiceTest {
     }
 
     @Test
-    void GivenMoreRegistrationsThanCapacity_WhenDrawLotteryIsTriggered_ThenWinnersAreSelectedUpToCapacity() {
-        // Arrange: Create an event and a lottery with a capacity of 2
-        LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
-        lotteryService.createLottery(validToken, eventId, 2, lotteryDate_X, (long) 24.0);
-
-        lotteryService.registerUserToLottery(validToken, eventId);
-        lotteryService.registerUserToLottery(notPermission, eventId);
-        lotteryService.registerUserToLottery(validToken2, eventId);
-        lotteryService.registerUserToLottery(validToken3, eventId);
-        // Retrieve the newly created lottery to simulate users registering
-        Lottery lottery = lotteryRepo.getAll().get(0);
-
-        // Act: Manually trigger the draw (simulating the scheduler waking up)
-        lotteryService.drawLottery(lottery.getId());
-
-        // Then: Fetch the updated lottery and verify
-        Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
-        assertEquals(2, updatedLottery.getWinners().size(), "Should only have exactly 2 winners");
-
-        // Verify winners are from the registered list
-        assertTrue(lottery.getRegistered().containsAll(updatedLottery.getWinners()), "Winners must be among those who registered");
-    }
-
-    @Test
-    void GivenFewerRegistrationsThanCapacity_WhenDrawLotteryIsTriggered_ThenAllRegisteredWin() {
-        // Arrange: Create an event and a lottery with a capacity of 10
+    void GivenFewerRegistrationsThanCapacity_WhenDrawLotteryIsTriggered_ThenAllRegisteredWin() throws InterruptedException {
+        // Arrange: Create lottery with capacity 10
         LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
         lotteryService.createLottery(validToken, eventId, 10, lotteryDate_X, (long) 24.0);
 
@@ -304,12 +284,90 @@ class LotteryServiceTest {
         lotteryService.registerUserToLottery(notPermission, eventId);
         lotteryService.registerUserToLottery(validToken2, eventId);
 
-        // Act: Manually trigger the draw
-        lotteryService.drawLottery(lottery.getId());
+        // Arrange: Extract string identifiers for WebSocket listeners
+        String id1 = auth.getUserIdentifier(validToken).getValue();
+        String id2 = auth.getUserIdentifier(notPermission).getValue();
+        String id3 = auth.getUserIdentifier(validToken2).getValue();
 
-        // Then: Verify everyone won
-        Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
-        assertEquals(3, updatedLottery.getWinners().size(), "All 3 registered users should win");
+        // Arrange: Setup latches and references to catch the notifications
+        CountDownLatch latch1 = new CountDownLatch(1);
+        CountDownLatch latch2 = new CountDownLatch(1);
+        CountDownLatch latch3 = new CountDownLatch(1);
+
+        AtomicReference<NotifyDTO> notif1 = new AtomicReference<>();
+        AtomicReference<NotifyDTO> notif2 = new AtomicReference<>();
+        AtomicReference<NotifyDTO> notif3 = new AtomicReference<>();
+
+        Registration reg1 = Broadcaster.registerUser(id1, dto -> { notif1.set(dto); latch1.countDown(); });
+        Registration reg2 = Broadcaster.registerUser(id2, dto -> { notif2.set(dto); latch2.countDown(); });
+        Registration reg3 = Broadcaster.registerUser(id3, dto -> { notif3.set(dto); latch3.countDown(); });
+
+        try {
+            // Act: Manually trigger the draw (simulating the scheduler)
+            lotteryService.drawLottery(lottery.getId());
+
+            // Assert: Verify DB state
+            Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
+            assertEquals(3, updatedLottery.getWinners().size(), "All 3 registered users should win");
+
+            // Assert: Verify all users received notifications within timeout
+            assertTrue(latch1.await(2000, TimeUnit.MILLISECONDS), "User 1 did not receive notification");
+            assertTrue(latch2.await(2000, TimeUnit.MILLISECONDS), "User 2 did not receive notification");
+            assertTrue(latch3.await(2000, TimeUnit.MILLISECONDS), "User 3 did not receive notification");
+
+            // Assert: Verify notification content contains the access code
+            assertTrue(notif1.get().getPayload().getMessage().contains("Your code is: "));
+            assertTrue(notif2.get().getPayload().getMessage().contains("Your code is: "));
+            assertTrue(notif3.get().getPayload().getMessage().contains("Your code is: "));
+        } finally {
+            // Cleanup
+            reg1.remove(); reg2.remove(); reg3.remove();
+        }
+    }
+
+    @Test
+    void GivenMoreRegistrationsThanCapacity_WhenDrawLotteryIsTriggered_ThenWinnersAreSelectedUpToCapacity() throws InterruptedException {
+        // Arrange: Create a lottery with a capacity of 2
+        LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+        lotteryService.createLottery(validToken, eventId, 2, lotteryDate_X, (long) 24.0);
+
+        lotteryService.registerUserToLottery(validToken, eventId);
+        lotteryService.registerUserToLottery(notPermission, eventId);
+        lotteryService.registerUserToLottery(validToken2, eventId);
+        lotteryService.registerUserToLottery(validToken3, eventId);
+
+        Lottery lottery = lotteryRepo.getAll().get(0);
+
+        // Arrange: Listen to all 4 users using a shared counter
+        String id1 = auth.getUserIdentifier(validToken).getValue();
+        String id2 = auth.getUserIdentifier(notPermission).getValue();
+        String id3 = auth.getUserIdentifier(validToken2).getValue();
+        String id4 = auth.getUserIdentifier(validToken3).getValue();
+
+        AtomicInteger notificationCount = new AtomicInteger(0);
+
+        Registration reg1 = Broadcaster.registerUser(id1, dto -> notificationCount.incrementAndGet());
+        Registration reg2 = Broadcaster.registerUser(id2, dto -> notificationCount.incrementAndGet());
+        Registration reg3 = Broadcaster.registerUser(id3, dto -> notificationCount.incrementAndGet());
+        Registration reg4 = Broadcaster.registerUser(id4, dto -> notificationCount.incrementAndGet());
+
+        try {
+            // Act: Trigger the draw
+            lotteryService.drawLottery(lottery.getId());
+
+            // Assert: Verify DB
+            Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
+            assertEquals(2, updatedLottery.getWinners().size(), "Should only have exactly 2 winners");
+
+            // Wait briefly for background threads to deliver notifications
+            Thread.sleep(1000);
+
+            // Assert: Ensure exactly 2 notifications were dispatched overall across the 4 users
+            assertEquals(2, notificationCount.get(), "Only the 2 winners should have received notifications");
+
+        } finally {
+            reg1.remove(); reg2.remove(); reg3.remove(); reg4.remove();
+        }
     }
 
     @Test
@@ -319,6 +377,76 @@ class LotteryServiceTest {
         // It should just log the error internally as per our implementation.
         assertDoesNotThrow(() -> lotteryService.drawLottery(-1),
                 "The service should catch the exception and log it, not crash the system.");
+    }
+
+    @Test
+    void GivenConcurrentDrawCalls_WhenExecuted_ThenDrawnOnceAndNotificationsSentExactlyOnce() throws Exception {
+        // Arrange: Setup lottery with capacity 10 and 2 registered users
+        LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+        lotteryService.createLottery(validToken, eventId, 10, lotteryDate_X, 24L);
+
+        Lottery lottery = lotteryRepo.getAll().get(0);
+        lotteryService.registerUserToLottery(validToken, eventId);
+        lotteryService.registerUserToLottery(notPermission, eventId);
+
+        String id1 = auth.getUserIdentifier(validToken).getValue();
+        String id2 = auth.getUserIdentifier(notPermission).getValue();
+
+        AtomicInteger notificationCount = new AtomicInteger(0);
+
+        Registration reg1 = Broadcaster.registerUser(id1, dto -> notificationCount.incrementAndGet());
+        Registration reg2 = Broadcaster.registerUser(id2, dto -> notificationCount.incrementAndGet());
+
+        // Arrange: Prepare concurrent environment with a starting gate
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch startGate = new CountDownLatch(1);
+
+        try {
+            // Act: Define the tasks to wait for the gate
+            Callable<Void> concurrentTask = () -> {
+                startGate.await();
+                lotteryService.drawLottery(lottery.getId());
+                return null;
+            };
+
+            Future<?> future1 = executor.submit(concurrentTask);
+            Future<?> future2 = executor.submit(concurrentTask);
+
+            // Both threads attack simultaneously
+            startGate.countDown();
+
+            // Wait for both to finish. We catch and ignore OptimisticLockingFailureException
+            // because depending on CPU speed, it might or might not happen, and both are valid outcomes.
+            try {
+                future1.get();
+            } catch (java.util.concurrent.ExecutionException e) {
+                if (!(e.getCause() instanceof OptimisticLockingFailureException)) {
+                    throw e; // Rethrow if it's a real unexpected bug
+                }
+            }
+
+            try {
+                future2.get();
+            } catch (java.util.concurrent.ExecutionException e) {
+                if (!(e.getCause() instanceof OptimisticLockingFailureException)) {
+                    throw e; // Rethrow if it's a real unexpected bug
+                }
+            }
+
+            // Assert: Verify DB state - Only 2 winners must exist
+            Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
+            assertEquals(2, updatedLottery.getWinners().size(), "Company should have exactly 2 winners regardless of concurrency");
+
+            // Wait briefly to allow background notification threads to finish
+            Thread.sleep(1000);
+
+            // Assert: Verify notification count 2 and not 4 (which would indicate both draws executed fully)
+            assertEquals(2, notificationCount.get(), "Notifications should be sent exactly once per winner despite concurrent draw attempts");
+        } finally {
+            executor.shutdown();
+            reg1.remove();
+            reg2.remove();
+        }
     }
 
     @Test
