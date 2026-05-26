@@ -92,7 +92,7 @@ class EventCompanyManageServiceTest {
         tokenService = new TokenService();
         suspensionRepo = new SuspensionRepoImpl();
         accessValidator=new AccessValidator(suspensionRepo);
-        auth=new Auth(tokenService,userRepo,passwordEncoder);
+        auth=new Auth(tokenService);
         companyRepo=new CompanyRepoImpl();
         eventRepo = new EventRepoImpl();
 
@@ -103,7 +103,7 @@ class EventCompanyManageServiceTest {
         eventService=new EventService(auth,eventRepo);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,accessValidator,notifier,userRepo,100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,accessValidator,notifier,userRepo, 100);
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete order repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo,accessValidator,notifier);
@@ -111,7 +111,7 @@ class EventCompanyManageServiceTest {
                 companyRepo,
                 eventRepo,
                 auth,
-                paymentSystem,accessValidator,notifier, userRepo
+                paymentSystem,accessValidator,notifier,userRepo
         );
 
         validToken1=null; // user with all permissions
@@ -141,13 +141,13 @@ class EventCompanyManageServiceTest {
         UserDTO managerDTO = new UserDTO("manager_event@test.com", "Manager", "Test", "Password123!", 1, 1, 2000, "City", "050-555-9999");
         userService.registerUser(null, managerDTO);
         managerToken = userService.login("manager_event@test.com", "Password123!").getValue();
-        managerId = auth.getUserId(managerToken).getValue();
+        managerId = userService.getUserId(managerToken).getValue();
         Company setupCompany = companyRepo.findById(companyId);
-        setupCompany.getCompanyPermission().addToTree(managerId, auth.getUserId(validToken1).getValue(), new HashSet<>());
+        setupCompany.getCompanyPermission().addToTree(managerId, userService.getUserId(validToken1).getValue(), new HashSet<>());
         companyRepo.store(setupCompany);
 
         String adminEmail = "admin_master@bgu.ac.il";
-        auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(adminEmail));
+        auth = new Auth(tokenService, Set.of(adminEmail));
        // userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "Sys", "Pass123!", 1, 1, 2000, "Address", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
@@ -1425,10 +1425,10 @@ class EventCompanyManageServiceTest {
         String managerEmail = "manager_race" + System.currentTimeMillis() + "@test.com";
         userService.registerUser(null, new UserDTO(managerEmail, "Man", "Ager", "Pass123!", 1, 1, 2000, "City", "050-999-9999"));
         String managerToken = userService.login(managerEmail, "Pass123!").getValue();
-        int MANAGER_ID = auth.getUserId(managerToken).getValue();
+        int MANAGER_ID = userService.getUserId(managerToken).getValue();
 
         Company company = companyRepo.findById(companyId);
-        int ownerId = auth.getUserId(validToken1).getValue();
+        int ownerId = userService.getUserId(validToken1).getValue();
         company.getCompanyPermission().addToTree(MANAGER_ID, ownerId, new HashSet<>());
         companyRepo.store(company);
 

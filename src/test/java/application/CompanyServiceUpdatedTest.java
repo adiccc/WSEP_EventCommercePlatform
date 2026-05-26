@@ -11,7 +11,6 @@ import domain.dto.UserDTO;
 
 import domain.event.IEventRepo;
 import domain.policy.*;
-import domain.policy.PurchasePolicyType;
 import domain.user.IUserRepo;
 import domain.dto.CompanyDTO;
 import domain.user.IUserRepo;
@@ -74,7 +73,7 @@ class CompanyServiceUpdatedTest {
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         TokenService tokenService = new TokenService();
         String adminEmail = "admin@admin.com";
-        auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(adminEmail));
+        auth = new Auth(tokenService, Set.of(adminEmail));
         companyRepo = new CompanyRepoImpl();
         notifier = Mockito.spy(new VaadinNotifier());
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
@@ -84,12 +83,12 @@ class CompanyServiceUpdatedTest {
         userService.registerUser(null, ownerDTO);
         OWNER_EMAIL="owner@test.com";
         OWNER_TOKEN = userService.login(OWNER_EMAIL, "Password123!").getValue();
-        OWNER_ID = auth.getUserId(OWNER_TOKEN).getValue();
+        OWNER_ID = userService.getUserId(OWNER_TOKEN).getValue();
         GUEST_TOKEN = userService.continueAsGuest().getValue();
         UserDTO otherDTO = new UserDTO("other@test.com", "Other", "Test", "Password123!", 1, 1, 2000, "City", "050-123-4567");
         userService.registerUser(null, otherDTO);
         OTHER_TOKEN = userService.login("other@test.com", "Password123!").getValue();
-        OTHER_USER_ID = auth.getUserId(OTHER_TOKEN).getValue();
+        OTHER_USER_ID = userService.getUserId(OTHER_TOKEN).getValue();
 
         service.createProductionCompany(OWNER_TOKEN,COMPANY_ID,"Test Company","test@test.com","0500000000","bank-1");
 
@@ -97,13 +96,13 @@ class CompanyServiceUpdatedTest {
         userService.registerUser(null, managerDTO);
         MANAGER_EMAIL = "manager@test.com";
         MANAGER_TOKEN = userService.login(MANAGER_EMAIL, "Password123!").getValue();
-        MANAGER_ID = auth.getUserId(MANAGER_TOKEN).getValue();
+        MANAGER_ID = userService.getUserId(MANAGER_TOKEN).getValue();
 
         UserDTO otherOwnerDTO = new UserDTO("otherowner@test.com", "OtherOwner", "Test", "Password123!", 1, 1, 2000, "City", "050-666-6666");
         userService.registerUser(null, otherOwnerDTO);
         OTHER_OWNER_EMAIL = "otherowner@test.com";
         OTHER_OWNER_TOKEN = userService.login(OTHER_OWNER_EMAIL, "Password123!").getValue();
-        OTHER_OWNER_ID = auth.getUserId(OTHER_OWNER_TOKEN).getValue();
+        OTHER_OWNER_ID = userService.getUserId(OTHER_OWNER_TOKEN).getValue();
 
         Company company = companyRepo.findById(COMPANY_ID);
         company.getCompanyPermission().addToTree(MANAGER_ID, OWNER_ID, new HashSet<>());
@@ -1098,7 +1097,7 @@ class CompanyServiceUpdatedTest {
         UserDTO dto = new UserDTO("manager2@test.com", "Manager2", "Test", "Password123!", 1, 1, 2000, "City", "050-777-7777");
         userService.registerUser(null, dto);
         String token = userService.login("manager2@test.com", "Password123!").getValue();
-        int id = auth.getUserId(token).getValue();
+        int id = userService.getUserId(token).getValue();
         Company company = companyRepo.findById(COMPANY_ID);
         company.getCompanyPermission().addToTree(id, OWNER_ID, new HashSet<>());
         companyRepo.store(company);
@@ -1160,7 +1159,7 @@ class CompanyServiceUpdatedTest {
         UserDTO dto = new UserDTO("manager3@test.com", "Manager3", "Test", "Password123!", 1, 1, 2000, "City", "050-888-8888");
         userService.registerUser(null, dto);
         String tok = userService.login("manager3@test.com", "Password123!").getValue();
-        int manager3Id = auth.getUserId(tok).getValue();
+        int manager3Id = userService.getUserId(tok).getValue();
         company.getCompanyPermission().addToTree(manager3Id, OTHER_OWNER_ID, new HashSet<>());
         companyRepo.store(company);
 
@@ -1191,7 +1190,7 @@ class CompanyServiceUpdatedTest {
         UserDTO dto = new UserDTO("manager3@test.com", "Manager3", "Test", "Password123!", 1, 1, 2000, "City", "050-888-8888");
         userService.registerUser(null, dto);
         String tok = userService.login("manager3@test.com", "Password123!").getValue();
-        int subManagerId = auth.getUserId(tok).getValue();
+        int subManagerId = userService.getUserId(tok).getValue();
         Company company = companyRepo.findById(COMPANY_ID);
         company.getCompanyPermission().addToTree(subManagerId, MANAGER_ID, new HashSet<>());
         companyRepo.store(company);

@@ -46,7 +46,7 @@ class UserServiceTest {
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
         String adminEmail = "admin@admin.com";
-        auth = new Auth(realTokenService, userRepo, passwordEncoder, Set.of(adminEmail));
+        auth = new Auth(realTokenService, Set.of(adminEmail));
         notifier = new VaadinNotifier();
         userService = new UserService(realTokenService, auth, userRepo, passwordEncoder,notifier);
         companyRepo = new CompanyRepoImpl();

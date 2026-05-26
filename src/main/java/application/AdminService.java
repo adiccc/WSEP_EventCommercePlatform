@@ -20,8 +20,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -427,7 +425,7 @@ public class AdminService {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");
 
-            int userId = auth.getUserId(token).getValue();
+            int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
@@ -574,6 +572,14 @@ public class AdminService {
                 return new Response<>(null, "Failed to retrieve purchasers: " + e.getMessage());
             }
         });
+    }
+       private int getUserIdFromToken(String token) {
+        String email = auth.getUserEmail(token).getValue();
+        if (email != null) {
+            Member m = userRepo.findUserByEmail(email);
+            if (m != null) return m.getUserId();
+        }
+        return -1; //for guest or invalid token
     }
     // Helper method to send a real-time notification or save it as delayed if the user is offline.
     private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {

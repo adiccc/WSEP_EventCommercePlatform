@@ -1,7 +1,6 @@
 package application;
 
 import java.util.*;
-import java.util.NoSuchElementException;
 import java.util.logging.Logger;
 
 import DTO.*;
@@ -50,7 +49,7 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() ->{
         try {
                 logger.info("Attempting to create company: " + companyName + " for user: " + sessionToken);
-                int userId = auth.getUserId(sessionToken).getValue();
+                int userId = getUserIdFromToken(sessionToken);
                 Member user = userRepo.findById(userId);
                 if (user == null) {
                     return new Response<>(null, "User not found.");
@@ -118,7 +117,7 @@ public class CompanyService {
                 Company company = companyRepo.findById(companyId);
                 // 3. For members, sync their role state within the company
                 if ("MEMBER".equals(role)) {
-                    int userId = auth.getUserId(sessionToken).getValue();
+                    int userId = getUserIdFromToken(sessionToken);
                     if (userId != -1) {
                         Member member = userRepo.findById(userId);
                         member.changeState(company.getCompanyPermission().getUserState(userId));
@@ -150,7 +149,7 @@ public class CompanyService {
             logger.info("viewRolesAndPermissionsTree called for companyId: " + companyId);
             try {
                 // 1. Validate token
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("viewRolesAndPermissionsTree failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
@@ -199,7 +198,7 @@ public class CompanyService {
             try {
                 String role = auth.getRole(token).getValue();
                 if (role == null) return Response.error("Invalid or expired token");
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 Company company = companyRepo.findById(companyId);
                 return Response.ok(company.getUserRoleName(userId));
             } catch (OptimisticLockingFailureException e) {
@@ -220,7 +219,7 @@ public class CompanyService {
             try {
                 String role = auth.getRole(token).getValue();
                 if (role == null) return Response.error("Invalid or expired token");
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 Company company = companyRepo.findById(companyId);
                 return Response.ok(company.getManagerPermissions(userId));
             } catch (OptimisticLockingFailureException e) {
@@ -237,7 +236,7 @@ public class CompanyService {
         {
             logger.info("addRuleToCompany called for companyId: " + companyId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("addRuleToCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
@@ -287,7 +286,7 @@ public class CompanyService {
         {
             logger.info("removeRuleFromCompany called for companyId: " + companyId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("removeRuleFromCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
@@ -340,7 +339,7 @@ public class CompanyService {
 
             try {
                 // 1. Validate token
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("addDiscountToCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
@@ -404,7 +403,7 @@ public class CompanyService {
 
             try {
                 // 1. Validate token
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("removeDiscountFromCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
@@ -465,7 +464,7 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("changeDiscountPolicyType called for companyId: " + companyId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
                 if (!accessValidator.hasWriteAccess(userId))
@@ -497,7 +496,7 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("changePurchasePolicyType called for companyId: " + companyId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
                 if (!accessValidator.hasWriteAccess(userId))
@@ -542,7 +541,7 @@ public class CompanyService {
                 }
                 List<CompanyDTO> filteredCompanies = new ArrayList<CompanyDTO>();
                 //it's a member or a guest
-                int userId = auth.getUserId(token).getValue(); //for guest returns -1
+                int userId = getUserIdFromToken(token);
                 boolean isMember = "MEMBER".equals(role);
                 for (Company company : allCompanies) {
                     // isUserPermitted means or the company is active
@@ -578,7 +577,7 @@ public class CompanyService {
                     logger.warning("updateManagerPermissions failed: user is not logged in");
                     return Response.error("User is not logged in");
                 }
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("updateManagerPermissions failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
@@ -637,7 +636,7 @@ public class CompanyService {
                     logger.warning("requestAppointOwner failed: user is not logged in");
                     return Response.error("User is not logged in");
                 }
-                int appointerId = auth.getUserId(token).getValue();
+                int appointerId = getUserIdFromToken(token);
                 if (appointerId == -1) {
                     logger.warning("requestAppointOwner failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
@@ -695,7 +694,7 @@ public class CompanyService {
                     logger.warning("respondToOwnerAppointment failed: user is not logged in");
                     return Response.error("User is not logged in");
                 }
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("respondToOwnerAppointment failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
@@ -756,7 +755,8 @@ public class CompanyService {
                     logger.warning("requestAppointManager failed: user is not logged in");
                     return Response.error("User is not logged in");
                 }
-                int appointerId = auth.getUserId(token).getValue();
+                int appointerId = getUserIdFromToken(token);
+
                 if (appointerId == -1) {
                     logger.warning("requestAppointManager failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
@@ -818,7 +818,7 @@ public class CompanyService {
                     logger.warning("respondToManagerAppointment failed: user is not logged in");
                     return Response.error("User is not logged in");
                 }
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("respondToManagerAppointment failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
@@ -875,7 +875,8 @@ public class CompanyService {
                     logger.warning("removeManagerAppointment failed: user is not logged in");
                     return Response.error("User is not logged in");
                 }
-                int actingOwnerId = auth.getUserId(token).getValue();
+                int actingOwnerId = getUserIdFromToken(token);
+
                 if (actingOwnerId == -1) {
                     logger.warning("removeManagerAppointment failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
@@ -943,7 +944,7 @@ public class CompanyService {
                 if (role.equals("GUEST")) {
                     return Response.error("Guests do not have company roles");
                 }
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 List<CompanyDTO> result = companyRepo.findByUserRole(userId);
                 logger.info("getMyCompanies succeeded, found " + result.size() + " companies for user " + userId);
                 return Response.ok(result);
@@ -963,20 +964,20 @@ public class CompanyService {
                 logger.warning("deactivateCompany failed: invalid or expired token");
                 return new Response<>(false, "Invalid or expired token, deactivate failed");
             }
-            if(!accessValidator.hasWriteAccess(auth.getUserId(ownerToken).getValue())){
+            int userId = getUserIdFromToken(ownerToken);
+            if (!accessValidator.hasWriteAccess(userId)) {
                 logger.warning("deactivateCompany failed: user doesnt have write access");
                 return new Response<>(null, "user does not have write access.");
             }
             try {
-                int userId = auth.getUserId(ownerToken).getValue();
                 Company company = companyRepo.findById(companyId);
-                if(company == null){
+                if (company == null) {
                     logger.warning("deactivateCompany failed: company not found, id: " + companyId);
-                    return new Response<>(false,"Company not found");
+                    return new Response<>(false, "Company not found");
                 }
-                if(!company.isOwner(userId)){
+                if (!company.isOwner(userId)) {
                     logger.warning("deactivateCompany failed: user isn't owner of the company");
-                    return new Response<>(false,"user is not owner of the company");
+                    return new Response<>(false, "user is not owner of the company");
                 }
                 if (company.isActive()) {
                     company.deactivate();
@@ -1010,8 +1011,15 @@ public class CompanyService {
             }
         });
     }
-
-    // Helper method to send a real-time notification or save it as delayed if the user is offline.
+       private int getUserIdFromToken(String token) {
+            String email = auth.getUserEmail(token).getValue();
+            if (email != null) {
+                Member m = userRepo.findUserByEmail(email);
+                if (m != null) return m.getUserId();
+            }
+            return -1; //for guest or invalid
+        }
+         // Helper method to send a real-time notification or save it as delayed if the user is offline.
     private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() -> {
             try {

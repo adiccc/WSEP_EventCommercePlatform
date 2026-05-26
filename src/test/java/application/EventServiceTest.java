@@ -60,7 +60,7 @@ class EventServiceTest {
         tokenService = new TokenService();
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
-        auth = new Auth(tokenService,userRepo,passwordEncoder);
+        auth = new Auth(tokenService);
         CompanyRepoImpl companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         suspensionRepo=new SuspensionRepoImpl();
