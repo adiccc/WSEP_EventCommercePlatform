@@ -605,7 +605,7 @@ public class CompanyService {
                 try{
                     NotifyPayload payload = new NotifyPayload("Your manager permissions have been updated in company " + company.getCompanyName(),null, companyId);
                     NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                    notifier.notifyUser(managerMember.getIdentifier(), notifyDTO);
+                    sendOrSaveNotification(managerMember.getIdentifier(), notifyDTO);
                     logger.info("updateManagerPermissions sent notification successfully");
                 } catch (Exception e){
                     logger.warning("updateManagerPermissions failed to send notification: " + e.getMessage());
@@ -666,7 +666,7 @@ public class CompanyService {
                 try{
                     NotifyPayload payload = new NotifyPayload("You have been invited to be a owner at company " + company.getCompanyName(), null,companyId);
                     NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
-                    notifier.notifyUser(appointee.getIdentifier(), notifyDTO);
+                    sendOrSaveNotification(appointee.getIdentifier(), notifyDTO);
                     logger.info("requestAppointOwner sent notification successfully");
                 } catch (Exception e){
                     logger.warning("requestAppointOwner failed to send notification: " + e.getMessage());
@@ -728,7 +728,7 @@ public class CompanyService {
                     try{
                         NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
                         NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                        notifier.notifyMemberById(userId, notifyDTO);
+                        sendOrSaveNotification(userRepo.getUserEmail(userId), notifyDTO);
                         logger.info("respondToOwnerAppointment: user " + userId + " accepted and became owner of company " + companyId);
                     }
                     catch(Exception e){
@@ -784,7 +784,7 @@ public class CompanyService {
                 try{
                     NotifyPayload payload = new NotifyPayload("You have been invited to be a manager at company " + company.getCompanyName(), null,companyId);
                     NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
-                    notifier.notifyUser(member.getIdentifier(), notifyDTO);
+                    sendOrSaveNotification(member.getIdentifier(), notifyDTO);
                     logger.info("requestAppointManager sent notification successfully");
                 }
                 catch(Exception e){
@@ -850,7 +850,7 @@ public class CompanyService {
                     try{
                         NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
                         NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                        notifier.notifyMemberById(userId, notifyDTO);
+                        sendOrSaveNotification(userRepo.getUserEmail(userId), notifyDTO);
                         logger.info("respondToManagerAppointment succeeded for userId: " + userId + ", accepted: " + accept);
                     }
                     catch(Exception e){
@@ -905,7 +905,7 @@ public class CompanyService {
                 try{
                     NotifyPayload payload = new NotifyPayload("Your manager role has been removed from company " + company.getCompanyName(), null, companyId);
                     NotifyDTO notifyDTO = new NotifyDTO( NotifyType.KICKOUT_TAB_NAVIGATION,payload);
-                    notifier.notifyUser(managerMember.getIdentifier(), notifyDTO);
+                    sendOrSaveNotification(managerMember.getIdentifier(), notifyDTO);
                     logger.info("removeManagerAppointment succeeded sending notification for userId: " + managerMember.getIdentifier());
                 } catch (Exception e){
                     logger.warning("removeManagerAppointment failed to send notification: " + e.getMessage());
@@ -987,7 +987,7 @@ public class CompanyService {
                             try {
                                 NotifyPayload payload = new NotifyPayload("Alert: Company " + company.getCompanyName() + " has been deactivated.", null, companyId);
                                 NotifyDTO notifyDTO = new NotifyDTO(NotifyType.KICKOUT_TAB_NAVIGATION, payload);
-                                notifier.notifyMemberById(staffId, notifyDTO);
+                                sendOrSaveNotification(userRepo.getUserEmail(staffId), notifyDTO);
                                 logger.info("deactivateCompany succeeded sending notification for userId: " + staffId);
                             } catch (Exception e){
                                 logger.warning("deactivateCompany notification send failed: " + e.getMessage());
@@ -1009,5 +1009,29 @@ public class CompanyService {
                 return new Response<>(false, "Unexpected error: " + e.getMessage());
             }
         });
+    }
+
+    //Helper method to send a real-time notification or save it as delayed if the user is offline.
+    private void sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
+        try {
+            Member member = userRepo.findUserByEmail(userIdentifier);
+            if (member == null) {
+                logger.warning("User not found for identifier: " + userIdentifier);
+                return;
+            }
+            // Attempt to send in real-time
+            boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
+
+            // If delivery failed (user is offline), save as delayed notification
+            if (!isDelivered) {
+                member.addDelayedNotification(notifyDTO);
+                userRepo.store(member);
+                logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
+            }
+        } catch (OptimisticLockingFailureException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.warning("Failed to send or save notification for " + userIdentifier + ": " + e.getMessage());
+        }
     }
 }
