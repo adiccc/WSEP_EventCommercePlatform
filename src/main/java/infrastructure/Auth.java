@@ -118,7 +118,7 @@ public class Auth implements IAuth {
                     return new Response<>(null, "Member is logged out");
                 }
             }
-            // in guest extract if it's succesfull we check if the token is valid with
+            // in guest extract if it's successful we check if the token is valid with
             // expiration date
             logger.info("retrieved and validate role: " + role);
             return new Response<>(role, "retrieved role");
@@ -266,7 +266,7 @@ public class Auth implements IAuth {
             if (role.equals("GUEST") || role.equals("MEMBER")) {
                 String identifier = tokenService.extractUsername(token);
                 logger.info("Retrieved user identifier " + identifier);
-                return new Response<>(identifier, "Guest token recognized");
+                return new Response<>(identifier, "Retrieved user identifier");
             } else {
                 logger.warning("User with token is not found");
                 return new Response<>(null, "User with token is not found");

@@ -567,6 +567,21 @@ public class ActiveOrderService {
                     return new Response<>(null, "Ticket issuance failed");
                 }
 
+                try {
+                    NotifyDTO confirmation = new NotifyDTO(
+                            NotifyType.GENERAL_POPUP,
+                            new NotifyPayload(
+                                    "Your order #" + order.getOrderId() + " for \""
+                                            + event.getName() + "\" was completed successfully.",
+                                    event.getId()));
+                    String recipientIdentifier = auth.getUserIdentifier(token).getValue();
+                    if (recipientIdentifier != null) {
+                        notifier.notifyUser(recipientIdentifier, confirmation);
+                    }
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Purchase confirmation notification failed: " + e.getMessage());
+                }
+
                 return new Response<>(order.getOrderId(), "Purchase completed successfully");
 
             } catch (NoSuchElementException e) {
