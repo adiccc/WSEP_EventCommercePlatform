@@ -51,7 +51,7 @@ class AuthTest {
         String token = "logged.out.token";
         when(tokenServiceMock.validateToken(token)).thenReturn(true);
         when(tokenServiceMock.extractRole(token)).thenReturn("MEMBER");
-
+        when(tokenServiceMock.extractExpirationDate(token)).thenReturn(new java.util.Date(System.currentTimeMillis() + 100000));
         auth.logout(token);
 
         Response<String> response = auth.getRole(token);
@@ -65,7 +65,7 @@ class AuthTest {
         String token = "admin.token";
         when(tokenServiceMock.validateToken(token)).thenReturn(true);
         when(tokenServiceMock.extractUsername(token)).thenReturn(ADMIN_EMAIL);
-
+        when(tokenServiceMock.extractRole(token)).thenReturn("MEMBER");
         Response<Boolean> response = auth.isAdmin(token);
 
         assertTrue(response.getValue());
@@ -86,6 +86,7 @@ class AuthTest {
     void logout_ValidToken_BecomesLoggedOut() {
         String token = "valid.token";
         when(tokenServiceMock.validateToken(token)).thenReturn(true);
+        when(tokenServiceMock.extractExpirationDate(token)).thenReturn(new java.util.Date(System.currentTimeMillis() + 100000));
 
         Response<Boolean> response = auth.logout(token);
 
