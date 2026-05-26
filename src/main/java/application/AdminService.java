@@ -391,6 +391,8 @@ public class AdminService {
                     for (Order order : orders) {
                         try {
                             processRefundAdmin(token, event.getId(), order.getOrderId());
+                        } catch (OptimisticLockingFailureException e) {
+                            throw e;
                         } catch (Exception e) {
                             logger.log(Level.SEVERE, "Failed to process automatic refund for order " +
                                     order.getOrderId() + " in event " + event.getId() + ": " + e.getMessage());
@@ -402,9 +404,15 @@ public class AdminService {
                 NotifyPayload payload= new NotifyPayload("Company " + company.getCompanyName() + " has been closed by admin, all events are cancelled and refunds are being processed", null,companyId);
                 for (Integer userId : recipients) {
                     try {
-                        sendOrSaveNotification(userRepo.getUserEmail(userId), new NotifyDTO(GENERAL_POPUP,payload));
+                        sendOrSaveNotification(
+                                userRepo.getUserEmail(userId),
+                                new NotifyDTO(GENERAL_POPUP, payload)
+                        );
+                    } catch (OptimisticLockingFailureException e) {
+                        throw e;
                     } catch (Exception e) {
-                        logger.log(Level.SEVERE, "Failed to notify user " + userId + " about company closure: " + e.getMessage());
+                        logger.log(Level.SEVERE,
+                                "Failed to notify user " + userId + " about company closure: " + e.getMessage());
                     }
                 }
                 logger.info("Company with id " + companyId + " has been closed by admin");

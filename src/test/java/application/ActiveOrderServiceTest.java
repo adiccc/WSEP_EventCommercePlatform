@@ -1557,196 +1557,299 @@ class ActiveOrderServiceTest {
         Mockito.verify(ticketSupply, Mockito.never()).issue(Mockito.any(TicketSupplyRequestDTO.class));
     }
 
+    // Refund notification is triggered during checkout, where the user is expected
+    // to be online, so we test real-time delivery and do not add an offline checkout test.
     @Test
-    void GivenTicketIssuanceRejected_WhenCheckoutAndPayment_ThenRefundAndActiveOrderDeleted() {
-        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
-        Map<String, Integer> standing = Map.of("floor", 2);
+    void GivenTicketIssuanceRejectedAndUserOnline_WhenCheckoutAndPayment_ThenRefundAndActiveOrderDeletedAndRealtimeNotificationSent() throws Exception {
+        String userEmail = auth.getUserEmail(validToken).getValue();
 
-        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
+        CountDownLatch notificationLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
 
-        Response<Integer> selectResponse =
-                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+        Registration registration = Broadcaster.registerUser(userEmail, notification -> {
+            receivedNotification.set(notification);
+            notificationLatch.countDown();
+        });
 
-        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        try {
+            Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+            Map<String, Integer> standing = Map.of("floor", 2);
 
-        int activeOrderId = selectResponse.getValue();
+            service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
 
-        ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
-        List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
+            Response<Integer> selectResponse =
+                    service.userSelectTickets(validToken, concurrentEventId, seating, standing);
 
-        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
+            assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
 
-        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
-                .thenReturn("payment-123");
+            int activeOrderId = selectResponse.getValue();
 
-        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
-        Mockito.when(supplyResult.isSuccess()).thenReturn(false);
+            ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
+            List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
 
-        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
-                .thenReturn(supplyResult);
+            assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
 
-        Mockito.when(paymentSystem.refund(Mockito.eq("payment-123"), Mockito.anyDouble()))
-                .thenReturn(true);
+            Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                    .thenReturn("payment-123");
 
-        PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+            TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+            Mockito.when(supplyResult.isSuccess()).thenReturn(false);
 
-        Response<CheckoutPriceDTO> checkoutPriceResponse =
-                service.prepareCheckout(validToken, activeOrderId);
+            Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                    .thenReturn(supplyResult);
 
-        assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
+            Mockito.when(paymentSystem.refund(Mockito.eq("payment-123"), Mockito.anyDouble()))
+                    .thenReturn(true);
 
-        Response<Integer> checkoutResponse =
-                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+            PaymentDetailsDTO paymentDetails =
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
-        assertNull(checkoutResponse.getValue());
-        assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
+            Response<CheckoutPriceDTO> checkoutPriceResponse =
+                    service.prepareCheckout(validToken, activeOrderId);
 
-        assertThrows(NoSuchElementException.class,
-                () -> activeOrderRepo.findById(activeOrderId),
-                "Active order should be deleted after ticket issuance failure");
+            assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
 
-        assertEquals(1, eventRepo.findById(concurrentEventId).getOrders().size(),
-                "Order should be created before refund handling");
+            Response<Integer> checkoutResponse =
+                    service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
 
-        assertEquals(domain.event.OrderStatus.REFUNDED,
-                eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
-                "Order should be marked REFUNDED when refund succeeds");
+            assertNull(checkoutResponse.getValue());
+            assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
 
-        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.AVAILABLE);
+            assertThrows(NoSuchElementException.class,
+                    () -> activeOrderRepo.findById(activeOrderId),
+                    "Active order should be deleted after ticket issuance failure");
 
-        Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
-        Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
-        Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
-        Mockito.verify(notifier).notifyUser(
-                Mockito.eq(auth.getUserEmail(validToken).getValue()),
-                Mockito.any(NotifyDTO.class)
-        );
+            assertEquals(1, eventRepo.findById(concurrentEventId).getOrders().size(),
+                    "Order should be created before refund handling");
+
+            assertEquals(domain.event.OrderStatus.REFUNDED,
+                    eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
+                    "Order should be marked REFUNDED when refund succeeds");
+
+            assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.AVAILABLE);
+
+            Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+            Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
+            Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
+
+            assertTrue(notificationLatch.await(2, TimeUnit.SECONDS),
+                    "Online user should receive the refund notification in real time");
+
+            NotifyDTO notification = receivedNotification.get();
+
+            assertNotNull(notification, "Notification should have been received in real time");
+            assertEquals(NotifyType.GENERAL_POPUP, notification.getType());
+            assertTrue(notification.getPayload().getMessage().contains("Refund processed"),
+                    "Realtime notification should be the refund notification: "
+                            + notification.getPayload().getMessage());
+            assertEquals(concurrentEventId, notification.getPayload().getEventId().intValue());
+
+            Member buyer = userRepo.findUserByEmail(userEmail);
+            assertTrue(buyer.getDelayedNotifications().isEmpty(),
+                    "Online user should not have the notification saved as delayed");
+
+            Mockito.verify(notifier).notifyUser(
+                    Mockito.eq(userEmail),
+                    Mockito.any(NotifyDTO.class)
+            );
+
+        } finally {
+            registration.remove();
+        }
+    }
+    // Refund notification is triggered during checkout, where the user is expected
+    // to be online, so we test real-time delivery and do not add an offline checkout test.
+    @Test
+    void GivenTicketIssuanceThrowsAndUserOnline_WhenCheckoutAndPayment_ThenRefundAndActiveOrderDeletedAndRealtimeNotificationSent() throws Exception {
+        String userEmail = auth.getUserEmail(validToken).getValue();
+
+        CountDownLatch notificationLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration registration = Broadcaster.registerUser(userEmail, notification -> {
+            receivedNotification.set(notification);
+            notificationLatch.countDown();
+        });
+
+        try {
+            Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+            Map<String, Integer> standing = Map.of("floor", 2);
+
+            service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+
+            Response<Integer> selectResponse =
+                    service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+
+            assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+
+            int activeOrderId = selectResponse.getValue();
+
+            ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
+            List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
+
+            assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
+
+            Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                    .thenReturn("payment-123");
+
+            Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                    .thenThrow(new RuntimeException("Ticket supply unavailable"));
+
+            Mockito.when(paymentSystem.refund(Mockito.eq("payment-123"), Mockito.anyDouble()))
+                    .thenReturn(true);
+
+            PaymentDetailsDTO paymentDetails =
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+
+            Response<CheckoutPriceDTO> checkoutPriceResponse =
+                    service.prepareCheckout(validToken, activeOrderId);
+
+            assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
+
+            Response<Integer> checkoutResponse =
+                    service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+            assertNull(checkoutResponse.getValue());
+            assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
+
+            assertThrows(NoSuchElementException.class,
+                    () -> activeOrderRepo.findById(activeOrderId),
+                    "Active order should be deleted after ticket issuance exception");
+
+            assertEquals(domain.event.OrderStatus.REFUNDED,
+                    eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
+                    "Order should be marked REFUNDED when refund succeeds");
+
+            assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.AVAILABLE);
+
+            Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+            Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
+            Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
+
+            assertTrue(notificationLatch.await(2, TimeUnit.SECONDS),
+                    "Online user should receive the refund notification in real time");
+
+            NotifyDTO notification = receivedNotification.get();
+
+            assertNotNull(notification, "Notification should have been received in real time");
+            assertEquals(NotifyType.GENERAL_POPUP, notification.getType());
+            assertTrue(notification.getPayload().getMessage().contains("Refund processed"),
+                    "Realtime notification should be the refund processed notification: "
+                            + notification.getPayload().getMessage());
+            assertEquals(concurrentEventId, notification.getPayload().getEventId().intValue());
+
+            Member buyer = userRepo.findUserByEmail(userEmail);
+            assertTrue(buyer.getDelayedNotifications().isEmpty(),
+                    "Online user should not have the notification saved as delayed");
+
+            Mockito.verify(notifier).notifyUser(
+                    Mockito.eq(userEmail),
+                    Mockito.any(NotifyDTO.class)
+            );
+
+        } finally {
+            registration.remove();
+        }
     }
 
+    // Refund notification is triggered during checkout, where the user is expected
+    // to be online, so we test real-time delivery and do not add an offline checkout test.
     @Test
-    void GivenTicketIssuanceThrows_WhenCheckoutAndPayment_ThenRefundAndActiveOrderDeleted() {
-        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
-        Map<String, Integer> standing = Map.of("floor", 2);
+    void GivenRefundFailsAfterIssuanceFailureAndUserOnline_WhenCheckoutAndPayment_ThenOrderMarkedRefundRequiredAndRealtimeNotificationSent() throws Exception {
+        String userEmail = auth.getUserEmail(validToken).getValue();
 
-        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
+        CountDownLatch notificationLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
 
-        Response<Integer> selectResponse =
-                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+        Registration registration = Broadcaster.registerUser(userEmail, notification -> {
+            receivedNotification.set(notification);
+            notificationLatch.countDown();
+        });
 
-        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        try {
+            Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+            Map<String, Integer> standing = Map.of("floor", 2);
 
-        int activeOrderId = selectResponse.getValue();
+            service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
 
-        ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
-        List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
+            Response<Integer> selectResponse =
+                    service.userSelectTickets(validToken, concurrentEventId, seating, standing);
 
-        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
+            assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
 
-        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
-                .thenReturn("payment-123");
+            int activeOrderId = selectResponse.getValue();
 
-        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
-                .thenThrow(new RuntimeException("Ticket supply unavailable"));
+            ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
+            List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
 
-        Mockito.when(paymentSystem.refund(Mockito.eq("payment-123"), Mockito.anyDouble()))
-                .thenReturn(true);
+            assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
 
-        PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+            Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                    .thenReturn("payment-123");
 
-        Response<CheckoutPriceDTO> checkoutPriceResponse =
-                service.prepareCheckout(validToken, activeOrderId);
+            TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+            Mockito.when(supplyResult.isSuccess()).thenReturn(false);
 
-        assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
+            Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                    .thenReturn(supplyResult);
 
-        Response<Integer> checkoutResponse =
-                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+            Mockito.when(paymentSystem.refund(Mockito.eq("payment-123"), Mockito.anyDouble()))
+                    .thenReturn(false);
 
-        assertNull(checkoutResponse.getValue());
-        assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
+            PaymentDetailsDTO paymentDetails =
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
-        assertThrows(NoSuchElementException.class,
-                () -> activeOrderRepo.findById(activeOrderId),
-                "Active order should be deleted after ticket issuance exception");
+            Response<CheckoutPriceDTO> checkoutPriceResponse =
+                    service.prepareCheckout(validToken, activeOrderId);
 
-        assertEquals(domain.event.OrderStatus.REFUNDED,
-                eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
-                "Order should be marked REFUNDED when refund succeeds");
+            assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
 
-        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.AVAILABLE);
+            Response<Integer> checkoutResponse =
+                    service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
 
-        Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
-        Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
-        Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
-        Mockito.verify(notifier).notifyUser(
-                Mockito.eq(auth.getUserEmail(validToken).getValue()),
-                Mockito.any(NotifyDTO.class)
-        );
+            assertNull(checkoutResponse.getValue());
+            assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
+
+            assertThrows(NoSuchElementException.class,
+                    () -> activeOrderRepo.findById(activeOrderId),
+                    "Active order should be deleted after failed issuance");
+
+            assertEquals(domain.event.OrderStatus.REFUND_REQUIRED,
+                    eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
+                    "Order should be marked REFUND_REQUIRED when refund fails");
+
+            assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.AVAILABLE);
+
+            Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+            Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
+            Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
+
+            assertTrue(notificationLatch.await(2, TimeUnit.SECONDS),
+                    "Online user should receive the refund-required notification in real time");
+
+            NotifyDTO notification = receivedNotification.get();
+
+            assertNotNull(notification, "Notification should have been received in real time");
+            assertEquals(NotifyType.GENERAL_POPUP, notification.getType());
+            assertTrue(notification.getPayload().getMessage().contains("please contact support"),
+                    "Realtime notification should be the refund-required notification: "
+                            + notification.getPayload().getMessage());
+            assertEquals(concurrentEventId, notification.getPayload().getEventId().intValue());
+
+            Member buyer = userRepo.findUserByEmail(userEmail);
+            assertTrue(buyer.getDelayedNotifications().isEmpty(),
+                    "Online user should not have the notification saved as delayed");
+
+            Mockito.verify(notifier).notifyUser(
+                    Mockito.eq(userEmail),
+                    Mockito.any(NotifyDTO.class)
+            );
+
+        } finally {
+            registration.remove();
+        }
     }
 
-    @Test
-    void GivenRefundFailsAfterIssuanceFailure_WhenCheckoutAndPayment_ThenOrderMarkedRefundRequired() {
-        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
-        Map<String, Integer> standing = Map.of("floor", 2);
-
-        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
-
-        Response<Integer> selectResponse =
-                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
-
-        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
-
-        int activeOrderId = selectResponse.getValue();
-
-        ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
-        List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
-
-        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
-
-        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
-                .thenReturn("payment-123");
-
-        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
-        Mockito.when(supplyResult.isSuccess()).thenReturn(false);
-
-        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
-                .thenReturn(supplyResult);
-
-        Mockito.when(paymentSystem.refund(Mockito.eq("payment-123"), Mockito.anyDouble()))
-                .thenReturn(false);
-
-        PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
-
-        Response<CheckoutPriceDTO> checkoutPriceResponse =
-                service.prepareCheckout(validToken, activeOrderId);
-
-        assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
-
-        Response<Integer> checkoutResponse =
-                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
-
-        assertNull(checkoutResponse.getValue());
-        assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
-
-        assertThrows(NoSuchElementException.class,
-                () -> activeOrderRepo.findById(activeOrderId),
-                "Active order should be deleted after failed issuance");
-
-        assertEquals(domain.event.OrderStatus.REFUND_REQUIRED,
-                eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus(),
-                "Order should be marked REFUND_REQUIRED when refund fails");
-        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.AVAILABLE);
-
-        Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
-        Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
-        Mockito.verify(paymentSystem).refund(Mockito.eq("payment-123"), Mockito.anyDouble());
-        Mockito.verify(notifier).notifyUser(
-                Mockito.eq(auth.getUserEmail(validToken).getValue()),
-                Mockito.any(NotifyDTO.class)
-        );
-    }
 
     @Test
     void GivenExpiredActiveOrder_WhenCheckoutAndPayment_ThenTicketsReleasedAndActiveOrderDeleted() {
@@ -1859,70 +1962,6 @@ class ActiveOrderServiceTest {
 
         Mockito.verify(ticketSupply, Mockito.never())
                 .issue(Mockito.any(TicketSupplyRequestDTO.class));
-    }
-
-    @Test
-    void GivenTicketIssuanceFailureAndRefundApproved_WhenCheckoutAndPayment_ThenRefundNotificationSent() {
-        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
-        Map<String, Integer> standing = Map.of("floor", 2);
-
-        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
-
-        Response<Integer> selectResponse =
-                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
-
-        assertNotNull(selectResponse.getValue(),
-                "setup failed: " + selectResponse.getMessage());
-
-        int activeOrderId = selectResponse.getValue();
-
-        Mockito.when(paymentSystem.pay(
-                Mockito.anyDouble(),
-                Mockito.any(PaymentDetailsDTO.class))
-        ).thenReturn("payment-123");
-
-        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
-
-        Mockito.when(supplyResult.isSuccess()).thenReturn(false);
-
-        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
-                .thenReturn(supplyResult);
-
-        Mockito.when(paymentSystem.refund(
-                Mockito.eq("payment-123"),
-                Mockito.anyDouble())
-        ).thenReturn(true);
-
-        PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO(
-                        "1234",
-                        "12/30",
-                        "123",
-                        "111",
-                        1,
-                        null
-                );
-
-        Response<CheckoutPriceDTO> checkoutPriceResponse =
-                service.prepareCheckout(validToken, activeOrderId);
-
-        assertNotNull(checkoutPriceResponse.getValue());
-
-        Response<Integer> checkoutResponse =
-                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
-
-        assertNull(checkoutResponse.getValue());
-        assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
-
-        Mockito.verify(notifier).notifyUser(
-                Mockito.eq(auth.getUserEmail(validToken).getValue()),
-                Mockito.argThat((NotifyDTO dto) ->
-                        dto != null
-                                && dto.getPayload() != null
-                                && dto.getPayload().getMessage()
-                                .contains("Refund processed")
-                )
-        );
     }
 
 

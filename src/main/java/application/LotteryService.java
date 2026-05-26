@@ -143,10 +143,33 @@ public class LotteryService {
             lotteryRepo.store(lottery);
             logger.log(Level.INFO, "Successfully drawn winners for lottery ID: " + lotteryId);
             // Notify the winners
-            for (Integer winner: winners.keySet()) {
-                int userId = winner;
-                String code = winners.get(winner);
-                sendOrSaveNotification(userRepo.getUserEmail(userId), new NotifyDTO(NotifyType.GENERAL_POPUP,new NotifyPayload("Congratulations! You have won the lottery for event " + lotteryId + ". Your code is: " + code)));
+            // Notify the winners
+            for (Integer winner : winners.keySet()) {
+                try {
+                    int userId = winner;
+                    String code = winners.get(winner);
+                    String userEmail = userRepo.getUserEmail(userId);
+
+                    NotifyDTO notification = new NotifyDTO(
+                            NotifyType.GENERAL_POPUP,
+                            new NotifyPayload(
+                                    "Congratulations! You have won the lottery for event "
+                                            + lotteryId + ". Your code is: " + code
+                            )
+                    );
+
+                    Response<Void> notificationResponse =
+                            sendOrSaveNotification(userEmail, notification);
+
+                    logger.info("Lottery winner notification result for user "
+                            + userEmail + ": " + notificationResponse.getMessage());
+
+                } catch (OptimisticLockingFailureException e) {
+                    throw e;
+
+                } catch (Exception e) {
+                    logger.warning("Failed to notify lottery winner " + winner + ": " + e.getMessage());
+                }
             }
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Could not draw lottery, ID not found: " + lotteryId);

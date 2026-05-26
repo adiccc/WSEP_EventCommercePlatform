@@ -619,6 +619,7 @@ class UserServiceTest {
         assertTrue(cleanBlank.isError());
     }
 
+    //Todo: CHANGE STORE
     @Test
     void GivenValidEmailWithRealDelayedNotifications_WhenGetAndClean_ThenFlowSucceeds() {
         // Arrange
@@ -660,7 +661,7 @@ class UserServiceTest {
         assertTrue(cleanResponse.getValue());
         assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty(), "DB should be empty after clean");
     }
-
+    //Todo: CHANGE STORE
     @Test
     void GivenOfflineUser_WhenNotifiedAndLogsIn_ThenNotificationsFlowWorks() {
         // Arrange
@@ -769,6 +770,7 @@ class UserServiceTest {
         assertNotNull(memberAfterChaos.getDelayedNotifications());
     }
 
+    //Todo: CHANGE STORE
     @Test
     void GivenUserWithDelayedNotifications_WhenAdminRemovesUser_ThenLoginFailsAndDataInaccessible() {
         // Arrange

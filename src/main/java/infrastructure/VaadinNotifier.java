@@ -24,7 +24,7 @@ public class VaadinNotifier implements INotifier {
     }
 
     @Override
-    public boolean notifyTab(String tabId, NotifyDTO notification) { // because we dont have suspended notifications
+    public boolean notifyTab(String tabId, NotifyDTO notification) {
         return Broadcaster.broadcastToTab(tabId, notification);
     }
 
