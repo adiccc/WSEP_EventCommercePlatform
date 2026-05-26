@@ -98,12 +98,12 @@ class EventCompanyManageServiceTest {
 
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
-        notifier = new VaadinNotifier(userRepo);
+        notifier = new VaadinNotifier();
         userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier);
         eventService=new EventService(auth,eventRepo);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,accessValidator,notifier,100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,accessValidator,notifier,userRepo,100);
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete order repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo,accessValidator,notifier);
@@ -111,7 +111,7 @@ class EventCompanyManageServiceTest {
                 companyRepo,
                 eventRepo,
                 auth,
-                paymentSystem,accessValidator,notifier
+                paymentSystem,accessValidator,notifier, userRepo
         );
 
         validToken1=null; // user with all permissions

@@ -18,6 +18,8 @@ import domain.policy.DiscountPolicyType;
 import domain.policy.PurchasePolicyType;
 import domain.event.*;
 import Exception.OptimisticLockingFailureException;
+import domain.user.IUserRepo;
+import domain.user.Member;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -43,11 +45,12 @@ public class EventCompanyManageService {
     private final IAccessValidator accessValidator;
     private final INotifier notifier;
     AtomicInteger ticketIdGenerator = new AtomicInteger(1);
+    private final IUserRepo userRepo;
 
 
 
     @Autowired
-    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, IAccessValidator accessValidator,INotifier notifier) {
+    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, IAccessValidator accessValidator,INotifier notifier, IUserRepo userRepo) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;
         this.auth = auth;
@@ -55,6 +58,7 @@ public class EventCompanyManageService {
         this.paymentSystem = paymentSystem;
         this.accessValidator = accessValidator;
         this.notifier = notifier;
+        this.userRepo = userRepo;
     }
 
     public Response<Boolean> DefineVenueAndSeatingMap(String token, Integer eventId, ElementPositionDTO stage,
@@ -230,7 +234,7 @@ public class EventCompanyManageService {
                 NotifyPayload payload= new NotifyPayload("The Date of event " + event.getName() + " has been updated to " + event.getDate().toString(),eventId, null);
                 NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
                 for(String purchaser : purchasers){
-                    notifier.notifyUser(purchaser, notifyDTO);
+                    sendOrSaveNotification(purchaser, notifyDTO);
                 }
                 return new Response<>(true, "Event updated successfully");
             } catch (OptimisticLockingFailureException e) {
@@ -364,7 +368,7 @@ public class EventCompanyManageService {
                         String purchaserIdentifier = order.getUserIdentifier();
                         NotifyPayload payload = new NotifyPayload("Event " + eventId + "cancelled", eventId, null);
                         NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP,payload);
-                        notifier.notifyUser(purchaserIdentifier,notifyDTO);
+                        sendOrSaveNotification(purchaserIdentifier,notifyDTO);
                         processRefund(token, event.getId(), order.getOrderId());
                     } catch (Exception e) {
                         logger.log(Level.SEVERE, "Failed to process automatic refund for order " +
@@ -580,7 +584,7 @@ public class EventCompanyManageService {
 
                     String userIdentifier = order.getUserIdentifier();
                     NotifyPayload payload = new NotifyPayload("Refund process for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId,null);
-                    notifier.notifyUser(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
+                    sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
                     return new Response<>(true, "Refund completed successfully");
                 }
 
@@ -588,7 +592,7 @@ public class EventCompanyManageService {
                 eventRepo.store(event);
                 String userIdentifier = order.getUserIdentifier();
                 NotifyPayload payload = new NotifyPayload("Refund process failed for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId,null);
-                notifier.notifyUser(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
+                sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
                 logger.log(Level.SEVERE, "Refund rejected by external payment service");
                 return new Response<>(false, "Refund rejected by external payment service");
 
@@ -887,6 +891,40 @@ public class EventCompanyManageService {
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to get purchase history: " + e.getMessage());
                 return new Response<>(null, "Failed to get purchase history: " + e.getMessage());
+            }
+        });
+    }
+    // Helper method to send a real-time notification or save it as delayed if the user is offline.
+    private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                Member member = userRepo.findUserByEmail(userIdentifier);
+
+                if (member == null) {
+                    logger.warning("User not found for identifier: " + userIdentifier);
+                    return new Response<>(null, "User not found");
+                }
+
+                boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
+
+                if (!isDelivered) {
+                    member.addDelayedNotification(notifyDTO);
+                    userRepo.store(member);
+
+                    logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
+                    return new Response<>(null, "Notification saved as delayed");
+                }
+
+                return new Response<>(null, "Notification sent successfully");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                logger.warning("Failed to send or save notification for "
+                        + userIdentifier + ": " + e.getMessage());
+
+                return new Response<>(null, "Failed to send or save notification");
             }
         });
     }

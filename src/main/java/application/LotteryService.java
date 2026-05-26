@@ -11,6 +11,8 @@ import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
+import domain.user.IUserRepo;
+import domain.user.Member;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -34,9 +36,10 @@ public class LotteryService {
     private final ICompanyRepo companyRepo;
     private final IAccessValidator accessValidator;
     private final INotifier notifier;
+    private final IUserRepo userRepo;
 
     @Autowired
-    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth, ICompanyRepo companyRepo, IAccessValidator accessValidator, INotifier notifier) {
+    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth, ICompanyRepo companyRepo, IAccessValidator accessValidator, INotifier notifier, IUserRepo userRepo) {
         this.lotteryRepo = lotteryRepo;
         this.eventRepo = eventRepo;
         this.logger = Logger.getLogger(LotteryService.class.getName());
@@ -45,6 +48,7 @@ public class LotteryService {
         this.companyRepo = companyRepo;
         this.accessValidator = accessValidator;
         this.notifier = notifier;
+        this.userRepo = userRepo;
     }
 
     public Response<Boolean> createLottery(String token, int eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
@@ -142,7 +146,7 @@ public class LotteryService {
             for (Integer winner: winners.keySet()) {
                 int userId = winner;
                 String code = winners.get(winner);
-                notifier.notifyMemberById(userId, new NotifyDTO(NotifyType.GENERAL_POPUP,new NotifyPayload("Congratulations! You have won the lottery for event " + lotteryId + ". Your code is: " + code)));
+                sendOrSaveNotification(userRepo.getUserEmail(userId), new NotifyDTO(NotifyType.GENERAL_POPUP,new NotifyPayload("Congratulations! You have won the lottery for event " + lotteryId + ". Your code is: " + code)));
             }
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Could not draw lottery, ID not found: " + lotteryId);
@@ -209,6 +213,41 @@ public class LotteryService {
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to register user to lottery: " + e.getMessage());
                 return new Response<>(false, "Failed to register user to lottery: " + e.getMessage());
+            }
+        });
+    }
+
+    // Helper method to send a real-time notification or save it as delayed if the user is offline.
+    private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                Member member = userRepo.findUserByEmail(userIdentifier);
+
+                if (member == null) {
+                    logger.warning("User not found for identifier: " + userIdentifier);
+                    return new Response<>(null, "User not found");
+                }
+
+                boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
+
+                if (!isDelivered) {
+                    member.addDelayedNotification(notifyDTO);
+                    userRepo.store(member);
+
+                    logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
+                    return new Response<>(null, "Notification saved as delayed");
+                }
+
+                return new Response<>(null, "Notification sent successfully");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                logger.warning("Failed to send or save notification for "
+                        + userIdentifier + ": " + e.getMessage());
+
+                return new Response<>(null, "Failed to send or save notification");
             }
         });
     }

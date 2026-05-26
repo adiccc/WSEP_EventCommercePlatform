@@ -69,7 +69,7 @@ class ActiveOrderServiceTest {
         ISuspensionRepo suspensionRepo = new SuspensionRepoImpl();
         IAccessValidator accessValidator=new AccessValidator(suspensionRepo);
         auth = new Auth(tokenService, userRepo, passwordEncoder);
-        notifier = Mockito.spy(new VaadinNotifier(userRepo));
+        notifier = Mockito.spy(new VaadinNotifier());
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
 
         userService.registerUser(
@@ -99,7 +99,7 @@ class ActiveOrderServiceTest {
         companyService.createProductionCompany(validToken, companyId,
                 "test-company", "testC@company.com", "054-5556677", "leumi");
 
-        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
+        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier,userRepo);
 
         Response<Integer> r = companyEventService.createEvent(
                 validToken,
@@ -135,7 +135,7 @@ class ActiveOrderServiceTest {
         companyEventService.DefineVenueAndSeatingMap(validToken, eventId, stage, entries, standingZones, seatingZones);
         companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId, stage, entries, standingZones, seatingZones);
 
-        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator,notifier);
+        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,accessValidator,notifier,userRepo);
         lotteryService.createLottery(validToken, eventId, 10,
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
@@ -150,6 +150,7 @@ class ActiveOrderServiceTest {
                 ticketSupply,
                 accessValidator,
                 notifier,
+                userRepo,
                 capacity
         );
     }
@@ -3392,7 +3393,7 @@ class ActiveOrderServiceTest {
     @Test
     void GivenNotifierThrows_WhenSoldOutCheckoutAndPayment_ThenPurchaseStillSucceeds() {
         Mockito.doThrow(new RuntimeException("notify boom"))
-                .when(notifier).notifyMemberById(Mockito.any(Integer.class), Mockito.any(NotifyDTO.class));
+                .when(notifier).notifyUser(Mockito.any(String.class), Mockito.any(NotifyDTO.class));
 
         int soldOutEventId = createSoldOutTestEvent("notify-throws");
 
@@ -3438,7 +3439,7 @@ class ActiveOrderServiceTest {
         assertTrue(eventRepo.findById(soldOutEventId).isSoldOut(),
                 "Event must still be marked sold out after a successful purchase");
         Mockito.verify(notifier, Mockito.atLeastOnce())
-                .notifyMemberById(Mockito.any(Integer.class), Mockito.any(NotifyDTO.class));
+                .notifyUser(Mockito.any(String.class), Mockito.any(NotifyDTO.class));
     }
 
     @Test
@@ -3855,8 +3856,8 @@ class ActiveOrderServiceTest {
                 ArgumentCaptor.forClass(NotifyDTO.class);
 
         Mockito.verify(notifier, Mockito.atLeastOnce())
-                .notifyMemberById(
-                        Mockito.eq(userId),
+                .notifyUser(
+                        Mockito.eq(userRepo.getUserEmail(userId)),
                         notificationCaptor.capture()
                 );
 
