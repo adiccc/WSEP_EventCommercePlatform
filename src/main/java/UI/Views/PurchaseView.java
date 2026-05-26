@@ -120,7 +120,7 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
             ActiveOrderDTO order = response.getValue().getActiveOrder();
 
             if (order.getStage() == STAGE.CHECKING_OUT) {
-                UI.getCurrent().navigate("checkout/" + order.getId());
+                event.rerouteTo("checkout/" + order.getId());
                 return;
             }
 

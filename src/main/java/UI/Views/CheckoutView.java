@@ -78,7 +78,20 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         }
 
         String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+
+        if (tabId == null || tabId.isBlank()) {
+            showError("Could not identify the current tab");
+            event.rerouteTo("home");
+            return;
+        }
+
         token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
+
+        if (token == null || token.isBlank()) {
+            showError("Your session expired. Please log in again or continue as guest.");
+            event.rerouteTo("home");
+            return;
+        }
 
         buildPage();
         prepareCheckout();
