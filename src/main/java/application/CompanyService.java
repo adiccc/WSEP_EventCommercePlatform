@@ -602,9 +602,14 @@ public class CompanyService {
                 }
                 company.updateManagerPermissions(userId, managerId, newPermissions);
                 companyRepo.store(company);
-                NotifyPayload payload = new NotifyPayload("Your manager permissions have been updated in company " + company.getCompanyName(),null, companyId);
-                NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                notifier.notifyUser(managerMember.getIdentifier(), notifyDTO);
+                try{
+                    NotifyPayload payload = new NotifyPayload("Your manager permissions have been updated in company " + company.getCompanyName(),null, companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
+                    notifier.notifyUser(managerMember.getIdentifier(), notifyDTO);
+                    logger.info("updateManagerPermissions sent notification successfully");
+                } catch (Exception e){
+                    logger.warning("updateManagerPermissions failed to send notification: " + e.getMessage());
+                }
                 logger.info("updateManagerPermissions succeeded for managerId: " + managerId);
                 return Response.ok(true);
             } catch (NoSuchElementException e) {
@@ -658,9 +663,14 @@ public class CompanyService {
                 }
                 company.requestAppointOwner(appointerId, appointeeId);
                 companyRepo.store(company);
-                NotifyPayload payload = new NotifyPayload("You have been invited to be a owner at company " + company.getCompanyName(), null,companyId);
-                NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
-                notifier.notifyUser(appointee.getIdentifier(), notifyDTO);
+                try{
+                    NotifyPayload payload = new NotifyPayload("You have been invited to be a owner at company " + company.getCompanyName(), null,companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
+                    notifier.notifyUser(appointee.getIdentifier(), notifyDTO);
+                    logger.info("requestAppointOwner sent notification successfully");
+                } catch (Exception e){
+                    logger.warning("requestAppointOwner failed to send notification: " + e.getMessage());
+                }
                 logger.info("requestAppointOwner succeeded: pending appointment created for " + appointeeId);
                 return Response.ok(true);
             } catch (SecurityException e) {
@@ -715,10 +725,15 @@ public class CompanyService {
                 }
                 companyRepo.store(company);
                 if(accept){ //just after successful save to the repo we are sending the notification!
-                    NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
-                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                    notifier.notifyMemberById(userId, notifyDTO);
-                    logger.info("respondToOwnerAppointment: user " + userId + " accepted and became owner of company " + companyId);
+                    try{
+                        NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
+                        NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
+                        notifier.notifyMemberById(userId, notifyDTO);
+                        logger.info("respondToOwnerAppointment: user " + userId + " accepted and became owner of company " + companyId);
+                    }
+                    catch(Exception e){
+                        logger.warning("respondToOwnerAppointment failed to send notification: " + e.getMessage());
+                    }
                 }
                 return Response.ok(accept);
             } catch (NoSuchElementException e) {
@@ -766,9 +781,16 @@ public class CompanyService {
                 }
                 company.requestAppointManager(appointerId, appointeeId, permissions);
                 companyRepo.store(company);
-                NotifyPayload payload = new NotifyPayload("You have been invited to be a manager at company " + company.getCompanyName(), null,companyId);
-                NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
-                notifier.notifyUser(member.getIdentifier(), notifyDTO);
+                try{
+                    NotifyPayload payload = new NotifyPayload("You have been invited to be a manager at company " + company.getCompanyName(), null,companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
+                    notifier.notifyUser(member.getIdentifier(), notifyDTO);
+                    logger.info("requestAppointManager sent notification successfully");
+                }
+                catch(Exception e){
+                    logger.warning("requestAppointManager failed to send notification: " + e.getMessage());
+                }
+
                 logger.info("requestAppointManager succeeded for appointeeId: " + appointeeId);
                 return Response.ok(true);
             } catch (SecurityException e) {
@@ -818,16 +840,23 @@ public class CompanyService {
                 }
                 company.respondManagerAppointment(userId, accept);
                 if (accept) {
+
                     Member member = userRepo.findById(userId);
                     member.changeState(new Manager());
                     userRepo.store(member);
                 }
                 companyRepo.store(company);
                 if(accept){
-                    NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
-                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                    notifier.notifyMemberById(userId, notifyDTO);
-                    logger.info("respondToManagerAppointment succeeded for userId: " + userId + ", accepted: " + accept);
+                    try{
+                        NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
+                        NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
+                        notifier.notifyMemberById(userId, notifyDTO);
+                        logger.info("respondToManagerAppointment succeeded for userId: " + userId + ", accepted: " + accept);
+                    }
+                    catch(Exception e){
+                        logger.warning("respondToManagerAppointment failed to send notification: " + e.getMessage());
+                    }
+
                 }
                 return Response.ok(accept);
             } catch (OptimisticLockingFailureException e) {
@@ -873,9 +902,15 @@ public class CompanyService {
                 managerMember.changeState(null);
                 userRepo.store(managerMember);
                 companyRepo.store(company);
-                NotifyPayload payload = new NotifyPayload("Your manager role has been removed from company " + company.getCompanyName(), null, companyId);
-                NotifyDTO notifyDTO = new NotifyDTO( NotifyType.KICKOUT_TAB_NAVIGATION,payload);
-                notifier.notifyUser(managerMember.getIdentifier(), notifyDTO);
+                try{
+                    NotifyPayload payload = new NotifyPayload("Your manager role has been removed from company " + company.getCompanyName(), null, companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.KICKOUT_TAB_NAVIGATION,payload);
+                    notifier.notifyUser(managerMember.getIdentifier(), notifyDTO);
+                    logger.info("removeManagerAppointment succeeded sending notification for userId: " + managerMember.getIdentifier());
+                } catch (Exception e){
+                    logger.warning("removeManagerAppointment failed to send notification: " + e.getMessage());
+                }
+
                 logger.info("removeManagerAppointment succeeded for managerId: " + managerId);
                 return Response.ok(true);
             } catch (SecurityException e) {
@@ -946,12 +981,17 @@ public class CompanyService {
                 if (company.isActive()) {
                     company.deactivate();
                     companyRepo.store(company);
-                    Set<Integer> allStaff = new HashSet<>(company.getOwnerIds());
-                    allStaff.addAll(company.getCompanyPermission().getManagers());
-                    for(Integer staffId : allStaff){
-                        NotifyPayload payload = new NotifyPayload("Alert: Company " + company.getCompanyName() + " has been deactivated.", null, companyId);
-                        NotifyDTO notifyDTO = new NotifyDTO( NotifyType.KICKOUT_TAB_NAVIGATION,payload);
-                        notifier.notifyMemberById(staffId, notifyDTO);
+                        Set<Integer> allStaff = new HashSet<>(company.getOwnerIds());
+                        allStaff.addAll(company.getCompanyPermission().getManagers());
+                        for(Integer staffId : allStaff){
+                            try {
+                                NotifyPayload payload = new NotifyPayload("Alert: Company " + company.getCompanyName() + " has been deactivated.", null, companyId);
+                                NotifyDTO notifyDTO = new NotifyDTO(NotifyType.KICKOUT_TAB_NAVIGATION, payload);
+                                notifier.notifyMemberById(staffId, notifyDTO);
+                                logger.info("deactivateCompany succeeded sending notification for userId: " + staffId);
+                            } catch (Exception e){
+                                logger.warning("deactivateCompany notification send failed: " + e.getMessage());
+                            }
                     }
                     logger.info("deactivateCompany succeeded for companyId: " + companyId);
                     return new Response<>(true, "Company deactivated successfully");

@@ -60,7 +60,7 @@ public class UserService {
             return Response.ok(result);
         });
     }
-
+//TODO:: try and catch handle
     //trigger for moving to login page
     private void onUserAdmitted(String uuid) {
         logger.info("User admitted from queue with sessionId: " + uuid);
