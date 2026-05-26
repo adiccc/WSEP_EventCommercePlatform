@@ -95,7 +95,7 @@ class ActiveOrderServiceTest {
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
 
-        companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator);
+        companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator,notifier);
         companyService.createProductionCompany(validToken, companyId,
                 "test-company", "testC@company.com", "054-5556677", "leumi");
 
@@ -3247,8 +3247,10 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
-
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1,null);
+        userService.cleanDelayedNotifications("testuser1@gmail.com");
+        userService.cleanDelayedNotifications("owner2@gmail.com");
+        userService.cleanDelayedNotifications("manager1@gmail.com");
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
 

@@ -6,6 +6,7 @@ import domain.user.Founder;
 import domain.user.Manager;
 import domain.user.Owner;
 import domain.user.State;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 
 import java.util.*;
 
@@ -223,6 +224,9 @@ public class Permissions {
                 companyTree.get(pending.getMyManager()).addAppointee(managerId);
             }
         }
+    }
+    public Set<Integer> getManagers() {
+       return this.companyTree.keySet();
     }
 
 }

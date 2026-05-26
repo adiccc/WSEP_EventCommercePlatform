@@ -190,6 +190,7 @@ public class EventCompanyManageService {
             }
         });
     }
+//TODO:: try and catch handle
 
     public Response<Boolean> UpdateEventDate(String token, Integer eventId, LocalDateTime date) {
         return RetryHelper.executeWithRetry(() ->
@@ -319,7 +320,7 @@ public class EventCompanyManageService {
             }
         });
     }
-
+//TODO:: try and catch handle
     public Response<Boolean> DeleteEvent(String token, Integer eventId) {
         return RetryHelper.executeWithRetry(()->{
             logger.log(Level.INFO, "DeleteEvent called");
@@ -542,7 +543,7 @@ public class EventCompanyManageService {
         }
         });
     }
-
+//TODO:: try and catch handle
     public Response<Boolean> processRefund(String token, Integer eventId, int orderId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");

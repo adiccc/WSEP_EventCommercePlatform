@@ -1015,15 +1015,22 @@ public class ActiveOrderService {
 
     private void promoteNextInQueue(int eventId) {
         String nextToken = dequeueNextToken(eventId);
+        boolean created;
         if (nextToken != null) {
-            createActiveOrderForToken(nextToken, eventId);
-            NotifyPayload payload = new NotifyPayload("Your turn for event " + eventId + " has arrived!",eventId,null);
-            NotifyDTO notifyDTO = new NotifyDTO(NotifyType.QUEUE_EVENT_TURN_ARRIVED,payload);
-            notifier.notifyTab(nextToken, notifyDTO);
-            logger.info("Notified tab " + nextToken + " that their turn for event " + eventId + " has arrived.");
+            created =  createActiveOrderForToken(nextToken, eventId);
+            if(created){
+                try{
+                    NotifyPayload payload = new NotifyPayload("Your turn for event " + eventId + " has arrived!",eventId,null);
+                    NotifyDTO notifyDTO = new NotifyDTO(NotifyType.QUEUE_EVENT_TURN_ARRIVED,payload);
+                    notifier.notifyTab(nextToken, notifyDTO);
+                    logger.info("Notified tab " + nextToken + " that their turn for event " + eventId + " has arrived.");
+                } catch (Exception e){
+                    logger.log(Level.WARNING,"Failed to notify tab " + nextToken + " about queue turn: " + e.getMessage());
+                }
+            }
+
         }
     }
-
 
     private String dequeueNextToken(int eventId) {
         return RetryHelper.executeWithRetry(() -> {
@@ -1043,7 +1050,7 @@ public class ActiveOrderService {
         }).getValue();
     }
 
-    private void createActiveOrderForToken(String token, int eventId) {
+    private boolean createActiveOrderForToken(String token, int eventId) {
         boolean skipped = RetryHelper.executeWithRetry(() -> {
             try {
                 String role = auth.getRole(token).getValue();
@@ -1066,7 +1073,9 @@ public class ActiveOrderService {
 
         if (skipped) {
             promoteNextInQueue(eventId);
+            return false;
         }
+        return true;
     }
 
     private void notifySoldOutIfApplicable(int eventId) {
