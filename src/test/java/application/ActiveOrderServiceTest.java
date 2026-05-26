@@ -3247,7 +3247,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1,null);
         userService.cleanDelayedNotifications("testuser1@gmail.com");
         userService.cleanDelayedNotifications("owner2@gmail.com");
         userService.cleanDelayedNotifications("manager1@gmail.com");
