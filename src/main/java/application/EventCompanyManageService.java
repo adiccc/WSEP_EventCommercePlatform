@@ -1,23 +1,16 @@
 package application;
 
-import DTO.ElementPositionDTO;
-import DTO.PurchaseHistoryDTO;
-import DTO.SeatingZoneDTO;
-import DTO.StandingZoneDTO;
 import DTO.*;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.*;
 import domain.dto.*;
-import domain.event.Event;
-import domain.event.EventMap;
-import domain.event.IEventRepo;
-import domain.dataType.ElementPosition;
-import domain.event.Zone;
 import domain.policy.DiscountPolicyType;
 import domain.policy.PurchasePolicyType;
 import domain.event.*;
 import Exception.OptimisticLockingFailureException;
+import domain.user.IUserRepo;
+import domain.user.Member;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +37,7 @@ public class EventCompanyManageService {
     private final IPaymentSystem paymentSystem;
     private final IAccessValidator accessValidator;
     private final INotifier notifier;
+    private final IUserRepo userRepo;
     AtomicInteger ticketIdGenerator = new AtomicInteger(1);
     private final IUserRepo userRepo;
 
@@ -59,6 +53,7 @@ public class EventCompanyManageService {
         this.accessValidator = accessValidator;
         this.notifier = notifier;
         this.userRepo = userRepo;
+        this.userRepo = userRepo;
     }
 
     public Response<Boolean> DefineVenueAndSeatingMap(String token, Integer eventId, ElementPositionDTO stage,
@@ -68,7 +63,7 @@ public class EventCompanyManageService {
             logger.log(Level.INFO, "DefineVenueAndSeatingMap called");
 
             // check valid token
-            int userId = auth.getUserId(token).getValue();
+            int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
@@ -140,7 +135,7 @@ public class EventCompanyManageService {
             logger.log(Level.INFO, "createEvent called");
 
             // check valid token
-            int creatorId = auth.getUserId(token).getValue();
+            int creatorId = getUserIdFromToken(token);
             if (creatorId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(null, "Invalid token");
@@ -202,7 +197,7 @@ public class EventCompanyManageService {
             logger.log(Level.INFO, "UpdateEventDate called");
 
             // check valid token
-            int userId = auth.getUserId(token).getValue();
+            int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
@@ -255,7 +250,7 @@ public class EventCompanyManageService {
             logger.log(Level.INFO, "AddZonesToEventMap called");
 
             // check valid token
-            int userId = auth.getUserId(token).getValue();
+            int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
@@ -328,7 +323,7 @@ public class EventCompanyManageService {
     public Response<Boolean> DeleteEvent(String token, Integer eventId) {
         return RetryHelper.executeWithRetry(()->{
             logger.log(Level.INFO, "DeleteEvent called");
-            int userId = auth.getUserId(token).getValue();
+            int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
@@ -390,7 +385,7 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "getOrdersByCompany called");
-            int userId = auth.getUserId(token).getValue();
+            int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(null, "Invalid token");
@@ -448,7 +443,7 @@ public class EventCompanyManageService {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 boolean isMember = "MEMBER".equals(role);
                 boolean isUserPermitted = company.isActive() || (isMember && company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES));
                 if (!isUserPermitted) {
@@ -501,7 +496,7 @@ public class EventCompanyManageService {
                 logger.log(Level.SEVERE, "company not found");
                 return new Response<>(null, "company not found");
             }
-            int userId = auth.getUserId(token).getValue();
+            int userId = getUserIdFromToken(token);
             boolean isMember = userId != -1;
             boolean isUserPermitted = isMember && (company.getCompanyPermission().checkPermission(userId, PermissionType.GENERATE_SALES_REPORTS)); 
             //The requerment is just for the Owner 
@@ -552,7 +547,7 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");
 
-            int userId = auth.getUserId(token).getValue();
+            int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
@@ -613,7 +608,7 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("addRuleToEvent called for eventId: " + eventId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
                 if (!accessValidator.hasWriteAccess(userId))
@@ -657,7 +652,7 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("removeRuleFromEvent called for eventId: " + eventId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
                 if (!accessValidator.hasWriteAccess(userId))
@@ -701,7 +696,7 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("addDiscountToEvent called for eventId: " + eventId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
                 if (!accessValidator.hasWriteAccess(userId))
@@ -745,7 +740,7 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("removeDiscountFromEvent called for eventId: " + eventId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
                 if (!accessValidator.hasWriteAccess(userId))
@@ -789,7 +784,7 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("changeEventPurchasePolicyType called for eventId: " + eventId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
                 if (!accessValidator.hasWriteAccess(userId))
@@ -824,7 +819,7 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("changeEventDiscountPolicyType called for eventId: " + eventId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
                 if (!accessValidator.hasWriteAccess(userId))
@@ -894,7 +889,15 @@ public class EventCompanyManageService {
             }
         });
     }
-    // Helper method to send a real-time notification or save it as delayed if the user is offline.
+        private int getUserIdFromToken(String token) {
+        String email = auth.getUserEmail(token).getValue();
+        if (email != null) {
+            Member m = userRepo.findUserByEmail(email);
+            if (m != null) return m.getUserId();
+        }
+        return -1;
+    }
+     // Helper method to send a real-time notification or save it as delayed if the user is offline.
     private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() -> {
             try {
