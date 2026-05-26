@@ -3,6 +3,7 @@ package application;
 import DTO.NotifyDTO;
 import DTO.NotifyPayload;
 import DTO.NotifyType;
+import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.PermissionType;
@@ -34,19 +35,19 @@ public class LotteryService {
     private final IAuth auth;
     private final ScheduledExecutorService scheduler; // ScheduledExecutorService is used to schedule tasks to run after a given delay
     private final ICompanyRepo companyRepo;
-    private final IAccessValidator accessValidator;
+    private final ISuspensionRepo suspensionRepo;
     private final INotifier notifier;
     private final IUserRepo userRepo;
 
     @Autowired
-    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth, ICompanyRepo companyRepo, IAccessValidator accessValidator, INotifier notifier, IUserRepo userRepo) {
+    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth, ICompanyRepo companyRepo, ISuspensionRepo suspensionRepo, INotifier notifier, IUserRepo userRepo) {
         this.lotteryRepo = lotteryRepo;
         this.eventRepo = eventRepo;
         this.logger = Logger.getLogger(LotteryService.class.getName());
         this.auth = auth;
         this.scheduler = Executors.newScheduledThreadPool(10);
         this.companyRepo = companyRepo;
-        this.accessValidator = accessValidator;
+        this.suspensionRepo=suspensionRepo;
         this.notifier = notifier;
         this.userRepo = userRepo;
     }
@@ -61,9 +62,9 @@ public class LotteryService {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
             }
-            if(!accessValidator.hasWriteAccess(userId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
             try {
                 Event event = eventRepo.findById(eventId);
@@ -189,9 +190,9 @@ public class LotteryService {
                 logger.severe("User is not logged in");
                 return new Response<>(false, "User is not logged in");
             }
-            if(!accessValidator.hasWriteAccess(userId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
 
             try {

@@ -82,7 +82,7 @@ public class SuspensionRepoImpl implements ISuspensionRepo {
 
 
     @Override
-    public boolean hasActiveSuspension(int userId) {
+    public boolean haveActiveSuspension(int userId) {
         List<Integer> suspensionsIds = suspensionsIdByUserID.get(userId);
         if(suspensionsIds==null){
             return false;

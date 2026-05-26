@@ -1,6 +1,7 @@
 package application;
 
 import DTO.*;
+import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.*;
@@ -35,7 +36,7 @@ public class EventCompanyManageService {
     private final Logger logger;
     private final IAuth auth;
     private final IPaymentSystem paymentSystem;
-    private final IAccessValidator accessValidator;
+    private final ISuspensionRepo suspensionRepo;
     private final INotifier notifier;
     private final IUserRepo userRepo;
     AtomicInteger ticketIdGenerator = new AtomicInteger(1);
@@ -43,13 +44,13 @@ public class EventCompanyManageService {
 
 
     @Autowired
-    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, IAccessValidator accessValidator,INotifier notifier, IUserRepo userRepo) {
+    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo,INotifier notifier, IUserRepo userRepo) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;
         this.auth = auth;
         this.logger = Logger.getLogger(EventCompanyManageService.class.getName());
         this.paymentSystem = paymentSystem;
-        this.accessValidator = accessValidator;
+        this.suspensionRepo = suspensionRepo;
         this.notifier = notifier;
         this.userRepo = userRepo;
     }
@@ -66,9 +67,9 @@ public class EventCompanyManageService {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
             }
-            if(!accessValidator.hasWriteAccess(userId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
             try {
                 Event event = eventRepo.findById(eventId);
@@ -138,9 +139,9 @@ public class EventCompanyManageService {
                 logger.severe("Invalid token");
                 return new Response<>(null, "Invalid token");
             }
-            if(!accessValidator.hasWriteAccess(creatorId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            if (suspensionRepo.haveActiveSuspension(creatorId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
 
             try {
@@ -200,9 +201,9 @@ public class EventCompanyManageService {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
             }
-            if(!accessValidator.hasWriteAccess(userId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
             try {
                 Event event = eventRepo.findById(eventId);
@@ -253,9 +254,9 @@ public class EventCompanyManageService {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
             }
-            if(!accessValidator.hasWriteAccess(userId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
 
             try {
@@ -326,9 +327,9 @@ public class EventCompanyManageService {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
             }
-            if(!accessValidator.hasWriteAccess(userId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
             try{
                 Event event = eventRepo.findById(eventId);
@@ -609,9 +610,10 @@ public class EventCompanyManageService {
                 int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("user does not have write access.");
-
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 if (ruleDTO == null)
                     return Response.error("Invalid rule data");
 
@@ -653,9 +655,10 @@ public class EventCompanyManageService {
                 int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("user does not have write access.");
-
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 if (ruleDTO == null)
                     return Response.error("Invalid rule data");
 
@@ -697,9 +700,10 @@ public class EventCompanyManageService {
                 int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("user does not have write access.");
-
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 if (discountDTO == null)
                     return Response.error("Invalid discount data");
 
@@ -741,9 +745,10 @@ public class EventCompanyManageService {
                 int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("user does not have write access.");
-
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 if (discountDTO == null)
                     return Response.error("Invalid discount data");
 
@@ -785,9 +790,10 @@ public class EventCompanyManageService {
                 int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("user does not have write access.");
-
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 Event event = eventRepo.findById(eventId);
                 Company company = companyRepo.findById(event.getCompanyId());
                 if (!company.isActive())
@@ -820,9 +826,10 @@ public class EventCompanyManageService {
                 int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("user does not have write access.");
-
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 Event event = eventRepo.findById(eventId);
                 Company company = companyRepo.findById(event.getCompanyId());
                 if (!company.isActive())
