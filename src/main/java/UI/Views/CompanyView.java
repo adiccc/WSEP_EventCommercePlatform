@@ -198,7 +198,12 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
                 e -> openSalesReportDialog(token));
         salesBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
 
-        HorizontalLayout bar = new HorizontalLayout(rolesBtn, policyBtn, ordersBtn, salesBtn);
+        Button createEventBtn = new Button("🎫 Create Event",
+                e -> getUI().ifPresent(ui ->
+                        ui.navigate("company/" + companyId + "/create-event")));
+        createEventBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        HorizontalLayout bar = new HorizontalLayout(createEventBtn, rolesBtn, policyBtn, ordersBtn, salesBtn);
         bar.getStyle()
                 .set("padding", "0.5rem 0")
                 .set("margin-bottom", "0.25rem");
@@ -236,6 +241,16 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
                     e -> openSalesReportDialog(token));
             salesBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
             bar.add(salesBtn);
+        }
+
+        if (perms != null && perms.contains(PermissionType.CREATE_EVENT)) {
+            Button createEventBtn = new Button("🎫 Create Event",
+                    e -> getUI().ifPresent(ui ->
+                            ui.navigate("company/" + companyId + "/create-event")));
+
+            createEventBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+            bar.add(createEventBtn);
         }
 
         return bar;

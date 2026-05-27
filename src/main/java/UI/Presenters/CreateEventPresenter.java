@@ -1,11 +1,15 @@
 package UI.Presenters;
 
+import DTO.ElementPositionDTO;
+import DTO.SeatingZoneDTO;
+import DTO.StandingZoneDTO;
 import application.EventCompanyManageService;
 import application.Response;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public class CreateEventPresenter {
 
@@ -34,6 +38,24 @@ public class CreateEventPresenter {
                 hasLottery,
                 location,
                 category
+        );
+    }
+
+    public Response<Boolean> defineVenueAndSeatingMap(
+            String token,
+            Integer eventId,
+            ElementPositionDTO stage,
+            List<ElementPositionDTO> entries,
+            List<StandingZoneDTO> standingZones,
+            List<SeatingZoneDTO> seatingZones
+    ) {
+        return eventCompanyManageService.DefineVenueAndSeatingMap(
+                token,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
         );
     }
 }
