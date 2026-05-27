@@ -60,7 +60,6 @@ class EventCompanyManageServiceTest {
     private int managerId;
     private IAuth auth;
     private ISuspensionRepo suspensionRepo;
-    private IAccessValidator accessValidator;
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
     private IEventRepo eventRepo;
@@ -91,7 +90,6 @@ class EventCompanyManageServiceTest {
         passwordEncoder=new PasswordEncoderUtil();
         tokenService = new TokenService();
         suspensionRepo = new SuspensionRepoImpl();
-        accessValidator=new AccessValidator(suspensionRepo);
         auth=new Auth(tokenService);
         companyRepo=new CompanyRepoImpl();
         eventRepo = new EventRepoImpl();
@@ -103,15 +101,15 @@ class EventCompanyManageServiceTest {
         eventService=new EventService(auth,eventRepo);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,accessValidator,notifier,userRepo, 100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,userRepo, 100);
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete order repo from company service construture
-        companyService=new CompanyService(auth,companyRepo,userRepo,accessValidator,notifier);
+        companyService=new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier);
         eventCompanyManageService = new EventCompanyManageService(
                 companyRepo,
                 eventRepo,
                 auth,
-                paymentSystem,accessValidator,notifier,userRepo
+                paymentSystem,suspensionRepo,notifier,userRepo
         );
 
         validToken1=null; // user with all permissions

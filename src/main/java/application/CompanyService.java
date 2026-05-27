@@ -5,6 +5,7 @@ import java.util.logging.Logger;
 
 import DTO.*;
 import Exception.OptimisticLockingFailureException;
+import domain.Suspension.ISuspensionRepo;
 import domain.company.*;
 import domain.dataType.PermissionType;
 import domain.dto.CompanyDTO;
@@ -28,7 +29,7 @@ public class CompanyService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
 
     private final IAuth auth;
-    private final IAccessValidator accessValidator;
+    private final ISuspensionRepo suspensionRepo;
     private final ICompanyRepo companyRepo;
     private final IUserRepo userRepo;
     private final INotifier notifier;
@@ -36,11 +37,11 @@ public class CompanyService {
 
     @Autowired
     public CompanyService( IAuth auth, ICompanyRepo companyRepo,
-                          IUserRepo userRepo, IAccessValidator accessValidator,INotifier notifier) {
+                          IUserRepo userRepo,ISuspensionRepo suspensionRepo,INotifier notifier) {
         this.auth = auth;
         this.companyRepo = companyRepo;
         this.userRepo = userRepo;
-        this.accessValidator = accessValidator;
+        this.suspensionRepo = suspensionRepo;
         this.notifier = notifier;
     }
 
@@ -57,9 +58,9 @@ public class CompanyService {
                 if (!auth.isLoggedIn(sessionToken).getValue()) {
                     return new Response<>(null, "User must be logged in to create a company.");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("User " + userId + " does not have write access.");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(sessionToken))) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
 
                 if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
@@ -241,9 +242,9 @@ public class CompanyService {
                     logger.warning("addRuleToCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("addRuleToCompany failed: invalid or expired token");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
 
                 Company company = companyRepo.findById(companyId);
@@ -291,9 +292,9 @@ public class CompanyService {
                     logger.warning("removeRuleFromCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("removeRuleFromCompany failed: invalid or expired token");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 Company company = companyRepo.findById(companyId);
                 if (company == null) {
@@ -344,9 +345,9 @@ public class CompanyService {
                     logger.warning("addDiscountToCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("addDiscountToCompany failed: invalid or expired token");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
 
                 // 2. Company must exist
@@ -408,9 +409,9 @@ public class CompanyService {
                     logger.warning("removeDiscountFromCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("removeDiscountFromCompany failed: invalid or expired token");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
 
                 // 2. Company must exist
@@ -467,9 +468,10 @@ public class CompanyService {
                 int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("User does not have write access");
-
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 Company company = companyRepo.findById(companyId);
                 if (!company.isActive())
                     return Response.error("Company is not active");
@@ -499,9 +501,10 @@ public class CompanyService {
                 int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("User does not have write access");
-
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 Company company = companyRepo.findById(companyId);
                 if (!company.isActive())
                     return Response.error("Company is not active");
@@ -582,8 +585,9 @@ public class CompanyService {
                     logger.warning("updateManagerPermissions failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 if (newPermissions == null) {
                     logger.warning("updateManagerPermissions failed: null permissions list");
@@ -641,9 +645,9 @@ public class CompanyService {
                     logger.warning("requestAppointOwner failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(appointerId)){
-                    logger.warning("requestAppointOwner failed: appointee " + appointeeId + " doesnt have write access");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(appointerId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 Company company;
                 try {
@@ -699,9 +703,9 @@ public class CompanyService {
                     logger.warning("respondToOwnerAppointment failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("respondToOwnerAppointment failed: user does not have write access");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 Company company;
                 try {
@@ -761,9 +765,9 @@ public class CompanyService {
                     logger.warning("requestAppointManager failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(appointerId)){
-                    logger.warning("requestAppointManager failed: appointee does not have write access");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(appointerId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 Company company;
                 try {
@@ -823,9 +827,9 @@ public class CompanyService {
                     logger.warning("respondToManagerAppointment failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("respondToManagerAppointment failed: user doesnt have write access");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 Company company;
                 try {
@@ -881,9 +885,9 @@ public class CompanyService {
                     logger.warning("removeManagerAppointment failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(actingOwnerId)){
-                    logger.warning("removeManagerAppointment failed: user doesnt have write access");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(actingOwnerId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 Company company;
                 try {
@@ -965,9 +969,9 @@ public class CompanyService {
                 return new Response<>(false, "Invalid or expired token, deactivate failed");
             }
             int userId = getUserIdFromToken(ownerToken);
-            if (!accessValidator.hasWriteAccess(userId)) {
-                logger.warning("deactivateCompany failed: user doesnt have write access");
-                return new Response<>(null, "user does not have write access.");
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
             try {
                 Company company = companyRepo.findById(companyId);

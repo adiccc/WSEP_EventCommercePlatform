@@ -49,7 +49,6 @@ class LotteryServiceTest {
         private String validToken2;
         private String validToken3;
         private IAuth auth;
-        private IAccessValidator accessValidator;
         private ISuspensionRepo suspensionRepo;
         private IUserRepo userRepo;
         private IPasswordEncoder passwordEncoder;
@@ -68,7 +67,6 @@ class LotteryServiceTest {
                 auth = new Auth(tokenService);
                 userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier);
                 suspensionRepo = new SuspensionRepoImpl();
-                accessValidator = new AccessValidator(suspensionRepo);
 
                 CompanyRepoImpl companyRepo = new CompanyRepoImpl();
                 eventRepo = new EventRepoImpl();
@@ -78,12 +76,12 @@ class LotteryServiceTest {
                 notifier = new VaadinNotifier();
 
                 userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier);
-                CompanyService companyService = new CompanyService(auth, companyRepo, userRepo, accessValidator,
+                CompanyService companyService = new CompanyService(auth, companyRepo, userRepo, suspensionRepo,
                                 notifier);
                 eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,
-                                accessValidator, notifier, userRepo);
+                                suspensionRepo, notifier, userRepo);
 
-                lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo, accessValidator,
+                lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo, suspensionRepo,
                                 notifier, userRepo);
 
                 // user with permission

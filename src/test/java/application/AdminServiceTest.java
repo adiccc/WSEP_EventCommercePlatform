@@ -45,7 +45,6 @@ class AdminServiceTest {
     private String nonAdminToken;
     private ICompanyRepo companyRepo;
     private IUserRepo userRepo;
-    private IAccessValidator accessValidator;
     private ISuspensionRepo suspensionRepo;
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
@@ -86,7 +85,6 @@ class AdminServiceTest {
 
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         auth = new Auth(tokenService, Set.of(ADMIN_EMAIL));
-        accessValidator = new AccessValidator(suspensionRepo);
         notifier = new VaadinNotifier();
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
 
@@ -94,10 +92,10 @@ class AdminServiceTest {
 
         IActiveOrderRepo activeOrderRepo =new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo = new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,accessValidator,notifier,userRepo,100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,suspensionRepo,notifier,userRepo,100);
 
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier,userRepo);
-        companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator,notifier);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo);
+        companyService = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier);
 
         UserDTO adminDTO = new UserDTO(ADMIN_EMAIL, "Admin", "User", PASSWORD, 1, 1, 1990, "City", "050-000-0000");
         UserDTO userDTO = new UserDTO(USER_EMAIL, "Regular", "User", PASSWORD, 1, 1, 1990, "City", "050-111-1111");
@@ -1290,7 +1288,7 @@ class AdminServiceTest {
         assertTrue(response.getValue());
         assertTrue(response.getMessage().contains("Suspension succeeded"));
 
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
         assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
     }
 
@@ -1309,7 +1307,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     @Test
@@ -1325,7 +1323,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     @Test
@@ -1361,7 +1359,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(suspendedUserId);
         assertTrue(member.isSuspended());
 
-        assertFalse(accessValidator.hasWriteAccess(suspendedUserId));
+        assertTrue(suspensionRepo.haveActiveSuspension(suspendedUserId));
     }
 
     @Test
@@ -1377,7 +1375,7 @@ class AdminServiceTest {
         assertTrue(response.getMessage().contains("Suspension succeeded"));
 
         assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     @Test
@@ -1396,7 +1394,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     @Test
@@ -1414,7 +1412,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     @Test
@@ -1451,7 +1449,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(suspendedUserId);
         assertTrue(member.isSuspended());
 
-        assertFalse(accessValidator.hasWriteAccess(suspendedUserId));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     @Test
@@ -1469,7 +1467,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     // Race Condition
@@ -1517,7 +1515,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(suspenedUserId);
 
         assertTrue(member.isSuspended(), "User should be suspended");
-        assertFalse(accessValidator.hasWriteAccess(suspenedUserId), "Suspended user should not have write access");
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
 
         executor.shutdown();
     }
@@ -1532,7 +1530,7 @@ class AdminServiceTest {
 
         assertTrue(suspendResponse.getValue());
         assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
 
         // Act
         Response<Boolean> response = adminService.UnsuspendUser(adminToken, userIdNotSuspened);
@@ -1544,7 +1542,8 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should have write access");
+
     }
 
     @Test
@@ -1554,7 +1553,7 @@ class AdminServiceTest {
 
         assertTrue(suspendResponse.getValue());
         assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
 
         // Act
         Response<Boolean> response = adminService.UnsuspendUser(adminToken, userIdNotSuspened);
@@ -1566,7 +1565,8 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should have write access");
+
     }
 
     @Test
@@ -1577,7 +1577,8 @@ class AdminServiceTest {
 
         assertTrue(suspendResponse.getValue());
         assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
+
 
         userService.logout(adminToken);
 
@@ -1591,7 +1592,8 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertTrue(member.isSuspended());
 
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
+
     }
 
     @Test
@@ -1602,7 +1604,8 @@ class AdminServiceTest {
 
         assertTrue(suspendResponse.getValue());
         assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
+
 
         // Act
         Response<Boolean> response = adminService.UnsuspendUser(nonAdminToken, userIdNotSuspened);
@@ -1614,7 +1617,8 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertTrue(member.isSuspended());
 
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
+
     }
 
     @Test
@@ -1634,7 +1638,8 @@ class AdminServiceTest {
     void GivenActiveUser_WhenCancelUserSuspension_ThenUserIsNotSuspendedErrorReturned() {
         // Arrange
         assertFalse(userRepo.findById(userIdNotSuspened).isSuspended());
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should have write access");
+
 
         // Act
         Response<Boolean> response = adminService.UnsuspendUser(adminToken, userIdNotSuspened);
@@ -1646,7 +1651,8 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should have write access");
+
     }
 
     // Race Condition
@@ -1659,7 +1665,8 @@ class AdminServiceTest {
         Response<Boolean> suspendResponse = adminService.SuspendUser(adminToken, suspendedUserId);
         assertTrue(suspendResponse.getValue());
         assertTrue(userRepo.findById(suspendedUserId).isSuspended());
-        assertFalse(accessValidator.hasWriteAccess(suspendedUserId));
+        assertTrue(suspensionRepo.haveActiveSuspension(suspendedUserId), "Suspended user should not have write access");
+
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch startGun = new CountDownLatch(1);
@@ -1713,8 +1720,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(suspendedUserId);
 
         assertFalse(member.isSuspended(), "User should not be suspended after unsuspend");
-        assertTrue(accessValidator.hasWriteAccess(suspendedUserId), "Unsuspended user should have write access");
-        assertFalse(suspensionRepo.hasActiveSuspension(suspendedUserId), "User should not have an active suspension");
+        assertFalse(suspensionRepo.haveActiveSuspension(suspendedUserId), "User should not have an active suspension");
 
         long successfulUnsuspensions = responses.stream()
                 .filter(Response::getValue)
@@ -1828,13 +1834,15 @@ class AdminServiceTest {
                 adminService.SuspendUser(adminToken, userIdNotSuspened);
 
         assertTrue(suspendResponse.getValue());
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
+
 
         Response<Boolean> unsuspendResponse =
                 adminService.UnsuspendUser(adminToken, userIdNotSuspened);
 
         assertTrue(unsuspendResponse.getValue());
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should have write access");
+
 
         // Act
         Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(adminToken);
@@ -1853,7 +1861,8 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
+
     }
 
 }

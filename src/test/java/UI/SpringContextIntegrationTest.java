@@ -8,7 +8,6 @@ import application.EventService;
 import application.LotteryService;
 import application.TokenService;
 import application.UserService;
-import infrastructure.AccessValidator;
 import infrastructure.Auth;
 import infrastructure.PasswordEncoderUtil;
 import infrastructure.PaymentSystemProxy;
@@ -56,9 +55,6 @@ public class SpringContextIntegrationTest {
     private Auth auth;
 
     @Autowired
-    private AccessValidator accessValidator;
-
-    @Autowired
     private PaymentSystemProxy paymentSystemProxy;
 
     @Autowired
@@ -86,7 +82,6 @@ public class SpringContextIntegrationTest {
         assertNotNull(eventCompanyManageService);
         assertNotNull(tokenService);
         assertNotNull(auth);
-        assertNotNull(accessValidator);
         assertNotNull(paymentSystemProxy);
         assertNotNull(ticketSupplyProxy);
         assertNotNull(passwordEncoderUtil);

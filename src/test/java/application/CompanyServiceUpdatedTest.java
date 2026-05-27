@@ -55,7 +55,6 @@ class CompanyServiceUpdatedTest {
     private UserService userService;
     private ICompanyRepo companyRepo;
     private IAuth auth;
-    private IAccessValidator accessValidator;
     private ISuspensionRepo suspensionRepo;
     private IUserRepo userRepo;
     private AdminService adminService;
@@ -68,7 +67,6 @@ class CompanyServiceUpdatedTest {
     void setUp() {
         LoggerSetup.setup();
         suspensionRepo=new SuspensionRepoImpl();
-        accessValidator=new AccessValidator(suspensionRepo);
         userRepo = new UserRepo();
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         TokenService tokenService = new TokenService();
@@ -77,7 +75,7 @@ class CompanyServiceUpdatedTest {
         companyRepo = new CompanyRepoImpl();
         notifier = Mockito.spy(new VaadinNotifier());
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
-        service = new CompanyService(auth, companyRepo, userRepo,accessValidator,notifier);
+        service = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier);
 
         UserDTO ownerDTO = new UserDTO("owner@test.com", "Owner", "Test", "Password123!", 1, 1, 2000, "City", "050-123-4567");
         userService.registerUser(null, ownerDTO);

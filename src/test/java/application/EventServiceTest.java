@@ -38,7 +38,6 @@ class EventServiceTest {
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
     private ISuspensionRepo suspensionRepo;
-    private IAccessValidator accessValidator;
     private EventRepoImpl eventRepo;
     private EventService service;
     private INotifier notifier;
@@ -64,8 +63,7 @@ class EventServiceTest {
         CompanyRepoImpl companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         suspensionRepo=new SuspensionRepoImpl();
-        accessValidator=new AccessValidator(suspensionRepo);
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier,userRepo);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo);
         service = new EventService(auth, eventRepo);
         notifier = new VaadinNotifier();
 
@@ -74,7 +72,7 @@ class EventServiceTest {
         userService.registerUser(validToken,userDTO);
         validToken=userService.login("user1@test.com","mytest").getValue();
         GUEST_TOKEN = userService.continueAsGuest().getValue();
-        CompanyService companyService=new CompanyService(auth,companyRepo,userRepo,accessValidator,notifier);
+        CompanyService companyService=new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier);
         Response<Company> c1=companyService.createProductionCompany(validToken,company1,"test-company","testC@company.com","054-5556677","leumi");
 
         // Active event (company1)

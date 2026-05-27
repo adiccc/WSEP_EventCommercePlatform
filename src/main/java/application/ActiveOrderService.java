@@ -2,6 +2,7 @@ package application;
 
 import DTO.*;
 
+import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
@@ -44,7 +45,7 @@ public class ActiveOrderService {
     private final ILotteryRepo lotteryRepo;
     private final IUserRepo userRepo;
     private final IAuth auth;
-    private final IAccessValidator accessValidator;
+    private final ISuspensionRepo suspensionRepo;
     private final IPaymentSystem paymentSystem;
     private final ITicketSupply ticketSupply;
     private final INotifier notifier;
@@ -60,7 +61,7 @@ public class ActiveOrderService {
             ILotteryRepo lotteryRepo,
             IPaymentSystem paymentSystem,
             ITicketSupply ticketSupply,
-            IAccessValidator accessValidator,
+            ISuspensionRepo suspensionRepo,
             INotifier notifier,
             IUserRepo userRepo,
             @Value("${active-order.capacity:20}") int capacity) {
@@ -71,7 +72,7 @@ public class ActiveOrderService {
         this.auth = auth;
         this.paymentSystem = paymentSystem;
         this.ticketSupply = ticketSupply;
-        this.accessValidator = accessValidator;
+        this.suspensionRepo=suspensionRepo;
         this.notifier = notifier;
         this.capacity = capacity;
         this.userRepo = userRepo;
@@ -108,9 +109,9 @@ public class ActiveOrderService {
                 return new Response<>(null, "Invalid token");
             }
             int userId = getUserIdFromToken(token);
-            if (!accessValidator.hasWriteAccess(userId)) {
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
 
             try {
@@ -254,12 +255,9 @@ public class ActiveOrderService {
 
 
                 int userId = getUserIdFromToken(token);
-
-                if (!accessValidator.hasWriteAccess(userId)) {
-                    logger.severe("User does not have write access");
-                    return new Response<>(
-                            null,
-                            "User does not have write access");
+                if (userId!=-1 && suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
 
                 Event event = eventRepo.findById(eventId);
@@ -344,11 +342,10 @@ public class ActiveOrderService {
                     return new Response<>(null, "Invalid token");
                 }
 
-                int userId =getUserIdFromToken(token);
-
-                if (!accessValidator.hasWriteAccess(userId)) {
-                    logger.log(Level.SEVERE, "Lottery code validation failed: user does not have write access");
-                    return new Response<>(null, "User does not have write access");
+                int userId = getUserIdFromToken(token);
+                if (userId!=-1 && suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
 
                 Event event = eventRepo.findById(eventId);
@@ -446,9 +443,10 @@ public class ActiveOrderService {
             logger.log(Level.SEVERE, "identifier is null");
             return new Response<>(null, "Invalid identifier supplied");
         }
-        if(!accessValidator.hasWriteAccess(getUserIdFromToken(identifier))){
-            logger.severe("User does not have write access");
-            return new Response<>(null, "user does not have write access.");
+        int userId =getUserIdFromToken(identifier);
+        if (userId!=-1 && suspensionRepo.haveActiveSuspension(userId)) {
+            logger.severe("User does not have write access caused by suspension");
+            return new Response<>(null, "user does not have write access caused by suspension.");
         }
         try {
             int totalSeatingTickets = seatingZones.values().stream()
@@ -551,9 +549,9 @@ public class ActiveOrderService {
                         return new Response<>(null, "not a valid user email");
                     }
 
-                    if (!accessValidator.hasWriteAccess(getUserIdFromToken(token))) {
-                        logger.severe("User does not have write access");
-                        return new Response<>(null, "user does not have write access.");
+                    if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(token))) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
                     }
                 }
 
@@ -643,9 +641,9 @@ public class ActiveOrderService {
                         return new Response<>(null, "not a valid user email");
 
                     }
-                    if(!accessValidator.hasWriteAccess(getUserIdFromToken(token))){
-                        logger.severe("User does not have write access");
-                        return new Response<>(null, "user does not have write access.");
+                    if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(token))) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
                     }
                 }
                 activeOrder = activeOrderRepo.findById(activeOrderId);
@@ -891,9 +889,9 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "user not logged in");
                     return new Response<>(null, "user not logged in");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.severe("User does not have write access");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(token))) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 String userEmail = auth.getUserEmail(token).getValue();
                 ActiveOrderDTO order = activeOrderRepo.findOrderByUserId(userEmail);
@@ -934,9 +932,9 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
-                if(!accessValidator.hasWriteAccess(getUserIdFromToken(token))){
-                    logger.severe("User does not have write access");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(token))) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 String email = auth.getUserEmail(token).getValue();
 
@@ -1168,7 +1166,7 @@ public class ActiveOrderService {
             }
         }
     }
-        private int getUserIdFromToken(String token) {
+    private int getUserIdFromToken(String token) {
         String email = auth.getUserEmail(token).getValue();
         if (email != null) {
             Member m = userRepo.findUserByEmail(email);
