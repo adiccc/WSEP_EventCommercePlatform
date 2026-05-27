@@ -1399,70 +1399,96 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenValidActiveOrder_WhenCheckoutAndPayment_ThenOrderCreatedAndActiveOrderDeleted() {
-        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
-        Map<String, Integer> standing = Map.of("floor", 2);
+    void GivenValidActiveOrder_WhenCheckoutAndPayment_ThenOrderCreatedAndActiveOrderDeleted() throws Exception {
+        String buyerEmail = auth.getUserEmail(validToken).getValue();
 
-        service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
+        CountDownLatch notificationLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
 
-        Response<Integer> selectResponse =
-                service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+        Registration registration = Broadcaster.registerUser(buyerEmail, notification -> {
+            receivedNotification.set(notification);
+            notificationLatch.countDown();
+        });
 
-        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        try {
+            Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+            Map<String, Integer> standing = Map.of("floor", 2);
 
-        int activeOrderId = selectResponse.getValue();
+            service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
 
-        ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
-        List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
+            Response<Integer> selectResponse =
+                    service.userSelectTickets(validToken, concurrentEventId, seating, standing);
 
-        // validation ticket status
-        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
+            assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
 
-        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
-                .thenReturn("payment-123");
+            int activeOrderId = selectResponse.getValue();
 
-        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
-        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+            ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
+            List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
 
-        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
-                .thenReturn(supplyResult);
+            // validation ticket status
+            assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
 
-        PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+            Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                    .thenReturn("payment-123");
 
-        Response<CheckoutPriceDTO> checkoutPriceResponse =
-                service.prepareCheckout(validToken, activeOrderId);
+            TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+            Mockito.when(supplyResult.isSuccess()).thenReturn(true);
 
-        assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
+            Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                    .thenReturn(supplyResult);
 
-        Response<Integer> checkoutResponse =
-                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+            PaymentDetailsDTO paymentDetails =
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
 
-        assertNotNull(checkoutResponse.getValue(),
-                "Checkout should return created order id. Message: " + checkoutResponse.getMessage());
+            Response<CheckoutPriceDTO> checkoutPriceResponse =
+                    service.prepareCheckout(validToken, activeOrderId);
 
-        assertEquals("Purchase completed successfully", checkoutResponse.getMessage());
+            assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
 
-        assertThrows(NoSuchElementException.class,
-                () -> activeOrderRepo.findById(activeOrderId),
-                "Active order should be deleted after successful checkout");
+            Response<Integer> checkoutResponse =
+                    service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
 
-        assertEquals(1, eventRepo.findById(concurrentEventId).getOrders().size(),
-                "Successful checkout should create exactly one order");
+            assertNotNull(checkoutResponse.getValue(),
+                    "Checkout should return created order id. Message: " + checkoutResponse.getMessage());
 
-        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.SOLD);
-        Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
-        Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
+            assertEquals("Purchase completed successfully", checkoutResponse.getMessage());
 
-        Member buyer = userRepo.findUserByEmail("testuser1@gmail.com");
-        assertEquals(1, buyer.getDelayedNotifications().size(),
-                "Buyer should receive exactly one purchase-confirmation notification");
-        NotifyDTO confirmation = buyer.getDelayedNotifications().get(0);
-        assertEquals(NotifyType.GENERAL_POPUP, confirmation.getType());
-        assertTrue(confirmation.getPayload().getMessage().contains("completed successfully"),
-                "Confirmation message should state the order completed successfully: "
-                        + confirmation.getPayload().getMessage());
-        assertEquals(concurrentEventId, confirmation.getPayload().getEventId().intValue());
+            assertThrows(NoSuchElementException.class,
+                    () -> activeOrderRepo.findById(activeOrderId),
+                    "Active order should be deleted after successful checkout");
+
+            assertEquals(1, eventRepo.findById(concurrentEventId).getOrders().size(),
+                    "Successful checkout should create exactly one order");
+
+            assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.SOLD);
+            Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+            Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
+
+            assertTrue(notificationLatch.await(2, TimeUnit.SECONDS),
+                    "Online buyer should receive the purchase-confirmation notification in real time");
+
+            NotifyDTO confirmation = receivedNotification.get();
+
+            assertNotNull(confirmation, "Confirmation should have been received in real time");
+            assertEquals(NotifyType.GENERAL_POPUP, confirmation.getType());
+            assertTrue(confirmation.getPayload().getMessage().contains("completed successfully"),
+                    "Confirmation message should state the order completed successfully: "
+                            + confirmation.getPayload().getMessage());
+            assertEquals(concurrentEventId, confirmation.getPayload().getEventId().intValue());
+
+            Member buyer = userRepo.findUserByEmail(buyerEmail);
+            assertEquals(0, buyer.getDelayedNotifications().size(),
+                    "Online buyer should not have the confirmation saved as delayed");
+
+            Mockito.verify(notifier).notifyUser(
+                    Mockito.eq(buyerEmail),
+                    Mockito.any(NotifyDTO.class)
+            );
+
+        } finally {
+            registration.remove();
+        }
     }
 
     @Test
