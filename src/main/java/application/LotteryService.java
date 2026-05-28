@@ -55,12 +55,12 @@ public class LotteryService {
     public Response<Boolean> createLottery(String token, int eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "createLottery called");
-
+            if (getValidatedRole(token) == null) return new Response<>(false, "Invalid token");
             // check valid token
             int userId = getUserIdFromToken(token);
             if (userId == -1) {
-                logger.severe("Invalid token");
-                return new Response<>(false, "Invalid token");
+                logger.severe("Only members can create lottery");
+                return new Response<>(false, "Only members can create lottery");
             }
             if (suspensionRepo.haveActiveSuspension(userId)) {
                 logger.severe("User does not have write access caused by suspension");
@@ -184,7 +184,7 @@ public class LotteryService {
     public Response<Boolean> registerUserToLottery(String token, int eventId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "registerUserToLottery called");
-
+            if (getValidatedRole(token) == null) return new Response<>(false, "Invalid token");
             int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("User is not logged in");
@@ -247,6 +247,23 @@ public class LotteryService {
             if (m != null) return m.getUserId();
         }
         return -1;
+    }
+
+    private void notifyTokenExpired(String token) {
+        try {
+            NotifyPayload payload = new NotifyPayload("Your session has expired");
+            NotifyDTO expiredNotify = new NotifyDTO(NotifyType.TOKEN_EXPIRED, payload);
+            notifier.notifyTab(token, expiredNotify);
+        } catch (Exception e) { logger.warning("Failed to send TOKEN_EXPIRED"); }
+    }
+
+    private String getValidatedRole(String token) {
+        Response<String> roleRes = auth.getRole(token);
+        if (roleRes.getValue() == null) {
+            notifyTokenExpired(token);
+            return null;
+        }
+        return roleRes.getValue();
     }
 
     // Helper method to send a real-time notification or save it as delayed if the user is offline.

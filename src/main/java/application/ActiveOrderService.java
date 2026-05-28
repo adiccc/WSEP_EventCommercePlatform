@@ -102,7 +102,7 @@ public class ActiveOrderService {
             logger.log(Level.INFO, "enterEventPurchase called");
             cleanupExpiredOrders();
 
-            String role = auth.getRole(token).getValue();
+            String role = getValidatedRole(token);
 
             if (role == null) {
                 logger.log(Level.SEVERE, "Invalid token");
@@ -247,12 +247,11 @@ public class ActiveOrderService {
             logger.log(Level.INFO, "isRequiredLotteryCode called");
 
             try {
-                String role = auth.getRole(token).getValue();
+                String role = getValidatedRole(token);
                 if (role == null) {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
-
 
                 int userId = getUserIdFromToken(token);
                 if (userId!=-1 && suspensionRepo.haveActiveSuspension(userId)) {
@@ -335,7 +334,7 @@ public class ActiveOrderService {
             logger.log(Level.INFO, "validateLotteryCode called");
 
             try {
-                String role = auth.getRole(token).getValue();
+                String role = getValidatedRole(token);
 
                 if (role == null) {
                     logger.log(Level.SEVERE, "Lottery code validation failed: invalid token");
@@ -438,7 +437,7 @@ public class ActiveOrderService {
     public Response<Integer> userSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
         return RetryHelper.executeWithRetry(()->{
         logger.log(Level.INFO, "userSelectTickets called");
-        String role = auth.getRole(identifier).getValue();
+        String role = getValidatedRole(identifier);
         if(role == null){
             logger.log(Level.SEVERE, "identifier is null");
             return new Response<>(null, "Invalid identifier supplied");
@@ -533,7 +532,7 @@ public class ActiveOrderService {
             logger.log(Level.INFO, "prepareCheckoutPrice called");
 
             try {
-                String role = auth.getRole(token).getValue();
+                String role = getValidatedRole(token);
                 if (role == null) {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
@@ -628,7 +627,7 @@ public class ActiveOrderService {
             boolean paymentStageAcquired = false;
 
             try {
-                String role = auth.getRole(token).getValue();
+                String role = getValidatedRole(token);
                 if (role == null) {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
@@ -879,10 +878,14 @@ public class ActiveOrderService {
             }
         }
     }
-
+//TODO:: EXPIRRED TOKEN
     public Response<ActiveOrderDTO> memberProceedAnActiveOrder(String token) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "memberProceedActiveOrder called");
+            String role = getValidatedRole(token); //if token is expired
+            if (role == null) {
+                return new Response<>(null, "Invalid token");
+            }
             try {
                 int userId = getUserIdFromToken(token);
                 if(userId == -1){
@@ -927,7 +930,7 @@ public class ActiveOrderService {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "editTicketSelection called");
             try {
-                String role = auth.getRole(token).getValue();
+                String role = getValidatedRole(token);
                 if (role == null) {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
@@ -1047,7 +1050,8 @@ public class ActiveOrderService {
 
     public Response<Boolean> cancelEventQueueEntry(String token, int eventId) {
         return RetryHelper.executeWithRetry(() -> {
-            if (token == null || token.isBlank()) {
+            String role = getValidatedRole(token);
+            if (role == null) {
                 return new Response<>(false, "Invalid token");
             }
 
@@ -1114,7 +1118,7 @@ public class ActiveOrderService {
     private boolean createActiveOrderForToken(String token, int eventId) {
         boolean skipped = RetryHelper.executeWithRetry(() -> {
             try {
-                String role = auth.getRole(token).getValue();
+                String role = getValidatedRole(token);
                 String userIdentifier = token;
                 if (role.equals("MEMBER")) {
                     userIdentifier = auth.getUserEmail(token).getValue();
@@ -1208,6 +1212,25 @@ public class ActiveOrderService {
                 return new Response<>(null, "Failed to send or save notification");
             }
         });
+    }
+    private void notifyTokenExpired(String token) {
+        try {
+            NotifyPayload payload = new NotifyPayload("Your session has expired");
+            NotifyDTO expiredNotify = new NotifyDTO(NotifyType.TOKEN_EXPIRED, payload);
+            notifier.notifyTab(token, expiredNotify);
+            logger.info("Sent TOKEN_EXPIRED notification to tab: " + token);
+        } catch (Exception e) {
+            logger.warning("Failed to send TOKEN_EXPIRED notification: " + e.getMessage());
+        }
+    }
+
+    private String getValidatedRole(String token) {
+        String role = auth.getRole(token).getValue();
+        if (role == null) {
+            notifyTokenExpired(token);
+            return null;
+        }
+        return role;
     }
 
 }
