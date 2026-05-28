@@ -90,7 +90,7 @@ class ActiveOrderServiceTest {
         eventRepo = new EventRepoImpl();
         activeOrderRepo = new ActiveOrderRepoImpl();
         CompanyRepoImpl companyRepo = new CompanyRepoImpl();
-        lotteryRepo = new LotteryRepoImpl();
+        LotteryRepoImpl lotteryRepo = new LotteryRepoImpl();
 
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
@@ -826,7 +826,7 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenMixedExpiredAndActiveOrders_WhenCleanupExpiredOrders_ThenOnlyExpiredAreRemoved() throws Exception {
+    void GivenMixedExpiredAndActiveOrders_WhenCleanupExpiredOrders_ThenOnlyExpiredAreRemoved() {
         String emailA = "mix_a@mail.com";
         String emailB = "mix_b@mail.com";
         userService.registerUser("", new UserDTO(emailA, "a", "a", "pass", 1, 1, 2000, "Israel", "050-100-2000"));
@@ -952,7 +952,7 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenExpiredActiveOrder_WhenMemberProceedActiveOrder_ThenExpiredError() throws Exception {
+    void GivenExpiredActiveOrder_WhenMemberProceedActiveOrder_ThenExpiredError() {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Response<Integer> created = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
@@ -1088,7 +1088,7 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenExpiredOrder_WhenEditTicketSelection_ThenExpiredError() throws Exception {
+    void GivenExpiredOrder_WhenEditTicketSelection_ThenExpiredError() {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
@@ -4194,7 +4194,7 @@ class ActiveOrderServiceTest {
         // Arrange
         String email = "expired_select@mail.com";
         userService.registerUser("", new UserDTO(
-                email, "f", "l", "pass", 1, 1, 2000, "Israel", "050-123-4568" 
+                email, "f", "l", "pass", 1, 1, 2000, "Israel", "050-123-4568"
         ));
         String token = userService.login(email, "pass").getValue();
 
