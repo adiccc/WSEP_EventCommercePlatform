@@ -87,9 +87,9 @@ public class ActiveOrder {
         }
     }
 
-    public void returnToSelecting() {
+    public void restartCheckoutTimer() {
         if (stage == STAGE.CHECKING_OUT) {
-            stage = STAGE.SELECTING_TICKETS;
+            this.checkoutStartedAt = LocalDateTime.now();
         }
     }
 

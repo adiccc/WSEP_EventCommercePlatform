@@ -486,7 +486,7 @@ public class ActiveOrderService {
                 }
                 List<Integer> tickets = e.bookTickets(seatingZones, standingZones);
                 newActiveOrder.setTickets(tickets);
-                newActiveOrder.proceedToCheckout();
+//                newActiveOrder.proceedToCheckout();
                 this.eventRepo.store(e);
                 activeOrderRepo.store(newActiveOrder);
 
@@ -647,6 +647,7 @@ public class ActiveOrderService {
                     }
                 }
                 activeOrder = activeOrderRepo.findById(activeOrderId);
+                activeOrder.proceedToCheckout();
                 if (!(activeOrder.getUserIdentifier().equals(userIdentifier))) { // userIdentifier
                     return new Response<>(null, "Active order does not belong to user");
                 }
@@ -1017,7 +1018,7 @@ public class ActiveOrderService {
                     newTickets.addAll(added);
                 }
                 order.setTickets(newTickets);
-                order.returnToSelecting();
+
 
                 eventRepo.store(event);
                 activeOrderRepo.store(order);
@@ -1029,7 +1030,6 @@ public class ActiveOrderService {
                 logger.log(Level.SEVERE, "Order or event not found: " + e.getMessage());
                 return new Response<>(null, "Order or event not found");
             } catch (IllegalArgumentException | IllegalStateException e) {
-                // thrown by quantityExceedsPolicy, bookTickets, etc.
                 logger.log(Level.SEVERE, "Invalid edit: " + e.getMessage());
                 return new Response<>(null, "Invalid edit: " + e.getMessage());
             } catch (OptimisticLockingFailureException e) {
