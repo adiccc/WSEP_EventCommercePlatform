@@ -486,7 +486,7 @@ public class ActiveOrderService {
                 }
                 List<Integer> tickets = e.bookTickets(seatingZones, standingZones);
                 newActiveOrder.setTickets(tickets);
-//                newActiveOrder.proceedToCheckout();
+                newActiveOrder.proceedToCheckout();
                 this.eventRepo.store(e);
                 activeOrderRepo.store(newActiveOrder);
 
@@ -1018,7 +1018,7 @@ public class ActiveOrderService {
                     newTickets.addAll(added);
                 }
                 order.setTickets(newTickets);
-
+                order.restartCheckoutTimer();
 
                 eventRepo.store(event);
                 activeOrderRepo.store(order);
