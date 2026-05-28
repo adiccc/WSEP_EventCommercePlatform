@@ -1287,23 +1287,27 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenEditFromCheckingOut_WhenEditTicketSelection_ThenStageReturnsToSelecting() {
+    void GivenEditFromCheckingOut_WhenEditTicketSelection_ThenStageStaysCheckingOutAndTimerRestarts() {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
 
-        ActiveOrder o = activeOrderRepo.findById(orderId);
-        o.proceedToCheckout();
-        activeOrderRepo.store(o);
-        assertEquals(domain.activeOrder.STAGE.CHECKING_OUT,
-                activeOrderRepo.findById(orderId).getStage());
+        // Locking seats already moves the order into CHECKING_OUT and starts the seat-hold timer.
+        ActiveOrder before = activeOrderRepo.findById(orderId);
+        assertEquals(domain.activeOrder.STAGE.CHECKING_OUT, before.getStage());
+        LocalDateTime checkoutStartedBefore = before.getCheckoutStartedAt();
+        assertNotNull(checkoutStartedBefore);
 
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 6));
 
         assertNotNull(r.getValue(), "msg=" + r.getMessage());
-        assertEquals(domain.activeOrder.STAGE.SELECTING_TICKETS,
-                activeOrderRepo.findById(orderId).getStage());
+
+        // Editing keeps the seats held: stage stays CHECKING_OUT and the 10-min timer restarts.
+        ActiveOrder after = activeOrderRepo.findById(orderId);
+        assertEquals(domain.activeOrder.STAGE.CHECKING_OUT, after.getStage());
+        assertTrue(after.getCheckoutStartedAt().isAfter(checkoutStartedBefore),
+                "edit must restart the checkout (seat-hold) timer");
     }
 
     @Test

@@ -647,7 +647,6 @@ public class ActiveOrderService {
                     }
                 }
                 activeOrder = activeOrderRepo.findById(activeOrderId);
-                activeOrder.proceedToCheckout();
                 if (!(activeOrder.getUserIdentifier().equals(userIdentifier))) { // userIdentifier
                     return new Response<>(null, "Active order does not belong to user");
                 }
