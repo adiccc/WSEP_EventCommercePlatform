@@ -49,6 +49,7 @@ public class ActiveOrderService {
     private final IPaymentSystem paymentSystem;
     private final ITicketSupply ticketSupply;
     private final INotifier notifier;
+    private final PreExpirationNotificationScheduler preExpirationScheduler;
     private final int capacity;
     private final ScheduledExecutorService cleanupScheduler;
 
@@ -63,6 +64,7 @@ public class ActiveOrderService {
             ITicketSupply ticketSupply,
             ISuspensionRepo suspensionRepo,
             INotifier notifier,
+            PreExpirationNotificationScheduler preExpirationScheduler,
             IUserRepo userRepo,
             @Value("${active-order.capacity:20}") int capacity) {
         this.eventRepo = eventRepo;
@@ -74,6 +76,7 @@ public class ActiveOrderService {
         this.ticketSupply = ticketSupply;
         this.suspensionRepo=suspensionRepo;
         this.notifier = notifier;
+        this.preExpirationScheduler = preExpirationScheduler;
         this.capacity = capacity;
         this.userRepo = userRepo;
         this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -489,6 +492,9 @@ public class ActiveOrderService {
                 this.eventRepo.store(e);
                 activeOrderRepo.store(newActiveOrder);
 
+                preExpirationScheduler.scheduleOrReschedule(
+                        newActiveOrder.getId(), newActiveOrder.getCheckoutWarningTime());
+
                 logger.log(Level.INFO, "Tickets selected successfully");
                 return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
             } catch (NoSuchElementException e) {
@@ -842,6 +848,7 @@ public class ActiveOrderService {
                 }
                 if (shouldDeleteActiveOrder) {
                     activeOrderRepo.delete(activeOrderId);
+                    preExpirationScheduler.cancel(activeOrderId);
                     promoteNextInQueue(event.getId());
 
                 }
@@ -863,6 +870,7 @@ public class ActiveOrderService {
                         event.releaseTickets(current.getTickets());
                         eventRepo.store(event); // optimistic lock check
                         activeOrderRepo.delete(current.getId());
+                        preExpirationScheduler.cancel(current.getId());
                         promoteNextInQueue(event.getId());
                         return new Response<>(true, "expired");
                     } catch (NoSuchElementException e) {
@@ -1024,6 +1032,9 @@ public class ActiveOrderService {
                 eventRepo.store(event);
                 activeOrderRepo.store(order);
 
+                preExpirationScheduler.scheduleOrReschedule(
+                        order.getId(), order.getCheckoutWarningTime());
+
                 logger.log(Level.INFO, "Selection updated successfully");
                 return new Response<>(new ActiveOrderDTO(order), "Selection updated successfully");
 
@@ -1044,6 +1055,7 @@ public class ActiveOrderService {
 
     public void shutdown() {
         cleanupScheduler.shutdown();
+        preExpirationScheduler.shutdown();
     }
 
     public Response<Boolean> cancelEventQueueEntry(String token, int eventId) {

@@ -142,6 +142,9 @@ class ActiveOrderServiceTest {
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
 
+        PreExpirationNotificationScheduler preExpirationScheduler =
+                new PreExpirationNotificationScheduler(activeOrderRepo, notifier);
+
         service = new ActiveOrderService(
                 auth,
                 activeOrderRepo,
@@ -152,6 +155,7 @@ class ActiveOrderServiceTest {
                 ticketSupply,
                 suspensionRepo,
                 notifier,
+                preExpirationScheduler,
                 userRepo,
                 capacity
         );
