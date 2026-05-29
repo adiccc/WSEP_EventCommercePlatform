@@ -70,26 +70,27 @@ public class WebQueueView extends VerticalLayout {
         getElement().executeJs(
                 """
                 const TAB_ID_KEY = "eventCommerceTabId";
-    
-                let tabId = sessionStorage.getItem(TAB_ID_KEY);
-    
-                if (!tabId) {
-                    if (window.crypto && window.crypto.randomUUID) {
-                        tabId = window.crypto.randomUUID();
-                    } else {
-                        tabId = Date.now() + "-" + Math.random().toString(36).substring(2);
-                    }
-    
-                    sessionStorage.setItem(TAB_ID_KEY, tabId);
+                const QUEUE_TOKEN_KEY = "eventCommerceWebQueueToken";
+
+                // Always generate a fresh tabId so duplicate tabs don't share session state
+                let tabId;
+                if (window.crypto && window.crypto.randomUUID) {
+                    tabId = window.crypto.randomUUID();
+                } else {
+                    tabId = Date.now() + "-" + Math.random().toString(36).substring(2);
                 }
-    
-                this.$server.onBrowserTabReady(tabId);
+                sessionStorage.setItem(TAB_ID_KEY, tabId);
+
+                // Pass any saved queue token for resumption after a page refresh
+                const savedQueueToken = sessionStorage.getItem(QUEUE_TOKEN_KEY) || "";
+
+                this.$server.onBrowserTabReady(tabId, savedQueueToken);
                 """
         );
     }
 
     @ClientCallable
-    public void onBrowserTabReady(String tabId) {
+    public void onBrowserTabReady(String tabId, String savedQueueToken) {
         if (initialized) {
             return;
         }
@@ -97,19 +98,16 @@ public class WebQueueView extends VerticalLayout {
         initialized = true;
         UI.getCurrent().getElement().setProperty("currentTabId", tabId);
 
-        initializeQueueState();
+        initializeQueueState(savedQueueToken);
     }
 
-    private void initializeQueueState() {
-        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
-        String existingQueueToken = (String) VaadinSession.getCurrent().getAttribute("webQueueToken_" + tabId);
-
-        if (existingQueueToken == null || existingQueueToken.isBlank()) {
-            enterQueue();
+    private void initializeQueueState(String savedQueueToken) {
+        if (savedQueueToken != null && !savedQueueToken.isBlank()) {
+            checkCurrentStatusAndRegister(savedQueueToken);
             return;
         }
 
-        checkCurrentStatusAndRegister(existingQueueToken);
+        enterQueue();
     }
 
     private void checkCurrentStatusAndRegister(String webQueueToken) {
@@ -134,6 +132,10 @@ public class WebQueueView extends VerticalLayout {
         VaadinSession.getCurrent().setAttribute("webQueueToken_" + tabId, webQueueToken);
         VaadinSession.getCurrent().setAttribute("notificationUserIdentifier_" + tabId, webQueueToken);
         VaadinSession.getCurrent().setAttribute("webQueueAdmitted_" + tabId, false);
+
+        // Keep sessionStorage in sync so refresh can resume
+        getElement().executeJs("sessionStorage.setItem('eventCommerceWebQueueToken', $0)", webQueueToken);
+
         showWaitingState(result.getPosition());
         registerToBroadcaster(webQueueToken);
     }
@@ -149,17 +151,21 @@ public class WebQueueView extends VerticalLayout {
 
         QueueEntryResultDTO result = response.getValue();
         String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
-        VaadinSession.getCurrent().setAttribute("webQueueToken_" + tabId, result.getToken());
-        VaadinSession.getCurrent().setAttribute("notificationUserIdentifier_" + tabId, result.getToken());
+        String token = result.getToken();
+        VaadinSession.getCurrent().setAttribute("webQueueToken_" + tabId, token);
+        VaadinSession.getCurrent().setAttribute("notificationUserIdentifier_" + tabId, token);
+
+        // Persist token so a page refresh can resume queue position
+        getElement().executeJs("sessionStorage.setItem('eventCommerceWebQueueToken', $0)", token);
 
         if (result.isAdmitted()) {
-            admitUserAndNavigateToLogin(result.getToken());
+            admitUserAndNavigateToLogin(token);
             return;
         }
 
         VaadinSession.getCurrent().setAttribute("webQueueAdmitted_" + tabId, false);
         showWaitingState(result.getPosition());
-        registerToBroadcaster(result.getToken());
+        registerToBroadcaster(token);
     }
 
     private void registerToBroadcaster(String queueToken) {
@@ -244,6 +250,9 @@ public class WebQueueView extends VerticalLayout {
         VaadinSession.getCurrent().setAttribute("webQueueToken_" + tabId, webQueueToken);
         VaadinSession.getCurrent().setAttribute("webQueueAdmitted_" + tabId, true);
         VaadinSession.getCurrent().setAttribute("notificationUserIdentifier_" + tabId, null);
+
+        // Clear queue token from sessionStorage so a later duplicate/new tab starts fresh
+        getElement().executeJs("sessionStorage.removeItem('eventCommerceWebQueueToken')");
 
         showSuccess("Your turn has arrived. Please sign in or continue as guest.");
 

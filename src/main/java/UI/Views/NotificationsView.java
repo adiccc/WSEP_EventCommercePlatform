@@ -1,10 +1,13 @@
 package UI.Views;
 
 import DTO.NotifyDTO;
+import DTO.NotifyType;
 import UI.Presenters.NotificationsPresenter;
+import application.CompanyService;
 import application.Response;
 import application.UserService;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Paragraph;
@@ -12,6 +15,7 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
@@ -27,11 +31,13 @@ import java.util.List;
 public class NotificationsView extends VerticalLayout {
 
     private final NotificationsPresenter presenter;
+    private final CompanyService companyService;
     private final VerticalLayout notificationsContainer;
     private final Button markAllAsReadButton;
 
-    public NotificationsView(UserService userService) {
+    public NotificationsView(UserService userService, CompanyService companyService) {
         this.presenter = new NotificationsPresenter(userService);
+        this.companyService = companyService;
 
         setPadding(true);
         setSpacing(true);
@@ -150,7 +156,70 @@ public class NotificationsView extends VerticalLayout {
                 .set("margin-bottom", "0");
 
         card.add(typeBadge, message);
+
+        if (notification != null
+                && NotifyType.ROLE_APPOINTMENT_REQUEST.equals(notification.getType())
+                && notification.getPayload() != null
+                && notification.getPayload().getCompanyId() != null) {
+
+            int companyId = notification.getPayload().getCompanyId();
+
+            Button acceptBtn = new Button("Accept", e -> respondToAppointment(card, companyId, true));
+            acceptBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);
+            acceptBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+
+            Button rejectBtn = new Button("Reject", e -> respondToAppointment(card, companyId, false));
+            rejectBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_SMALL);
+
+            HorizontalLayout actions = new HorizontalLayout(acceptBtn, rejectBtn);
+            actions.getStyle().set("margin-top", "0.75rem");
+            card.add(actions);
+        }
+
         return card;
+    }
+
+    private void respondToAppointment(Div card, int companyId, boolean accept) {
+        String token = getToken();
+        if (token == null || token.isBlank()) {
+            showError("You must be logged in to respond to an appointment.");
+            return;
+        }
+
+        var ownerRes = companyService.respondToOwnerAppointment(token, companyId, accept);
+        boolean success = ownerRes != null && ownerRes.getValue() != null;
+
+        if (!success) {
+            var managerRes = companyService.respondToManagerAppointment(token, companyId, accept);
+            success = managerRes != null && managerRes.getValue() != null;
+            if (!success) {
+                String errorMsg = managerRes != null ? managerRes.getMessage() : "Failed to respond to appointment.";
+                showError(errorMsg);
+                return;
+            }
+        }
+
+        // Remove the notification from the store now that it's been acted on
+        String userEmail = getUserEmail();
+        if (userEmail != null && !userEmail.isBlank()) {
+            presenter.cleanDelayedNotifications(userEmail);
+        }
+
+        loadNotifications();
+
+        if (accept) {
+            showSuccess("You have accepted the appointment.");
+        } else {
+            showSuccess("You have rejected the appointment.");
+        }
+    }
+
+    private String getToken() {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        if (tabId == null || tabId.isBlank()) {
+            return null;
+        }
+        return (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
     }
 
     private String getNotificationMessage(NotifyDTO notification) {
