@@ -5,6 +5,7 @@ import UI.Presenters.PurchasePresenter;
 import application.EventService;
 import application.LotteryService;
 import application.Response;
+import application.IAuth;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.*;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
@@ -37,9 +38,9 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     private String token;
     private Button lotteryButton;
 
-    public EventDetailsView(EventService eventService, ActiveOrderService activeOrderService, LotteryService lotteryService) {
+    public EventDetailsView(EventService eventService, ActiveOrderService activeOrderService, LotteryService lotteryService, IAuth auth) {
 
-        this.presenter = new EventDetailsPresenter(eventService, lotteryService);
+        this.presenter = new EventDetailsPresenter(eventService, lotteryService, auth);
         this.purchasePresenter = new PurchasePresenter(activeOrderService);
 
         setSpacing(true);
@@ -174,7 +175,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         actions.add(purchaseButton);
 
-        if (dto.hasLottery() && token != null && !token.isBlank()) {
+        if (dto.hasLottery() && isMember()) {
             actions.add(lotteryButton);
         }
 
@@ -185,6 +186,16 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         );
 
         return header;
+    }
+
+    private boolean isMember() {
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+
+        Response<String> roleResponse = presenter.getRole(token);
+
+        return "MEMBER".equals(roleResponse.getValue());
     }
 
     private void registerToLottery() {
