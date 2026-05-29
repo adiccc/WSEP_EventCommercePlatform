@@ -2,26 +2,26 @@ package application;
 
 import DTO.NotifyDTO;
 import DTO.NotifyType;
+import com.vaadin.flow.shared.Registration;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
+import infrastructure.ActiveOrderRepoImpl;
+import infrastructure.Broadcaster;
+import infrastructure.VaadinNotifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
-import java.util.NoSuchElementException;
+import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.after;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class PreExpirationNotificationSchedulerTest {
 
@@ -30,113 +30,117 @@ class PreExpirationNotificationSchedulerTest {
     private static final int EVENT_ID = 7;
 
     private IActiveOrderRepo activeOrderRepo;
-    private INotifier notifier;
     private PreExpirationNotificationScheduler scheduler;
+    private BlockingQueue<NotifyDTO> delivered;
+    private Registration recipientRegistration;
 
     @BeforeEach
     void setUp() {
-        activeOrderRepo = mock(IActiveOrderRepo.class);
-        notifier = mock(INotifier.class);
-        scheduler = new PreExpirationNotificationScheduler(activeOrderRepo, notifier);
+        activeOrderRepo = new ActiveOrderRepoImpl();
+        scheduler = new PreExpirationNotificationScheduler(activeOrderRepo, new VaadinNotifier());
+
+        // Capture, in real time, whatever the recipient's tab would receive via the Broadcaster.
+        delivered = new LinkedBlockingQueue<>();
+        recipientRegistration = Broadcaster.registerUser(RECIPIENT, delivered::add);
     }
 
     @AfterEach
     void tearDown() {
+        recipientRegistration.remove();
         scheduler.shutdown();
     }
 
-    /** A CHECKING_OUT order whose 10-minute timer is currently inside its final minute. */
-    private ActiveOrder orderInWarningWindow() {
-        ActiveOrder order = mock(ActiveOrder.class);
-        when(order.getCheckoutWarningTime()).thenReturn(LocalDateTime.now().minusSeconds(1));
-        when(order.isExpired(any(LocalDateTime.class))).thenReturn(false);
-        when(order.getUserIdentifier()).thenReturn(RECIPIENT);
-        when(order.getEventId()).thenReturn(EVENT_ID);
+    /** A real order, freshly moved into CHECKING_OUT (its 10-minute timer starts now). */
+    private ActiveOrder checkingOutOrder() {
+        ActiveOrder order = new ActiveOrder(ORDER_ID, RECIPIENT, EVENT_ID, List.of(1));
+        order.proceedToCheckout();
         return order;
     }
 
     @Test
-    void GivenOrderInWarningWindow_WhenScheduleOrReschedule_ThenRealTimePopupSentToOrderIdentifier() {
-        ActiveOrder order = orderInWarningWindow();
-        when(activeOrderRepo.findById(ORDER_ID)).thenReturn(order);
+    void GivenOrderInWarningWindow_WhenScheduleOrReschedule_ThenRealTimePopupSentToOrderIdentifier()
+            throws InterruptedException {
+        ActiveOrder order = checkingOutOrder();
+        // forceExpireForTest stamps checkoutStartedAt = (arg - 11 min). Passing now+2 min lands it
+        // 9 min ago: the warning instant (checkoutStartedAt + 9 min) has just passed, while the
+        // 10-min checkout deadline is still ~1 min away (so the order is NOT yet expired).
+        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2));
+        activeOrderRepo.store(order);
 
-        // warningTime already passed -> the one-shot task runs immediately
-        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().minusSeconds(1));
+        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().minusSeconds(1)); // fire immediately
 
-        ArgumentCaptor<NotifyDTO> captor = ArgumentCaptor.forClass(NotifyDTO.class);
-        verify(notifier, timeout(2000)).notifyUser(eq(RECIPIENT), captor.capture());
-        verify(notifier, never()).notifyTab(anyString(), any()); // real-time popup, not tab routing
-
-        NotifyDTO sent = captor.getValue();
+        NotifyDTO sent = delivered.poll(2, TimeUnit.SECONDS);
+        assertNotNull(sent, "a real-time popup should have been delivered to the recipient");
         assertEquals(NotifyType.GENERAL_POPUP, sent.getType());
         assertEquals(EVENT_ID, sent.getPayload().getEventId().intValue());
     }
 
     @Test
-    void GivenScheduledWarning_WhenCancel_ThenNothingIsSent() {
-        ActiveOrder order = orderInWarningWindow();
-        when(activeOrderRepo.findById(ORDER_ID)).thenReturn(order);
+    void GivenScheduledWarning_WhenCancel_ThenNothingIsSent() throws InterruptedException {
+        ActiveOrder order = checkingOutOrder();
+        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2)); // inside the warning window
+        activeOrderRepo.store(order);
 
         scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().plusSeconds(1));
         scheduler.cancel(ORDER_ID);
 
-        verify(notifier, after(1500).never()).notifyUser(anyString(), any());
+        assertFalse(scheduler.hasPendingWarning(ORDER_ID));
+        assertNull(delivered.poll(1500, TimeUnit.MILLISECONDS));
     }
 
     @Test
-    void GivenPendingWarning_WhenScheduleOrReschedule_ThenWarningSentExactlyOnce() {
-        ActiveOrder order = orderInWarningWindow();
-        when(activeOrderRepo.findById(ORDER_ID)).thenReturn(order);
+    void GivenPendingWarning_WhenScheduleOrReschedule_ThenWarningSentExactlyOnce() throws InterruptedException {
+        ActiveOrder order = checkingOutOrder();
+        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2)); // inside the warning window
+        activeOrderRepo.store(order);
 
-        // first task ~1s out, then reschedule to fire now; the first must be cancelled
-        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().plusSeconds(1));
-        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().minusSeconds(1));
+        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().plusSeconds(1));  // would fire at +1s
+        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().minusSeconds(1)); // reschedule: fire now
 
-        // wait past the original deadline: exactly one send must have happened
-        verify(notifier, after(1500).times(1)).notifyUser(eq(RECIPIENT), any());
+        assertNotNull(delivered.poll(2, TimeUnit.SECONDS), "the rescheduled warning should fire");
+        // the original +1s task must have been cancelled by the reschedule -> no second delivery
+        assertNull(delivered.poll(1500, TimeUnit.MILLISECONDS));
     }
 
     @Test
-    void GivenOrderNotYetInWarningWindow_WhenScheduleOrReschedule_ThenSkippedWithoutSending() {
-        ActiveOrder order = mock(ActiveOrder.class);
-        when(order.getCheckoutWarningTime()).thenReturn(LocalDateTime.now().plusMinutes(5));
-        when(order.isExpired(any(LocalDateTime.class))).thenReturn(false);
-        when(activeOrderRepo.findById(ORDER_ID)).thenReturn(order);
-
-        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().minusSeconds(1));
-
-        verify(notifier, after(800).never()).notifyUser(anyString(), any());
-    }
-
-    @Test
-    void GivenOrderAlreadyExpired_WhenScheduleOrReschedule_ThenSkippedWithoutSending() {
-        ActiveOrder order = mock(ActiveOrder.class);
-        when(order.getCheckoutWarningTime()).thenReturn(LocalDateTime.now().minusSeconds(1));
-        when(order.isExpired(any(LocalDateTime.class))).thenReturn(true);
-        when(activeOrderRepo.findById(ORDER_ID)).thenReturn(order);
+    void GivenOrderNotYetInWarningWindow_WhenScheduleOrReschedule_ThenSkippedWithoutSending()
+            throws InterruptedException {
+        activeOrderRepo.store(checkingOutOrder()); // checkoutStartedAt = now -> warning is 9 min away
 
         scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().minusSeconds(1));
 
-        verify(notifier, after(800).never()).notifyUser(anyString(), any());
+        assertNull(delivered.poll(800, TimeUnit.MILLISECONDS));
     }
 
     @Test
-    void GivenOrderAlreadyRemoved_WhenScheduleOrReschedule_ThenSkippedWithoutSending() {
-        when(activeOrderRepo.findById(ORDER_ID)).thenThrow(new NoSuchElementException("gone"));
+    void GivenOrderAlreadyExpired_WhenScheduleOrReschedule_ThenSkippedWithoutSending() throws InterruptedException {
+        ActiveOrder order = checkingOutOrder();
+        order.forceExpireForTest(LocalDateTime.now()); // checkoutStartedAt = now-11min -> already expired
+        activeOrderRepo.store(order);
 
         scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().minusSeconds(1));
 
-        verify(notifier, after(800).never()).notifyUser(anyString(), any());
+        assertNull(delivered.poll(800, TimeUnit.MILLISECONDS));
     }
 
     @Test
-    void GivenNullWarningTime_WhenScheduleOrReschedule_ThenAnyPendingWarningIsCleared() {
-        ActiveOrder order = orderInWarningWindow();
-        when(activeOrderRepo.findById(ORDER_ID)).thenReturn(order);
+    void GivenOrderAlreadyRemoved_WhenScheduleOrReschedule_ThenSkippedWithoutSending() throws InterruptedException {
+        // order never stored -> repo.findById throws NoSuchElementException, so the warning is skipped
+        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().minusSeconds(1));
+
+        assertNull(delivered.poll(800, TimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    void GivenNullWarningTime_WhenScheduleOrReschedule_ThenAnyPendingWarningIsCleared() throws InterruptedException {
+        ActiveOrder order = checkingOutOrder();
+        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2));
+        activeOrderRepo.store(order);
 
         scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().plusSeconds(1));
         scheduler.scheduleOrReschedule(ORDER_ID, null); // order no longer CHECKING_OUT -> clear
 
-        verify(notifier, after(1500).never()).notifyUser(anyString(), any());
+        assertFalse(scheduler.hasPendingWarning(ORDER_ID));
+        assertNull(delivered.poll(1500, TimeUnit.MILLISECONDS));
     }
 }
