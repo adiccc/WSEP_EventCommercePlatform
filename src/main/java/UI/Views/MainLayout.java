@@ -32,6 +32,7 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
     private final IAuth auth;
     private final UserService userService;
     private Registration userBroadcasterRegistration;
+    private Registration tabBroadcasterRegistration;
     private final ActiveOrderService activeOrderService;
 
     public MainLayout(IAuth auth, UserService userService, ActiveOrderService activeOrderService) {
@@ -164,23 +165,37 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
     }
 
     private void registerToBroadcaster() {
-        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        UI ui = UI.getCurrent();
+
+        if (ui == null) {
+            return;
+        }
+
+        String tabId = ui.getElement().getProperty("currentTabId");
+
+        if (tabId == null || tabId.isBlank()) {
+            return;
+        }
 
         String userIdentifier =
                 (String) VaadinSession.getCurrent()
                         .getAttribute("notificationUserIdentifier_" + tabId);
 
-        if (userIdentifier == null || userIdentifier.isBlank()) {
-            return;
+        String token =
+                (String) VaadinSession.getCurrent()
+                        .getAttribute("token_" + tabId);
+
+        if (userIdentifier != null && !userIdentifier.isBlank()) {
+            userBroadcasterRegistration = Broadcaster.registerUser(userIdentifier, notification -> {
+                ui.access(() -> handleNotification(notification));
+            });
         }
 
-        UI ui = UI.getCurrent();
-
-        userBroadcasterRegistration = Broadcaster.registerUser(userIdentifier, notification -> {
-            if (ui != null) {
+        if (token != null && !token.isBlank()) {
+            tabBroadcasterRegistration = Broadcaster.registerTab(token, notification -> {
                 ui.access(() -> handleNotification(notification));
-            }
-        });
+            });
+        }
 
         addDetachListener(event -> unregisterFromBroadcaster());
     }
@@ -189,6 +204,10 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         if (userBroadcasterRegistration != null) {
             userBroadcasterRegistration.remove();
             userBroadcasterRegistration = null;
+        }
+        if (tabBroadcasterRegistration != null) {
+            tabBroadcasterRegistration.remove();
+            tabBroadcasterRegistration = null;
         }
     }
 
@@ -200,7 +219,67 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
         if (notification.getType() == NotifyType.GENERAL_POPUP) {
             showNotification(notification);
+        } else if (notification.getType() == NotifyType.TOKEN_EXPIRED) {
+            handleTokenExpired();
         }
+    }
+
+    private void handleTokenExpired() {
+        UI ui = UI.getCurrent();
+
+        if (ui == null) {
+            return;
+        }
+
+        String tabId = ui.getElement().getProperty("currentTabId");
+
+        if (tabId != null && !tabId.isBlank()) {
+            if (isTokenExpiredAlreadyHandled(tabId)) {
+                return;
+            }
+
+            markTokenExpiredHandled(tabId);
+        }
+
+        Notification notification = Notification.show(
+                "Your session has expired. Please start again.",
+                4000,
+                Notification.Position.TOP_CENTER
+        );
+        notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+
+        if (tabId != null && !tabId.isBlank()) {
+            VaadinSession session = VaadinSession.getCurrent();
+
+            session.setAttribute("token_" + tabId, null);
+            session.setAttribute("notificationUserIdentifier_" + tabId, null);
+
+            session.setAttribute("eventQueueTabId_" + tabId, null);
+            session.setAttribute("eventQueueCompanyId_" + tabId, null);
+            session.setAttribute("eventQueueEventId_" + tabId, null);
+            session.setAttribute("eventQueueAdmitted_" + tabId, null);
+        }
+
+        ui.getPage().executeJs(
+                """
+                sessionStorage.removeItem("eventCommerceEventQueueToken");
+                sessionStorage.removeItem("eventCommerceEventQueueEventId");
+                """
+        );
+
+        ui.navigate("");
+    }
+
+    private boolean isTokenExpiredAlreadyHandled(String tabId) {
+        Boolean handled = (Boolean) VaadinSession.getCurrent()
+                .getAttribute("tokenExpiredHandled_" + tabId);
+
+        return Boolean.TRUE.equals(handled);
+    }
+
+    private void markTokenExpiredHandled(String tabId) {
+        VaadinSession.getCurrent()
+                .setAttribute("tokenExpiredHandled_" + tabId, true);
     }
 
     private void showNotification(NotifyDTO notification) {
@@ -283,19 +362,9 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
             addLoginItem(nav);
 
         } else {
-            // Invalid or expired token
-            VaadinSession.getCurrent().setAttribute("token_" + tabId, null);
-
-
-            Notification notification = Notification.show(
-                    "Session expired. Please sign in again.",
-                    4000,
-                    Notification.Position.TOP_CENTER
-            );
-            notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
-
-            addLoginItem(nav);
-        }
+        VaadinSession.getCurrent().setAttribute("token_" + tabId, null);
+        addLoginItem(nav);
+    }
 
         addToDrawer(nav);
     }
