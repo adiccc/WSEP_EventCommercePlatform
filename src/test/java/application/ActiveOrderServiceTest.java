@@ -144,7 +144,7 @@ class ActiveOrderServiceTest {
                 5);
 
         preExpirationScheduler =
-                Mockito.spy(new PreExpirationNotificationScheduler(activeOrderRepo, notifier));
+                new PreExpirationNotificationScheduler(activeOrderRepo, notifier);
 
         service = new ActiveOrderService(
                 auth,
@@ -1322,13 +1322,8 @@ class ActiveOrderServiceTest {
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
 
-        ArgumentCaptor<LocalDateTime> warningAt = ArgumentCaptor.forClass(LocalDateTime.class);
-        Mockito.verify(preExpirationScheduler)
-                .scheduleOrReschedule(Mockito.eq(orderId), warningAt.capture());
-
-        // locking seats moved the order to CHECKING_OUT, so a future warning time is scheduled
-        assertNotNull(warningAt.getValue());
-        assertTrue(warningAt.getValue().isAfter(LocalDateTime.now()));
+        // locking seats moved the order to CHECKING_OUT, so a warning is now scheduled for it
+        assertTrue(preExpirationScheduler.hasPendingWarning(orderId));
     }
 
     @Test
@@ -1336,18 +1331,16 @@ class ActiveOrderServiceTest {
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+        LocalDateTime warningBefore = activeOrderRepo.findById(orderId).getCheckoutWarningTime();
 
         Response<ActiveOrderDTO> edit = service.editTicketSelection(
                 validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 4));
         assertNotNull(edit.getValue(), "edit failed: " + edit.getMessage());
 
-        ArgumentCaptor<LocalDateTime> warningAt = ArgumentCaptor.forClass(LocalDateTime.class);
-        // once when seats were locked, once when the edit restarted the timer
-        Mockito.verify(preExpirationScheduler, Mockito.times(2))
-                .scheduleOrReschedule(Mockito.eq(orderId), warningAt.capture());
-
-        List<LocalDateTime> scheduled = warningAt.getAllValues();
-        assertFalse(scheduled.get(1).isBefore(scheduled.get(0)),
+        // the edit restarted the timer: a warning is still scheduled, now for a later deadline
+        assertTrue(preExpirationScheduler.hasPendingWarning(orderId));
+        LocalDateTime warningAfter = activeOrderRepo.findById(orderId).getCheckoutWarningTime();
+        assertFalse(warningAfter.isBefore(warningBefore),
                 "edit must reschedule the warning to the new (later or equal) deadline");
     }
 
@@ -1356,11 +1349,12 @@ class ActiveOrderServiceTest {
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+        assertTrue(preExpirationScheduler.hasPendingWarning(orderId));
 
         forceExpireOrder(orderId);
         service.cleanupExpiredOrders();
 
-        Mockito.verify(preExpirationScheduler).cancel(orderId);
+        assertFalse(preExpirationScheduler.hasPendingWarning(orderId));
         assertThrows(NoSuchElementException.class, () -> activeOrderRepo.findById(orderId));
     }
 
@@ -1369,6 +1363,7 @@ class ActiveOrderServiceTest {
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 2)).getValue();
+        assertTrue(preExpirationScheduler.hasPendingWarning(orderId));
 
         Response<CheckoutPriceDTO> price = service.prepareCheckout(validToken, orderId);
         assertNotNull(price.getValue(), "setup prepareCheckout failed: " + price.getMessage());
@@ -1385,7 +1380,7 @@ class ActiveOrderServiceTest {
         Response<Integer> result = service.checkoutAndPayment(validToken, orderId, paymentDetails);
 
         assertNotNull(result.getValue(), "checkout failed: " + result.getMessage());
-        Mockito.verify(preExpirationScheduler).cancel(orderId);
+        assertFalse(preExpirationScheduler.hasPendingWarning(orderId));
     }
 
     @Test
@@ -3972,7 +3967,7 @@ class ActiveOrderServiceTest {
         assertEquals(1, countSoldOutNotifications(manager2), "Manager2 (appointed by another owner) should also receive the sold-out notification");
     }
     @Test
-    void GivenSoldOutEventWithWaitingUser_WhenSomeoneCheckouts_ThenWaitingUserPromotedAndNotified() throws Exception {
+    void GivenSoldOutEventWithWaitingUser_WhenCheckoutAndPayment_ThenWaitingUserPromotedAndNotified() throws Exception {
         // Arrange
         WebQueue.resetForTesting();
         WebQueue.getInstance(100);

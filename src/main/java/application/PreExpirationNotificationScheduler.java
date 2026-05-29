@@ -89,6 +89,11 @@ public class PreExpirationNotificationScheduler {
         });
     }
 
+    /** Whether a pre-expiration warning is currently scheduled for the given order. */
+    public boolean hasPendingWarning(int orderId) {
+        return scheduledWarnings.containsKey(orderId);
+    }
+
     private void fireWarning(int orderId) {
         ActiveOrder order;
         try {
