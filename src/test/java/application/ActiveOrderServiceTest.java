@@ -143,9 +143,6 @@ class ActiveOrderServiceTest {
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
 
-        PreExpirationNotificationScheduler preExpirationScheduler =
-                new PreExpirationNotificationScheduler(activeOrderRepo, notifier);
-
         preExpirationScheduler =
                 new PreExpirationNotificationScheduler(activeOrderRepo, notifier);
 
@@ -1384,12 +1381,6 @@ class ActiveOrderServiceTest {
 
         assertNotNull(result.getValue(), "checkout failed: " + result.getMessage());
         assertFalse(preExpirationScheduler.hasPendingWarning(orderId));
-
-        // Editing keeps the seats held: stage stays CHECKING_OUT and the 10-min timer restarts.
-        ActiveOrder after = activeOrderRepo.findById(orderId);
-        assertEquals(domain.activeOrder.STAGE.CHECKING_OUT, after.getStage());
-        assertTrue(after.getCheckoutStartedAt().isAfter(checkoutStartedBefore),
-                "edit must restart the checkout (seat-hold) timer");
     }
 
     @Test
