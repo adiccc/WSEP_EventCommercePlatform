@@ -35,6 +35,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     private int companyId;
     private int eventId;
     private String token;
+    private Button lotteryButton;
 
     public EventDetailsView(EventService eventService, ActiveOrderService activeOrderService, LotteryService lotteryService) {
 
@@ -155,7 +156,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         purchaseButton.addClickListener(e -> handlePurchaseClick());
 
-        Button lotteryButton =
+        lotteryButton =
                 new Button("🎲 Register to Lottery");
 
         lotteryButton.getStyle()
@@ -206,6 +207,8 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                     Notification.Position.TOP_CENTER
             );
             notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+            lotteryButton.setEnabled(false);
+            lotteryButton.setText("✅ Registered to Lottery");
             return;
         }
 
