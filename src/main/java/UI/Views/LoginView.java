@@ -47,6 +47,7 @@ public class LoginView extends VerticalLayout implements BeforeEnterObserver {
                 String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
                 VaadinSession.getCurrent().setAttribute("token_" + tabId, response.getValue());
                 VaadinSession.getCurrent().setAttribute("notificationUserIdentifier_" + tabId, emailField.getValue());
+                VaadinSession.getCurrent().setAttribute("tokenExpiredHandled_" + tabId, null);
                 showSuccess(response.getMessage());
 
                 getUI().ifPresent(ui -> ui.navigate("home"));
@@ -72,6 +73,7 @@ public class LoginView extends VerticalLayout implements BeforeEnterObserver {
                         "notificationUserIdentifier_" + tabId,
                         presenter.getUserIdentifier(response.getValue()).getValue()
                 );
+                VaadinSession.getCurrent().setAttribute("tokenExpiredHandled_" + tabId, null);
                 showSuccess(response.getMessage());
                 getUI().ifPresent(ui -> ui.navigate("home"));
             } else {

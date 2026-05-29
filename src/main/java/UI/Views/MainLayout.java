@@ -3,12 +3,17 @@ package UI.Views;
 import DTO.NotifyType;
 import DTO.QueueEntryResultDTO;
 import application.ActiveOrderService;
+import application.CompanyService;
 import application.IAuth;
 import application.Response;
 import application.UserService;
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.applayout.DrawerToggle;
+import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
@@ -31,13 +36,16 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
     private final IAuth auth;
     private final UserService userService;
+    private final CompanyService companyService;
     private Registration userBroadcasterRegistration;
+    private Registration tabBroadcasterRegistration;
     private final ActiveOrderService activeOrderService;
 
-    public MainLayout(IAuth auth, UserService userService, ActiveOrderService activeOrderService) {
+    public MainLayout(IAuth auth, UserService userService, ActiveOrderService activeOrderService, CompanyService companyService) {
         this.auth = auth;
         this.userService = userService;
         this.activeOrderService = activeOrderService;
+        this.companyService = companyService;
 
         registerToBroadcaster();
         createHeader();
@@ -164,23 +172,37 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
     }
 
     private void registerToBroadcaster() {
-        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        UI ui = UI.getCurrent();
+
+        if (ui == null) {
+            return;
+        }
+
+        String tabId = ui.getElement().getProperty("currentTabId");
+
+        if (tabId == null || tabId.isBlank()) {
+            return;
+        }
 
         String userIdentifier =
                 (String) VaadinSession.getCurrent()
                         .getAttribute("notificationUserIdentifier_" + tabId);
 
-        if (userIdentifier == null || userIdentifier.isBlank()) {
-            return;
+        String token =
+                (String) VaadinSession.getCurrent()
+                        .getAttribute("token_" + tabId);
+
+        if (userIdentifier != null && !userIdentifier.isBlank()) {
+            userBroadcasterRegistration = Broadcaster.registerUser(userIdentifier, notification -> {
+                ui.access(() -> handleNotification(notification));
+            });
         }
 
-        UI ui = UI.getCurrent();
-
-        userBroadcasterRegistration = Broadcaster.registerUser(userIdentifier, notification -> {
-            if (ui != null) {
+        if (token != null && !token.isBlank()) {
+            tabBroadcasterRegistration = Broadcaster.registerTab(token, notification -> {
                 ui.access(() -> handleNotification(notification));
-            }
-        });
+            });
+        }
 
         addDetachListener(event -> unregisterFromBroadcaster());
     }
@@ -190,6 +212,10 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
             userBroadcasterRegistration.remove();
             userBroadcasterRegistration = null;
         }
+        if (tabBroadcasterRegistration != null) {
+            tabBroadcasterRegistration.remove();
+            tabBroadcasterRegistration = null;
+        }
     }
 
     private void handleNotification(NotifyDTO notification) {
@@ -198,9 +224,142 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
             return;
         }
 
-        if (notification.getType() == NotifyType.GENERAL_POPUP) {
-            showNotification(notification);
+        switch (notification.getType()) {
+            case GENERAL_POPUP -> showNotification(notification);
+            case TOKEN_EXPIRED -> handleTokenExpired();
+            case KICKOUT_TAB_NAVIGATION -> handleKickout(notification);
+            case ROLE_APPOINTMENT_REQUEST -> showAppointmentDialog(notification);
+            default -> { }
         }
+    }
+
+    private void handleTokenExpired() {
+        UI ui = UI.getCurrent();
+
+        if (ui == null) {
+            return;
+        }
+
+        String tabId = ui.getElement().getProperty("currentTabId");
+
+        if (tabId != null && !tabId.isBlank()) {
+            if (isTokenExpiredAlreadyHandled(tabId)) {
+                return;
+            }
+
+            markTokenExpiredHandled(tabId);
+        }
+
+        Notification notification = Notification.show(
+                "Your session has expired. Please start again.",
+                4000,
+                Notification.Position.TOP_CENTER
+        );
+        notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+
+        if (tabId != null && !tabId.isBlank()) {
+            VaadinSession session = VaadinSession.getCurrent();
+
+            session.setAttribute("token_" + tabId, null);
+            session.setAttribute("notificationUserIdentifier_" + tabId, null);
+
+            session.setAttribute("eventQueueTabId_" + tabId, null);
+            session.setAttribute("eventQueueCompanyId_" + tabId, null);
+            session.setAttribute("eventQueueEventId_" + tabId, null);
+            session.setAttribute("eventQueueAdmitted_" + tabId, null);
+        }
+
+        ui.getPage().executeJs(
+                """
+                sessionStorage.removeItem("eventCommerceEventQueueToken");
+                sessionStorage.removeItem("eventCommerceEventQueueEventId");
+                """
+        );
+
+        ui.navigate("");
+    }
+
+    private boolean isTokenExpiredAlreadyHandled(String tabId) {
+        Boolean handled = (Boolean) VaadinSession.getCurrent()
+                .getAttribute("tokenExpiredHandled_" + tabId);
+
+        return Boolean.TRUE.equals(handled);
+    }
+
+    private void markTokenExpiredHandled(String tabId) {
+        VaadinSession.getCurrent()
+                .setAttribute("tokenExpiredHandled_" + tabId, true);
+    }
+
+    private void handleKickout(NotifyDTO notification) {
+        String message = getMessageOrDefault(notification, "Your access to this company has been revoked.");
+        Integer companyId = notification.getPayload() != null ? notification.getPayload().getCompanyId() : null;
+
+        if (companyId != null) {
+            UI ui = UI.getCurrent();
+            if (ui != null) {
+                String currentPath = ui.getInternals().getActiveViewLocation().getPath();
+                if (currentPath.startsWith("company/" + companyId)) {
+                    ui.navigate("my-companies");
+                }
+            }
+        }
+        showError(message);
+    }
+
+    private void showAppointmentDialog(NotifyDTO notification) {
+        String message = getMessageOrDefault(notification, "You have a new role appointment request.");
+        Integer companyId = notification.getPayload() != null ? notification.getPayload().getCompanyId() : null;
+
+        if (companyId == null) {
+            showNotification(notification);
+            return;
+        }
+
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
+
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Role Appointment Request");
+        dialog.setCloseOnEsc(false);
+        dialog.setCloseOnOutsideClick(false);
+
+        Paragraph msg = new Paragraph(message);
+
+        int resolvedCompanyId = companyId;
+
+        String tabId2 = UI.getCurrent().getElement().getProperty("currentTabId");
+        String userEmail = (String) VaadinSession.getCurrent().getAttribute("notificationUserIdentifier_" + tabId2);
+
+        Button acceptBtn = new Button("Accept", e -> {
+            var ownerRes = companyService.respondToOwnerAppointment(token, resolvedCompanyId, true);
+            if (ownerRes.getValue() == null) {
+                companyService.respondToManagerAppointment(token, resolvedCompanyId, true);
+            }
+            if (userEmail != null && !userEmail.isBlank()) {
+                userService.cleanDelayedNotifications(userEmail);
+            }
+            dialog.close();
+            showSuccess("You have accepted the appointment.");
+        });
+        acceptBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);
+
+        Button rejectBtn = new Button("Reject", e -> {
+            var ownerRes = companyService.respondToOwnerAppointment(token, resolvedCompanyId, false);
+            if (ownerRes.getValue() == null) {
+                companyService.respondToManagerAppointment(token, resolvedCompanyId, false);
+            }
+            if (userEmail != null && !userEmail.isBlank()) {
+                userService.cleanDelayedNotifications(userEmail);
+            }
+            dialog.close();
+            showError("You have rejected the appointment.");
+        });
+        rejectBtn.addThemeVariants(ButtonVariant.LUMO_ERROR);
+
+        HorizontalLayout buttons = new HorizontalLayout(acceptBtn, rejectBtn);
+        dialog.add(msg, buttons);
+        dialog.open();
     }
 
     private void showNotification(NotifyDTO notification) {
@@ -283,17 +442,7 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
             addLoginItem(nav);
 
         } else {
-            // Invalid or expired token
             VaadinSession.getCurrent().setAttribute("token_" + tabId, null);
-
-
-            Notification notification = Notification.show(
-                    "Session expired. Please sign in again.",
-                    4000,
-                    Notification.Position.TOP_CENTER
-            );
-            notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
-
             addLoginItem(nav);
         }
 
