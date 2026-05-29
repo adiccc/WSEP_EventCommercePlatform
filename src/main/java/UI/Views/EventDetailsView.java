@@ -34,6 +34,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     private final EventDetailsPresenter presenter;
     private int companyId;
     private int eventId;
+    private String token;
 
     public EventDetailsView(EventService eventService, ActiveOrderService activeOrderService, LotteryService lotteryService) {
 
@@ -68,7 +69,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
     private void loadEvent(int companyId, int eventId) {
         String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
-        String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
+        token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
 
         Button back = new Button(
                 "← Back to Company",
@@ -172,7 +173,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         actions.add(purchaseButton);
 
-        if (dto.hasLottery()) {
+        if (dto.hasLottery() && token != null && !token.isBlank()) {
             actions.add(lotteryButton);
         }
 
