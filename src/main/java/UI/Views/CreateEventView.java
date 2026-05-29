@@ -203,7 +203,8 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
         HorizontalLayout entry2Row = new HorizontalLayout(entry2XField, entry2YField);
 
         Button addStandingZoneButton = new Button("➕ Add Standing Zone", e -> {
-            addStandingZone("Standing Zone " + (standingZoneForms.size() + 1), 30, 80.0, 100, 450);
+            int nextIndex = standingZoneForms.size() + seatingZoneForms.size() + 1;
+            addStandingZone("Standing Zone " + nextIndex, 30, 80.0, 100 + nextIndex * 30, 450);
             refreshZoneContainers();
             refreshMapPreview();
             updateCreateButtonState();
@@ -211,7 +212,8 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
         addStandingZoneButton.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
 
         Button addSeatingZoneButton = new Button("➕ Add Seating Zone", e -> {
-            addSeatingZone("Seating Zone " + (seatingZoneForms.size() + 1), 8, 10, 150.0, 300, 400);
+            int nextIndex = standingZoneForms.size() + seatingZoneForms.size() + 1;
+            addSeatingZone("Seating Zone " + nextIndex, 8, 10, 150.0, 300 + nextIndex * 30, 400);
             refreshZoneContainers();
             refreshMapPreview();
             updateCreateButtonState();
@@ -283,7 +285,7 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
 
         lotterySection.add(
                 sectionTitle("🎲 Lottery Setup"),
-                new Paragraph("Lottery draw time must be in the future and before the sale start date."),
+                new Paragraph("Fill all lottery fields before submitting."),
                 row
         );
     }
@@ -538,12 +540,9 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
         if (!hasCoordinate(entry2XField, "Entry 2 X", showErrors)) return false;
         if (!hasCoordinate(entry2YField, "Entry 2 Y", showErrors)) return false;
 
-        if (standingZoneForms.isEmpty()) {
-            return fail(showErrors, "At least one standing zone is required.");
-        }
-
-        if (seatingZoneForms.isEmpty()) {
-            return fail(showErrors, "At least one seating zone is required.");
+        if (standingZoneForms.isEmpty() && seatingZoneForms.isEmpty()) {
+            return fail(showErrors,
+                    "At least one standing zone or seating zone is required.");
         }
 
         for (StandingZoneForm form : standingZoneForms) {
@@ -879,8 +878,8 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
             configureCoordinate(yField);
 
             Button removeButton = new Button("Remove", e -> {
-                if (standingZoneForms.size() <= 1) {
-                    showError("At least one standing zone is required.");
+                if (standingZoneForms.size() == 1 && seatingZoneForms.isEmpty()) {
+                    showError("At least one standing zone or seating zone is required.");
                     return;
                 }
 
@@ -923,8 +922,8 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
             configureCoordinate(yField);
 
             Button removeButton = new Button("Remove", e -> {
-                if (seatingZoneForms.size() <= 1) {
-                    showError("At least one seating zone is required.");
+                if (seatingZoneForms.size() == 1 && standingZoneForms.isEmpty()) {
+                    showError("At least one standing zone or seating zone is required.");
                     return;
                 }
 
