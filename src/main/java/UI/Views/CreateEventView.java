@@ -38,7 +38,6 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -60,21 +59,18 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
     private final IntegerField stageXField = new IntegerField("Stage X");
     private final IntegerField stageYField = new IntegerField("Stage Y");
 
-    private final IntegerField entry1XField = new IntegerField("Entry 1 X");
-    private final IntegerField entry1YField = new IntegerField("Entry 1 Y");
-    private final IntegerField entry2XField = new IntegerField("Entry 2 X");
-    private final IntegerField entry2YField = new IntegerField("Entry 2 Y");
-
     private final IntegerField lotteryCapacityField = new IntegerField("Lottery Capacity");
     private final DateTimePicker lotteryDateField = new DateTimePicker("Lottery Draw Time");
     private final IntegerField lotteryExpirationHoursField = new IntegerField("Code Expiration Hours");
 
     private final VerticalLayout lotterySection = new VerticalLayout();
+    private final VerticalLayout entriesContainer = new VerticalLayout();
     private final VerticalLayout standingZonesContainer = new VerticalLayout();
     private final VerticalLayout seatingZonesContainer = new VerticalLayout();
     private final Div mapPreview = new Div();
     private final Button createButton = new Button("🎫 Create Event");
 
+    private final List<EntryForm> entryForms = new ArrayList<>();
     private final List<StandingZoneForm> standingZoneForms = new ArrayList<>();
     private final List<SeatingZoneForm> seatingZoneForms = new ArrayList<>();
 
@@ -114,7 +110,7 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
                 .set("margin-top", "0");
 
         configureFields();
-        initializeDefaultZonesIfNeeded();
+        initializeDefaultsIfNeeded();
         registerLiveValidation();
         registerMapPreviewUpdates();
 
@@ -140,6 +136,7 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
         );
 
         refreshLotterySectionVisibility();
+        refreshEntriesContainer();
         refreshZoneContainers();
         refreshMapPreview();
         updateCreateButtonState();
@@ -174,6 +171,7 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
         layout.getStyle()
                 .set("overflow", "visible")
                 .set("gap", "1.5rem");
+
         VerticalLayout formColumn = new VerticalLayout();
         formColumn.setPadding(false);
         formColumn.setSpacing(true);
@@ -199,12 +197,27 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
         VerticalLayout section = cardSection();
 
         HorizontalLayout stageRow = new HorizontalLayout(stageXField, stageYField);
-        HorizontalLayout entry1Row = new HorizontalLayout(entry1XField, entry1YField);
-        HorizontalLayout entry2Row = new HorizontalLayout(entry2XField, entry2YField);
+
+        Button addEntryButton = new Button("➕ Add Entry", e -> {
+            int nextIndex = nextEntryIndex();
+
+            addEntry(
+                    "Entry " + nextIndex,
+                    50 + (nextIndex - 1) * 120,
+                    100
+            );
+
+            refreshEntriesContainer();
+            refreshMapPreview();
+            updateCreateButtonState();
+        });
+        addEntryButton.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
 
         Button addStandingZoneButton = new Button("➕ Add Standing Zone", e -> {
-            int nextIndex = standingZoneForms.size() + seatingZoneForms.size() + 1;
-            addStandingZone("Standing Zone " + nextIndex, 30, 80.0, 100 + nextIndex * 30, 450);
+            int nextIndex = nextStandingZoneIndex();
+            int[] nextPosition = nextStandingZonePosition();
+
+            addStandingZone("Standing Zone " + nextIndex, 30, 80.0, nextPosition[0], nextPosition[1]);
             refreshZoneContainers();
             refreshMapPreview();
             updateCreateButtonState();
@@ -212,14 +225,17 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
         addStandingZoneButton.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
 
         Button addSeatingZoneButton = new Button("➕ Add Seating Zone", e -> {
-            int nextIndex = standingZoneForms.size() + seatingZoneForms.size() + 1;
-            addSeatingZone("Seating Zone " + nextIndex, 8, 10, 150.0, 300 + nextIndex * 30, 400);
+            int nextIndex = nextSeatingZoneIndex();
+            int[] nextPosition = nextSeatingZonePosition();
+
+            addSeatingZone("Seating Zone " + nextIndex, 8, 10, 150.0, nextPosition[0], nextPosition[1]);
             refreshZoneContainers();
             refreshMapPreview();
             updateCreateButtonState();
         });
         addSeatingZoneButton.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
 
+        entriesContainer.setPadding(false);
         standingZonesContainer.setPadding(false);
         seatingZonesContainer.setPadding(false);
 
@@ -229,8 +245,8 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
                 new H3("Stage"),
                 stageRow,
                 new H3("Entries"),
-                entry1Row,
-                entry2Row,
+                entriesContainer,
+                addEntryButton,
                 new H3("Standing Zones"),
                 standingZonesContainer,
                 addStandingZoneButton,
@@ -282,6 +298,7 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
                 lotteryExpirationHoursField
         );
         row.setWidthFull();
+        row.getStyle().set("flex-wrap", "wrap");
 
         lotterySection.add(
                 sectionTitle("🎲 Lottery Setup"),
@@ -326,10 +343,6 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
 
         configureCoordinate(stageXField);
         configureCoordinate(stageYField);
-        configureCoordinate(entry1XField);
-        configureCoordinate(entry1YField);
-        configureCoordinate(entry2XField);
-        configureCoordinate(entry2YField);
 
         configurePositiveInteger(lotteryCapacityField);
         lotteryDateField.setWidth("20rem");
@@ -360,19 +373,34 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
         field.setWidth("10rem");
     }
 
-    private void initializeDefaultZonesIfNeeded() {
-        if (standingZoneForms.isEmpty()) {
-            stageXField.setValue(400);
-            stageYField.setValue(20);
-
-            entry1XField.setValue(50);
-            entry1YField.setValue(100);
-            entry2XField.setValue(750);
-            entry2YField.setValue(100);
-
-            addStandingZone("General Standing", 40, 80.0, 70, 450);
-            addSeatingZone("Regular", 8, 10, 150.0, 270, 400);
+    private void initializeDefaultsIfNeeded() {
+        if (!entryForms.isEmpty() || !standingZoneForms.isEmpty() || !seatingZoneForms.isEmpty()) {
+            return;
         }
+
+        stageXField.setValue(400);
+        stageYField.setValue(20);
+
+        addEntry("Entry 1", 50, 100);
+        addEntry("Entry 2", 750, 100);
+
+        addStandingZone("Standing Zone 1", 40, 80.0, 70, 450);
+        addSeatingZone("Seating Zone 1", 8, 10, 150.0, 270, 400);
+    }
+
+    private void addEntry(String label, int x, int y) {
+        EntryForm form = new EntryForm(label);
+
+        form.xField.setValue(x);
+        form.yField.setValue(y);
+
+        entryForms.add(form);
+
+        addValidationListener(form.xField);
+        addValidationListener(form.yField);
+
+        addMapListener(form.xField);
+        addMapListener(form.yField);
     }
 
     private void addStandingZone(String name, int capacity, double price, int x, int y) {
@@ -400,6 +428,122 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
 
         seatingZoneForms.add(form);
         registerSeatingZoneListeners(form);
+    }
+
+    private int nextEntryIndex() {
+        int index = 1;
+
+        while (entryLabelExists("Entry " + index)) {
+            index++;
+        }
+
+        return index;
+    }
+
+    private boolean entryLabelExists(String label) {
+        for (EntryForm form : entryForms) {
+            if (form.label.equals(label)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private int nextStandingZoneIndex() {
+        int index = 1;
+
+        while (standingZoneNameExists("Standing Zone " + index)) {
+            index++;
+        }
+
+        return index;
+    }
+
+    private boolean standingZoneNameExists(String name) {
+        for (StandingZoneForm form : standingZoneForms) {
+            if (name.equals(form.nameField.getValue())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private int nextSeatingZoneIndex() {
+        int index = 1;
+
+        while (seatingZoneNameExists("Seating Zone " + index)) {
+            index++;
+        }
+
+        return index;
+    }
+
+    private boolean seatingZoneNameExists(String name) {
+        for (SeatingZoneForm form : seatingZoneForms) {
+            if (name.equals(form.nameField.getValue())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private int[] nextStandingZonePosition() {
+        return nextZonePosition(70, 450, 230, 160);
+    }
+
+    private int[] nextSeatingZonePosition() {
+        return nextZonePosition(270, 400, 320, 210);
+    }
+
+    private int[] nextZonePosition(int baseX, int baseY, int stepX, int stepY) {
+        int nextX = baseX;
+        int nextY = baseY;
+
+        while (isPreviewPositionOccupied(nextX, nextY)) {
+            nextX += stepX;
+
+            if (nextX > 950) {
+                nextX = baseX;
+                nextY += stepY;
+            }
+        }
+
+        return new int[]{nextX, nextY};
+    }
+
+    private boolean isPreviewPositionOccupied(int x, int y) {
+        for (StandingZoneForm form : standingZoneForms) {
+            if (isNear(form.xField.getValue(), form.yField.getValue(), x, y)) {
+                return true;
+            }
+        }
+
+        for (SeatingZoneForm form : seatingZoneForms) {
+            if (isNear(form.xField.getValue(), form.yField.getValue(), x, y)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean isNear(Integer existingX, Integer existingY, int x, int y) {
+        if (existingX == null || existingY == null) {
+            return false;
+        }
+
+        return Math.abs(existingX - x) < 230 && Math.abs(existingY - y) < 170;
+    }
+
+    private void refreshEntriesContainer() {
+        entriesContainer.removeAll();
+
+        for (EntryForm form : entryForms) {
+            entriesContainer.add(form.root);
+        }
     }
 
     private void refreshZoneContainers() {
@@ -434,10 +578,6 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
 
         addValidationListener(stageXField);
         addValidationListener(stageYField);
-        addValidationListener(entry1XField);
-        addValidationListener(entry1YField);
-        addValidationListener(entry2XField);
-        addValidationListener(entry2YField);
 
         addValidationListener(lotteryCapacityField);
         addValidationListener(lotteryDateField);
@@ -447,10 +587,6 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
     private void registerMapPreviewUpdates() {
         addMapListener(stageXField);
         addMapListener(stageYField);
-        addMapListener(entry1XField);
-        addMapListener(entry1YField);
-        addMapListener(entry2XField);
-        addMapListener(entry2YField);
     }
 
     private void registerStandingZoneListeners(StandingZoneForm form) {
@@ -531,18 +667,21 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
         return true;
     }
 
-
     private boolean isMapValid(boolean showErrors) {
         if (!hasCoordinate(stageXField, "Stage X", showErrors)) return false;
         if (!hasCoordinate(stageYField, "Stage Y", showErrors)) return false;
-        if (!hasCoordinate(entry1XField, "Entry 1 X", showErrors)) return false;
-        if (!hasCoordinate(entry1YField, "Entry 1 Y", showErrors)) return false;
-        if (!hasCoordinate(entry2XField, "Entry 2 X", showErrors)) return false;
-        if (!hasCoordinate(entry2YField, "Entry 2 Y", showErrors)) return false;
+
+        if (entryForms.isEmpty()) {
+            return fail(showErrors, "At least one entry is required.");
+        }
+
+        for (EntryForm form : entryForms) {
+            if (!hasCoordinate(form.xField, form.label + " X", showErrors)) return false;
+            if (!hasCoordinate(form.yField, form.label + " Y", showErrors)) return false;
+        }
 
         if (standingZoneForms.isEmpty() && seatingZoneForms.isEmpty()) {
-            return fail(showErrors,
-                    "At least one standing zone or seating zone is required.");
+            return fail(showErrors, "At least one standing zone or seating zone is required.");
         }
 
         for (StandingZoneForm form : standingZoneForms) {
@@ -576,7 +715,6 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
 
         return hasPositiveInteger(lotteryExpirationHoursField, "Code expiration hours", showErrors);
     }
-
 
     private boolean hasCoordinate(IntegerField field, String label, boolean showErrors) {
         if (field.getValue() == null || field.getValue() < 0) {
@@ -639,16 +777,14 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
                 token,
                 eventId,
                 new ElementPositionDTO(stageXField.getValue(), stageYField.getValue()),
-                List.of(
-                        new ElementPositionDTO(entry1XField.getValue(), entry1YField.getValue()),
-                        new ElementPositionDTO(entry2XField.getValue(), entry2YField.getValue())
-                ),
+                buildEntryDTOs(),
                 buildStandingZoneDTOs(),
                 buildSeatingZoneDTOs()
         );
 
         if (mapResponse.getValue() == null || !mapResponse.getValue()) {
-            showError("Event was created but is not active because venue map setup failed: " + mapResponse.getMessage());
+            showError("Event was created, but it is not active because venue map setup failed: "
+                    + safeMessage(mapResponse.getMessage()));
             return;
         }
 
@@ -662,7 +798,8 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
             );
 
             if (lotteryResponse.getValue() == null || !lotteryResponse.getValue()) {
-                showError("Event and venue map were created, but the event is not active because lottery setup failed: " + lotteryResponse.getMessage());
+                showError("Event and venue map were created, but the event is not active because lottery setup failed: "
+                        + safeMessage(lotteryResponse.getMessage()));
                 return;
             }
         }
@@ -671,6 +808,18 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
         UI.getCurrent().navigate("company/" + companyId);
     }
 
+    private List<ElementPositionDTO> buildEntryDTOs() {
+        List<ElementPositionDTO> entries = new ArrayList<>();
+
+        for (EntryForm form : entryForms) {
+            entries.add(new ElementPositionDTO(
+                    form.xField.getValue(),
+                    form.yField.getValue()
+            ));
+        }
+
+        return entries;
+    }
 
     private List<StandingZoneDTO> buildStandingZoneDTOs() {
         List<StandingZoneDTO> zones = new ArrayList<>();
@@ -715,8 +864,15 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
                 .set("min-height", "900px");
 
         addStagePreview(canvas);
-        addEntryPreview(canvas, entry1XField.getValue(), entry1YField.getValue(), "ENTRY 1");
-        addEntryPreview(canvas, entry2XField.getValue(), entry2YField.getValue(), "ENTRY 2");
+
+        for (EntryForm form : entryForms) {
+            addEntryPreview(
+                    canvas,
+                    form.xField.getValue(),
+                    form.yField.getValue(),
+                    form.label.toUpperCase()
+            );
+        }
 
         for (StandingZoneForm form : standingZoneForms) {
             addStandingPreview(canvas, form);
@@ -837,6 +993,12 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
         return (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
     }
 
+    private String safeMessage(String message) {
+        return message != null && !message.isBlank()
+                ? message
+                : "No additional error details were provided.";
+    }
+
     private void showSuccess(String message) {
         Notification notification = Notification.show(message, 3000, Notification.Position.TOP_CENTER);
         notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
@@ -861,6 +1023,39 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
         notification.open();
     }
 
+    private class EntryForm {
+        private final VerticalLayout root = cardSection();
+        private final String label;
+        private final IntegerField xField = new IntegerField("Entry X");
+        private final IntegerField yField = new IntegerField("Entry Y");
+
+        private EntryForm(String label) {
+            this.label = label;
+
+            configureCoordinate(xField);
+            configureCoordinate(yField);
+
+            Button removeButton = new Button("Remove", e -> {
+                if (entryForms.size() <= 1) {
+                    showError("At least one entry is required.");
+                    return;
+                }
+
+                entryForms.remove(this);
+                refreshEntriesContainer();
+                refreshMapPreview();
+                updateCreateButtonState();
+            });
+            removeButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+
+            HorizontalLayout row = new HorizontalLayout(xField, yField, removeButton);
+            row.setWidthFull();
+            row.getStyle().set("flex-wrap", "wrap");
+            row.setDefaultVerticalComponentAlignment(Alignment.BASELINE);
+
+            root.add(new H4(label), row);
+        }
+    }
 
     private class StandingZoneForm {
         private final VerticalLayout root = cardSection();
@@ -893,7 +1088,6 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
             HorizontalLayout row1 = new HorizontalLayout(nameField, capacityField, priceField);
             row1.setWidthFull();
             row1.getStyle().set("flex-wrap", "wrap");
-
 
             HorizontalLayout row2 = new HorizontalLayout(xField, yField, removeButton);
             row2.setWidthFull();
