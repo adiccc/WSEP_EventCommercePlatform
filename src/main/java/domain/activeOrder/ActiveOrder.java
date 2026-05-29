@@ -16,6 +16,7 @@ public class ActiveOrder {
     private Double approvedCheckoutPrice;
     private static final int SELECTING_TICKETS_TIMEOUT_MINUTES = 5;
     private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
+    private static final int WARNING_BEFORE_CHECKOUT_EXPIRY_MINUTES = 1;
 
     public ActiveOrder(int orderId, String userIdentifier, Integer eventId, List<Integer> tickets) {
         this.orderId = orderId;
@@ -91,6 +92,14 @@ public class ActiveOrder {
         if (stage == STAGE.CHECKING_OUT) {
             this.checkoutStartedAt = LocalDateTime.now();
         }
+    }
+
+    public LocalDateTime getCheckoutWarningTime() {
+        if (stage == STAGE.CHECKING_OUT && checkoutStartedAt != null) {
+            return checkoutStartedAt.plusMinutes(
+                    CHECKOUT_TIMEOUT_MINUTES - WARNING_BEFORE_CHECKOUT_EXPIRY_MINUTES);
+        }
+        return null;
     }
 
     public boolean isExpired(LocalDateTime now) {
