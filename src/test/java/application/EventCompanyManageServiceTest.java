@@ -2,6 +2,7 @@ package application;
 
 import DTO.*;
 import Log.LoggerSetup;
+import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
@@ -34,10 +35,8 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 import domain.policy.DiscountPolicyType;
 import domain.policy.PurchasePolicyType;
@@ -98,7 +97,7 @@ class EventCompanyManageServiceTest {
         ticketSupply = Mockito.mock(ITicketSupply.class);
         notifier = new VaadinNotifier();
         userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier);
-        eventService=new EventService(auth,eventRepo);
+        eventService=new EventService(auth,eventRepo,notifier);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
         activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,userRepo, 100);
@@ -257,7 +256,7 @@ class EventCompanyManageServiceTest {
         );
 
         assertFalse(response.getValue());
-        assertEquals("Invalid token", response.getMessage());
+        assertEquals("Invalid or expired token", response.getMessage());
     }
 
     @Test
@@ -368,7 +367,7 @@ class EventCompanyManageServiceTest {
 
         // Assert: System blocks and alerts about invalid token
         assertNull(response.getValue());
-        assertEquals("Invalid token", response.getMessage());
+        assertEquals("Invalid or expired token", response.getMessage());
     }
 
     @Test
@@ -1487,7 +1486,7 @@ class EventCompanyManageServiceTest {
         Response<List<PurchaseHistoryDTO>> response =
                 eventCompanyManageService.getPurchaseHistoryByUser(null);
         assertNull(response.getValue());
-        assertEquals("User is not logged in", response.getMessage());
+        assertEquals("Invalid or expired token", response.getMessage());
     }
 
     @Test
@@ -2163,6 +2162,118 @@ class EventCompanyManageServiceTest {
         // Must remain with original purchase snapshot
         assertNotEquals("2030-01-01T20:00", history.getEventDate());
         assertFalse(history.getPurchasedTickets().isEmpty());
+    }
+    @Test
+    void GivenRealExpiredToken_WhenCreateEvent_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        // Arrange: Register a dedicated user for this test
+        String email = "expired_create_event@test.com";
+        userService.registerUser(null, new UserDTO(
+                email, "Expired", "User", "pass", 1, 1, 1990, "Israel", "050-111-2233"
+        ));
+
+        // Arrange: Generate a real JWT that has ALREADY EXPIRED
+        TokenService testTokenService = new TokenService();
+        String expiredToken = testTokenService.generateExpiredTokenForTest(email);
+
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(expiredToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            // Act
+            Response<Integer> response = eventCompanyManageService.createEvent(
+                    expiredToken, companyId, LocalDateTime.now().plusDays(30), "Expired Token Event",
+                    LocalDateTime.now().plusDays(1), false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL
+            );
+
+            // Assert
+            assertNull(response.getValue());
+            assertEquals("Invalid or expired token", response.getMessage());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenUpdateEventDate_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        String email = "logout_update_date@test.com";
+        userService.registerUser(null, new UserDTO(
+                email, "Logout", "User", "pass", 1, 1, 1990, "City", "050-000-0000"
+        ));
+        String testToken = userService.login(email, "pass").getValue();
+
+        userService.logout(testToken);
+
+        // Arrange: Set up the WebSocket listener for this specific token's tab
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(testToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            Response<Boolean> response = eventCompanyManageService.UpdateEventDate(testToken, eventId, LocalDateTime.now().plusDays(20));
+
+            // Assert
+            assertFalse(response.getValue());
+            assertEquals("Invalid token", response.getMessage());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenGetCompanyDetails_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        String email = "logout_get_details@test.com";
+        userService.registerUser(null, new UserDTO(
+                email, "Logout", "User2", "pass", 1, 1, 1990, "City", "050-000-0000"
+        ));
+        String testToken = userService.login(email, "pass").getValue();
+
+        userService.logout(testToken);
+
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(testToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            // Act: Attempt to fetch company details
+            Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(testToken, companyId);
+
+            // Assert
+            assertNull(response.getValue());
+            assertEquals("Invalid token", response.getMessage());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
     }
 }
 

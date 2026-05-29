@@ -68,4 +68,14 @@ public class TokenService {
     public Date extractExpirationDate(String token) {
         return extractClaim(token, Claims::getExpiration);
     }
+    public String generateExpiredTokenForTest(String username) {
+        return Jwts.builder()
+                .setSubject(username)
+                .claim("role", "MEMBER")
+                .setIssuedAt(new Date(System.currentTimeMillis() - (1000 * 60 * 60 * 2)))
+                .setExpiration(new Date(System.currentTimeMillis() - (1000 * 60 * 60)))
+                .signWith(key)
+                .compact();
+    }
+
 }

@@ -460,7 +460,7 @@ public class EventCompanyManageService {
                     logger.log(Level.SEVERE, "company not found");
                     return new Response<>(null, "company not found");
                 }
-                String role = auth.getRole(token).getValue();
+                String role = getValidatedRole(token);
                 if (role == null) {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");

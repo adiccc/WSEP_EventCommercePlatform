@@ -783,7 +783,7 @@ public class CompanyService {
             try {
                 String role = getValidatedRole(token);
                 if (role == null) {
-                    return new Response<>(false, "Invalid token");
+                    return Response.error("Invalid token");
                 }
                 int appointerId = getUserIdFromToken(token);
 
