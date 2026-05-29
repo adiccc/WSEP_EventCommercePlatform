@@ -20,6 +20,7 @@ import application.ActiveOrderService;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.notification.NotificationVariant;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -171,7 +172,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         actions.add(purchaseButton);
 
-        if (dto.isHasLottery()) {
+        if (dto.hasLottery()) {
             actions.add(lotteryButton);
         }
 
@@ -198,19 +199,21 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                 );
 
         if (response.getValue() != null && response.getValue()) {
-            Notification.show(
+            Notification notification = Notification.show(
                     response.getMessage(),
                     4000,
                     Notification.Position.TOP_CENTER
             );
+            notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
             return;
         }
 
-        Notification.show(
+        Notification notification = Notification.show(
                 response.getMessage(),
                 5000,
                 Notification.Position.TOP_CENTER
         );
+        notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
     }
 
     private void handlePurchaseClick() {
