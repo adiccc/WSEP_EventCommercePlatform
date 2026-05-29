@@ -3,6 +3,7 @@ package UI.Views;
 import UI.Presenters.EventDetailsPresenter;
 import UI.Presenters.PurchasePresenter;
 import application.EventService;
+import application.LotteryService;
 import application.Response;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.*;
@@ -33,9 +34,9 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     private int companyId;
     private int eventId;
 
-    public EventDetailsView(EventService eventService, ActiveOrderService activeOrderService) {
+    public EventDetailsView(EventService eventService, ActiveOrderService activeOrderService, LotteryService lotteryService) {
 
-        this.presenter = new EventDetailsPresenter(eventService);
+        this.presenter = new EventDetailsPresenter(eventService, lotteryService);
         this.purchasePresenter = new PurchasePresenter(activeOrderService);
 
         setSpacing(true);
@@ -152,13 +153,64 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         purchaseButton.addClickListener(e -> handlePurchaseClick());
 
+        Button lotteryButton =
+                new Button("🎲 Register to Lottery");
+
+        lotteryButton.getStyle()
+                .set("margin-top", "1rem")
+                .set("font-weight", "600")
+                .set("background", "#7c3aed")
+                .set("color", "white")
+                .set("padding", "0.8rem 1.4rem")
+                .set("border-radius", "12px");
+
+        lotteryButton.addClickListener(e -> registerToLottery());
+
+        HorizontalLayout actions = new HorizontalLayout();
+        actions.setSpacing(true);
+
+        actions.add(purchaseButton);
+
+        if (dto.isHasLottery()) {
+            actions.add(lotteryButton);
+        }
+
         header.add(
                 name,
                 chips,
-                purchaseButton
+                actions
         );
 
         return header;
+    }
+
+    private void registerToLottery() {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+
+        String token =
+                (String) VaadinSession.getCurrent()
+                        .getAttribute("token_" + tabId);
+
+        Response<Boolean> response =
+                presenter.registerUserToLottery(
+                        token,
+                        eventId
+                );
+
+        if (response.getValue() != null && response.getValue()) {
+            Notification.show(
+                    response.getMessage(),
+                    4000,
+                    Notification.Position.TOP_CENTER
+            );
+            return;
+        }
+
+        Notification.show(
+                response.getMessage(),
+                5000,
+                Notification.Position.TOP_CENTER
+        );
     }
 
     private void handlePurchaseClick() {
