@@ -678,14 +678,17 @@ class LotteryServiceTest {
         void GivenLoggedOutUser_WhenRegisterUserToLottery_ThenErrorReturned() {
                 // Arrange
                 LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+                UserDTO user = new UserDTO("test@test.com", "first", "last", "pass", 1, 1, 2000, "city", "050-123-4567");
+                userService.registerUser(null, user);
+                String token = userService.login("test@test.com", "pass").getValue();
                 lotteryService.createLottery(validToken, eventId, 5, lotteryDate_X, 24L);
-
+                userService.logout(token);
                 // Act
-                Response<Boolean> response = lotteryService.registerUserToLottery(null, eventId);
+                Response<Boolean> response = lotteryService.registerUserToLottery(token, eventId);
 
                 // Assert
                 assertFalse(response.getValue());
-                assertEquals("User is not logged in", response.getMessage());
+                assertEquals("Invalid token", response.getMessage());
         }
 
         @Test
@@ -810,5 +813,42 @@ class LotteryServiceTest {
                 assertEquals(usersCount, successfulRegistrations);
                 assertEquals(usersCount, lottery.getRegistered().size());
         }
+        @Test
+        void GivenRealExpiredToken_WhenCreateLottery_ThenTokenExpiredNotificationSent() throws InterruptedException {
+                // Arrange
+                String email = "expired_create_lottery@test.com";
+                userService.registerUser(null, new UserDTO(
+                        email, "Expired", "User", "pass", 1, 1, 1990, "Israel", "050-111-2233"
+                ));
 
+                // Arrange: Generate a real token that has ALREADY EXPIRED
+                TokenService testTokenService = new TokenService();
+                String expiredToken = testTokenService.generateExpiredTokenForTest(email);
+
+                CountDownLatch tabLatch = new CountDownLatch(1);
+                AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+                Registration tabReg = Broadcaster.registerTab(expiredToken, dto -> {
+                        receivedNotification.set(dto);
+                        tabLatch.countDown();
+                });
+
+                try {
+                        // Act
+                        Response<Boolean> response = lotteryService.createLottery(
+                                expiredToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L
+                        );
+
+                        assertFalse(response.getValue());
+                        assertEquals("Invalid token", response.getMessage());
+
+                        // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+                        assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+                        assertNotNull(receivedNotification.get());
+                        assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+                } finally {
+                        tabReg.remove();
+                }
+        }
 }

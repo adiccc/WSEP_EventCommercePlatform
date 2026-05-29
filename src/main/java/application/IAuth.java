@@ -15,6 +15,6 @@ public interface IAuth {
 
     Response<String> getUserEmail(String token);
 
-    Response<String> getUserIdentifier(String token); // TODO: CHECK IF TO DELETE
+    Response<String> getUserIdentifier(String token);
 
 }

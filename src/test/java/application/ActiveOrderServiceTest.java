@@ -51,6 +51,7 @@ class ActiveOrderServiceTest {
     private EventCompanyManageService companyEventService;
     private LotteryService lotteryService;
     private LotteryRepoImpl lotteryRepo;
+    private TokenService tokenService;
     private String validToken;
     private Integer eventId;
     private Integer concurrentEventId;
@@ -63,7 +64,7 @@ class ActiveOrderServiceTest {
     @BeforeEach
     void setUp() {
         LoggerSetup.setup();
-        TokenService tokenService = new TokenService();
+        tokenService = new TokenService();
         userRepo = new UserRepo();
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         ISuspensionRepo suspensionRepo = new SuspensionRepoImpl();
@@ -4158,5 +4159,76 @@ class ActiveOrderServiceTest {
         assertNotNull(response.getValue());
         assertTrue(response.getValue());
         assertEquals("Lottery code is valid", response.getMessage());
+    }
+
+    @Test
+    void GivenExpiredToken_WhenEnterEventPurchase_ThenTokenExpiredNotificationSent() {
+        // Arrange
+        String email = "expired_enter@mail.com";
+        userService.registerUser("", new UserDTO(
+                email, "f", "l", "pass", 1, 1, 2000, "Israel", "050-123-4567"
+        ));
+        String token = userService.login(email, "pass").getValue();
+
+        // Act
+        userService.logout(token);
+
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase(token, companyId, eventId, null);
+
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+
+        Mockito.verify(notifier, Mockito.atLeastOnce()).notifyTab(
+                Mockito.eq(token),
+                Mockito.argThat(notification -> notification.getType() == NotifyType.TOKEN_EXPIRED)
+        );
+    }
+
+    @Test
+    void GivenExpiredToken_WhenUserSelectTickets_ThenTokenExpiredNotificationSent() {
+        // Arrange
+        String email = "expired_select@mail.com";
+        userService.registerUser("", new UserDTO(
+                email, "f", "l", "pass", 1, 1, 2000, "Israel", "050-123-4568" 
+        ));
+        String token = userService.login(email, "pass").getValue();
+
+        // Act
+        userService.logout(token);
+
+        //trying to select tickets before token is getting expired
+        Response<Integer> response = service.userSelectTickets(token, eventId, new HashMap<>(), new HashMap<>());
+
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("Invalid identifier supplied", response.getMessage());
+
+        Mockito.verify(notifier, Mockito.atLeastOnce()).notifyTab(
+                Mockito.eq(token),
+                Mockito.argThat(notification -> notification.getType() == NotifyType.TOKEN_EXPIRED)
+        );
+    }
+    @Test
+    void GivenRealExpiredToken_WhenEnterPurchase_ThenTokenExpiredNotificationSent() {
+        // Arrange
+        String email = "pure_integration@mail.com";
+        userService.registerUser("", new UserDTO(
+                email, "Pure", "Integration", "pass", 1, 1, 2000, "Israel", "050-123-4567"
+        ));
+
+        String expiredToken = tokenService.generateExpiredTokenForTest(email);
+
+        // Act
+        Response<EnterPurchaseDTO> response = service.enterEventPurchase(expiredToken, companyId, eventId, null);
+
+        // Assert
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+
+        Mockito.verify(notifier, Mockito.atLeastOnce()).notifyTab(
+                Mockito.eq(expiredToken),
+                Mockito.argThat(notification -> notification.getType() == NotifyType.TOKEN_EXPIRED)
+        );
     }
 }

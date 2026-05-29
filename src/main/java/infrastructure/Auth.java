@@ -54,14 +54,21 @@ public class Auth implements IAuth {
             return new Response<>(false, "Token is missing or empty");
         }
         try {
-            Date date = tokenService.extractExpirationDate(token);
-            if (tokensLoggedOut.putIfAbsent(token, date) != null) {
-                logger.warning("Logout attempt failed: member is in the logged out tokens list");
-                return new Response<>(false, "Cannot log out, user is Already logged out");
+            Date date;
+            try {
+                date = tokenService.extractExpirationDate(token);
             }
-            cleanExpiredLoggedOutTokens();
-            logger.info("Logout successful for username: " + tokenService.extractUsername(token));
-            return new Response<>(true, "Logout successful");
+            catch (Exception e) {
+                logger.warning("Token already expired or invalid during logout. Proceeding to blacklist it.");
+                date = new Date();
+            }
+                if (tokensLoggedOut.putIfAbsent(token, date) != null) {
+                    logger.warning("Logout attempt failed: member is in the logged out tokens list");
+                    return new Response<>(false, "Cannot log out, user is Already logged out");
+                }
+                cleanExpiredLoggedOutTokens();
+                logger.info("Logout successful for username: " + tokenService.extractUsername(token));
+                return new Response<>(true, "Logout successful");
         } catch (Exception e) {
             logger.severe("Logout failed for token: " + token + ". Error: " + e.getMessage());
             return new Response<>(false, "Logout failed due to server error");

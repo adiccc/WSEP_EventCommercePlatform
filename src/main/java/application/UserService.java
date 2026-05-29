@@ -344,6 +344,16 @@ public class UserService {
             }
             try {
                 String role = auth.getRole(token).getValue();
+                if(role == null){
+                    try{
+                        NotifyPayload payload = new NotifyPayload("Your session has expired");
+                        NotifyDTO expiredNotify = new NotifyDTO(NotifyType.TOKEN_EXPIRED, payload);
+                        notifier.notifyTab(token, expiredNotify);
+                        logger.info("Sent TOKEN_EXPIRED notification to tab: " + token);
+                    } catch (Exception e) {
+                        logger.warning("Failed to send TOKEN_EXPIRED notification: " + e.getMessage());
+                    }
+                }
                 if ("GUEST".equals(role)) {
                     return new Response<>(-1, "Guest token recognized");
                 }
@@ -368,28 +378,4 @@ public class UserService {
         });
     }
 
-    public Response<UserDTO> getUserDTO(String token) {
-        return RetryHelper.executeWithRetry(() -> {
-            if (!auth.isLoggedIn(token).getValue()) {
-                logger.warning("User with token is not logged in");
-                return new Response<>(null, "User with token is not logged in");
-            }
-            try {
-                String email = auth.getUserEmail(token).getValue();
-                if (email == null) {
-                    return new Response<>(null, "Email extraction failed");
-                }
-
-                Member member = userRepo.findUserByEmail(email);
-                if (member != null) {
-                    return new Response<>(member.getUserDTO(), "Retrieved User DTO");
-                } else {
-                    return new Response<>(null, "Member not found in database");
-                }
-            } catch (Exception e) {
-                logger.severe("Failed to get User DTO: " + e.getMessage());
-                return new Response<>(null, "Server error while retrieving User DTO");
-            }
-        });
-    }
 }

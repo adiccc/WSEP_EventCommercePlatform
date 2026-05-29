@@ -1,9 +1,8 @@
 package application;
 
-import DTO.ElementPositionDTO;
-import DTO.SeatingZoneDTO;
-import DTO.StandingZoneDTO;
+import DTO.*;
 import Log.LoggerSetup;
+import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.dataType.*;
@@ -26,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -46,7 +46,7 @@ class EventServiceTest {
     private Integer activeEvent1Id;
     private Integer inactiveEventId;
     private EventCompanyManageService eventCompanyManageService;
-
+    private UserService userService;
     private ElementPositionDTO stage;
     private List<ElementPositionDTO> entries;
     private List<StandingZoneDTO> standingZones;
@@ -63,11 +63,11 @@ class EventServiceTest {
         CompanyRepoImpl companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         suspensionRepo=new SuspensionRepoImpl();
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo);
-        service = new EventService(auth, eventRepo);
         notifier = new VaadinNotifier();
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo);
+        service = new EventService(auth, eventRepo,notifier);
 
-        UserService userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier);
+        userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier);
         UserDTO userDTO = new UserDTO("user1@test.com","test1","t","mytest",1,1,2016,"user test address","054-555-6677");
         userService.registerUser(validToken,userDTO);
         validToken=userService.login("user1@test.com","mytest").getValue();
@@ -290,7 +290,7 @@ class EventServiceTest {
     @Test
     void GivenNoCompanyData_WhenSearchEvents_ThenNoResultsReturned() {
         EventRepoImpl emptyRepo = new EventRepoImpl();
-        EventService emptyService = new EventService(auth, emptyRepo);
+        EventService emptyService = new EventService(auth, emptyRepo,notifier);
 
         EventSearchFilter filter = new EventSearchFilter();
         filter.setKeyword("anything");
@@ -658,6 +658,115 @@ class EventServiceTest {
         assertNotNull(response.getValue());
         assertFalse(response.getValue().isEmpty());
         assertEquals("Events retrieved successfully", response.getMessage());
+    }
+    @Test
+    void GivenRealExpiredToken_WhenSearchEvents_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        // Arrange: Create a local UserService since it's not a class field
+        UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier);
+
+        String email = "expired_search@test.com";
+        userService.registerUser(null, new UserDTO(
+                email, "Expired", "User", "pass", 1, 1, 1990, "Israel", "050-111-2233"
+        ));
+
+        // Arrange: Generate an expired token directly using our test hook
+        String expiredToken = tokenService.generateExpiredTokenForTest(email);
+
+        // Arrange: Set up the WebSocket listener for this specific token's tab
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(expiredToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            // Act: Attempt to search events with an expired token
+            Response<List<EventDTO>> response = service.searchEvents(expiredToken, new EventSearchFilter());
+
+            // Assert: Action should be blocked gracefully
+            assertNull(response.getValue());
+            assertEquals("Invalid token", response.getMessage());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+    @Test
+    void GivenLoggedOutUser_WhenViewEventDetails_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        String email = "logout_view_details@test.com";
+        userService.registerUser(null, new UserDTO(
+                email, "Logout", "User", "pass", 1, 1, 1990, "City", "050-000-0000"
+        ));
+        String testToken = userService.login(email, "pass").getValue();
+
+        userService.logout(testToken);
+
+        // Arrange: Set up the WebSocket listener for this specific token's tab
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(testToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            // Act
+            Response<EventDetailsDTO> response = service.ViewEventDetails(testToken, company1, activeEvent1Id);
+
+            assertNull(response.getValue());
+            assertEquals("Invalid token", response.getMessage());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenSearchCompanyEvents_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        String email = "logout_company_events@test.com";
+        userService.registerUser(null, new UserDTO(
+                email, "Logout", "User2", "pass", 1, 1, 1990, "City", "050-000-0000"
+        ));
+        String testToken = userService.login(email, "pass").getValue();
+
+        // Act: Log out to invalidate the token
+        userService.logout(testToken);
+
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(testToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            Response<List<EventDTO>> response = service.searchCompanyEvents(testToken, company1, new EventSearchFilter());
+
+            assertNull(response.getValue());
+            assertEquals("Invalid token", response.getMessage());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
     }
 
 }

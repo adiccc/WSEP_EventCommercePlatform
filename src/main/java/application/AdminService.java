@@ -2,6 +2,7 @@ package application;
 
 import DTO.NotifyDTO;
 import DTO.NotifyPayload;
+import DTO.NotifyType;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
@@ -60,7 +61,7 @@ public class AdminService {
         return RetryHelper.executeWithRetry(()->{
             logger.log(Level.INFO, "SuspendUser called");
             try{
-                if(!auth.isAdmin(token).getValue()){
+                if(!isVerifiedAdmin(token)){
                     logger.log(Level.INFO, "SuspendUser failed : user is not admin");
                     return new Response<>(false, "SuspendUser failed : user is not admin");
                 }
@@ -91,7 +92,7 @@ public class AdminService {
         return RetryHelper.executeWithRetry(()->{
             logger.log(Level.INFO, "SuspendUser called");
             try{
-                if(!auth.isAdmin(token).getValue()){
+                if(!isVerifiedAdmin(token)){
                     logger.log(Level.INFO, "SuspendUser failed : user is not admin");
                     return new Response<>(false, "SuspendUser failed : user is not admin");
                 }
@@ -126,7 +127,7 @@ public class AdminService {
         return RetryHelper.executeWithRetry(()->{
             logger.log(Level.INFO, "UnsuspendUser called");
             try{
-                if(!auth.isAdmin(token).getValue()){
+                if(!isVerifiedAdmin(token)){
                     logger.log(Level.INFO, "UnsuspendUser failed : user is not admin");
                     return new Response<>(false, "UnsuspendUser failed : user is not admin");
                 }
@@ -157,7 +158,7 @@ public class AdminService {
     public Response<List<SuspensionDTO>> getAllUsersSuspensions(String token) {
         return RetryHelper.executeWithRetry(()-> {
             logger.log(Level.INFO, "getAllUsersSuspensions called");
-            if (!auth.isAdmin(token).getValue()) {
+            if (!isVerifiedAdmin(token)) {
                 logger.log(Level.INFO, "getAllUsersSuspensions failed : user is not admin");
                 return new Response<>(null, "getAllUsersSuspensions failed : user is not admin");
             }
@@ -197,7 +198,7 @@ public class AdminService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("setMaxCapacity attempt");
             try {
-                if (!auth.isAdmin(token).getValue()) {
+                if (!isVerifiedAdmin(token)) {
                     logger.warning("setMaxCapacity failed: unauthorized");
                     return Response.error("Unauthorized: admin access required");
                 }
@@ -217,7 +218,7 @@ public class AdminService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("getMaxCapacity attempt");
             try {
-                if (!auth.isAdmin(token).getValue()) {
+                if (!isVerifiedAdmin(token)) {
                     logger.warning("getMaxCapacity failed: unauthorized");
                     return Response.error("Unauthorized: admin access required");
                 }
@@ -235,7 +236,7 @@ public class AdminService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("getActiveCount attempt");
             try {
-                if (!auth.isAdmin(token).getValue()) {
+                if (!isVerifiedAdmin(token)) {
                     logger.warning("getActiveCount failed: unauthorized");
                     return Response.error("Unauthorized: admin access required");
                 }
@@ -265,7 +266,7 @@ public class AdminService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("removeUser attempt for userId: " + userIdToRemove);
             try {
-                if (!auth.isAdmin(adminToken).getValue()) {
+                if (!isVerifiedAdmin(adminToken)) {
                     logger.warning("removeUser failed: unauthorized");
                     return Response.error("Unauthorized: admin access required");
                 }
@@ -345,7 +346,7 @@ public class AdminService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("getWaitingCount attempt");
             try {
-                if (!auth.isAdmin(token).getValue()) {
+                if (!isVerifiedAdmin(token)) {
                     logger.warning("getWaitingCount failed: unauthorized");
                     return Response.error("Unauthorized: admin access required");
                 }
@@ -363,7 +364,7 @@ public class AdminService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("closeCompanyByAdmin attempt for companyId: " + companyId);
             try {
-                if (!auth.isAdmin(token).getValue()) {
+                if (!isVerifiedAdmin(token)) {
                     logger.warning("closeCompanyByAdmin failed: unauthorized");
                     return new Response<>(false, "Unauthorized: admin access required");
                 }
@@ -493,7 +494,7 @@ public class AdminService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("getGlobalOrders attempt for admin");
             try {
-                if (!auth.isAdmin(token).getValue()) {
+                if (!isVerifiedAdmin(token)) {
                     logger.warning("closeCompanyByAdmin failed: unauthorized");
                     return new Response<>(null, "Unauthorized: admin access required");
                 }
@@ -561,7 +562,7 @@ public class AdminService {
     public Response<List<String>> getAllPurchasers(String token) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("getAllPurchasers attempt for admin");
-                if (!auth.isAdmin(token).getValue()) {
+                if (!isVerifiedAdmin(token)) {
                     logger.warning("getAllPurchasers failed: unauthorized");
                     return new Response<>(null, "Unauthorized: Only admin can access");
                 }
@@ -622,5 +623,24 @@ public class AdminService {
                 return new Response<>(null, "Failed to send or save notification");
             }
         });
+    }
+private void notifyTokenExpired(String token) {
+    try {
+        NotifyPayload payload = new NotifyPayload("Your session has expired");
+        NotifyDTO expiredNotify = new NotifyDTO(NotifyType.TOKEN_EXPIRED, payload);
+        notifier.notifyTab(token, expiredNotify);
+        logger.info("Sent TOKEN_EXPIRED notification to tab: " + token);
+    } catch (Exception e) {
+        logger.warning("Failed to send TOKEN_EXPIRED notification: " + e.getMessage());
+    }
+}
+
+private boolean isVerifiedAdmin(String token) {
+    Response<String> roleRes = auth.getRole(token);
+    if (roleRes.getValue() == null) {
+        notifyTokenExpired(token);
+        return false;
+    }
+    return auth.isAdmin(token).getValue();
     }
 }

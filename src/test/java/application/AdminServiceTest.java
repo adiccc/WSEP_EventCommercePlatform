@@ -61,6 +61,7 @@ class AdminServiceTest {
     private List<SeatingZoneDTO> seatingZones;
     private INotifier notifier;
     private IAuth auth;
+    private TokenService tokenService;
 
     private static final String ADMIN_EMAIL = "admin@bgu.ac.il";
     private static final String USER_EMAIL = "user@bgu.ac.il";
@@ -75,7 +76,7 @@ class AdminServiceTest {
         WebQueue.resetForTesting();
         WebQueue.getInstance(100);
 
-        TokenService tokenService = new TokenService();
+        tokenService = new TokenService();
         userRepo = new UserRepo();
         eventRepo = new EventRepoImpl();
         companyRepo = new CompanyRepoImpl();
@@ -1865,4 +1866,117 @@ class AdminServiceTest {
 
     }
 
+    @Test
+    void GivenRealExpiredToken_WhenSetMaxCapacity_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        // Arrange: Register a dedicated admin so the user exists in DB
+        String email = "expired_admin_hermetic@bgu.ac.il";
+        userService.registerUser(null, new UserDTO(
+                email, "Expired", "Admin", "pass", 1, 1, 1990, "Israel", "050-111-2233"
+        ));
+
+        // Arrange: Use the TokenService to generate a real JWT that has ALREADY EXPIRED.
+        TokenService testTokenService = new TokenService();
+        String expiredToken = testTokenService.generateExpiredTokenForTest(email);
+
+        // Arrange: Set up the WebSocket listener for this specific token's tab
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(expiredToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            // Act: Call an admin function with the expired token
+            Response<Boolean> response = adminService.setMaxCapacity(expiredToken, 500);
+
+            // Assert: Must fail gracefully
+            assertTrue(response.isError());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+
+    @Test
+    void GivenLoggedOutAdmin_WhenCloseCompanyByAdmin_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        // Arrange: Create a dedicated admin for this test
+        String email = "logout_close_admin@bgu.ac.il";
+        userService.registerUser(null, new UserDTO(
+                email, "Logout", "Admin", "pass", 1, 1, 1990, "City", "050-000-0000"
+        ));
+        String testAdminToken = userService.login(email, "pass").getValue();
+
+        // Act: Log the user out (invalidating the token in Auth)
+        userService.logout(testAdminToken);
+
+        // Arrange: Set up the WebSocket listener for this specific token's tab
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(testAdminToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            // Act: Attempt to close the company
+            Response<Boolean> response = adminService.closeCompanyByAdmin(testAdminToken, companyId);
+
+            // Assert: Unauthorized due to invalid token
+            assertTrue(response.isError());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+
+    @Test
+    void GivenLoggedOutAdmin_WhenSuspendUser_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        // Arrange: Create a dedicated admin for this test
+        String email = "logout_suspend_admin@bgu.ac.il";
+        userService.registerUser(null, new UserDTO(
+                email, "Logout", "Admin2", "pass", 1, 1, 1990, "City", "050-000-0000"
+        ));
+        String testAdminToken = userService.login(email, "pass").getValue();
+
+        // Act: Log the user out
+        userService.logout(testAdminToken);
+
+        // Arrange: Set up the WebSocket listener for this specific token's tab
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(testAdminToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            // Act: Attempt to suspend a user
+            Response<Boolean> response = adminService.SuspendUser(testAdminToken, userIdNotSuspened);
+
+            // Assert: Request should fail
+            assertTrue(response.isError());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
 }
