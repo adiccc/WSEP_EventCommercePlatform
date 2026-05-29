@@ -197,6 +197,8 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         dialog.setWidth("420px");
 
         DateTimePicker newDateField = new DateTimePicker("New Event Date");
+        newDateField.setMin(LocalDateTime.now());
+
         newDateField.setWidthFull();
 
         try {
