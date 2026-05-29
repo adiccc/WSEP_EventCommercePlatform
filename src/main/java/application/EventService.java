@@ -1,5 +1,8 @@
 package application;
 
+import DTO.NotifyDTO;
+import DTO.NotifyPayload;
+import DTO.NotifyType;
 import domain.dataType.EventSearchFilter;
 import domain.dto.EventDTO;
 import domain.dto.EventDetailsDTO;
@@ -23,11 +26,13 @@ public class EventService {
 
     private final IEventRepo eventRepo;
     private final IAuth auth;
+    private final INotifier notifier;
 
     @Autowired
-    public EventService(IAuth auth, IEventRepo eventRepo) {
+    public EventService(IAuth auth, IEventRepo eventRepo, INotifier notifier) {
         this.eventRepo = eventRepo;
         this.auth = auth;
+        this.notifier = notifier;
     }
 
     public Response<EventDetailsDTO> ViewEventDetails(String token, int companyId, Integer eventId) {
@@ -36,7 +41,7 @@ public class EventService {
             logger.log(Level.INFO, "ViewEventDetails called");
 
             // check valid token
-            String role = auth.getRole(token).getValue();
+            String role = getValidatedRole(token);
             if(role == null){
                 logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
@@ -70,7 +75,7 @@ public class EventService {
             logger.info("Search events called");
 
             // token validation
-            String role = auth.getRole(token).getValue();
+            String role = getValidatedRole(token);
             if(role == null){
                 logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
@@ -108,7 +113,7 @@ public class EventService {
             logger.info("Search company events called");
 
             // token validation
-            String role = auth.getRole(token).getValue();
+            String role = getValidatedRole(token);
             if(role == null){
                 logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
@@ -140,5 +145,22 @@ public class EventService {
                 return new Response<>(null, "Search failed");
             }
         });
+
+    }
+    private void notifyTokenExpired(String token) {
+        try {
+            NotifyPayload payload = new NotifyPayload("Your session has expired");
+            NotifyDTO expiredNotify = new NotifyDTO(NotifyType.TOKEN_EXPIRED, payload);
+            notifier.notifyTab(token, expiredNotify);
+        } catch (Exception e) { logger.warning("Notify failed"); }
+    }
+
+    private String getValidatedRole(String token) {
+        String role = auth.getRole(token).getValue();
+        if (role == null) {
+            notifyTokenExpired(token);
+            return null;
+        }
+        return role;
     }
 }

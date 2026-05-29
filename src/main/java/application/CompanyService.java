@@ -1,11 +1,11 @@
 package application;
 
 import java.util.*;
-import java.util.NoSuchElementException;
 import java.util.logging.Logger;
 
 import DTO.*;
 import Exception.OptimisticLockingFailureException;
+import domain.Suspension.ISuspensionRepo;
 import domain.company.*;
 import domain.dataType.PermissionType;
 import domain.dto.CompanyDTO;
@@ -29,7 +29,7 @@ public class CompanyService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
 
     private final IAuth auth;
-    private final IAccessValidator accessValidator;
+    private final ISuspensionRepo suspensionRepo;
     private final ICompanyRepo companyRepo;
     private final IUserRepo userRepo;
     private final INotifier notifier;
@@ -37,11 +37,11 @@ public class CompanyService {
 
     @Autowired
     public CompanyService( IAuth auth, ICompanyRepo companyRepo,
-                          IUserRepo userRepo, IAccessValidator accessValidator,INotifier notifier) {
+                          IUserRepo userRepo,ISuspensionRepo suspensionRepo,INotifier notifier) {
         this.auth = auth;
         this.companyRepo = companyRepo;
         this.userRepo = userRepo;
-        this.accessValidator = accessValidator;
+        this.suspensionRepo = suspensionRepo;
         this.notifier = notifier;
     }
 
@@ -50,17 +50,21 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() ->{
         try {
                 logger.info("Attempting to create company: " + companyName + " for user: " + sessionToken);
-                int userId = auth.getUserId(sessionToken).getValue();
+                String role = getValidatedRole(sessionToken);
+                if (role == null) {
+                    return new Response<>(null, "Invalid token");
+                }
+                int userId = getUserIdFromToken(sessionToken);
+                if (userId == -1) {
+                    return new Response<>(null, "User must be logged in to create a company, or session expired.");
+                }
                 Member user = userRepo.findById(userId);
                 if (user == null) {
                     return new Response<>(null, "User not found.");
                 }
-                if (!auth.isLoggedIn(sessionToken).getValue()) {
-                    return new Response<>(null, "User must be logged in to create a company.");
-                }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("User " + userId + " does not have write access.");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(sessionToken))) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
 
                 if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
@@ -109,7 +113,7 @@ public class CompanyService {
             logger.info("getProductionCompany called for companyId: " + companyId);
             try {
                 // 1. Validate token — guests have userId == -1, which is fine for read-only access
-                String role = auth.getRole(sessionToken).getValue();
+                String role = getValidatedRole(sessionToken);
                 if (role == null) {
                     logger.warning("getProductionCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
@@ -118,7 +122,7 @@ public class CompanyService {
                 Company company = companyRepo.findById(companyId);
                 // 3. For members, sync their role state within the company
                 if ("MEMBER".equals(role)) {
-                    int userId = auth.getUserId(sessionToken).getValue();
+                    int userId = getUserIdFromToken(sessionToken);
                     if (userId != -1) {
                         Member member = userRepo.findById(userId);
                         member.changeState(company.getCompanyPermission().getUserState(userId));
@@ -149,8 +153,12 @@ public class CompanyService {
         {
             logger.info("viewRolesAndPermissionsTree called for companyId: " + companyId);
             try {
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    return new Response<>(null, "Invalid token");
+                }
                 // 1. Validate token
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("viewRolesAndPermissionsTree failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
@@ -197,9 +205,11 @@ public class CompanyService {
     public Response<String> getUserRoleInCompany(String token, int companyId) {
         return RetryHelper.executeWithRetry(() -> {
             try {
-                String role = auth.getRole(token).getValue();
+                String role = getValidatedRole(token);
                 if (role == null) return Response.error("Invalid or expired token");
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
+                if (userId != -1) return Response.error("Invalid or expired token");
+
                 Company company = companyRepo.findById(companyId);
                 return Response.ok(company.getUserRoleName(userId));
             } catch (OptimisticLockingFailureException e) {
@@ -218,9 +228,11 @@ public class CompanyService {
     public Response<Set<PermissionType>> getMyPermissions(String token, int companyId) {
         return RetryHelper.executeWithRetry(() -> {
             try {
-                String role = auth.getRole(token).getValue();
+                String role = getValidatedRole(token);
                 if (role == null) return Response.error("Invalid or expired token");
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
+                if (userId != -1) return Response.error("Invalid or expired token");
+
                 Company company = companyRepo.findById(companyId);
                 return Response.ok(company.getManagerPermissions(userId));
             } catch (OptimisticLockingFailureException e) {
@@ -237,14 +249,18 @@ public class CompanyService {
         {
             logger.info("addRuleToCompany called for companyId: " + companyId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    return new Response<>(false, "Invalid token");
+                }
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("addRuleToCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("addRuleToCompany failed: invalid or expired token");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
 
                 Company company = companyRepo.findById(companyId);
@@ -287,14 +303,18 @@ public class CompanyService {
         {
             logger.info("removeRuleFromCompany called for companyId: " + companyId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    return new Response<>(false, "Invalid token");
+                }
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("removeRuleFromCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("removeRuleFromCompany failed: invalid or expired token");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 Company company = companyRepo.findById(companyId);
                 if (company == null) {
@@ -339,15 +359,19 @@ public class CompanyService {
             logger.info("addDiscountToCompany called for companyId: " + companyId);
 
             try {
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    return new Response<>(false, "Invalid token");
+                }
                 // 1. Validate token
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("addDiscountToCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("addDiscountToCompany failed: invalid or expired token");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
 
                 // 2. Company must exist
@@ -403,15 +427,19 @@ public class CompanyService {
             logger.info("removeDiscountFromCompany called for companyId: " + companyId);
 
             try {
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    return new Response<>(false, "Invalid token");
+                }
                 // 1. Validate token
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("removeDiscountFromCompany failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("removeDiscountFromCompany failed: invalid or expired token");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
 
                 // 2. Company must exist
@@ -465,12 +493,17 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("changeDiscountPolicyType called for companyId: " + companyId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    return new Response<>(null, "Invalid token");
+                }
+                int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("User does not have write access");
-
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 Company company = companyRepo.findById(companyId);
                 if (!company.isActive())
                     return Response.error("Company is not active");
@@ -497,12 +530,17 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("changePurchasePolicyType called for companyId: " + companyId);
             try {
-                int userId = auth.getUserId(token).getValue();
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    return new Response<>(null, "Invalid token");
+                }
+                int userId = getUserIdFromToken(token);
                 if (userId == -1)
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("User does not have write access");
-
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 Company company = companyRepo.findById(companyId);
                 if (!company.isActive())
                     return Response.error("Company is not active");
@@ -530,7 +568,7 @@ public class CompanyService {
         {
             logger.info("getAvailableCompanies called");
             try {
-                String role = auth.getRole(token).getValue();
+                String role = getValidatedRole(token);
                 if (role == null) {
                     logger.warning("getAvailableCompanies failed: invalid or expired token");
                     return new Response<>(null,"Invalid or expired token");
@@ -542,7 +580,7 @@ public class CompanyService {
                 }
                 List<CompanyDTO> filteredCompanies = new ArrayList<CompanyDTO>();
                 //it's a member or a guest
-                int userId = auth.getUserId(token).getValue(); //for guest returns -1
+                int userId = getUserIdFromToken(token);
                 boolean isMember = "MEMBER".equals(role);
                 for (Company company : allCompanies) {
                     // isUserPermitted means or the company is active
@@ -574,17 +612,18 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("updateManagerPermissions called for companyId: " + companyId + ", managerId: " + managerId);
             try {
-                if (!auth.isLoggedIn(token).getValue()) {
-                    logger.warning("updateManagerPermissions failed: user is not logged in");
-                    return Response.error("User is not logged in");
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    return new Response<>(false, "Invalid token");
                 }
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("updateManagerPermissions failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 if (newPermissions == null) {
                     logger.warning("updateManagerPermissions failed: null permissions list");
@@ -602,14 +641,12 @@ public class CompanyService {
                 }
                 company.updateManagerPermissions(userId, managerId, newPermissions);
                 companyRepo.store(company);
-                try{
-                    NotifyPayload payload = new NotifyPayload("Your manager permissions have been updated in company " + company.getCompanyName(),null, companyId);
-                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                    notifier.notifyUser(managerMember.getIdentifier(), notifyDTO);
-                    logger.info("updateManagerPermissions sent notification successfully");
-                } catch (Exception e){
-                    logger.warning("updateManagerPermissions failed to send notification: " + e.getMessage());
-                }
+
+                NotifyPayload payload = new NotifyPayload("Your manager permissions have been updated in company " + company.getCompanyName(),null, companyId);
+                NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
+                sendOrSaveNotification(managerMember.getIdentifier(), notifyDTO);
+                logger.info("updateManagerPermissions sent notification successfully");
+
                 logger.info("updateManagerPermissions succeeded for managerId: " + managerId);
                 return Response.ok(true);
             } catch (NoSuchElementException e) {
@@ -633,18 +670,18 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("requestAppointOwner called for companyId: " + companyId + ", appointeeId: " + appointeeId);
             try {
-                if (!auth.isLoggedIn(token).getValue()) {
-                    logger.warning("requestAppointOwner failed: user is not logged in");
-                    return Response.error("User is not logged in");
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    return new Response<>(false, "Invalid token");
                 }
-                int appointerId = auth.getUserId(token).getValue();
+                int appointerId = getUserIdFromToken(token);
                 if (appointerId == -1) {
                     logger.warning("requestAppointOwner failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(appointerId)){
-                    logger.warning("requestAppointOwner failed: appointee " + appointeeId + " doesnt have write access");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(appointerId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 Company company;
                 try {
@@ -663,14 +700,11 @@ public class CompanyService {
                 }
                 company.requestAppointOwner(appointerId, appointeeId);
                 companyRepo.store(company);
-                try{
-                    NotifyPayload payload = new NotifyPayload("You have been invited to be a owner at company " + company.getCompanyName(), null,companyId);
-                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
-                    notifier.notifyUser(appointee.getIdentifier(), notifyDTO);
-                    logger.info("requestAppointOwner sent notification successfully");
-                } catch (Exception e){
-                    logger.warning("requestAppointOwner failed to send notification: " + e.getMessage());
-                }
+                NotifyPayload payload = new NotifyPayload("You have been invited to be a owner at company " + company.getCompanyName(), null,companyId);
+                NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
+                sendOrSaveNotification(appointee.getIdentifier(), notifyDTO);
+                logger.info("requestAppointOwner sent notification successfully");
+
                 logger.info("requestAppointOwner succeeded: pending appointment created for " + appointeeId);
                 return Response.ok(true);
             } catch (SecurityException e) {
@@ -691,18 +725,18 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("respondToOwnerAppointment called for companyId: " + companyId + ", accept: " + accept);
             try {
-                if (!auth.isLoggedIn(token).getValue()) {
-                    logger.warning("respondToOwnerAppointment failed: user is not logged in");
-                    return Response.error("User is not logged in");
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    return new Response<>(false, "Invalid token");
                 }
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("respondToOwnerAppointment failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("respondToOwnerAppointment failed: user does not have write access");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 Company company;
                 try {
@@ -725,15 +759,10 @@ public class CompanyService {
                 }
                 companyRepo.store(company);
                 if(accept){ //just after successful save to the repo we are sending the notification!
-                    try{
-                        NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
-                        NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                        notifier.notifyMemberById(userId, notifyDTO);
-                        logger.info("respondToOwnerAppointment: user " + userId + " accepted and became owner of company " + companyId);
-                    }
-                    catch(Exception e){
-                        logger.warning("respondToOwnerAppointment failed to send notification: " + e.getMessage());
-                    }
+                    NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
+                    sendOrSaveNotification(userRepo.getUserEmail(userId), notifyDTO);
+                    logger.info("respondToOwnerAppointment: user " + userId + " accepted and became owner of company " + companyId);
                 }
                 return Response.ok(accept);
             } catch (NoSuchElementException e) {
@@ -752,18 +781,19 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("requestAppointManager called for companyId: " + companyId + ", appointeeId: " + appointeeId);
             try {
-                if (!auth.isLoggedIn(token).getValue()) {
-                    logger.warning("requestAppointManager failed: user is not logged in");
-                    return Response.error("User is not logged in");
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    return Response.error("Invalid token");
                 }
-                int appointerId = auth.getUserId(token).getValue();
+                int appointerId = getUserIdFromToken(token);
+
                 if (appointerId == -1) {
                     logger.warning("requestAppointManager failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(appointerId)){
-                    logger.warning("requestAppointManager failed: appointee does not have write access");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(appointerId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 Company company;
                 try {
@@ -781,15 +811,10 @@ public class CompanyService {
                 }
                 company.requestAppointManager(appointerId, appointeeId, permissions);
                 companyRepo.store(company);
-                try{
-                    NotifyPayload payload = new NotifyPayload("You have been invited to be a manager at company " + company.getCompanyName(), null,companyId);
-                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
-                    notifier.notifyUser(member.getIdentifier(), notifyDTO);
-                    logger.info("requestAppointManager sent notification successfully");
-                }
-                catch(Exception e){
-                    logger.warning("requestAppointManager failed to send notification: " + e.getMessage());
-                }
+                NotifyPayload payload = new NotifyPayload("You have been invited to be a manager at company " + company.getCompanyName(), null,companyId);
+                NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
+                sendOrSaveNotification(member.getIdentifier(), notifyDTO);
+                logger.info("requestAppointManager sent notification successfully");
 
                 logger.info("requestAppointManager succeeded for appointeeId: " + appointeeId);
                 return Response.ok(true);
@@ -814,18 +839,18 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("respondToManagerAppointment called for companyId: " + companyId + ", accept: " + accept);
             try {
-                if (!auth.isLoggedIn(token).getValue()) {
-                    logger.warning("respondToManagerAppointment failed: user is not logged in");
-                    return Response.error("User is not logged in");
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    return new Response<>(false, "Invalid token");
                 }
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 if (userId == -1) {
                     logger.warning("respondToManagerAppointment failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(userId)){
-                    logger.warning("respondToManagerAppointment failed: user doesnt have write access");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 Company company;
                 try {
@@ -847,16 +872,10 @@ public class CompanyService {
                 }
                 companyRepo.store(company);
                 if(accept){
-                    try{
-                        NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
-                        NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                        notifier.notifyMemberById(userId, notifyDTO);
-                        logger.info("respondToManagerAppointment succeeded for userId: " + userId + ", accepted: " + accept);
-                    }
-                    catch(Exception e){
-                        logger.warning("respondToManagerAppointment failed to send notification: " + e.getMessage());
-                    }
-
+                    NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
+                    sendOrSaveNotification(userRepo.getUserEmail(userId), notifyDTO);
+                    logger.info("respondToManagerAppointment succeeded for userId: " + userId + ", accepted: " + accept);
                 }
                 return Response.ok(accept);
             } catch (OptimisticLockingFailureException e) {
@@ -871,18 +890,19 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("removeManagerAppointment called for companyId: " + companyId + ", managerId: " + managerId);
             try {
-                if (!auth.isLoggedIn(token).getValue()) {
-                    logger.warning("removeManagerAppointment failed: user is not logged in");
-                    return Response.error("User is not logged in");
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    return new Response<>(false, "Invalid token");
                 }
-                int actingOwnerId = auth.getUserId(token).getValue();
+                int actingOwnerId = getUserIdFromToken(token);
+
                 if (actingOwnerId == -1) {
                     logger.warning("removeManagerAppointment failed: invalid or expired token");
                     return Response.error("Invalid or expired token");
                 }
-                if(!accessValidator.hasWriteAccess(actingOwnerId)){
-                    logger.warning("removeManagerAppointment failed: user doesnt have write access");
-                    return new Response<>(null, "user does not have write access.");
+                if (suspensionRepo.haveActiveSuspension(actingOwnerId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
                 }
                 Company company;
                 try {
@@ -902,14 +922,10 @@ public class CompanyService {
                 managerMember.changeState(null);
                 userRepo.store(managerMember);
                 companyRepo.store(company);
-                try{
-                    NotifyPayload payload = new NotifyPayload("Your manager role has been removed from company " + company.getCompanyName(), null, companyId);
-                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.KICKOUT_TAB_NAVIGATION,payload);
-                    notifier.notifyUser(managerMember.getIdentifier(), notifyDTO);
-                    logger.info("removeManagerAppointment succeeded sending notification for userId: " + managerMember.getIdentifier());
-                } catch (Exception e){
-                    logger.warning("removeManagerAppointment failed to send notification: " + e.getMessage());
-                }
+                NotifyPayload payload = new NotifyPayload("Your manager role has been removed from company " + company.getCompanyName(), null, companyId);
+                NotifyDTO notifyDTO = new NotifyDTO( NotifyType.KICKOUT_TAB_NAVIGATION,payload);
+                sendOrSaveNotification(managerMember.getIdentifier(), notifyDTO);
+                logger.info("removeManagerAppointment succeeded sending notification for userId: " + managerMember.getIdentifier());
 
                 logger.info("removeManagerAppointment succeeded for managerId: " + managerId);
                 return Response.ok(true);
@@ -936,14 +952,15 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("getMyCompanies called");
             try {
-                String role = auth.getRole(token).getValue();
+                String role = getValidatedRole(token);
                 if (role == null) {
                     return Response.error("Invalid or expired token");
                 }
                 if (role.equals("GUEST")) {
                     return Response.error("Guests do not have company roles");
                 }
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
+                if(userId == -1) return Response.error("Invalid or expired token");
                 List<CompanyDTO> result = companyRepo.findByUserRole(userId);
                 logger.info("getMyCompanies succeeded, found " + result.size() + " companies for user " + userId);
                 return Response.ok(result);
@@ -959,24 +976,27 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.info("deactivateCompany called");
-            if (!auth.isLoggedIn(ownerToken).getValue()) {
-                logger.warning("deactivateCompany failed: invalid or expired token");
-                return new Response<>(false, "Invalid or expired token, deactivate failed");
+            String role = getValidatedRole(ownerToken);
+            if (role == null) {
+                return new Response<>(false, "Invalid token");
             }
-            if(!accessValidator.hasWriteAccess(auth.getUserId(ownerToken).getValue())){
-                logger.warning("deactivateCompany failed: user doesnt have write access");
-                return new Response<>(null, "user does not have write access.");
+            int userId = getUserIdFromToken(ownerToken);
+            if(userId == -1) {
+                return new Response<>(false, "Invalid or expired token");
+            }
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(false, "user does not have write access caused by suspension.");
             }
             try {
-                int userId = auth.getUserId(ownerToken).getValue();
                 Company company = companyRepo.findById(companyId);
-                if(company == null){
+                if (company == null) {
                     logger.warning("deactivateCompany failed: company not found, id: " + companyId);
-                    return new Response<>(false,"Company not found");
+                    return new Response<>(false, "Company not found");
                 }
-                if(!company.isOwner(userId)){
+                if (!company.isOwner(userId)) {
                     logger.warning("deactivateCompany failed: user isn't owner of the company");
-                    return new Response<>(false,"user is not owner of the company");
+                    return new Response<>(false, "user is not owner of the company");
                 }
                 if (company.isActive()) {
                     company.deactivate();
@@ -984,14 +1004,10 @@ public class CompanyService {
                         Set<Integer> allStaff = new HashSet<>(company.getOwnerIds());
                         allStaff.addAll(company.getCompanyPermission().getManagers());
                         for(Integer staffId : allStaff){
-                            try {
-                                NotifyPayload payload = new NotifyPayload("Alert: Company " + company.getCompanyName() + " has been deactivated.", null, companyId);
-                                NotifyDTO notifyDTO = new NotifyDTO(NotifyType.KICKOUT_TAB_NAVIGATION, payload);
-                                notifier.notifyMemberById(staffId, notifyDTO);
-                                logger.info("deactivateCompany succeeded sending notification for userId: " + staffId);
-                            } catch (Exception e){
-                                logger.warning("deactivateCompany notification send failed: " + e.getMessage());
-                            }
+                            NotifyPayload payload = new NotifyPayload("Alert: Company " + company.getCompanyName() + " has been deactivated.", null, companyId);
+                            NotifyDTO notifyDTO = new NotifyDTO(NotifyType.KICKOUT_TAB_NAVIGATION, payload);
+                            sendOrSaveNotification(userRepo.getUserEmail(staffId), notifyDTO);
+                            logger.info("deactivateCompany succeeded sending notification for userId: " + staffId);
                     }
                     logger.info("deactivateCompany succeeded for companyId: " + companyId);
                     return new Response<>(true, "Company deactivated successfully");
@@ -1007,6 +1023,70 @@ public class CompanyService {
             } catch (Exception e) {
                 logger.severe("Unexpected error in deactivateCompany: " + e.getMessage());
                 return new Response<>(false, "Unexpected error: " + e.getMessage());
+            }
+        });
+    }
+       private int getUserIdFromToken(String token) {
+            String email = auth.getUserEmail(token).getValue();
+            if (email == null) {
+                return -1;
+            }
+                Member m = userRepo.findUserByEmail(email);
+                if (m != null) return m.getUserId();
+            return -1; //for guest or invalid
+        }
+
+    private void notifyTokenExpired(String token) {
+        try{
+            NotifyPayload payload = new NotifyPayload("Your session has expired");
+            NotifyDTO expiredNotify = new NotifyDTO(NotifyType.TOKEN_EXPIRED, payload);
+            notifier.notifyTab(token, expiredNotify);
+            logger.info("Sent TOKEN_EXPIRED notification to tab: " + token);
+        } catch (Exception e) {
+            logger.warning("Failed to send TOKEN_EXPIRED notification: " + e.getMessage());
+        }
+    }
+
+    private String getValidatedRole(String token) {
+        Response<String> roleRes = auth.getRole(token);
+        if (roleRes.getValue() == null) {
+            notifyTokenExpired(token);
+            return null;
+        }
+        return roleRes.getValue();
+    }
+
+         // Helper method to send a real-time notification or save it as delayed if the user is offline.
+    private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                Member member = userRepo.findUserByEmail(userIdentifier);
+
+                if (member == null) {
+                    logger.warning("User not found for identifier: " + userIdentifier);
+                    return new Response<>(null, "User not found");
+                }
+
+                boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
+
+                if (!isDelivered) {
+                    member.addDelayedNotification(notifyDTO);
+                    userRepo.store(member);
+
+                    logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
+                    return new Response<>(null, "Notification saved as delayed");
+                }
+
+                return new Response<>(null, "Notification sent successfully");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                logger.warning("Failed to send or save notification for "
+                        + userIdentifier + ": " + e.getMessage());
+
+                return new Response<>(null, "Failed to send or save notification");
             }
         });
     }

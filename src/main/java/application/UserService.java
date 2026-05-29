@@ -60,13 +60,17 @@ public class UserService {
             return Response.ok(result);
         });
     }
-//TODO:: try and catch handle
     //trigger for moving to login page
     private void onUserAdmitted(String uuid) {
         logger.info("User admitted from queue with sessionId: " + uuid);
-        NotifyPayload payload = new NotifyPayload("Your turn has arrived");
-        NotifyDTO notify = new NotifyDTO(NotifyType.QUEUE_WEB_TURN_ARRIVED,payload);
-        notifier.notifyTab(uuid,notify);
+        try {
+            NotifyPayload payload = new NotifyPayload("Your turn has arrived");
+            NotifyDTO notify = new NotifyDTO(NotifyType.QUEUE_WEB_TURN_ARRIVED, payload);
+            notifier.notifyTab(uuid, notify);
+            logger.info("Queue admission notification sent successfully");
+        }
+        catch(Exception e) {
+            logger.warning("Failed to send queue admission notification: " + e.getMessage());        }
     }
 
     public Response<String> continueAsGuest() {
@@ -92,8 +96,8 @@ public class UserService {
             logger.info("Registration attempt started for email: " + dto.getEmail());
             try {
                 if (activeIdentifier != null && !activeIdentifier.isBlank()) {
-                    int currentUserId = auth.getUserId(activeIdentifier).getValue();
-                    if (currentUserId != -1) { //in member state
+                    boolean active = auth.isLoggedIn(activeIdentifier).getValue();
+                    if (active) { //in member state
                         logger.warning("Registration failed: Active logged-in user attempted to register (Token: " + activeIdentifier + ")");
                         return Response.error("Can't register to the system at member state, must be a guest.");
                     }
@@ -169,13 +173,30 @@ public class UserService {
     public Response<String> login(String email, String password) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("Login attempt started for email: " + email);
-            Response<String> tokenResponse = auth.login(email, password);
-            if (tokenResponse.getValue() == null) {
-                logger.warning("Login attempt failed for " + email);
-                return Response.error(tokenResponse.getMessage());
+            try {
+                Member member = userRepo.findUserByEmail(email);
+                if (member == null || !passwordEncoder.matches(password, member.getPassword())) {
+                    logger.warning("Login failed: Invalid credentials for " + email);
+                    return new Response<>(null, "Invalid email or password");
+                }
+                if (!member.isActive()) {
+                    logger.warning("Login failed: member is blocked by Admin");
+                    return new Response<>(null, "Login failed: member is blocked by Admin");
+                }
+                Response<String> tokenResponse = auth.login(email);
+                if (tokenResponse.getValue() == null) {
+                    logger.warning("Login attempt failed for " + email);
+                    return Response.error(tokenResponse.getMessage());
+                }
+                logger.info("Login successful for email: " + email);
+                return new Response<>(tokenResponse.getValue(), tokenResponse.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e){
+                logger.severe("Login attempt failed for " + email);
+                return Response.error(e.getMessage());
             }
-            logger.info("Login successful for email: " + email);
-            return new Response<>(tokenResponse.getValue(), tokenResponse.getMessage());
+
         });
     }
 
@@ -227,7 +248,7 @@ public class UserService {
                     return new Response<>(false, "Logout failed");
                 }
                 WebQueue.getInstance().notifyUserLeft();
-                logger.info("leaveStore successful for token: " + token);
+                logger.info("leaveStore successful");
                 return response;
             } catch (OptimisticLockingFailureException e) {
                 throw e;
@@ -315,4 +336,46 @@ public class UserService {
             }
         });
     }
+    public Response<Integer> getUserId(String token) {
+        return RetryHelper.executeWithRetry(() -> {
+            if (token == null || token.isBlank()) {
+                logger.warning("Token is missing");
+                return new Response<>(-1, "Token is missing");
+            }
+            try {
+                String role = auth.getRole(token).getValue();
+                if(role == null){
+                    try{
+                        NotifyPayload payload = new NotifyPayload("Your session has expired");
+                        NotifyDTO expiredNotify = new NotifyDTO(NotifyType.TOKEN_EXPIRED, payload);
+                        notifier.notifyTab(token, expiredNotify);
+                        logger.info("Sent TOKEN_EXPIRED notification to tab: " + token);
+                    } catch (Exception e) {
+                        logger.warning("Failed to send TOKEN_EXPIRED notification: " + e.getMessage());
+                    }
+                }
+                if ("GUEST".equals(role)) {
+                    return new Response<>(-1, "Guest token recognized");
+                }
+                if (!auth.isLoggedIn(token).getValue()) {
+                    logger.warning("User with token is not logged in");
+                    return new Response<>(-1, "User with token is not logged in");
+                }
+                String email = auth.getUserEmail(token).getValue();
+                if (email == null) {
+                    return new Response<>(-1, "Email extraction failed");
+                }
+                Member member = userRepo.findUserByEmail(email);
+                if (member != null) {
+                    return new Response<>(member.getUserId(), "Retrieved member ID");
+                } else {
+                    return new Response<>(-1, "Member not found in database");
+                }
+            } catch (Exception e) {
+                logger.severe("Failed to get user ID: " + e.getMessage());
+                return new Response<>(-1, "Server error while retrieving user ID");
+            }
+        });
+    }
+
 }

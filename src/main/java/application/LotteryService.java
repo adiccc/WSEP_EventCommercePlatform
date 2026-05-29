@@ -3,6 +3,7 @@ package application;
 import DTO.NotifyDTO;
 import DTO.NotifyPayload;
 import DTO.NotifyType;
+import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.PermissionType;
@@ -11,6 +12,8 @@ import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
+import domain.user.IUserRepo;
+import domain.user.Member;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -32,34 +35,36 @@ public class LotteryService {
     private final IAuth auth;
     private final ScheduledExecutorService scheduler; // ScheduledExecutorService is used to schedule tasks to run after a given delay
     private final ICompanyRepo companyRepo;
-    private final IAccessValidator accessValidator;
+    private final ISuspensionRepo suspensionRepo;
     private final INotifier notifier;
+    private final IUserRepo userRepo;
 
     @Autowired
-    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth, ICompanyRepo companyRepo, IAccessValidator accessValidator, INotifier notifier) {
+    public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth, ICompanyRepo companyRepo, ISuspensionRepo suspensionRepo, INotifier notifier, IUserRepo userRepo) {
         this.lotteryRepo = lotteryRepo;
         this.eventRepo = eventRepo;
         this.logger = Logger.getLogger(LotteryService.class.getName());
         this.auth = auth;
         this.scheduler = Executors.newScheduledThreadPool(10);
         this.companyRepo = companyRepo;
-        this.accessValidator = accessValidator;
+        this.suspensionRepo=suspensionRepo;
         this.notifier = notifier;
+        this.userRepo = userRepo;
     }
 
     public Response<Boolean> createLottery(String token, int eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "createLottery called");
-
+            if (getValidatedRole(token) == null) return new Response<>(false, "Invalid token");
             // check valid token
-            int userId = auth.getUserId(token).getValue();
+            int userId = getUserIdFromToken(token);
             if (userId == -1) {
-                logger.severe("Invalid token");
-                return new Response<>(false, "Invalid token");
+                logger.severe("Only members can create lottery");
+                return new Response<>(false, "Only members can create lottery");
             }
-            if(!accessValidator.hasWriteAccess(userId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
             try {
                 Event event = eventRepo.findById(eventId);
@@ -139,10 +144,33 @@ public class LotteryService {
             lotteryRepo.store(lottery);
             logger.log(Level.INFO, "Successfully drawn winners for lottery ID: " + lotteryId);
             // Notify the winners
-            for (Integer winner: winners.keySet()) {
-                int userId = winner;
-                String code = winners.get(winner);
-                notifier.notifyMemberById(userId, new NotifyDTO(NotifyType.GENERAL_POPUP,new NotifyPayload("Congratulations! You have won the lottery for event " + lotteryId + ". Your code is: " + code)));
+            // Notify the winners
+            for (Integer winner : winners.keySet()) {
+                try {
+                    int userId = winner;
+                    String code = winners.get(winner);
+                    String userEmail = userRepo.getUserEmail(userId);
+
+                    NotifyDTO notification = new NotifyDTO(
+                            NotifyType.GENERAL_POPUP,
+                            new NotifyPayload(
+                                    "Congratulations! You have won the lottery for event "
+                                            + lotteryId + ". Your code is: " + code
+                            )
+                    );
+
+                    Response<Void> notificationResponse =
+                            sendOrSaveNotification(userEmail, notification);
+
+                    logger.info("Lottery winner notification result for user "
+                            + userEmail + ": " + notificationResponse.getMessage());
+
+                } catch (OptimisticLockingFailureException e) {
+                    throw e;
+
+                } catch (Exception e) {
+                    logger.warning("Failed to notify lottery winner " + winner + ": " + e.getMessage());
+                }
             }
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Could not draw lottery, ID not found: " + lotteryId);
@@ -156,15 +184,15 @@ public class LotteryService {
     public Response<Boolean> registerUserToLottery(String token, int eventId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "registerUserToLottery called");
-
-            int userId = auth.getUserId(token).getValue();
+            if (getValidatedRole(token) == null) return new Response<>(false, "Invalid token");
+            int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("User is not logged in");
                 return new Response<>(false, "User is not logged in");
             }
-            if(!accessValidator.hasWriteAccess(userId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
 
             try {
@@ -209,6 +237,66 @@ public class LotteryService {
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to register user to lottery: " + e.getMessage());
                 return new Response<>(false, "Failed to register user to lottery: " + e.getMessage());
+            }
+        });
+    }
+    private int getUserIdFromToken(String token) {
+        String email = auth.getUserEmail(token).getValue();
+        if (email != null) {
+            Member m = userRepo.findUserByEmail(email);
+            if (m != null) return m.getUserId();
+        }
+        return -1;
+    }
+
+    private void notifyTokenExpired(String token) {
+        try {
+            NotifyPayload payload = new NotifyPayload("Your session has expired");
+            NotifyDTO expiredNotify = new NotifyDTO(NotifyType.TOKEN_EXPIRED, payload);
+            notifier.notifyTab(token, expiredNotify);
+        } catch (Exception e) { logger.warning("Failed to send TOKEN_EXPIRED"); }
+    }
+
+    private String getValidatedRole(String token) {
+        Response<String> roleRes = auth.getRole(token);
+        if (roleRes.getValue() == null) {
+            notifyTokenExpired(token);
+            return null;
+        }
+        return roleRes.getValue();
+    }
+
+    // Helper method to send a real-time notification or save it as delayed if the user is offline.
+    private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                Member member = userRepo.findUserByEmail(userIdentifier);
+
+                if (member == null) {
+                    logger.warning("User not found for identifier: " + userIdentifier);
+                    return new Response<>(null, "User not found");
+                }
+
+                boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
+
+                if (!isDelivered) {
+                    member.addDelayedNotification(notifyDTO);
+                    userRepo.store(member);
+
+                    logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
+                    return new Response<>(null, "Notification saved as delayed");
+                }
+
+                return new Response<>(null, "Notification sent successfully");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                logger.warning("Failed to send or save notification for "
+                        + userIdentifier + ": " + e.getMessage());
+
+                return new Response<>(null, "Failed to send or save notification");
             }
         });
     }

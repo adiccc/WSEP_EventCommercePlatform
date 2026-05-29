@@ -1,9 +1,11 @@
 package application;
 
 import DTO.DiscountDTO;
+import DTO.NotifyDTO;
 import DTO.NotifyType;
 import DTO.PurchaseRuleDTO;
 import Log.LoggerSetup;
+import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
@@ -11,11 +13,11 @@ import domain.dto.UserDTO;
 
 import domain.event.IEventRepo;
 import domain.policy.*;
-import domain.policy.PurchasePolicyType;
 import domain.user.IUserRepo;
 import domain.dto.CompanyDTO;
 import domain.user.IUserRepo;
 import domain.user.Manager;
+import domain.user.Member;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,10 +30,9 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -45,59 +46,64 @@ class CompanyServiceUpdatedTest {
     private String OTHER_TOKEN;
     private int MANAGER_ID;
     private String MANAGER_TOKEN;
+    private String MANAGER_EMAIL;
     private int OTHER_OWNER_ID;
+    private String OTHER_OWNER_EMAIL;
     private String OTHER_OWNER_TOKEN;
     private String ADMIN_TOKEN;
+    private String OWNER_EMAIL;
 
     private CompanyService service;
     private UserService userService;
     private ICompanyRepo companyRepo;
     private IAuth auth;
-    private IAccessValidator accessValidator;
     private ISuspensionRepo suspensionRepo;
     private IUserRepo userRepo;
     private AdminService adminService;
     private IPaymentSystem paymentSystem;
     private IEventRepo eventRepo;
     private INotifier notifier;
+    private TokenService tokenService;
 
 
     @BeforeEach
     void setUp() {
         LoggerSetup.setup();
         suspensionRepo=new SuspensionRepoImpl();
-        accessValidator=new AccessValidator(suspensionRepo);
         userRepo = new UserRepo();
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
-        TokenService tokenService = new TokenService();
+        tokenService = new TokenService();
         String adminEmail = "admin@admin.com";
-        auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(adminEmail));
+        auth = new Auth(tokenService, Set.of(adminEmail));
         companyRepo = new CompanyRepoImpl();
-        notifier = Mockito.spy(new VaadinNotifier(userRepo));
+        notifier = new VaadinNotifier();
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
-        service = new CompanyService(auth, companyRepo, userRepo,accessValidator,notifier);
+        service = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier);
 
         UserDTO ownerDTO = new UserDTO("owner@test.com", "Owner", "Test", "Password123!", 1, 1, 2000, "City", "050-123-4567");
         userService.registerUser(null, ownerDTO);
-        OWNER_TOKEN = userService.login("owner@test.com", "Password123!").getValue();
-        OWNER_ID = auth.getUserId(OWNER_TOKEN).getValue();
+        OWNER_EMAIL="owner@test.com";
+        OWNER_TOKEN = userService.login(OWNER_EMAIL, "Password123!").getValue();
+        OWNER_ID = userService.getUserId(OWNER_TOKEN).getValue();
         GUEST_TOKEN = userService.continueAsGuest().getValue();
         UserDTO otherDTO = new UserDTO("other@test.com", "Other", "Test", "Password123!", 1, 1, 2000, "City", "050-123-4567");
         userService.registerUser(null, otherDTO);
         OTHER_TOKEN = userService.login("other@test.com", "Password123!").getValue();
-        OTHER_USER_ID = auth.getUserId(OTHER_TOKEN).getValue();
+        OTHER_USER_ID = userService.getUserId(OTHER_TOKEN).getValue();
 
         service.createProductionCompany(OWNER_TOKEN,COMPANY_ID,"Test Company","test@test.com","0500000000","bank-1");
 
         UserDTO managerDTO = new UserDTO("manager@test.com", "Manager", "Test", "Password123!", 1, 1, 2000, "City", "050-555-5555");
         userService.registerUser(null, managerDTO);
-        MANAGER_TOKEN = userService.login("manager@test.com", "Password123!").getValue();
-        MANAGER_ID = auth.getUserId(MANAGER_TOKEN).getValue();
+        MANAGER_EMAIL = "manager@test.com";
+        MANAGER_TOKEN = userService.login(MANAGER_EMAIL, "Password123!").getValue();
+        MANAGER_ID = userService.getUserId(MANAGER_TOKEN).getValue();
 
         UserDTO otherOwnerDTO = new UserDTO("otherowner@test.com", "OtherOwner", "Test", "Password123!", 1, 1, 2000, "City", "050-666-6666");
         userService.registerUser(null, otherOwnerDTO);
-        OTHER_OWNER_TOKEN = userService.login("otherowner@test.com", "Password123!").getValue();
-        OTHER_OWNER_ID = auth.getUserId(OTHER_OWNER_TOKEN).getValue();
+        OTHER_OWNER_EMAIL = "otherowner@test.com";
+        OTHER_OWNER_TOKEN = userService.login(OTHER_OWNER_EMAIL, "Password123!").getValue();
+        OTHER_OWNER_ID = userService.getUserId(OTHER_OWNER_TOKEN).getValue();
 
         Company company = companyRepo.findById(COMPANY_ID);
         company.getCompanyPermission().addToTree(MANAGER_ID, OWNER_ID, new HashSet<>());
@@ -628,7 +634,7 @@ class CompanyServiceUpdatedTest {
         auth.logout(OWNER_TOKEN);
         Response<Boolean> response = service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
         assertTrue(response.isError());
-        assertEquals("User is not logged in", response.getMessage());
+        assertEquals("Invalid token", response.getMessage());
     }
 
     @Test
@@ -689,7 +695,7 @@ class CompanyServiceUpdatedTest {
         auth.logout(OTHER_TOKEN);
         Response<Boolean> response = service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, true);
         assertTrue(response.isError());
-        assertEquals("User is not logged in", response.getMessage());
+        assertEquals("Invalid token", response.getMessage());
     }
 
     @Test
@@ -982,7 +988,7 @@ class CompanyServiceUpdatedTest {
 
         assertTrue(response.isError());
         assertNull(response.getValue());
-        assertEquals("User is not logged in", response.getMessage());
+        assertEquals("Invalid token", response.getMessage());
     }
 
     // ===================== II.4.X Respond To Manager Appointment =====================
@@ -1092,7 +1098,7 @@ class CompanyServiceUpdatedTest {
         UserDTO dto = new UserDTO("manager2@test.com", "Manager2", "Test", "Password123!", 1, 1, 2000, "City", "050-777-7777");
         userService.registerUser(null, dto);
         String token = userService.login("manager2@test.com", "Password123!").getValue();
-        int id = auth.getUserId(token).getValue();
+        int id = userService.getUserId(token).getValue();
         Company company = companyRepo.findById(COMPANY_ID);
         company.getCompanyPermission().addToTree(id, OWNER_ID, new HashSet<>());
         companyRepo.store(company);
@@ -1129,7 +1135,7 @@ class CompanyServiceUpdatedTest {
         auth.logout(OWNER_TOKEN);
         Response<Boolean> response = service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
         assertTrue(response.isError());
-        assertEquals("User is not logged in", response.getMessage());
+        assertEquals("Invalid token", response.getMessage());
     }
 
     @Test
@@ -1154,7 +1160,7 @@ class CompanyServiceUpdatedTest {
         UserDTO dto = new UserDTO("manager3@test.com", "Manager3", "Test", "Password123!", 1, 1, 2000, "City", "050-888-8888");
         userService.registerUser(null, dto);
         String tok = userService.login("manager3@test.com", "Password123!").getValue();
-        int manager3Id = auth.getUserId(tok).getValue();
+        int manager3Id = userService.getUserId(tok).getValue();
         company.getCompanyPermission().addToTree(manager3Id, OTHER_OWNER_ID, new HashSet<>());
         companyRepo.store(company);
 
@@ -1185,7 +1191,7 @@ class CompanyServiceUpdatedTest {
         UserDTO dto = new UserDTO("manager3@test.com", "Manager3", "Test", "Password123!", 1, 1, 2000, "City", "050-888-8888");
         userService.registerUser(null, dto);
         String tok = userService.login("manager3@test.com", "Password123!").getValue();
-        int subManagerId = auth.getUserId(tok).getValue();
+        int subManagerId = userService.getUserId(tok).getValue();
         Company company = companyRepo.findById(COMPANY_ID);
         company.getCompanyPermission().addToTree(subManagerId, MANAGER_ID, new HashSet<>());
         companyRepo.store(company);
@@ -1546,19 +1552,44 @@ class CompanyServiceUpdatedTest {
     }
 
     @Test
-    void GivenOwnerUpdatesPermissions_WhenUpdateManagerPermissions_ThenGeneralPopupSent() {
-        service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+    void GivenOwnerUpdatesPermissions_WhenUpdateManagerPermissions_ThenGeneralPopupSent() throws InterruptedException {
+        // Arrange
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
 
-        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
-                Mockito.eq("manager@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.GENERAL_POPUP)
-        );
+        Registration reg = Broadcaster.registerUser("manager@test.com", dto -> {
+            receivedNotification.set(dto);
+            latch.countDown();
+        });
+
+        try {
+            // Act
+            service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+
+            // Assert
+            assertTrue(latch.await(2, TimeUnit.SECONDS), "Notification timeout - manager did not receive popup");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.GENERAL_POPUP, receivedNotification.get().getType());
+        } finally {
+            reg.remove();
+        }
     }
 
     @Test
-    void GivenNonOwnerFailsToUpdate_WhenUpdateManagerPermissions_ThenNoNotificationSent() {
-        service.updateManagerPermissions(OTHER_TOKEN, COMPANY_ID, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
-        Mockito.verify(notifier, Mockito.never()).notifyUser(Mockito.anyString(), Mockito.any());
+    void GivenNonOwnerFailsToUpdate_WhenUpdateManagerPermissions_ThenNoNotificationSent() throws InterruptedException {
+        // Arrange
+        CountDownLatch latch = new CountDownLatch(1);
+        Registration reg = Broadcaster.registerUser("manager@test.com", dto -> latch.countDown());
+
+        try {
+            // Act
+            service.updateManagerPermissions(OTHER_TOKEN, COMPANY_ID, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+
+            // Assert: We wait 500ms and expect the latch NOT to count down (meaning no notification arrived)
+            assertFalse(latch.await(500, TimeUnit.MILLISECONDS), "Notification was wrongly sent for failed update");
+        } finally {
+            reg.remove();
+        }
     }
 
     @Test
@@ -1566,375 +1597,765 @@ class CompanyServiceUpdatedTest {
         Set<PermissionType> perms1 = EnumSet.of(PermissionType.CREATE_EVENT);
         Set<PermissionType> perms2 = EnumSet.of(PermissionType.DELETE_EVENT);
 
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger notificationCount = new AtomicInteger(0);
 
-        Future<Response<Boolean>> f1 = executor.submit(() -> {
-            start.await();
-            return service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, perms1);
-        });
-        Future<Response<Boolean>> f2 = executor.submit(() -> {
-            start.await();
-            return service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, perms2);
+        Registration reg = Broadcaster.registerUser("manager@test.com", dto -> {
+            if (dto.getType() == NotifyType.GENERAL_POPUP) {
+                notificationCount.incrementAndGet();
+            }
         });
 
-        start.countDown();
-        f1.get();
-        f2.get();
-        executor.shutdown();
+        try {
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            CountDownLatch start = new CountDownLatch(1);
 
-        Mockito.verify(notifier, Mockito.times(2)).notifyUser(
-                Mockito.eq("manager@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.GENERAL_POPUP)
-        );
+            Future<Response<Boolean>> f1 = executor.submit(() -> {
+                start.await();
+                return service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, perms1);
+            });
+            Future<Response<Boolean>> f2 = executor.submit(() -> {
+                start.await();
+                return service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, perms2);
+            });
+
+            start.countDown();
+            f1.get();
+            f2.get();
+            executor.shutdown();
+
+            Thread.sleep(1000);
+            assertEquals(2, notificationCount.get(), "Notifications should be sent exactly twice without crashing");
+        } finally {
+            reg.remove();
+        }
+    }
+
+    @Test
+    void GivenOwnerRequestsNewOwner_WhenRequestAppointOwner_ThenRequestNotificationSent() throws InterruptedException {
+        // Arrange
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration reg = Broadcaster.registerUser("other@test.com", dto -> {
+            receivedNotification.set(dto);
+            latch.countDown();
+        });
+
+        try {
+            // Act
+            service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+
+            // Assert
+            assertTrue(latch.await(2, TimeUnit.SECONDS), "Notification timeout - user did not receive invite");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.ROLE_APPOINTMENT_REQUEST, receivedNotification.get().getType());
+        } finally {
+            reg.remove();
+        }
+    }
+
+    @Test
+    void GivenUserAlreadyPendingOwner_WhenRequestAppointOwner_ThenNoDuplicateNotificationSent() throws InterruptedException {
+        // Arrange: Make the first request
+        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+
+        // Setup listener for the SECOND request
+        CountDownLatch latch = new CountDownLatch(1);
+        Registration reg = Broadcaster.registerUser("other@test.com", dto -> latch.countDown());
+
+        try {
+            // Act: Attempt duplicate request
+            service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+
+            // Assert: No new notification should arrive
+            assertFalse(latch.await(500, TimeUnit.MILLISECONDS), "Duplicate notification was wrongly sent");
+        } finally {
+            reg.remove();
+        }
+    }
+
+    @Test
+    void GivenPendingOwnerAccepts_WhenRespondToOwnerAppointment_ThenSuccessPopupSent() throws InterruptedException {
+        // Arrange
+        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration reg = Broadcaster.registerUser("other@test.com", dto -> {
+            receivedNotification.set(dto);
+            latch.countDown();
+        });
+
+        try {
+            // Act
+            service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+
+            // Assert
+            assertTrue(latch.await(2, TimeUnit.SECONDS), "Notification timeout - user did not receive success popup");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.GENERAL_POPUP, receivedNotification.get().getType());
+        } finally {
+            reg.remove();
+        }
+    }
+
+    @Test
+    void GivenPendingOwnerRejects_WhenRespondToOwnerAppointment_ThenNoPopupSent() throws InterruptedException {
+        // Arrange
+        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        Registration reg = Broadcaster.registerUser("other@test.com", dto -> latch.countDown());
+
+        try {
+            // Act
+            service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, false);
+
+            // Assert
+            assertFalse(latch.await(500, TimeUnit.MILLISECONDS), "Notification was wrongly sent upon rejection");
+        } finally {
+            reg.remove();
+        }
     }
 
 
     @Test
-    void GivenOwnerRequestsNewOwner_WhenRequestAppointOwner_ThenRequestNotificationSent() {
-        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+    void GivenOwnerRequestsManager_WhenRequestAppointManager_ThenRequestNotificationSent() throws InterruptedException {
+        // Arrange
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
 
-        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
-                Mockito.eq("other@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST)
-        );
+        Registration reg = Broadcaster.registerUser("other@test.com", dto -> {
+            receivedNotification.set(dto);
+            latch.countDown();
+        });
+
+        try {
+            // Act
+            service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+
+            // Assert
+            assertTrue(latch.await(2, TimeUnit.SECONDS), "Notification timeout - manager did not receive invite");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.ROLE_APPOINTMENT_REQUEST, receivedNotification.get().getType());
+        } finally {
+            reg.remove();
+        }
     }
 
     @Test
-    void GivenUserAlreadyPendingOwner_WhenRequestAppointOwner_ThenNoDuplicateNotificationSent() {
-        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
-        Mockito.clearInvocations(notifier);
-
-        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
-
-        Mockito.verify(notifier, Mockito.never()).notifyUser(Mockito.anyString(), Mockito.any());
-    }
-
-    @Test
-    void GivenPendingOwnerAccepts_WhenRespondToOwnerAppointment_ThenSuccessPopupSent() {
-        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
-        Mockito.clearInvocations(notifier);
-
-        service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, true);
-
-        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
-                Mockito.eq("other@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.GENERAL_POPUP)
-        );
-    }
-
-    @Test
-    void GivenPendingOwnerRejects_WhenRespondToOwnerAppointment_ThenNoPopupSent() {
-        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
-        Mockito.clearInvocations(notifier);
-
-        service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, false);
-
-        Mockito.verify(notifier, Mockito.never()).notifyUser(Mockito.anyString(), Mockito.any());
-    }
-
-
-    @Test
-    void GivenOwnerRequestsManager_WhenRequestAppointManager_ThenRequestNotificationSent() {
+    void GivenPendingManagerAccepts_WhenRespondToManagerAppointment_ThenSuccessPopupSent() throws InterruptedException {
+        // Arrange
         service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
 
-        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
-                Mockito.eq("other@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST)
-        );
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration reg = Broadcaster.registerUser("other@test.com", dto -> {
+            receivedNotification.set(dto);
+            latch.countDown();
+        });
+
+        try {
+            // Act
+            service.respondToManagerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+
+            // Assert
+            assertTrue(latch.await(2, TimeUnit.SECONDS), "Notification timeout - manager did not receive popup");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.GENERAL_POPUP, receivedNotification.get().getType());
+        } finally {
+            reg.remove();
+        }
     }
-
-    @Test
-    void GivenPendingManagerAccepts_WhenRespondToManagerAppointment_ThenSuccessPopupSent() {
-        service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
-        Mockito.clearInvocations(notifier);
-
-        service.respondToManagerAppointment(OTHER_TOKEN, COMPANY_ID, true);
-
-        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
-                Mockito.eq("other@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.GENERAL_POPUP)
-        );
-    }
-
     @Test
     void GivenTwoThreadsRaceToAcceptManagerRole_WhenRespondToManagerAppointment_ThenPopupSentExactlyOnce() throws Exception {
+        // Arrange
         service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
-        Mockito.clearInvocations(notifier);
 
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-        CountDownLatch start = new CountDownLatch(1);
-
-        Future<Response<Boolean>> f1 = executor.submit(() -> {
-            start.await();
-            return service.respondToManagerAppointment(OTHER_TOKEN, COMPANY_ID, true);
-        });
-        Future<Response<Boolean>> f2 = executor.submit(() -> {
-            start.await();
-            return service.respondToManagerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+        AtomicInteger notificationCount = new AtomicInteger(0);
+        Registration reg = Broadcaster.registerUser("other@test.com", dto -> {
+            if (dto.getType() == NotifyType.GENERAL_POPUP) {
+                notificationCount.incrementAndGet();
+            }
         });
 
-        start.countDown();
-        f1.get();
-        f2.get();
-        executor.shutdown();
+        try {
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            CountDownLatch start = new CountDownLatch(1);
 
-        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
-                Mockito.eq("other@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.GENERAL_POPUP)
-        );
+            // Act
+            Future<Response<Boolean>> f1 = executor.submit(() -> {
+                start.await();
+                return service.respondToManagerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+            });
+            Future<Response<Boolean>> f2 = executor.submit(() -> {
+                start.await();
+                return service.respondToManagerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+            });
+
+            start.countDown();
+            f1.get();
+            f2.get();
+            executor.shutdown();
+
+            Thread.sleep(1000); // Wait for async broadcasts to settle
+
+            // Assert
+            assertEquals(1, notificationCount.get(), "Popup should be sent exactly once despite race condition");
+        } finally {
+            reg.remove();
+        }
     }
-
-
     @Test
-    void GivenOwnerRemovesManager_WhenRemoveManagerAppointment_ThenKickoutSent() {
+    void GivenOwnerRemovesManager_WhenRemoveManagerAppointment_ThenKickoutSent() throws InterruptedException {
+        // Arrange
         addSecondManager();
 
-        service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
-        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
-                Mockito.eq("manager@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION)
-        );
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+        Registration reg = Broadcaster.registerUser("manager@test.com", dto -> {
+            receivedNotification.set(dto);
+            latch.countDown();
+        });
+
+        try {
+            // Act
+            service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+
+            // Assert
+            assertTrue(latch.await(2, TimeUnit.SECONDS), "Notification timeout - manager did not receive kickout");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.KICKOUT_TAB_NAVIGATION, receivedNotification.get().getType());
+        } finally {
+            reg.remove();
+        }
     }
-
     @Test
-    void GivenOnlyOneManager_WhenRemoveManagerAppointment_ThenFailsAndNoKickoutSent() {
-        service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+    void GivenOnlyOneManager_WhenRemoveManagerAppointment_ThenFailsAndNoKickoutSent() throws InterruptedException {
+        // Arrange
+        CountDownLatch latch = new CountDownLatch(1);
+        Registration reg = Broadcaster.registerUser("manager@test.com", dto -> latch.countDown());
 
-        Mockito.verify(notifier, Mockito.never()).notifyUser(Mockito.anyString(), Mockito.any());
+        try {
+            // Act
+            service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+
+            // Assert
+            assertFalse(latch.await(500, TimeUnit.MILLISECONDS), "Notification wrongly sent - action should fail");
+        } finally {
+            reg.remove();
+        }
     }
 
     @Test
     void GivenTwoThreadsRaceToRemoveManager_WhenRemoveManagerAppointment_ThenKickoutSentExactlyOnce() throws Exception {
+        // Arrange
         addSecondManager();
 
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-        CountDownLatch start = new CountDownLatch(1);
-
-        Future<Response<Boolean>> f1 = executor.submit(() -> {
-            start.await();
-            return service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
-        });
-        Future<Response<Boolean>> f2 = executor.submit(() -> {
-            start.await();
-            return service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        AtomicInteger notificationCount = new AtomicInteger(0);
+        Registration reg = Broadcaster.registerUser("manager@test.com", dto -> {
+            if (dto.getType() == NotifyType.KICKOUT_TAB_NAVIGATION) {
+                notificationCount.incrementAndGet();
+            }
         });
 
-        start.countDown();
-        f1.get();
-        f2.get();
-        executor.shutdown();
+        try {
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            CountDownLatch start = new CountDownLatch(1);
 
-        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
-                Mockito.eq("manager@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION)
-        );
-    }
+            // Act
+            Future<Response<Boolean>> f1 = executor.submit(() -> {
+                start.await();
+                return service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+            });
+            Future<Response<Boolean>> f2 = executor.submit(() -> {
+                start.await();
+                return service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+            });
 
+            start.countDown();
+            f1.get();
+            f2.get();
+            executor.shutdown();
 
-    @Test
-    void GivenOwnerDeactivatesCompany_WhenDeactivateCompany_ThenKickoutSentToAllManagersAndOwners() {
-        service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+            Thread.sleep(1000); // Wait for async broadcasts to settle
 
-        Mockito.verify(notifier, Mockito.times(1)).notifyMemberById(
-                Mockito.eq(OWNER_ID),
-                Mockito.argThat(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION)
-        );
-        Mockito.verify(notifier, Mockito.times(1)).notifyMemberById(
-                Mockito.eq(MANAGER_ID),
-                Mockito.argThat(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION)
-        );
+            // Assert
+            assertEquals(1, notificationCount.get(), "Kickout should be sent exactly once despite race condition");
+        } finally {
+            reg.remove();
+        }
     }
 
     @Test
-    void GivenCompanyAlreadyDeactivated_WhenDeactivateCompany_ThenNoNotificationsSent() {
-        service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
-        Mockito.clearInvocations(notifier);
+    void GivenOwnerDeactivatesCompany_WhenDeactivateCompany_ThenKickoutSentToAllManagersAndOwners() throws InterruptedException {
+        // Arrange: Listen to both Owner and Manager
+        CountDownLatch ownerLatch = new CountDownLatch(1);
+        CountDownLatch managerLatch = new CountDownLatch(1);
 
+        Registration ownerReg = Broadcaster.registerUser(OWNER_EMAIL, dto -> {
+            if (dto.getType() == NotifyType.KICKOUT_TAB_NAVIGATION) ownerLatch.countDown();
+        });
+        Registration managerReg = Broadcaster.registerUser(MANAGER_EMAIL, dto -> {
+            if (dto.getType() == NotifyType.KICKOUT_TAB_NAVIGATION) managerLatch.countDown();
+        });
+
+        try {
+            // Act
+            service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+
+            // Assert
+            assertTrue(ownerLatch.await(2, TimeUnit.SECONDS), "Owner did not receive kickout");
+            assertTrue(managerLatch.await(2, TimeUnit.SECONDS), "Manager did not receive kickout");
+        } finally {
+            ownerReg.remove();
+            managerReg.remove();
+        }
+    }
+    @Test
+    void GivenCompanyAlreadyDeactivated_WhenDeactivateCompany_ThenNoNotificationsSent() throws InterruptedException {
+        // Arrange
         service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
 
-        Mockito.verify(notifier, Mockito.never()).notifyMemberById(Mockito.anyInt(), Mockito.any());
+        CountDownLatch latch = new CountDownLatch(1);
+        Registration reg = Broadcaster.registerUser(OWNER_EMAIL, dto -> latch.countDown());
+
+        try {
+            // Act
+            service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+
+            // Assert
+            assertFalse(latch.await(500, TimeUnit.MILLISECONDS), "Notification wrongly sent for already deactivated company");
+        } finally {
+            reg.remove();
+        }
     }
 
     @Test
     void GivenTwoOwnersRaceToDeactivate_WhenDeactivateCompany_ThenKickoutBroadcastOncePerStaff() throws Exception {
+        // Arrange
         service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_OWNER_ID);
         service.respondToOwnerAppointment(OTHER_OWNER_TOKEN, COMPANY_ID, true);
-        Mockito.clearInvocations(notifier);
 
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger ownerNotificationCount = new AtomicInteger(0);
+        AtomicInteger otherOwnerNotificationCount = new AtomicInteger(0);
 
-        Future<Response<Boolean>> f1 = executor.submit(() -> {
-            start.await();
-            return service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
-        });
-        Future<Response<Boolean>> f2 = executor.submit(() -> {
-            start.await();
-            return service.deactivateCompany(OTHER_OWNER_TOKEN, COMPANY_ID);
-        });
+        Registration ownerReg = Broadcaster.registerUser(OWNER_EMAIL, dto -> ownerNotificationCount.incrementAndGet());
+        Registration otherOwnerReg = Broadcaster.registerUser(OTHER_OWNER_EMAIL, dto -> otherOwnerNotificationCount.incrementAndGet());
 
-        start.countDown();
-        f1.get();
-        f2.get();
-        executor.shutdown();
+        try {
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            CountDownLatch start = new CountDownLatch(1);
 
-        Mockito.verify(notifier, Mockito.times(1)).notifyMemberById(
-                Mockito.eq(OWNER_ID),
-                Mockito.argThat(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION)
-        );
-        Mockito.verify(notifier, Mockito.times(1)).notifyMemberById(
-                Mockito.eq(OTHER_OWNER_ID),
-                Mockito.argThat(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION)
-        );
+            // Act
+            Future<Response<Boolean>> f1 = executor.submit(() -> {
+                start.await();
+                return service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+            });
+            Future<Response<Boolean>> f2 = executor.submit(() -> {
+                start.await();
+                return service.deactivateCompany(OTHER_OWNER_TOKEN, COMPANY_ID);
+            });
+
+            start.countDown();
+            f1.get();
+            f2.get();
+            executor.shutdown();
+
+            Thread.sleep(1000); // Wait for async broadcasts to settle
+
+            // Assert
+            assertEquals(1, ownerNotificationCount.get(), "Owner should receive exactly 1 kickout");
+            assertEquals(1, otherOwnerNotificationCount.get(), "Other owner should receive exactly 1 kickout");
+        } finally {
+            ownerReg.remove();
+            otherOwnerReg.remove();
+        }
     }
+
     @Test
     void GivenTwoThreadsRaceToInviteSameManager_WhenRequestAppointManager_ThenExactlyOneInviteNotificationSent() throws Exception {
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-        CountDownLatch start = new CountDownLatch(1);
-
-        Future<Response<Boolean>> f1 = executor.submit(() -> {
-            start.await();
-            return service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
-        });
-        Future<Response<Boolean>> f2 = executor.submit(() -> {
-            start.await();
-            return service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+        // Arrange
+        AtomicInteger notificationCount = new AtomicInteger(0);
+        Registration reg = Broadcaster.registerUser("other@test.com", dto -> {
+            if(dto.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST) {
+                notificationCount.incrementAndGet();
+            }
         });
 
-        start.countDown();
-        f1.get();
-        f2.get();
-        executor.shutdown();
+        try {
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            CountDownLatch start = new CountDownLatch(1);
 
-        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
-                Mockito.eq("other@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST)
-        );
+            // Act
+            Future<Response<Boolean>> f1 = executor.submit(() -> {
+                start.await();
+                return service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+            });
+            Future<Response<Boolean>> f2 = executor.submit(() -> {
+                start.await();
+                return service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+            });
+
+            start.countDown();
+            f1.get();
+            f2.get();
+            executor.shutdown();
+
+            Thread.sleep(1000); // Wait for async broadcasts to settle
+
+            // Assert
+            assertEquals(1, notificationCount.get(), "Only one invite should be sent");
+        } finally {
+            reg.remove();
+        }
     }
+
     @Test
     void GivenUserAcceptsAndRejectsConcurrently_WhenRespondToOwnerAppointment_ThenAtMostOnePopupSent() throws Exception {
         // Arrange
         service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
-        Mockito.clearInvocations(notifier);
 
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-        CountDownLatch start = new CountDownLatch(1);
-
-        // Act
-        Future<Response<Boolean>> fAccept = executor.submit(() -> {
-            start.await();
-            return service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, true);
-        });
-        Future<Response<Boolean>> fReject = executor.submit(() -> {
-            start.await();
-            return service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, false);
+        AtomicInteger notificationCount = new AtomicInteger(0);
+        Registration reg = Broadcaster.registerUser("other@test.com", dto -> {
+            if(dto.getType() == NotifyType.GENERAL_POPUP) {
+                notificationCount.incrementAndGet();
+            }
         });
 
-        start.countDown();
-        Response<Boolean> rAccept = fAccept.get();
-        fReject.get();
-        executor.shutdown();
+        try {
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            CountDownLatch start = new CountDownLatch(1);
 
-        // Assert
-        int expectedPopups = (rAccept.getValue() != null && rAccept.getValue() == true) ? 1 : 0;
+            // Act
+            Future<Response<Boolean>> fAccept = executor.submit(() -> {
+                start.await();
+                return service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+            });
+            Future<Response<Boolean>> fReject = executor.submit(() -> {
+                start.await();
+                return service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, false);
+            });
 
-        Mockito.verify(notifier, Mockito.times(expectedPopups)).notifyUser(
-                Mockito.eq("other@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.GENERAL_POPUP)
-        );
+            start.countDown();
+            Response<Boolean> rAccept = fAccept.get();
+            fReject.get();
+            executor.shutdown();
+
+            Thread.sleep(1000); // Wait for async broadcasts to settle
+
+            // Assert: If accept won, 1 popup. If reject won, 0 popups.
+            int expectedPopups = (rAccept.getValue() != null && rAccept.getValue()) ? 1 : 0;
+            assertEquals(expectedPopups, notificationCount.get(), "Popup logic should be consistent with race winner");
+        } finally {
+            reg.remove();
+        }
     }
+
     @Test
     void GivenConcurrentRemoveManagerAndDeactivateCompany_ThenManagerReceivesExactlyOneKickout() throws Exception {
-        Mockito.clearInvocations(notifier);
-
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-        CountDownLatch start = new CountDownLatch(1);
-
-        Future<Response<Boolean>> fRemove = executor.submit(() -> {
-            start.await();
-            return service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
-        });
-        Future<Response<Boolean>> fDeactivate = executor.submit(() -> {
-            start.await();
-            return service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+        // Arrange
+        AtomicInteger notificationCount = new AtomicInteger(0);
+        Registration reg = Broadcaster.registerUser("manager@test.com", dto -> {
+            if(dto.getType() == NotifyType.KICKOUT_TAB_NAVIGATION) {
+                notificationCount.incrementAndGet();
+            }
         });
 
-        start.countDown();
-        fRemove.get();
-        fDeactivate.get();
-        executor.shutdown();
+        try {
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            CountDownLatch start = new CountDownLatch(1);
 
-        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
-                Mockito.eq("manager@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION)
-        );
+            // Act
+            Future<Response<Boolean>> fRemove = executor.submit(() -> {
+                start.await();
+                return service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+            });
+            Future<Response<Boolean>> fDeactivate = executor.submit(() -> {
+                start.await();
+                return service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+            });
+
+            start.countDown();
+            fRemove.get();
+            fDeactivate.get();
+            executor.shutdown();
+
+            Thread.sleep(1000); // Wait for async broadcasts to settle
+
+            // Assert
+            assertEquals(1, notificationCount.get(), "Manager should receive exactly one kickout despite race");
+        } finally {
+            reg.remove();
+        }
     }
+
     @Test
     void GivenTwoDifferentOwnersRaceToAppointSameManager_WhenRequestAppoint_ThenExactlyOneNotificationSent() throws Exception {
+        // Arrange
         service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_OWNER_ID);
         service.respondToOwnerAppointment(OTHER_OWNER_TOKEN, COMPANY_ID, true);
-        Mockito.clearInvocations(notifier);
 
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-        CountDownLatch start = new CountDownLatch(1);
-
-        Future<Response<Boolean>> f1 = executor.submit(() -> {
-            start.await();
-            return service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+        AtomicInteger notificationCount = new AtomicInteger(0);
+        Registration reg = Broadcaster.registerUser("other@test.com", dto -> {
+            if(dto.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST) {
+                notificationCount.incrementAndGet();
+            }
         });
 
-        Future<Response<Boolean>> f2 = executor.submit(() -> {
-            start.await();
-            return service.requestAppointManager(OTHER_OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.VIEW_ORDERS_HISTORY));
-        });
+        try {
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            CountDownLatch start = new CountDownLatch(1);
 
-        start.countDown();
-        Response<Boolean> r1 = f1.get();
-        Response<Boolean> r2 = f2.get();
-        executor.shutdown();
+            // Act
+            Future<Response<Boolean>> f1 = executor.submit(() -> {
+                start.await();
+                return service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+            });
 
-        int successes = (r1.getValue() != null && r1.getValue() ? 1 : 0) +
-                (r2.getValue() != null && r2.getValue() ? 1 : 0);
-        assertEquals(1, successes, "Only one owner should succeed in creating the pending appointment");
+            Future<Response<Boolean>> f2 = executor.submit(() -> {
+                start.await();
+                return service.requestAppointManager(OTHER_OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, EnumSet.of(PermissionType.VIEW_ORDERS_HISTORY));
+            });
 
-        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
-                Mockito.eq("other@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST)
-        );
+            start.countDown();
+            Response<Boolean> r1 = f1.get();
+            Response<Boolean> r2 = f2.get();
+            executor.shutdown();
+
+            // Assert
+            int successes = (r1.getValue() != null && r1.getValue() ? 1 : 0) +
+                    (r2.getValue() != null && r2.getValue() ? 1 : 0);
+            assertEquals(1, successes, "Only one owner should succeed in creating the pending appointment");
+
+            Thread.sleep(1000); // Wait for async broadcasts to settle
+            assertEquals(1, notificationCount.get(), "Only one invite should be sent");
+        } finally {
+            reg.remove();
+        }
     }
+
     @Test
     void GivenAuthorizedAndUnauthorizedOwnersRaceToRemoveManager_WhenRemove_ThenExactlyOneKickoutSent() throws Exception {
+        // Arrange
         service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_OWNER_ID);
         service.respondToOwnerAppointment(OTHER_OWNER_TOKEN, COMPANY_ID, true);
         addSecondManager();
-        Mockito.clearInvocations(notifier);
 
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-        CountDownLatch start = new CountDownLatch(1);
-
-        Future<Response<Boolean>> fUnauthorized = executor.submit(() -> {
-            start.await();
-            return service.removeManagerAppointment(OTHER_OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        AtomicInteger notificationCount = new AtomicInteger(0);
+        Registration reg = Broadcaster.registerUser("manager@test.com", dto -> {
+            if(dto.getType() == NotifyType.KICKOUT_TAB_NAVIGATION) {
+                notificationCount.incrementAndGet();
+            }
         });
 
-        Future<Response<Boolean>> fAuthorized = executor.submit(() -> {
-            start.await();
-            return service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        try {
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            CountDownLatch start = new CountDownLatch(1);
+
+            // Act
+            Future<Response<Boolean>> fUnauthorized = executor.submit(() -> {
+                start.await();
+                return service.removeManagerAppointment(OTHER_OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+            });
+
+            Future<Response<Boolean>> fAuthorized = executor.submit(() -> {
+                start.await();
+                return service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+            });
+
+            start.countDown();
+            Response<Boolean> rUnauth = fUnauthorized.get();
+            Response<Boolean> rAuth = fAuthorized.get();
+            executor.shutdown();
+
+            // Assert
+            assertTrue(rUnauth.isError(), "Unauthorized owner should fail to remove");
+            assertFalse(rAuth.isError(), "Authorized owner should succeed to remove");
+
+            Thread.sleep(1000); // Wait for async broadcasts to settle
+            assertEquals(1, notificationCount.get(), "Manager should receive kickout exactly once");
+        } finally {
+            reg.remove();
+        }
+    }
+    @Test
+    void GivenRealExpiredToken_WhenCreateProductionCompany_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        // Arrange: Register a dedicated user for this test
+        String email = "expired_create_co@test.com";
+        userService.registerUser(null, new UserDTO(
+                email, "Expired", "User", "pass", 1, 1, 1990, "Israel", "050-111-2233"
+        ));
+
+        // Arrange: Generate a real JWT that has ALREADY EXPIRED using the test hook
+        TokenService testTokenService = new TokenService();
+        String expiredToken = testTokenService.generateExpiredTokenForTest(email);
+
+        // Arrange: Set up the WebSocket listener for this specific token's tab
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(expiredToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
         });
 
-        start.countDown();
-        Response<Boolean> rUnauth = fUnauthorized.get();
-        Response<Boolean> rAuth = fAuthorized.get();
-        executor.shutdown();
+        try {
+            // Act: Attempt to create a company with the expired token
+            Response<Company> response = service.createProductionCompany(
+                    expiredToken, 999, "ExpiredCo", "exp@co.com", "050-000-0000", "bank-1"
+            );
 
-        assertTrue(rUnauth.isError(), "Unauthorized owner should fail to remove");
-        assertFalse(rAuth.isError(), "Authorized owner should succeed to remove");
+            // Assert: Action should be blocked gracefully
+            assertTrue(response.isError());
+            assertEquals("Invalid token", response.getMessage());
 
-        Mockito.verify(notifier, Mockito.times(1)).notifyUser(
-                Mockito.eq("manager@test.com"),
-                Mockito.argThat(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION)
-        );
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenAddRuleToCompany_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        // Arrange
+        String email = "logout_add_rule@test.com";
+        userService.registerUser(null, new UserDTO(
+                email, "Logout", "User", "pass", 1, 1, 1990, "City", "050-000-0000"
+        ));
+        String testToken = userService.login(email, "pass").getValue();
+
+        userService.logout(testToken);
+
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(testToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 4);
+            Response<Boolean> response = service.addRuleToCompany(testToken, COMPANY_ID, ruleDTO);
+
+            // Assert
+            assertTrue(response.isError());
+            assertEquals("Invalid token", response.getMessage());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenGetAvailableCompanies_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        // Arrange
+        String email = "logout_get_companies@test.com";
+        userService.registerUser(null, new UserDTO(
+                email, "Logout", "User2", "pass", 1, 1, 1990, "City", "050-000-0000"
+        ));
+        String testToken = userService.login(email, "pass").getValue();
+
+        userService.logout(testToken);
+
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(testToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            // Act
+            Response<List<CompanyDTO>> response = service.getAvailableCompanies(testToken);
+
+            // Assert
+            assertTrue(response.isError());
+            assertEquals("Invalid or expired token", response.getMessage());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+    @Test
+    void GivenOfflineAppointee_WhenRequestAppointOwner_ThenNotificationSavedAsDelayed() {
+        // Arrange: The appointee logs out to become offline
+        userService.logout(OTHER_TOKEN);
+
+        // Act: Owner sends the appointment request to the offline user
+        Response<Boolean> response = service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+
+        // Assert: The action must succeed
+        assertTrue(response.getValue(), "Requesting owner appointment should succeed");
+
+        // Assert: Verify the notification was saved as delayed in the repository
+        Member offlineAppointee = userRepo.findById(OTHER_USER_ID);
+        assertTrue(offlineAppointee.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().contains("invited to be a owner")),
+                "Offline appointee should have a delayed ROLE_APPOINTMENT_REQUEST notification");
+    }
+
+    @Test
+    void GivenOfflineManager_WhenUpdateManagerPermissions_ThenNotificationSavedAsDelayed() {
+        // Arrange: The manager logs out to become offline
+        userService.logout(MANAGER_TOKEN);
+
+        // Act: Owner updates the offline manager's permissions
+        Response<Boolean> response = service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+
+        // Assert: The action must succeed
+        assertTrue(response.getValue(), "Updating permissions should succeed");
+
+        // Assert: Verify the notification was saved as delayed in the repository
+        Member offlineManager = userRepo.findById(MANAGER_ID);
+        assertTrue(offlineManager.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().contains("permissions have been updated")),
+                "Offline manager should have a delayed GENERAL_POPUP notification");
+    }
+
+    @Test
+    void GivenOfflineManager_WhenRemoveManagerAppointment_ThenKickoutSavedAsDelayed() {
+        // Arrange: We must add a second manager first, because the system prevents removing the *only* manager
+        addSecondManager();
+
+        // The target manager logs out to become offline
+        userService.logout(MANAGER_TOKEN);
+
+        // Act: Owner removes the offline manager
+        Response<Boolean> response = service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+
+        // Assert: The action must succeed
+        assertTrue(response.getValue(), "Removing manager should succeed");
+
+        // Assert: Verify the kickout notification was saved as delayed in the repository
+        Member offlineManager = userRepo.findById(MANAGER_ID);
+        assertTrue(offlineManager.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().contains("role has been removed")),
+                "Offline removed manager should have a delayed KICKOUT_TAB_NAVIGATION notification");
     }
 
 }

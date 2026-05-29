@@ -16,51 +16,18 @@ import java.util.logging.Logger;
 @Component
 public class VaadinNotifier implements INotifier {
     private static final Logger logger = Logger.getLogger(VaadinNotifier.class.getName());
-    private final IUserRepo userRepo;
 
-    @Autowired
-    public VaadinNotifier(IUserRepo userRepo) {
-        this.userRepo = userRepo;
+
+    @Override
+    public boolean notifyUser(String userIdentifier, NotifyDTO notification) {
+        return Broadcaster.broadcastToUser(userIdentifier, notification);
     }
 
     @Override
-    public void notifyUser(String userIdentifier, NotifyDTO notification) {
-        RetryHelper.executeWithRetry(() -> {
-            logger.info("Attempting to send real-time notification to user: " + userIdentifier);
-            try {
-                boolean isSentRealTime = Broadcaster.broadcastToUser(userIdentifier, notification);
-
-                if (!isSentRealTime) {
-                    logger.info("User " + userIdentifier + " is offline. Saving as delayed notification.");
-                    Member member = userRepo.findUserByEmail(userIdentifier);
-                    if (member != null) {
-                        member.addDelayedNotification(notification);
-                        userRepo.store(member);
-                        logger.info("Delayed notification saved successfully for: " + userIdentifier);
-                    } else {
-                        logger.warning(
-                                "Failed to save delayed notification: Member not found for email " + userIdentifier);
-                    }
-                }
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Error in notifyUser for " + userIdentifier + ": " + e.getMessage());
-            }
-            return null;
-        });
-    }
-
-    @Override
-    public boolean notifyTab(String tabId, NotifyDTO notification) { // because we dont have suspended notifications
+    public boolean notifyTab(String tabId, NotifyDTO notification) {
         return Broadcaster.broadcastToTab(tabId, notification);
     }
 
-
-    public void notifyMemberById(Integer userId, NotifyDTO payload){
-        String userEmail = userRepo.getUserEmail(userId);
-        notifyUser(userEmail, payload);
-    }
 }
 
 

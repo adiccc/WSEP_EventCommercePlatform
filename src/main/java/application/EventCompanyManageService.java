@@ -1,23 +1,19 @@
 package application;
 
-import DTO.ElementPositionDTO;
-import DTO.PurchaseHistoryDTO;
-import DTO.SeatingZoneDTO;
-import DTO.StandingZoneDTO;
 import DTO.*;
+import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.*;
 import domain.dto.*;
-import domain.event.Event;
-import domain.event.EventMap;
-import domain.event.IEventRepo;
-import domain.dataType.ElementPosition;
-import domain.event.Zone;
 import domain.policy.DiscountPolicyType;
 import domain.policy.PurchasePolicyType;
 import domain.event.*;
 import Exception.OptimisticLockingFailureException;
+import domain.user.IUserRepo;
+import domain.user.Member;
+import domain.user.IUserRepo;
+import domain.user.Member;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -40,21 +36,23 @@ public class EventCompanyManageService {
     private final Logger logger;
     private final IAuth auth;
     private final IPaymentSystem paymentSystem;
-    private final IAccessValidator accessValidator;
+    private final ISuspensionRepo suspensionRepo;
     private final INotifier notifier;
+    private final IUserRepo userRepo;
     AtomicInteger ticketIdGenerator = new AtomicInteger(1);
 
 
 
     @Autowired
-    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, IAccessValidator accessValidator,INotifier notifier) {
+    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo,INotifier notifier, IUserRepo userRepo) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;
         this.auth = auth;
         this.logger = Logger.getLogger(EventCompanyManageService.class.getName());
         this.paymentSystem = paymentSystem;
-        this.accessValidator = accessValidator;
+        this.suspensionRepo = suspensionRepo;
         this.notifier = notifier;
+        this.userRepo = userRepo;
     }
 
     public Response<Boolean> DefineVenueAndSeatingMap(String token, Integer eventId, ElementPositionDTO stage,
@@ -62,16 +60,20 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "DefineVenueAndSeatingMap called");
-
+            String role = getValidatedRole(token);
+            if (role == null) {
+                logger.log(Level.SEVERE, "Invalid or expired token");
+                return new Response<>(false, "Invalid or expired token");
+            }
             // check valid token
-            int userId = auth.getUserId(token).getValue();
+            int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("Invalid token");
-                return new Response<>(false, "Invalid token");
+                return new Response<>(false, "Only members can define venue");
             }
-            if(!accessValidator.hasWriteAccess(userId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
             try {
                 Event event = eventRepo.findById(eventId);
@@ -134,16 +136,20 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "createEvent called");
-
-            // check valid token
-            int creatorId = auth.getUserId(token).getValue();
-            if (creatorId == -1) {
-                logger.severe("Invalid token");
-                return new Response<>(null, "Invalid token");
+            String role = getValidatedRole(token);
+            if (role == null) {
+                logger.log(Level.SEVERE, "Invalid or expired token");
+                return new Response<>(null, "Invalid or expired token");
             }
-            if(!accessValidator.hasWriteAccess(creatorId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            // check valid token
+            int creatorId = getUserIdFromToken(token);
+            if (creatorId == -1) {
+                logger.severe("Only members can create events");
+                return new Response<>(null, "Only members can create events");
+            }
+            if (suspensionRepo.haveActiveSuspension(creatorId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
 
             try {
@@ -190,22 +196,24 @@ public class EventCompanyManageService {
             }
         });
     }
-//TODO:: try and catch handle
-
     public Response<Boolean> UpdateEventDate(String token, Integer eventId, LocalDateTime date) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "UpdateEventDate called");
-
-            // check valid token
-            int userId = auth.getUserId(token).getValue();
-            if (userId == -1) {
-                logger.severe("Invalid token");
+            String role = getValidatedRole(token);
+            if (role == null) {
+                logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(false, "Invalid token");
             }
-            if(!accessValidator.hasWriteAccess(userId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            // check valid token
+            int userId = getUserIdFromToken(token);
+            if (userId == -1) {
+                logger.severe("Only members can update event's dates");
+                return new Response<>(false, "Only members can update event's dates");
+            }
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
             try {
                 Event event = eventRepo.findById(eventId);
@@ -226,13 +234,13 @@ public class EventCompanyManageService {
                 event.setDate(date);
                 eventRepo.store(event);
                 logger.log(Level.INFO, "Event updated successfully");
-                List<String> purchasers = eventRepo.getAllEventPurchasers(eventId);
-                NotifyPayload payload= new NotifyPayload("The Date of event " + event.getName() + " has been updated to " + event.getDate().toString(),eventId, null);
-                NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
-                for(String purchaser : purchasers){
-                    notifier.notifyUser(purchaser, notifyDTO);
-                }
-                return new Response<>(true, "Event updated successfully");
+                    List<String> purchasers = eventRepo.getAllEventPurchasers(eventId);
+                    NotifyPayload payload = new NotifyPayload("The Date of event " + event.getName() + " has been updated to " + event.getDate().toString(), eventId, null);
+                    NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
+                    for (String purchaser : purchasers) {
+                        sendOrSaveNotification(purchaser, notifyDTO);
+                    }
+                    return new Response<>(true, "Event updated successfully");
             } catch (OptimisticLockingFailureException e) {
                 throw e;
             } catch (Exception e) {
@@ -249,16 +257,20 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "AddZonesToEventMap called");
-
-            // check valid token
-            int userId = auth.getUserId(token).getValue();
-            if (userId == -1) {
-                logger.severe("Invalid token");
+            String role = getValidatedRole(token);
+            if (role == null) {
+                logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(false, "Invalid token");
             }
-            if(!accessValidator.hasWriteAccess(userId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            // check valid token
+            int userId = getUserIdFromToken(token);
+            if (userId == -1) {
+                logger.severe("Only members can add zones to events map");
+                return new Response<>(false, "Only members can add zones to events map");
+            }
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
 
             try {
@@ -320,18 +332,22 @@ public class EventCompanyManageService {
             }
         });
     }
-//TODO:: try and catch handle
     public Response<Boolean> DeleteEvent(String token, Integer eventId) {
         return RetryHelper.executeWithRetry(()->{
             logger.log(Level.INFO, "DeleteEvent called");
-            int userId = auth.getUserId(token).getValue();
-            if (userId == -1) {
-                logger.severe("Invalid token");
+            String role = getValidatedRole(token);
+            if (role == null) {
+                logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(false, "Invalid token");
             }
-            if(!accessValidator.hasWriteAccess(userId)){
-                logger.severe("User does not have write access");
-                return new Response<>(null, "user does not have write access.");
+            int userId = getUserIdFromToken(token);
+            if (userId == -1) {
+                logger.severe("Only members can delete events");
+                return new Response<>(false, "Only members can delete events");
+            }
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
             }
             try{
                 Event event = eventRepo.findById(eventId);
@@ -364,7 +380,7 @@ public class EventCompanyManageService {
                         String purchaserIdentifier = order.getUserIdentifier();
                         NotifyPayload payload = new NotifyPayload("Event " + eventId + "cancelled", eventId, null);
                         NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP,payload);
-                        notifier.notifyUser(purchaserIdentifier,notifyDTO);
+                        sendOrSaveNotification(purchaserIdentifier,notifyDTO);
                         processRefund(token, event.getId(), order.getOrderId());
                     } catch (Exception e) {
                         logger.log(Level.SEVERE, "Failed to process automatic refund for order " +
@@ -386,10 +402,15 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "getOrdersByCompany called");
-            int userId = auth.getUserId(token).getValue();
-            if (userId == -1) {
-                logger.severe("Invalid token");
+            String role = getValidatedRole(token);
+            if (role == null) {
+                logger.log(Level.SEVERE, "Invalid token");
                 return new Response<>(null, "Invalid token");
+            }
+            int userId = getUserIdFromToken(token);
+            if (userId == -1) {
+                logger.severe("Only members can get orders by company");
+                return new Response<>(null, "Only members can get orders by company");
             }
             try {
                 // validate that the company exist
@@ -439,12 +460,12 @@ public class EventCompanyManageService {
                     logger.log(Level.SEVERE, "company not found");
                     return new Response<>(null, "company not found");
                 }
-                String role = auth.getRole(token).getValue();
+                String role = getValidatedRole(token);
                 if (role == null) {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
-                int userId = auth.getUserId(token).getValue();
+                int userId = getUserIdFromToken(token);
                 boolean isMember = "MEMBER".equals(role);
                 boolean isUserPermitted = company.isActive() || (isMember && company.getCompanyPermission().checkPermission(userId, PermissionType.VIEW_CLOSED_COMPANIES));
                 if (!isUserPermitted) {
@@ -497,7 +518,12 @@ public class EventCompanyManageService {
                 logger.log(Level.SEVERE, "company not found");
                 return new Response<>(null, "company not found");
             }
-            int userId = auth.getUserId(token).getValue();
+            String role = getValidatedRole(token);
+            if (role == null) {
+                logger.log(Level.SEVERE, "Invalid or expired token");
+                return new Response<>(null, "Invalid or expired token");
+            }
+            int userId = getUserIdFromToken(token);
             boolean isMember = userId != -1;
             boolean isUserPermitted = isMember && (company.getCompanyPermission().checkPermission(userId, PermissionType.GENERATE_SALES_REPORTS)); 
             //The requerment is just for the Owner 
@@ -543,12 +569,15 @@ public class EventCompanyManageService {
         }
         });
     }
-//TODO:: try and catch handle
     public Response<Boolean> processRefund(String token, Integer eventId, int orderId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "processRefund called");
-
-            int userId = auth.getUserId(token).getValue();
+            String role = getValidatedRole(token);
+            if (role == null) {
+                logger.log(Level.SEVERE, "Invalid token");
+                return new Response<>(false, "Invalid token");
+            }
+            int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
@@ -580,7 +609,7 @@ public class EventCompanyManageService {
 
                     String userIdentifier = order.getUserIdentifier();
                     NotifyPayload payload = new NotifyPayload("Refund process for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId,null);
-                    notifier.notifyUser(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
+                    sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
                     return new Response<>(true, "Refund completed successfully");
                 }
 
@@ -588,7 +617,7 @@ public class EventCompanyManageService {
                 eventRepo.store(event);
                 String userIdentifier = order.getUserIdentifier();
                 NotifyPayload payload = new NotifyPayload("Refund process failed for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId,null);
-                notifier.notifyUser(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
+                sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
                 logger.log(Level.SEVERE, "Refund rejected by external payment service");
                 return new Response<>(false, "Refund rejected by external payment service");
 
@@ -609,12 +638,18 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("addRuleToEvent called for eventId: " + eventId);
             try {
-                int userId = auth.getUserId(token).getValue();
-                if (userId == -1)
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid or expired token");
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("user does not have write access.");
-
+                }
+                int userId = getUserIdFromToken(token);
+                if (userId == -1)
+                    return Response.error("Only members can add rule to event");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 if (ruleDTO == null)
                     return Response.error("Invalid rule data");
 
@@ -653,12 +688,18 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("removeRuleFromEvent called for eventId: " + eventId);
             try {
-                int userId = auth.getUserId(token).getValue();
-                if (userId == -1)
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid or expired token");
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("user does not have write access.");
-
+                }
+                int userId = getUserIdFromToken(token);
+                if (userId == -1)
+                    return Response.error("Only members can remove rule from event");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 if (ruleDTO == null)
                     return Response.error("Invalid rule data");
 
@@ -697,12 +738,18 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("addDiscountToEvent called for eventId: " + eventId);
             try {
-                int userId = auth.getUserId(token).getValue();
-                if (userId == -1)
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid or expired token");
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("user does not have write access.");
-
+                }
+                int userId = getUserIdFromToken(token);
+                if (userId == -1)
+                    return Response.error("Only members can add discount to event");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 if (discountDTO == null)
                     return Response.error("Invalid discount data");
 
@@ -741,12 +788,18 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("removeDiscountFromEvent called for eventId: " + eventId);
             try {
-                int userId = auth.getUserId(token).getValue();
-                if (userId == -1)
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid or expired token");
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("user does not have write access.");
-
+                }
+                int userId = getUserIdFromToken(token);
+                if (userId == -1)
+                    return Response.error("Only members can remove discounts from event");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 if (discountDTO == null)
                     return Response.error("Invalid discount data");
 
@@ -785,12 +838,18 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("changeEventPurchasePolicyType called for eventId: " + eventId);
             try {
-                int userId = auth.getUserId(token).getValue();
-                if (userId == -1)
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid or expired token");
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("user does not have write access.");
-
+                }
+                int userId = getUserIdFromToken(token);
+                if (userId == -1)
+                    return Response.error("Only members can change purpose policy types");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 Event event = eventRepo.findById(eventId);
                 Company company = companyRepo.findById(event.getCompanyId());
                 if (!company.isActive())
@@ -820,12 +879,18 @@ public class EventCompanyManageService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("changeEventDiscountPolicyType called for eventId: " + eventId);
             try {
-                int userId = auth.getUserId(token).getValue();
-                if (userId == -1)
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid or expired token");
                     return Response.error("Invalid or expired token");
-                if (!accessValidator.hasWriteAccess(userId))
-                    return Response.error("user does not have write access.");
-
+                }
+                int userId = getUserIdFromToken(token);
+                if (userId == -1)
+                    return Response.error("Only members can change discount policies");
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 Event event = eventRepo.findById(eventId);
                 Company company = companyRepo.findById(event.getCompanyId());
                 if (!company.isActive())
@@ -854,6 +919,11 @@ public class EventCompanyManageService {
     public Response<List<PurchaseHistoryDTO>> getPurchaseHistoryByUser(String token) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "getPurchaseHistoryByUser called");
+            String role = getValidatedRole(token);
+            if (role == null) {
+                logger.log(Level.SEVERE, "Invalid or expired token");
+                return new Response<>(null, "Invalid or expired token");
+            }
             String userEmail = auth.getUserEmail(token).getValue();
             if (userEmail == null) {
                 logger.severe("User is not logged in");
@@ -887,6 +957,69 @@ public class EventCompanyManageService {
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to get purchase history: " + e.getMessage());
                 return new Response<>(null, "Failed to get purchase history: " + e.getMessage());
+            }
+        });
+    }
+    private int getUserIdFromToken(String token) {
+        String email = auth.getUserEmail(token).getValue();
+        if (email == null) {
+            return -1;
+        }
+        Member m = userRepo.findUserByEmail(email);
+        if (m != null) return m.getUserId();
+        return -1; //for guest or invalid
+    }
+
+    private void notifyTokenExpired(String token) {
+        try{
+            NotifyPayload payload = new NotifyPayload("Your session has expired");
+            NotifyDTO expiredNotify = new NotifyDTO(NotifyType.TOKEN_EXPIRED, payload);
+            notifier.notifyTab(token, expiredNotify);
+            logger.info("Sent TOKEN_EXPIRED notification to tab: " + token);
+        } catch (Exception e) {
+            logger.warning("Failed to send TOKEN_EXPIRED notification: " + e.getMessage());
+        }
+    }
+
+    private String getValidatedRole(String token) {
+        Response<String> roleRes = auth.getRole(token);
+        if (roleRes.getValue() == null) {
+            notifyTokenExpired(token);
+            return null;
+        }
+        return roleRes.getValue();
+    }
+     // Helper method to send a real-time notification or save it as delayed if the user is offline.
+    private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                Member member = userRepo.findUserByEmail(userIdentifier);
+
+                if (member == null) {
+                    logger.warning("User not found for identifier: " + userIdentifier);
+                    return new Response<>(null, "User not found");
+                }
+
+                boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
+
+                if (!isDelivered) {
+                    member.addDelayedNotification(notifyDTO);
+                    userRepo.store(member);
+
+                    logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
+                    return new Response<>(null, "Notification saved as delayed");
+                }
+
+                return new Response<>(null, "Notification sent successfully");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                logger.warning("Failed to send or save notification for "
+                        + userIdentifier + ": " + e.getMessage());
+
+                return new Response<>(null, "Failed to send or save notification");
             }
         });
     }

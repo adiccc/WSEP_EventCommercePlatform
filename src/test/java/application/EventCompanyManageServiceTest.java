@@ -2,6 +2,7 @@ package application;
 
 import DTO.*;
 import Log.LoggerSetup;
+import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
@@ -18,6 +19,7 @@ import domain.event.OrderStatus;
 import domain.event.Order;
 import domain.lottery.ILotteryRepo;
 import domain.user.IUserRepo;
+import domain.user.Member;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,10 +36,8 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 import domain.policy.DiscountPolicyType;
 import domain.policy.PurchasePolicyType;
@@ -60,7 +60,6 @@ class EventCompanyManageServiceTest {
     private int managerId;
     private IAuth auth;
     private ISuspensionRepo suspensionRepo;
-    private IAccessValidator accessValidator;
     private IUserRepo userRepo;
     private IPasswordEncoder passwordEncoder;
     private IEventRepo eventRepo;
@@ -91,27 +90,26 @@ class EventCompanyManageServiceTest {
         passwordEncoder=new PasswordEncoderUtil();
         tokenService = new TokenService();
         suspensionRepo = new SuspensionRepoImpl();
-        accessValidator=new AccessValidator(suspensionRepo);
-        auth=new Auth(tokenService,userRepo,passwordEncoder);
+        auth=new Auth(tokenService);
         companyRepo=new CompanyRepoImpl();
         eventRepo = new EventRepoImpl();
 
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
-        notifier = new VaadinNotifier(userRepo);
+        notifier = new VaadinNotifier();
         userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier);
-        eventService=new EventService(auth,eventRepo);
+        eventService=new EventService(auth,eventRepo,notifier);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,accessValidator,notifier,100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,userRepo, 100);
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete order repo from company service construture
-        companyService=new CompanyService(auth,companyRepo,userRepo,accessValidator,notifier);
+        companyService=new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier);
         eventCompanyManageService = new EventCompanyManageService(
                 companyRepo,
                 eventRepo,
                 auth,
-                paymentSystem,accessValidator,notifier
+                paymentSystem,suspensionRepo,notifier,userRepo
         );
 
         validToken1=null; // user with all permissions
@@ -141,13 +139,13 @@ class EventCompanyManageServiceTest {
         UserDTO managerDTO = new UserDTO("manager_event@test.com", "Manager", "Test", "Password123!", 1, 1, 2000, "City", "050-555-9999");
         userService.registerUser(null, managerDTO);
         managerToken = userService.login("manager_event@test.com", "Password123!").getValue();
-        managerId = auth.getUserId(managerToken).getValue();
+        managerId = userService.getUserId(managerToken).getValue();
         Company setupCompany = companyRepo.findById(companyId);
-        setupCompany.getCompanyPermission().addToTree(managerId, auth.getUserId(validToken1).getValue(), new HashSet<>());
+        setupCompany.getCompanyPermission().addToTree(managerId, userService.getUserId(validToken1).getValue(), new HashSet<>());
         companyRepo.store(setupCompany);
 
         String adminEmail = "admin_master@bgu.ac.il";
-        auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(adminEmail));
+        auth = new Auth(tokenService, Set.of(adminEmail));
        // userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "Sys", "Pass123!", 1, 1, 2000, "Address", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
@@ -259,7 +257,7 @@ class EventCompanyManageServiceTest {
         );
 
         assertFalse(response.getValue());
-        assertEquals("Invalid token", response.getMessage());
+        assertEquals("Invalid or expired token", response.getMessage());
     }
 
     @Test
@@ -370,7 +368,7 @@ class EventCompanyManageServiceTest {
 
         // Assert: System blocks and alerts about invalid token
         assertNull(response.getValue());
-        assertEquals("Invalid token", response.getMessage());
+        assertEquals("Invalid or expired token", response.getMessage());
     }
 
     @Test
@@ -1425,10 +1423,10 @@ class EventCompanyManageServiceTest {
         String managerEmail = "manager_race" + System.currentTimeMillis() + "@test.com";
         userService.registerUser(null, new UserDTO(managerEmail, "Man", "Ager", "Pass123!", 1, 1, 2000, "City", "050-999-9999"));
         String managerToken = userService.login(managerEmail, "Pass123!").getValue();
-        int MANAGER_ID = auth.getUserId(managerToken).getValue();
+        int MANAGER_ID = userService.getUserId(managerToken).getValue();
 
         Company company = companyRepo.findById(companyId);
-        int ownerId = auth.getUserId(validToken1).getValue();
+        int ownerId = userService.getUserId(validToken1).getValue();
         company.getCompanyPermission().addToTree(MANAGER_ID, ownerId, new HashSet<>());
         companyRepo.store(company);
 
@@ -1489,7 +1487,7 @@ class EventCompanyManageServiceTest {
         Response<List<PurchaseHistoryDTO>> response =
                 eventCompanyManageService.getPurchaseHistoryByUser(null);
         assertNull(response.getValue());
-        assertEquals("User is not logged in", response.getMessage());
+        assertEquals("Invalid or expired token", response.getMessage());
     }
 
     @Test
@@ -2166,5 +2164,222 @@ class EventCompanyManageServiceTest {
         assertNotEquals("2030-01-01T20:00", history.getEventDate());
         assertFalse(history.getPurchasedTickets().isEmpty());
     }
+    @Test
+    void GivenRealExpiredToken_WhenCreateEvent_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        // Arrange: Register a dedicated user for this test
+        String email = "expired_create_event@test.com";
+        userService.registerUser(null, new UserDTO(
+                email, "Expired", "User", "pass", 1, 1, 1990, "Israel", "050-111-2233"
+        ));
+
+        // Arrange: Generate a real JWT that has ALREADY EXPIRED
+        TokenService testTokenService = new TokenService();
+        String expiredToken = testTokenService.generateExpiredTokenForTest(email);
+
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(expiredToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            // Act
+            Response<Integer> response = eventCompanyManageService.createEvent(
+                    expiredToken, companyId, LocalDateTime.now().plusDays(30), "Expired Token Event",
+                    LocalDateTime.now().plusDays(1), false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL
+            );
+
+            // Assert
+            assertNull(response.getValue());
+            assertEquals("Invalid or expired token", response.getMessage());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenUpdateEventDate_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        String email = "logout_update_date@test.com";
+        userService.registerUser(null, new UserDTO(
+                email, "Logout", "User", "pass", 1, 1, 1990, "City", "050-000-0000"
+        ));
+        String testToken = userService.login(email, "pass").getValue();
+
+        userService.logout(testToken);
+
+        // Arrange: Set up the WebSocket listener for this specific token's tab
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(testToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            Response<Boolean> response = eventCompanyManageService.UpdateEventDate(testToken, eventId, LocalDateTime.now().plusDays(20));
+
+            // Assert
+            assertFalse(response.getValue());
+            assertEquals("Invalid token", response.getMessage());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+
+    @Test
+    void GivenLoggedOutUser_WhenGetCompanyDetails_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        String email = "logout_get_details@test.com";
+        userService.registerUser(null, new UserDTO(
+                email, "Logout", "User2", "pass", 1, 1, 1990, "City", "050-000-0000"
+        ));
+        String testToken = userService.login(email, "pass").getValue();
+
+        userService.logout(testToken);
+
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(testToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            // Act: Attempt to fetch company details
+            Response<CompanyDetailsDTO> response = eventCompanyManageService.getCompanyDetails(testToken, companyId);
+
+            // Assert
+            assertNull(response.getValue());
+            assertEquals("Invalid token", response.getMessage());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+    // ==========================================
+    // Offline Users & Delayed Notifications Tests
+    // ==========================================
+
+    @Test
+    void GivenOfflinePurchaser_WhenUpdateEventDate_ThenNotificationSavedAsDelayed() {
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        String email = "offline_buyer_date@test.com";
+        userService.registerUser("", new UserDTO(email, "Off", "Line", "pass", 1, 1, 2000, "Address", "050-123-4567"));
+        String buyerToken = userService.login(email, "pass").getValue();
+
+        createCompletedOrderThroughPurchaseFlow(buyerToken, eventId, 1);
+
+        // Arrange: Buyer logs out to become offline
+        userService.logout(buyerToken);
+
+        LocalDateTime newDate = eventDate.plusDays(5);
+
+        // Act: Manager updates the event date
+        Response<Boolean> response = eventCompanyManageService.UpdateEventDate(validToken1, eventId, newDate);
+
+        // Assert: Action must succeed
+        assertTrue(response.getValue(), "Updating event date should succeed");
+
+        // Assert: Verify the notification was saved as delayed for the offline buyer
+        Member buyer = userRepo.findUserByEmail(email);
+        assertTrue(buyer.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().contains("has been updated to")),
+                "Offline buyer should have a delayed notification for event date update");
+    }
+
+    @Test
+    void GivenOfflinePurchaser_WhenDeleteEvent_ThenNotificationsSavedAsDelayed() {
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        String email = "offline_buyer_delete@test.com";
+        userService.registerUser("", new UserDTO(email, "Off", "Line", "pass", 1, 1, 2000, "Address", "050-123-4567"));
+        String buyerToken = userService.login(email, "pass").getValue();
+
+        createCompletedOrderThroughPurchaseFlow(buyerToken, eventId, 1);
+
+        // Arrange: Buyer logs out to become offline
+        userService.logout(buyerToken);
+
+        // Act: Manager deletes the event
+        Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, eventId);
+
+        // Assert: Action must succeed
+        assertTrue(response.getValue(), "Deleting event should succeed");
+
+        // Assert: Verify both Cancellation and Refund notifications are saved as delayed
+        Member buyer = userRepo.findUserByEmail(email);
+
+        assertTrue(buyer.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().toLowerCase().contains("cancelled")),
+                "Offline buyer should have a delayed notification for event cancellation");
+
+        assertTrue(buyer.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().toLowerCase().contains("refund")),
+                "Offline buyer should have a delayed notification for refund processing");
+    }
+
+    @Test
+    void GivenOfflinePurchaser_WhenProcessRefund_ThenRefundNotificationSavedAsDelayed() {
+        // Arrange
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        String email = "offline_buyer_refund@test.com";
+        userService.registerUser("", new UserDTO(email, "Off", "Line", "pass", 1, 1, 2000, "Address", "050-123-4567"));
+        String buyerToken = userService.login(email, "pass").getValue();
+
+        int orderId = createCompletedOrderThroughPurchaseFlow(buyerToken, eventId, 1);
+
+        Event event = eventRepo.findById(eventId);
+        Order order = event.findOrderById(orderId);
+        order.markRefundRequired();
+        eventRepo.store(event);
+
+        // Arrange: Buyer logs out to become offline
+        userService.logout(buyerToken);
+
+        // Act: Manager processes the refund
+        Response<Boolean> response = eventCompanyManageService.processRefund(validToken1, eventId, orderId);
+
+        // Assert: Action must succeed
+        assertTrue(response.getValue(), "Processing refund should succeed");
+
+        // Assert: Verify the refund notification was saved as delayed
+        Member buyer = userRepo.findUserByEmail(email);
+        assertTrue(buyer.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().toLowerCase().contains("refund process")),
+                "Offline buyer should have a delayed notification for refund");
+    }
 }
+
 

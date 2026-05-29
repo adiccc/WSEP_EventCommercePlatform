@@ -97,8 +97,8 @@ public class DataSeeder implements ApplicationRunner {
         createCompany(charlieToken,10, "Open Air Fest",       "open@airfest.com",      "054-333-0003", "IL-9012-003");
 
         // ── 4. Appoint dave as Owner of company 1, eve as Manager ─────────────
-        int daveId = auth.getUserId(daveToken).getValue();
-        int eveId  = auth.getUserId(eveToken).getValue();
+        int daveId = userService.getUserId(daveToken).getValue();
+        int eveId  = userService.getUserId(eveToken).getValue();
 
         appointOwner(aliceToken, daveToken, 1, daveId);
         appointManager(aliceToken, eveToken, 1, eveId,
@@ -114,7 +114,7 @@ public class DataSeeder implements ApplicationRunner {
         createEvent(aliceToken, 1, "Electronic Night Vol.3", base.plusMonths(2),  CategoryEvent.FESTIVAL,   GeographicalArea.CENTER);
 
         // Company 2 — Stadium Live
-        createEvent(aliceToken, 2, "Champions Finals", base.plusDays(20), CategoryEvent.SPORTS, GeographicalArea.JERUSALEM, true, true, List.of(auth.getUserId(aliceToken).getValue(), auth.getUserId(bobToken).getValue()));
+        createEvent(aliceToken, 2, "Champions Finals", base.plusDays(20), CategoryEvent.SPORTS, GeographicalArea.JERUSALEM, true, true, List.of(userService.getUserId(aliceToken).getValue(), userService.getUserId(bobToken).getValue()));
         createEvent(aliceToken, 2, "All-Star Weekend",       base.plusMonths(3),  CategoryEvent.SPORTS,     GeographicalArea.JERUSALEM);
 
         // Company 3 — Festival Nation
@@ -241,7 +241,7 @@ public class DataSeeder implements ApplicationRunner {
                              List<Integer> demoLotteryWinnerUserIds) {
 
         LocalDateTime saleStart = forceSaleStarted
-                ? LocalDateTime.now().minusMinutes(5)
+                ? LocalDateTime.now().minusMinutes(55)
                 : getDemoSaleStart(date);
 
         var r = eventService.createEvent(
@@ -284,7 +284,7 @@ public class DataSeeder implements ApplicationRunner {
 
         LocalDateTime registerWindow = LocalDateTime.now().minusMinutes(1);
 
-        long expirationTimeHours = 24;
+        long expirationTimeHours = 1;
 
         Lottery lottery = new Lottery(
                 eventId,

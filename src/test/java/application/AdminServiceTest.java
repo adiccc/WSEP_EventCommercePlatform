@@ -45,7 +45,6 @@ class AdminServiceTest {
     private String nonAdminToken;
     private ICompanyRepo companyRepo;
     private IUserRepo userRepo;
-    private IAccessValidator accessValidator;
     private ISuspensionRepo suspensionRepo;
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
@@ -62,6 +61,7 @@ class AdminServiceTest {
     private List<SeatingZoneDTO> seatingZones;
     private INotifier notifier;
     private IAuth auth;
+    private TokenService tokenService;
 
     private static final String ADMIN_EMAIL = "admin@bgu.ac.il";
     private static final String USER_EMAIL = "user@bgu.ac.il";
@@ -76,7 +76,7 @@ class AdminServiceTest {
         WebQueue.resetForTesting();
         WebQueue.getInstance(100);
 
-        TokenService tokenService = new TokenService();
+        tokenService = new TokenService();
         userRepo = new UserRepo();
         eventRepo = new EventRepoImpl();
         companyRepo = new CompanyRepoImpl();
@@ -85,19 +85,18 @@ class AdminServiceTest {
         ticketSupply = Mockito.mock(ITicketSupply.class);
 
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
-        auth = new Auth(tokenService, userRepo, passwordEncoder, Set.of(ADMIN_EMAIL));
-        accessValidator = new AccessValidator(suspensionRepo);
-        notifier = new VaadinNotifier(userRepo);
+        auth = new Auth(tokenService, Set.of(ADMIN_EMAIL));
+        notifier = new VaadinNotifier();
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
 
         adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem,suspensionRepo,notifier);
 
         IActiveOrderRepo activeOrderRepo =new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo = new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,accessValidator,notifier,100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,suspensionRepo,notifier,userRepo,100);
 
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,accessValidator,notifier);
-        companyService = new CompanyService(auth, companyRepo, userRepo,accessValidator,notifier);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo);
+        companyService = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier);
 
         UserDTO adminDTO = new UserDTO(ADMIN_EMAIL, "Admin", "User", PASSWORD, 1, 1, 1990, "City", "050-000-0000");
         UserDTO userDTO = new UserDTO(USER_EMAIL, "Regular", "User", PASSWORD, 1, 1, 1990, "City", "050-111-1111");
@@ -124,7 +123,7 @@ class AdminServiceTest {
 
         userService.registerUser(null, new UserDTO("notSuspenededUser@gmail.com","notSuspenededUser","test","test",1,1,2000,"test-addtess","050-000-0032"));
         userNotSusToken = userService.login("notSuspenededUser@gmail.com","test").getValue();
-        userIdNotSuspened=auth.getUserId(userNotSusToken).getValue();
+        userIdNotSuspened=userService.getUserId(userNotSusToken).getValue();
 
     }
 
@@ -250,7 +249,7 @@ class AdminServiceTest {
     }
 
     @Test
-    void GivenValidInputs_WhenCloseCompanyByAdmin_ThenCompanyAndEventsClosed() throws InterruptedException {
+    void GivenValidInputsAndBuyerOnline_WhenCloseCompanyByAdmin_ThenCompanyAndEventsClosedAndRefundNotificationSentRealtime() throws InterruptedException {
         // Arrange: Create an order and mock payment success
         int orderId = createCompletedOrderThroughPurchaseFlow(nonAdminToken, eventId, 1);
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
@@ -258,15 +257,80 @@ class AdminServiceTest {
         // Arrange: Extract identifiers to set up specific WebSocket listeners
         Event event = eventRepo.findById(eventId);
         String buyerIdentifier = event.findOrderById(orderId).getUserIdentifier();
-        int ownerId = companyRepo.findById(companyId).getCompanyPermission().getOwnerIds().iterator().next();
 
-        // Arrange: Setup listeners (simulating virtual browsers connected via WebSockets)
         CountDownLatch buyerLatch = new CountDownLatch(1);
         AtomicReference<NotifyDTO> buyerNotification = new AtomicReference<>();
         Registration buyerReg = Broadcaster.registerUser(buyerIdentifier, dto -> {
             buyerNotification.set(dto);
             buyerLatch.countDown();
         });
+
+        CountDownLatch ownerLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> ownerNotification = new AtomicReference<>();
+        String ownerIdentifier = auth.getUserEmail(adminToken).getValue();
+
+        Registration ownerReg = Broadcaster.registerUser(ownerIdentifier, dto -> {
+            ownerNotification.set(dto);
+            ownerLatch.countDown();
+        });
+
+        try {
+            // Act: Admin requests to close the company
+            Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
+
+            // Assert: database state and response
+            assertTrue(response.getValue());
+            assertEquals("Company closed successfully", response.getMessage());
+            assertFalse(companyRepo.findById(companyId).isActive());
+            assertFalse(eventRepo.findById(eventId).isActive());
+
+            assertEquals(OrderStatus.REFUNDED,
+                    eventRepo.findById(eventId).findOrderById(orderId).getStatus());
+
+            // Assert: buyer refund notification was delivered in real time
+            assertTrue(buyerLatch.await(2000, TimeUnit.MILLISECONDS), "Buyer notification timeout");
+            assertNotNull(buyerNotification.get());
+            assertEquals(NotifyType.GENERAL_POPUP, buyerNotification.get().getType());
+            assertTrue(buyerNotification.get().getPayload().getMessage().contains("Refund processed"),
+                    "Buyer should receive refund processed notification in real time: "
+                            + buyerNotification.get().getPayload().getMessage());
+
+            Member buyer = userRepo.findUserByEmail(buyerIdentifier);
+
+            assertFalse(buyer.getDelayedNotifications().stream()
+                            .anyMatch(n ->
+                                    n.getType() == NotifyType.GENERAL_POPUP
+                                            && n.getPayload() != null
+                                            && n.getPayload().getMessage().contains("Refund processed")
+                            ),
+                    "Online buyer should not have the refund processed notification saved as delayed");
+
+            // Assert: owner notification was also delivered in real time
+            assertTrue(ownerLatch.await(2000, TimeUnit.MILLISECONDS), "Owner notification timeout");
+            assertNotNull(ownerNotification.get());
+            assertEquals(NotifyType.GENERAL_POPUP, ownerNotification.get().getType());
+            assertTrue(ownerNotification.get().getPayload().getMessage().contains("Company"),
+                    "Owner should receive company closure notification in real time: "
+                            + ownerNotification.get().getPayload().getMessage());
+
+        } finally {
+            buyerReg.remove();
+            ownerReg.remove();
+        }
+    }
+
+    @Test
+    void GivenValidInputsAndBuyerOffline_WhenCloseCompanyByAdmin_ThenCompanyAndEventsClosedAndRefundNotificationSavedAsDelayed() {
+        // Arrange: Create an order and mock payment success
+        int orderId = createCompletedOrderThroughPurchaseFlow(nonAdminToken, eventId, 1);
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+
+        Event event = eventRepo.findById(eventId);
+        String buyerIdentifier = event.findOrderById(orderId).getUserIdentifier();
+
+        // Buyer is offline/logged out while the admin closes the company.
+        // Do not register the buyer in Broadcaster, so the refund notification should be saved as delayed.
+        userService.logout(nonAdminToken);
 
         CountDownLatch ownerLatch = new CountDownLatch(1);
         AtomicReference<NotifyDTO> ownerNotification = new AtomicReference<>();
@@ -280,23 +344,38 @@ class AdminServiceTest {
             // Act: Admin requests to close the company
             Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
 
-            // Assert: assertions for database state and response
+            // Assert: database state and response
             assertTrue(response.getValue());
             assertEquals("Company closed successfully", response.getMessage());
             assertFalse(companyRepo.findById(companyId).isActive());
             assertFalse(eventRepo.findById(eventId).isActive());
-            assertEquals(OrderStatus.REFUNDED, eventRepo.findById(eventId).findOrderById(orderId).getStatus());
+            assertEquals(OrderStatus.REFUNDED,
+                    eventRepo.findById(eventId).findOrderById(orderId).getStatus());
 
-            // Assert: Notification verifications (awaiting background execution)
-            assertTrue(buyerLatch.await(2000, TimeUnit.MILLISECONDS), "Buyer notification timeout");
-            assertTrue(buyerNotification.get().getPayload().getMessage().contains("Refund processed"));
+            // Assert: buyer refund notification was saved as delayed
+            Member buyer = userRepo.findUserByEmail(buyerIdentifier);
+            List<NotifyDTO> delayedNotifications = buyer.getDelayedNotifications();
 
-            assertTrue(ownerLatch.await(2000, TimeUnit.MILLISECONDS), "Owner notification timeout");
+            assertTrue(delayedNotifications.stream()
+                            .anyMatch(n ->
+                                    n.getType() == NotifyType.GENERAL_POPUP
+                                            && n.getPayload() != null
+                                            && n.getPayload().getMessage().contains("Refund processed")
+                                            && n.getPayload().getMessage().contains("because of closing the company")
+                            ),
+                    "Buyer should have a delayed refund processed notification");
+
+
+            // Assert: owner notification was still delivered in real time
+            try {
+                assertTrue(ownerLatch.await(2000, TimeUnit.MILLISECONDS), "Owner notification timeout");
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            assertNotNull(ownerNotification.get());
             assertTrue(ownerNotification.get().getPayload().getMessage().contains("Company"));
 
         } finally {
-            // Cleanup: Remove listeners to prevent memory leaks and test interference
-            buyerReg.remove();
             ownerReg.remove();
         }
     }
@@ -395,8 +474,9 @@ class AdminServiceTest {
             reg.remove();
         }
     }
+
     @Test
-    void GivenNotActivePaymentSystem_WhenCloseCompany_ThenCompanyClosedAndFailureHandled() throws InterruptedException {
+    void GivenNotActivePaymentSystemAndBuyerOnline_WhenCloseCompany_ThenCompanyClosedAndFailureNotificationSentRealtime() throws InterruptedException {
         // Arrange: Create order using nonAdminToken to cleanly separate buyer from owner
         int orderId = createCompletedOrderThroughPurchaseFlow(nonAdminToken, eventId, 1);
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(false);
@@ -404,7 +484,6 @@ class AdminServiceTest {
         Event event = eventRepo.findById(eventId);
         String buyerIdentifier = event.findOrderById(orderId).getUserIdentifier();
 
-        // Arrange: Setup listener for the specific buyer
         CountDownLatch buyerLatch = new CountDownLatch(1);
         AtomicReference<NotifyDTO> buyerNotification = new AtomicReference<>();
         Registration buyerReg = Broadcaster.registerUser(buyerIdentifier, dto -> {
@@ -412,22 +491,121 @@ class AdminServiceTest {
             buyerLatch.countDown();
         });
 
+        CountDownLatch ownerLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> ownerNotification = new AtomicReference<>();
+        String ownerIdentifier = auth.getUserEmail(adminToken).getValue();
+
+        Registration ownerReg = Broadcaster.registerUser(ownerIdentifier, dto -> {
+            ownerNotification.set(dto);
+            ownerLatch.countDown();
+        });
+
         try {
             // Act
             Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
 
-            // Assert:
+            // Assert: database state and response
             assertTrue(response.getValue());
+            assertEquals("Company closed successfully", response.getMessage());
             assertFalse(companyRepo.findById(companyId).isActive());
             assertFalse(eventRepo.findById(eventId).isActive());
-            assertEquals(domain.event.OrderStatus.REFUND_REQUIRED, eventRepo.findById(eventId).findOrderById(orderId).getStatus());
 
-            // Assert: Verify failure notification was correctly sent to the buyer
+            assertEquals(OrderStatus.REFUND_REQUIRED,
+                    eventRepo.findById(eventId).findOrderById(orderId).getStatus());
+
+            // Assert: buyer refund-failure notification was delivered in real time
             assertTrue(buyerLatch.await(2000, TimeUnit.MILLISECONDS), "Buyer notification timeout");
-            assertTrue(buyerNotification.get().getPayload().getMessage().contains("Refund failed"));
+            assertNotNull(buyerNotification.get());
+            assertEquals(NotifyType.GENERAL_POPUP, buyerNotification.get().getType());
+            assertTrue(buyerNotification.get().getPayload().getMessage().contains("Refund failed"),
+                    "Buyer should receive refund failure notification in real time: "
+                            + buyerNotification.get().getPayload().getMessage());
+
+            Member buyer = userRepo.findUserByEmail(buyerIdentifier);
+
+            assertFalse(buyer.getDelayedNotifications().stream()
+                            .anyMatch(n ->
+                                    n.getType() == NotifyType.GENERAL_POPUP
+                                            && n.getPayload() != null
+                                            && n.getPayload().getMessage().contains("Refund failed")
+                            ),
+                    "Online buyer should not have the refund failure notification saved as delayed");
+
+            // Assert: owner notification was also delivered in real time
+            assertTrue(ownerLatch.await(2000, TimeUnit.MILLISECONDS), "Owner notification timeout");
+            assertNotNull(ownerNotification.get());
+            assertEquals(NotifyType.GENERAL_POPUP, ownerNotification.get().getType());
+            assertTrue(ownerNotification.get().getPayload().getMessage().contains("Company"),
+                    "Owner should receive company closure notification in real time: "
+                            + ownerNotification.get().getPayload().getMessage());
 
         } finally {
             buyerReg.remove();
+            ownerReg.remove();
+        }
+    }
+
+    @Test
+    void GivenNotActivePaymentSystemAndBuyerOffline_WhenCloseCompany_ThenCompanyClosedAndFailureNotificationSavedAsDelayed() {
+        // Arrange: Create order using nonAdminToken to cleanly separate buyer from owner
+        int orderId = createCompletedOrderThroughPurchaseFlow(nonAdminToken, eventId, 1);
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(false);
+
+        Event event = eventRepo.findById(eventId);
+        String buyerIdentifier = event.findOrderById(orderId).getUserIdentifier();
+
+        // Buyer is offline/logged out while the admin closes the company.
+        // Do not register the buyer in Broadcaster, so the refund failure notification should be saved as delayed.
+        userService.logout(nonAdminToken);
+
+        CountDownLatch ownerLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> ownerNotification = new AtomicReference<>();
+        String ownerIdentifier = auth.getUserEmail(adminToken).getValue();
+
+        Registration ownerReg = Broadcaster.registerUser(ownerIdentifier, dto -> {
+            ownerNotification.set(dto);
+            ownerLatch.countDown();
+        });
+
+        try {
+            // Act: Admin requests to close the company
+            Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
+
+            // Assert: database state and response
+            assertTrue(response.getValue());
+            assertEquals("Company closed successfully", response.getMessage());
+            assertFalse(companyRepo.findById(companyId).isActive());
+            assertFalse(eventRepo.findById(eventId).isActive());
+
+            assertEquals(OrderStatus.REFUND_REQUIRED,
+                    eventRepo.findById(eventId).findOrderById(orderId).getStatus());
+
+            // Assert: buyer refund-failure notification was saved as delayed
+            Member buyer = userRepo.findUserByEmail(buyerIdentifier);
+            List<NotifyDTO> delayedNotifications = buyer.getDelayedNotifications();
+
+            assertTrue(delayedNotifications.stream()
+                            .anyMatch(n ->
+                                    n.getType() == NotifyType.GENERAL_POPUP
+                                            && n.getPayload() != null
+                                            && n.getPayload().getMessage().contains("Refund failed")
+                                            && n.getPayload().getMessage().contains("because of closing the company")
+                                            && n.getPayload().getMessage().contains("please contact support")
+                            ),
+                    "Buyer should have a delayed refund failure notification");
+
+            // Assert: owner notification was still delivered in real time
+            try {
+                assertTrue(ownerLatch.await(2000, TimeUnit.MILLISECONDS), "Owner notification timeout");
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+
+            assertNotNull(ownerNotification.get());
+            assertTrue(ownerNotification.get().getPayload().getMessage().contains("Company"));
+
+        } finally {
+            ownerReg.remove();
         }
     }
 
@@ -1111,7 +1289,7 @@ class AdminServiceTest {
         assertTrue(response.getValue());
         assertTrue(response.getMessage().contains("Suspension succeeded"));
 
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
         assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
     }
 
@@ -1130,7 +1308,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     @Test
@@ -1146,7 +1324,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     @Test
@@ -1182,7 +1360,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(suspendedUserId);
         assertTrue(member.isSuspended());
 
-        assertFalse(accessValidator.hasWriteAccess(suspendedUserId));
+        assertTrue(suspensionRepo.haveActiveSuspension(suspendedUserId));
     }
 
     @Test
@@ -1198,7 +1376,7 @@ class AdminServiceTest {
         assertTrue(response.getMessage().contains("Suspension succeeded"));
 
         assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     @Test
@@ -1217,7 +1395,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     @Test
@@ -1235,7 +1413,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     @Test
@@ -1272,7 +1450,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(suspendedUserId);
         assertTrue(member.isSuspended());
 
-        assertFalse(accessValidator.hasWriteAccess(suspendedUserId));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     @Test
@@ -1290,7 +1468,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
     }
 
     // Race Condition
@@ -1338,7 +1516,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(suspenedUserId);
 
         assertTrue(member.isSuspended(), "User should be suspended");
-        assertFalse(accessValidator.hasWriteAccess(suspenedUserId), "Suspended user should not have write access");
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
 
         executor.shutdown();
     }
@@ -1353,7 +1531,7 @@ class AdminServiceTest {
 
         assertTrue(suspendResponse.getValue());
         assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
 
         // Act
         Response<Boolean> response = adminService.UnsuspendUser(adminToken, userIdNotSuspened);
@@ -1365,7 +1543,8 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should have write access");
+
     }
 
     @Test
@@ -1375,7 +1554,7 @@ class AdminServiceTest {
 
         assertTrue(suspendResponse.getValue());
         assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
 
         // Act
         Response<Boolean> response = adminService.UnsuspendUser(adminToken, userIdNotSuspened);
@@ -1387,7 +1566,8 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should have write access");
+
     }
 
     @Test
@@ -1398,7 +1578,8 @@ class AdminServiceTest {
 
         assertTrue(suspendResponse.getValue());
         assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
+
 
         userService.logout(adminToken);
 
@@ -1412,7 +1593,8 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertTrue(member.isSuspended());
 
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
+
     }
 
     @Test
@@ -1423,7 +1605,8 @@ class AdminServiceTest {
 
         assertTrue(suspendResponse.getValue());
         assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
+
 
         // Act
         Response<Boolean> response = adminService.UnsuspendUser(nonAdminToken, userIdNotSuspened);
@@ -1435,7 +1618,8 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertTrue(member.isSuspended());
 
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
+
     }
 
     @Test
@@ -1455,7 +1639,8 @@ class AdminServiceTest {
     void GivenActiveUser_WhenCancelUserSuspension_ThenUserIsNotSuspendedErrorReturned() {
         // Arrange
         assertFalse(userRepo.findById(userIdNotSuspened).isSuspended());
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should have write access");
+
 
         // Act
         Response<Boolean> response = adminService.UnsuspendUser(adminToken, userIdNotSuspened);
@@ -1467,7 +1652,8 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should have write access");
+
     }
 
     // Race Condition
@@ -1480,7 +1666,8 @@ class AdminServiceTest {
         Response<Boolean> suspendResponse = adminService.SuspendUser(adminToken, suspendedUserId);
         assertTrue(suspendResponse.getValue());
         assertTrue(userRepo.findById(suspendedUserId).isSuspended());
-        assertFalse(accessValidator.hasWriteAccess(suspendedUserId));
+        assertTrue(suspensionRepo.haveActiveSuspension(suspendedUserId), "Suspended user should not have write access");
+
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch startGun = new CountDownLatch(1);
@@ -1534,8 +1721,7 @@ class AdminServiceTest {
         Member member = userRepo.findById(suspendedUserId);
 
         assertFalse(member.isSuspended(), "User should not be suspended after unsuspend");
-        assertTrue(accessValidator.hasWriteAccess(suspendedUserId), "Unsuspended user should have write access");
-        assertFalse(suspensionRepo.hasActiveSuspension(suspendedUserId), "User should not have an active suspension");
+        assertFalse(suspensionRepo.haveActiveSuspension(suspendedUserId), "User should not have an active suspension");
 
         long successfulUnsuspensions = responses.stream()
                 .filter(Response::getValue)
@@ -1649,13 +1835,15 @@ class AdminServiceTest {
                 adminService.SuspendUser(adminToken, userIdNotSuspened);
 
         assertTrue(suspendResponse.getValue());
-        assertFalse(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
+
 
         Response<Boolean> unsuspendResponse =
                 adminService.UnsuspendUser(adminToken, userIdNotSuspened);
 
         assertTrue(unsuspendResponse.getValue());
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should have write access");
+
 
         // Act
         Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(adminToken);
@@ -1674,7 +1862,121 @@ class AdminServiceTest {
         Member member = userRepo.findById(userIdNotSuspened);
         assertFalse(member.isSuspended());
 
-        assertTrue(accessValidator.hasWriteAccess(userIdNotSuspened));
+        assertFalse(suspensionRepo.haveActiveSuspension(userIdNotSuspened), "Suspended user should not have write access");
+
     }
 
+    @Test
+    void GivenRealExpiredToken_WhenSetMaxCapacity_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        // Arrange: Register a dedicated admin so the user exists in DB
+        String email = "expired_admin_hermetic@bgu.ac.il";
+        userService.registerUser(null, new UserDTO(
+                email, "Expired", "Admin", "pass", 1, 1, 1990, "Israel", "050-111-2233"
+        ));
+
+        // Arrange: Use the TokenService to generate a real JWT that has ALREADY EXPIRED.
+        TokenService testTokenService = new TokenService();
+        String expiredToken = testTokenService.generateExpiredTokenForTest(email);
+
+        // Arrange: Set up the WebSocket listener for this specific token's tab
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(expiredToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            // Act: Call an admin function with the expired token
+            Response<Boolean> response = adminService.setMaxCapacity(expiredToken, 500);
+
+            // Assert: Must fail gracefully
+            assertTrue(response.isError());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+
+    @Test
+    void GivenLoggedOutAdmin_WhenCloseCompanyByAdmin_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        // Arrange: Create a dedicated admin for this test
+        String email = "logout_close_admin@bgu.ac.il";
+        userService.registerUser(null, new UserDTO(
+                email, "Logout", "Admin", "pass", 1, 1, 1990, "City", "050-000-0000"
+        ));
+        String testAdminToken = userService.login(email, "pass").getValue();
+
+        // Act: Log the user out (invalidating the token in Auth)
+        userService.logout(testAdminToken);
+
+        // Arrange: Set up the WebSocket listener for this specific token's tab
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(testAdminToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            // Act: Attempt to close the company
+            Response<Boolean> response = adminService.closeCompanyByAdmin(testAdminToken, companyId);
+
+            // Assert: Unauthorized due to invalid token
+            assertTrue(response.isError());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
+
+    @Test
+    void GivenLoggedOutAdmin_WhenSuspendUser_ThenTokenExpiredNotificationSent() throws InterruptedException {
+        // Arrange: Create a dedicated admin for this test
+        String email = "logout_suspend_admin@bgu.ac.il";
+        userService.registerUser(null, new UserDTO(
+                email, "Logout", "Admin2", "pass", 1, 1, 1990, "City", "050-000-0000"
+        ));
+        String testAdminToken = userService.login(email, "pass").getValue();
+
+        // Act: Log the user out
+        userService.logout(testAdminToken);
+
+        // Arrange: Set up the WebSocket listener for this specific token's tab
+        CountDownLatch tabLatch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
+
+        Registration tabReg = Broadcaster.registerTab(testAdminToken, dto -> {
+            receivedNotification.set(dto);
+            tabLatch.countDown();
+        });
+
+        try {
+            // Act: Attempt to suspend a user
+            Response<Boolean> response = adminService.SuspendUser(testAdminToken, userIdNotSuspened);
+
+            // Assert: Request should fail
+            assertTrue(response.isError());
+
+            // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
+            assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+            assertNotNull(receivedNotification.get());
+            assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
+
+        } finally {
+            tabReg.remove();
+        }
+    }
 }
