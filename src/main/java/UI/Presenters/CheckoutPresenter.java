@@ -3,14 +3,18 @@ package UI.Presenters;
 import DTO.CheckoutPriceDTO;
 import DTO.PaymentDetailsDTO;
 import application.ActiveOrderService;
+import application.IAuth;
 import application.Response;
 
 public class CheckoutPresenter {
 
     private final ActiveOrderService activeOrderService;
+    private final IAuth auth;
 
-    public CheckoutPresenter(ActiveOrderService activeOrderService) {
+
+    public CheckoutPresenter(ActiveOrderService activeOrderService, IAuth auth) {
         this.activeOrderService = activeOrderService;
+        this.auth = auth;
     }
 
     public Response<CheckoutPriceDTO> prepareCheckout(String token, int activeOrderId) {
@@ -27,5 +31,9 @@ public class CheckoutPresenter {
             PaymentDetailsDTO paymentDetails) {
 
         return activeOrderService.checkoutAndPayment(token, activeOrderId, paymentDetails);
+    }
+
+    public Response<String> getRole(String token) {
+        return auth.getRole(token);
     }
 }
