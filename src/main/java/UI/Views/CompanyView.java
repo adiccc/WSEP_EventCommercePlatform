@@ -184,21 +184,24 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
 
         Button rolesBtn = new Button("👥 View Roles & Permissions",
                 e -> getUI().ifPresent(ui -> ui.navigate("company/" + companyId + "/roles")));
-        rolesBtn.getElement().setAttribute("theme", "primary");
 
         Button policyBtn = new Button("📋 Manage Purchase Policy",
                 e -> openPurchasePolicyDialog(token));
-        policyBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
 
         Button ordersBtn = new Button("📦 View Order History",
                 e -> openOrderHistoryDialog(token));
-        ordersBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
 
         Button salesBtn = new Button("📊 Sales Report",
                 e -> openSalesReportDialog(token));
-        salesBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
 
-        HorizontalLayout bar = new HorizontalLayout(rolesBtn, policyBtn, ordersBtn, salesBtn);
+        Button createEventBtn = new Button("🎫 Create Event",
+                e -> getUI().ifPresent(ui ->
+                        ui.navigate("company/" + companyId + "/create-event")));
+
+        List.of(createEventBtn, rolesBtn, policyBtn, ordersBtn, salesBtn)
+                .forEach(this::styleActionButton);
+
+        HorizontalLayout bar = new HorizontalLayout(createEventBtn, rolesBtn, policyBtn, ordersBtn, salesBtn);
         bar.getStyle()
                 .set("padding", "0.5rem 0")
                 .set("margin-bottom", "0.25rem");
@@ -210,7 +213,7 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
 
         Button rolesBtn = new Button("🔑 My Permissions",
                 e -> getUI().ifPresent(ui -> ui.navigate("company/" + companyId + "/roles")));
-        rolesBtn.getElement().setAttribute("theme", "contrast");
+        styleActionButton(rolesBtn);
 
         HorizontalLayout bar = new HorizontalLayout(rolesBtn);
         bar.getStyle()
@@ -219,27 +222,39 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
 
         var permResponse = presenter.getMyPermissions(token, companyId);
         Set<PermissionType> perms = permResponse.getValue();
+
         if (perms != null && perms.contains(PermissionType.MANAGE_POLICIES)) {
             Button policyBtn = new Button("📋 Manage Purchase Policy",
                     e -> openPurchasePolicyDialog(token));
-            policyBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+            styleActionButton(policyBtn);
             bar.add(policyBtn);
         }
+
         if (perms != null && perms.contains(PermissionType.VIEW_ORDERS_HISTORY)) {
             Button ordersBtn = new Button("📦 View Order History",
                     e -> openOrderHistoryDialog(token));
-            ordersBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+            styleActionButton(ordersBtn);
             bar.add(ordersBtn);
         }
+
         if (perms != null && perms.contains(PermissionType.GENERATE_SALES_REPORTS)) {
             Button salesBtn = new Button("📊 Sales Report",
                     e -> openSalesReportDialog(token));
-            salesBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+            styleActionButton(salesBtn);
             bar.add(salesBtn);
+        }
+
+        if (perms != null && perms.contains(PermissionType.CREATE_EVENT)) {
+            Button createEventBtn = new Button("🎫 Create Event",
+                    e -> getUI().ifPresent(ui ->
+                            ui.navigate("company/" + companyId + "/create-event")));
+            styleActionButton(createEventBtn);
+            bar.add(createEventBtn);
         }
 
         return bar;
     }
+
 
     // ── Filter section ────────────────────────────────────────────────────────
 
@@ -596,6 +611,16 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+    private void styleActionButton(Button button) {
+        button.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+        button.getStyle()
+                .set("height", "48px")
+                .set("font-weight", "800")
+                .set("border-radius", "14px")
+                .set("padding-left", "1.2rem")
+                .set("padding-right", "1.2rem")
+                .set("box-shadow", "0 3px 10px rgba(0,0,0,0.10)");
+    }
 
     private String getToken() {
         String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
