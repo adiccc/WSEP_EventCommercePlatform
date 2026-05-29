@@ -3,19 +3,24 @@ package UI.Presenters;
 import application.EventService;
 import application.LotteryService;
 import application.Response;
+import application.IAuth;
 import domain.dto.EventDetailsDTO;
 
 public class EventDetailsPresenter {
 
     private final EventService eventService;
     private final LotteryService lotteryService;
+    private final IAuth auth;
+
 
     public EventDetailsPresenter(
             EventService eventService,
-            LotteryService lotteryService
+            LotteryService lotteryService,
+            IAuth auth
     ) {
         this.eventService = eventService;
         this.lotteryService = lotteryService;
+        this.auth = auth;
     }
 
     public Response<EventDetailsDTO> getDetails(
@@ -38,5 +43,9 @@ public class EventDetailsPresenter {
                 token,
                 eventId
         );
+    }
+
+    public Response<String> getRole(String token) {
+        return auth.getRole(token);
     }
 }
