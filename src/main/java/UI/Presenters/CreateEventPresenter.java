@@ -4,6 +4,7 @@ import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import application.EventCompanyManageService;
+import application.LotteryService;
 import application.Response;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
@@ -14,9 +15,14 @@ import java.util.List;
 public class CreateEventPresenter {
 
     private final EventCompanyManageService eventCompanyManageService;
+    private final LotteryService lotteryService;
 
-    public CreateEventPresenter(EventCompanyManageService eventCompanyManageService) {
+    public CreateEventPresenter(
+            EventCompanyManageService eventCompanyManageService,
+            LotteryService lotteryService
+    ) {
         this.eventCompanyManageService = eventCompanyManageService;
+        this.lotteryService = lotteryService;
     }
 
     public Response<Integer> createEvent(
@@ -56,6 +62,22 @@ public class CreateEventPresenter {
                 entries,
                 standingZones,
                 seatingZones
+        );
+    }
+
+    public Response<Boolean> createLottery(
+            String token,
+            int eventId,
+            int capacity,
+            LocalDateTime registerWindow,
+            long expirationTimeHours
+    ) {
+        return lotteryService.createLottery(
+                token,
+                eventId,
+                capacity,
+                registerWindow,
+                expirationTimeHours
         );
     }
 }
