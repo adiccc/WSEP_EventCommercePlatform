@@ -3,6 +3,8 @@ package UI.Views;
 import UI.Presenters.EventDetailsPresenter;
 import UI.Presenters.PurchasePresenter;
 import application.EventService;
+import application.CompanyService;
+import application.EventCompanyManageService;
 import application.Response;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.*;
@@ -19,6 +21,8 @@ import application.ActiveOrderService;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.datetimepicker.DateTimePicker;
+import com.vaadin.flow.component.button.ButtonVariant;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -33,9 +37,11 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     private int companyId;
     private int eventId;
 
-    public EventDetailsView(EventService eventService, ActiveOrderService activeOrderService) {
+    public EventDetailsView(EventService eventService, ActiveOrderService activeOrderService,
+                            EventCompanyManageService eventCompanyManageService,
+                            CompanyService companyService) {
 
-        this.presenter = new EventDetailsPresenter(eventService);
+        this.presenter = new EventDetailsPresenter(eventService, eventCompanyManageService, companyService);
         this.purchasePresenter = new PurchasePresenter(activeOrderService);
 
         setSpacing(true);
@@ -152,13 +158,90 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         purchaseButton.addClickListener(e -> handlePurchaseClick());
 
+        Button updateDateButton =
+                new Button("📅 Update Event Date");
+
+        updateDateButton.getStyle()
+                .set("margin-top", "1rem")
+                .set("font-weight", "600")
+                .set("background", "#7c3aed")
+                .set("color", "white")
+                .set("padding", "0.8rem 1.4rem")
+                .set("border-radius", "12px");
+
+        updateDateButton.addClickListener(e -> openUpdateDateDialog(dto));
+
+        HorizontalLayout actions = new HorizontalLayout();
+        actions.setSpacing(true);
+
+        actions.add(purchaseButton);
+
+        String token = getToken();
+
+        if (presenter.canUpdateEventDate(token, companyId)) {
+            actions.add(updateDateButton);
+        }
+
         header.add(
                 name,
                 chips,
-                purchaseButton
+                actions
         );
 
         return header;
+    }
+
+    private void openUpdateDateDialog(EventDetailsDTO dto) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Update Event Date");
+        dialog.setWidth("420px");
+
+        DateTimePicker newDateField = new DateTimePicker("New Event Date");
+        newDateField.setWidthFull();
+
+        try {
+            newDateField.setValue(LocalDateTime.parse(dto.getDate()));
+        } catch (Exception ignored) {
+            // Keep field empty if the existing date cannot be parsed.
+        }
+
+        Button cancelButton = new Button("Cancel", e -> dialog.close());
+        cancelButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        Button updateButton = new Button("Update", e -> {
+            LocalDateTime newDate = newDateField.getValue();
+
+            if (newDate == null) {
+                showError("Please select a new event date.");
+                return;
+            }
+
+            Response<Boolean> response =
+                    presenter.updateEventDate(
+                            getToken(),
+                            eventId,
+                            newDate
+                    );
+
+            if (response.getValue() != null && response.getValue()) {
+                dialog.close();
+                showSuccess("Event date updated successfully.");
+                loadEvent(companyId, eventId);
+                return;
+            }
+
+            showError(response.getMessage());
+        });
+
+        updateButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        VerticalLayout content = new VerticalLayout(newDateField);
+        content.setPadding(false);
+        content.setSpacing(true);
+
+        dialog.add(content);
+        dialog.getFooter().add(cancelButton, updateButton);
+        dialog.open();
     }
 
     private void handlePurchaseClick() {
@@ -304,6 +387,11 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     // Helpers
     // =========================================================
 
+    private String getToken() {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        return (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
+    }
+
     private VerticalLayout section(String title) {
 
         VerticalLayout layout =
@@ -439,5 +527,21 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
             return rawDateTime;
         }
+    }
+
+    private void showSuccess(String message) {
+        Notification notification = Notification.show(
+                message,
+                3000,
+                Notification.Position.TOP_CENTER
+        );
+    }
+
+    private void showError(String message) {
+        Notification notification = Notification.show(
+                message,
+                4000,
+                Notification.Position.TOP_CENTER
+        );
     }
 }
