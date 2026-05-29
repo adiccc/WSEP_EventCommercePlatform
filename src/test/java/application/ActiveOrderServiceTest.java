@@ -4190,7 +4190,7 @@ class ActiveOrderServiceTest {
         // Arrange
         String email = "expired_select@mail.com";
         userService.registerUser("", new UserDTO(
-                email, "f", "l", "pass", 1, 1, 2000, "Israel", "050-123-4568" // מספר שונה כדי למנוע התנגשות
+                email, "f", "l", "pass", 1, 1, 2000, "Israel", "050-123-4568" 
         ));
         String token = userService.login(email, "pass").getValue();
 
