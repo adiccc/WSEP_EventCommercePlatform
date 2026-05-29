@@ -46,6 +46,7 @@ class ActiveOrderServiceTest {
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
     private INotifier notifier;
+    private PreExpirationNotificationScheduler preExpirationScheduler;
     private IUserRepo userRepo;
     private CompanyService companyService;
     private EventCompanyManageService companyEventService;
@@ -142,8 +143,8 @@ class ActiveOrderServiceTest {
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
 
-        PreExpirationNotificationScheduler preExpirationScheduler =
-                new PreExpirationNotificationScheduler(activeOrderRepo, notifier);
+        preExpirationScheduler =
+                Mockito.spy(new PreExpirationNotificationScheduler(activeOrderRepo, notifier));
 
         service = new ActiveOrderService(
                 auth,
@@ -1313,6 +1314,78 @@ class ActiveOrderServiceTest {
         assertEquals(domain.activeOrder.STAGE.CHECKING_OUT, after.getStage());
         assertTrue(after.getCheckoutStartedAt().isAfter(checkoutStartedBefore),
                 "edit must restart the checkout (seat-hold) timer");
+    }
+
+    @Test
+    void GivenEnteredPurchase_WhenUserSelectTickets_ThenPreExpirationWarningScheduled() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+
+        ArgumentCaptor<LocalDateTime> warningAt = ArgumentCaptor.forClass(LocalDateTime.class);
+        Mockito.verify(preExpirationScheduler)
+                .scheduleOrReschedule(Mockito.eq(orderId), warningAt.capture());
+
+        // locking seats moved the order to CHECKING_OUT, so a future warning time is scheduled
+        assertNotNull(warningAt.getValue());
+        assertTrue(warningAt.getValue().isAfter(LocalDateTime.now()));
+    }
+
+    @Test
+    void GivenOrderInCheckout_WhenEditTicketSelection_ThenPreExpirationWarningRescheduledNotEarlier() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+
+        Response<ActiveOrderDTO> edit = service.editTicketSelection(
+                validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 4));
+        assertNotNull(edit.getValue(), "edit failed: " + edit.getMessage());
+
+        ArgumentCaptor<LocalDateTime> warningAt = ArgumentCaptor.forClass(LocalDateTime.class);
+        // once when seats were locked, once when the edit restarted the timer
+        Mockito.verify(preExpirationScheduler, Mockito.times(2))
+                .scheduleOrReschedule(Mockito.eq(orderId), warningAt.capture());
+
+        List<LocalDateTime> scheduled = warningAt.getAllValues();
+        assertFalse(scheduled.get(1).isBefore(scheduled.get(0)),
+                "edit must reschedule the warning to the new (later or equal) deadline");
+    }
+
+    @Test
+    void GivenExpiredOrderInCheckout_WhenCleanupExpiredOrders_ThenPreExpirationWarningCancelled() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+
+        forceExpireOrder(orderId);
+        service.cleanupExpiredOrders();
+
+        Mockito.verify(preExpirationScheduler).cancel(orderId);
+        assertThrows(NoSuchElementException.class, () -> activeOrderRepo.findById(orderId));
+    }
+
+    @Test
+    void GivenSuccessfulCheckout_WhenCheckoutAndPayment_ThenPreExpirationWarningCancelled() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 2)).getValue();
+
+        Response<CheckoutPriceDTO> price = service.prepareCheckout(validToken, orderId);
+        assertNotNull(price.getValue(), "setup prepareCheckout failed: " + price.getMessage());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-confirmed");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+        Response<Integer> result = service.checkoutAndPayment(validToken, orderId, paymentDetails);
+
+        assertNotNull(result.getValue(), "checkout failed: " + result.getMessage());
+        Mockito.verify(preExpirationScheduler).cancel(orderId);
     }
 
     @Test
