@@ -878,7 +878,6 @@ public class ActiveOrderService {
             }
         }
     }
-//TODO:: EXPIRRED TOKEN
     public Response<ActiveOrderDTO> memberProceedAnActiveOrder(String token) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "memberProceedActiveOrder called");

@@ -19,6 +19,7 @@ import domain.event.OrderStatus;
 import domain.event.Order;
 import domain.lottery.ILotteryRepo;
 import domain.user.IUserRepo;
+import domain.user.Member;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -2275,5 +2276,110 @@ class EventCompanyManageServiceTest {
             tabReg.remove();
         }
     }
+    // ==========================================
+    // Offline Users & Delayed Notifications Tests
+    // ==========================================
+
+    @Test
+    void GivenOfflinePurchaser_WhenUpdateEventDate_ThenNotificationSavedAsDelayed() {
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        String email = "offline_buyer_date@test.com";
+        userService.registerUser("", new UserDTO(email, "Off", "Line", "pass", 1, 1, 2000, "Address", "050-123-4567"));
+        String buyerToken = userService.login(email, "pass").getValue();
+
+        createCompletedOrderThroughPurchaseFlow(buyerToken, eventId, 1);
+
+        // Arrange: Buyer logs out to become offline
+        userService.logout(buyerToken);
+
+        LocalDateTime newDate = eventDate.plusDays(5);
+
+        // Act: Manager updates the event date
+        Response<Boolean> response = eventCompanyManageService.UpdateEventDate(validToken1, eventId, newDate);
+
+        // Assert: Action must succeed
+        assertTrue(response.getValue(), "Updating event date should succeed");
+
+        // Assert: Verify the notification was saved as delayed for the offline buyer
+        Member buyer = userRepo.findUserByEmail(email);
+        assertTrue(buyer.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().contains("has been updated to")),
+                "Offline buyer should have a delayed notification for event date update");
+    }
+
+    @Test
+    void GivenOfflinePurchaser_WhenDeleteEvent_ThenNotificationsSavedAsDelayed() {
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        String email = "offline_buyer_delete@test.com";
+        userService.registerUser("", new UserDTO(email, "Off", "Line", "pass", 1, 1, 2000, "Address", "050-123-4567"));
+        String buyerToken = userService.login(email, "pass").getValue();
+
+        createCompletedOrderThroughPurchaseFlow(buyerToken, eventId, 1);
+
+        // Arrange: Buyer logs out to become offline
+        userService.logout(buyerToken);
+
+        // Act: Manager deletes the event
+        Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, eventId);
+
+        // Assert: Action must succeed
+        assertTrue(response.getValue(), "Deleting event should succeed");
+
+        // Assert: Verify both Cancellation and Refund notifications are saved as delayed
+        Member buyer = userRepo.findUserByEmail(email);
+
+        assertTrue(buyer.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().toLowerCase().contains("cancelled")),
+                "Offline buyer should have a delayed notification for event cancellation");
+
+        assertTrue(buyer.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().toLowerCase().contains("refund")),
+                "Offline buyer should have a delayed notification for refund processing");
+    }
+
+    @Test
+    void GivenOfflinePurchaser_WhenProcessRefund_ThenRefundNotificationSavedAsDelayed() {
+        // Arrange
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        String email = "offline_buyer_refund@test.com";
+        userService.registerUser("", new UserDTO(email, "Off", "Line", "pass", 1, 1, 2000, "Address", "050-123-4567"));
+        String buyerToken = userService.login(email, "pass").getValue();
+
+        int orderId = createCompletedOrderThroughPurchaseFlow(buyerToken, eventId, 1);
+
+        Event event = eventRepo.findById(eventId);
+        Order order = event.findOrderById(orderId);
+        order.markRefundRequired();
+        eventRepo.store(event);
+
+        // Arrange: Buyer logs out to become offline
+        userService.logout(buyerToken);
+
+        // Act: Manager processes the refund
+        Response<Boolean> response = eventCompanyManageService.processRefund(validToken1, eventId, orderId);
+
+        // Assert: Action must succeed
+        assertTrue(response.getValue(), "Processing refund should succeed");
+
+        // Assert: Verify the refund notification was saved as delayed
+        Member buyer = userRepo.findUserByEmail(email);
+        assertTrue(buyer.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().toLowerCase().contains("refund process")),
+                "Offline buyer should have a delayed notification for refund");
+    }
 }
+
 

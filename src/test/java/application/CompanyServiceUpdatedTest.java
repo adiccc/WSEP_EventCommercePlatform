@@ -17,6 +17,7 @@ import domain.user.IUserRepo;
 import domain.dto.CompanyDTO;
 import domain.user.IUserRepo;
 import domain.user.Manager;
+import domain.user.Member;
 import infrastructure.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -1591,35 +1592,43 @@ class CompanyServiceUpdatedTest {
         }
     }
 
-    //TODO: FIX TESTS
-//    @Test
-//    void GivenTwoThreadsRaceToUpdatePermissions_WhenUpdate_ThenNotificationSentTwiceWithoutCrashing() throws Exception {
-//        Set<PermissionType> perms1 = EnumSet.of(PermissionType.CREATE_EVENT);
-//        Set<PermissionType> perms2 = EnumSet.of(PermissionType.DELETE_EVENT);
-//
-//        ExecutorService executor = Executors.newFixedThreadPool(2);
-//        CountDownLatch start = new CountDownLatch(1);
-//
-//        Future<Response<Boolean>> f1 = executor.submit(() -> {
-//            start.await();
-//            return service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, perms1);
-//        });
-//        Future<Response<Boolean>> f2 = executor.submit(() -> {
-//            start.await();
-//            return service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, perms2);
-//        });
-//
-//        start.countDown();
-//        f1.get();
-//        f2.get();
-//        executor.shutdown();
-//
-//        Mockito.verify(notifier, Mockito.times(2)).notifyUser(
-//                Mockito.eq("manager@test.com"),
-//                Mockito.argThat(n -> n.getType() == NotifyType.GENERAL_POPUP)
-//        );
-//    }
+    @Test
+    void GivenTwoThreadsRaceToUpdatePermissions_WhenUpdate_ThenNotificationSentTwiceWithoutCrashing() throws Exception {
+        Set<PermissionType> perms1 = EnumSet.of(PermissionType.CREATE_EVENT);
+        Set<PermissionType> perms2 = EnumSet.of(PermissionType.DELETE_EVENT);
 
+        AtomicInteger notificationCount = new AtomicInteger(0);
+
+        Registration reg = Broadcaster.registerUser("manager@test.com", dto -> {
+            if (dto.getType() == NotifyType.GENERAL_POPUP) {
+                notificationCount.incrementAndGet();
+            }
+        });
+
+        try {
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            CountDownLatch start = new CountDownLatch(1);
+
+            Future<Response<Boolean>> f1 = executor.submit(() -> {
+                start.await();
+                return service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, perms1);
+            });
+            Future<Response<Boolean>> f2 = executor.submit(() -> {
+                start.await();
+                return service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, perms2);
+            });
+
+            start.countDown();
+            f1.get();
+            f2.get();
+            executor.shutdown();
+
+            Thread.sleep(1000);
+            assertEquals(2, notificationCount.get(), "Notifications should be sent exactly twice without crashing");
+        } finally {
+            reg.remove();
+        }
+    }
 
     @Test
     void GivenOwnerRequestsNewOwner_WhenRequestAppointOwner_ThenRequestNotificationSent() throws InterruptedException {
@@ -2285,6 +2294,68 @@ class CompanyServiceUpdatedTest {
         } finally {
             tabReg.remove();
         }
+    }
+    @Test
+    void GivenOfflineAppointee_WhenRequestAppointOwner_ThenNotificationSavedAsDelayed() {
+        // Arrange: The appointee logs out to become offline
+        userService.logout(OTHER_TOKEN);
+
+        // Act: Owner sends the appointment request to the offline user
+        Response<Boolean> response = service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+
+        // Assert: The action must succeed
+        assertTrue(response.getValue(), "Requesting owner appointment should succeed");
+
+        // Assert: Verify the notification was saved as delayed in the repository
+        Member offlineAppointee = userRepo.findById(OTHER_USER_ID);
+        assertTrue(offlineAppointee.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().contains("invited to be a owner")),
+                "Offline appointee should have a delayed ROLE_APPOINTMENT_REQUEST notification");
+    }
+
+    @Test
+    void GivenOfflineManager_WhenUpdateManagerPermissions_ThenNotificationSavedAsDelayed() {
+        // Arrange: The manager logs out to become offline
+        userService.logout(MANAGER_TOKEN);
+
+        // Act: Owner updates the offline manager's permissions
+        Response<Boolean> response = service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+
+        // Assert: The action must succeed
+        assertTrue(response.getValue(), "Updating permissions should succeed");
+
+        // Assert: Verify the notification was saved as delayed in the repository
+        Member offlineManager = userRepo.findById(MANAGER_ID);
+        assertTrue(offlineManager.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().contains("permissions have been updated")),
+                "Offline manager should have a delayed GENERAL_POPUP notification");
+    }
+
+    @Test
+    void GivenOfflineManager_WhenRemoveManagerAppointment_ThenKickoutSavedAsDelayed() {
+        // Arrange: We must add a second manager first, because the system prevents removing the *only* manager
+        addSecondManager();
+
+        // The target manager logs out to become offline
+        userService.logout(MANAGER_TOKEN);
+
+        // Act: Owner removes the offline manager
+        Response<Boolean> response = service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+
+        // Assert: The action must succeed
+        assertTrue(response.getValue(), "Removing manager should succeed");
+
+        // Assert: Verify the kickout notification was saved as delayed in the repository
+        Member offlineManager = userRepo.findById(MANAGER_ID);
+        assertTrue(offlineManager.getDelayedNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().contains("role has been removed")),
+                "Offline removed manager should have a delayed KICKOUT_TAB_NAVIGATION notification");
     }
 
 }

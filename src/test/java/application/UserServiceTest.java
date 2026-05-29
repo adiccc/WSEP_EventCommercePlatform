@@ -6,6 +6,7 @@ import DTO.QueueEntryResultDTO;
 import Log.LoggerSetup;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.ICompanyRepo;
+import domain.dataType.PermissionType;
 import domain.dto.UserDTO;
 import domain.event.IEventRepo;
 import domain.user.IUserRepo;
@@ -31,6 +32,7 @@ class UserServiceTest {
     private IAuth auth;
     private ISuspensionRepo suspensionRepo;
     private AdminService adminService;
+    private CompanyService companyService;
     private ICompanyRepo companyRepo;
     private IEventRepo eventRepo;
     private String ADMIN_TOKEN;
@@ -41,7 +43,7 @@ class UserServiceTest {
         LoggerSetup.setup();
         WebQueue.resetForTesting();
         WebQueue.getInstance(100);
-
+        suspensionRepo = new SuspensionRepoImpl();
         realTokenService = new TokenService();
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
@@ -55,6 +57,7 @@ class UserServiceTest {
         adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem, suspensionRepo,notifier);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
+        companyService = new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier);
     }
 
     private UserDTO createValidDTO() {
@@ -619,32 +622,23 @@ class UserServiceTest {
         assertTrue(cleanBlank.isError());
     }
 
-    //Todo: CHANGE STORE
     @Test
     void GivenValidEmailWithRealDelayedNotifications_WhenGetAndClean_ThenFlowSucceeds() {
         // Arrange
         UserDTO dto = createValidDTO();
         userService.registerUser(null, dto);
         String email = dto.getEmail();
+        int targetUserId = userRepo.findUserByEmail(email).getUserId();
 
-        DTO.NotifyDTO realNotification1 = new DTO.NotifyDTO(
-                DTO.NotifyType.GENERAL_POPUP,
-                new DTO.NotifyPayload("Welcome back!")
-        );
-        DTO.NotifyDTO realNotification2 = new DTO.NotifyDTO(
-                DTO.NotifyType.GENERAL_POPUP,
-                new DTO.NotifyPayload("Your event was canceled.", 101,null)
-        );
+        // Arrange
+        String ownerEmail = "owner_trigger1@test.com";
+        userService.registerUser(null, new UserDTO(ownerEmail, "O", "W", "pass", 1, 1, 2000, "City", "050-000-0000"));
+        String ownerToken = userService.login(ownerEmail, "pass").getValue();
+        int compId = 1500;
+        companyService.createProductionCompany(ownerToken, compId, "Trigger Co 1", "trig1@co.com", "050-111-1111", "bank");
 
-        boolean result1 = notifier.notifyUser(email, realNotification1);
-        assertFalse(result1, "Notification should not be delivered immediately to offline user");
-        Member mem = userRepo.findUserByEmail(email);
-        mem.addDelayedNotification(realNotification1);
-
-        boolean result2 = notifier.notifyUser(email, realNotification2);
-        assertFalse(result2, "Notification should not be delivered immediately to offline user");
-        mem.addDelayedNotification(realNotification2);
-        userRepo.store(mem);
+        companyService.requestAppointManager(ownerToken, compId, targetUserId, EnumSet.of(PermissionType.CREATE_EVENT));
+        companyService.requestAppointOwner(ownerToken, compId, targetUserId);
 
         assertEquals(2, userRepo.findUserByEmail(email).getDelayedNotifications().size());
 
@@ -661,24 +655,22 @@ class UserServiceTest {
         assertTrue(cleanResponse.getValue());
         assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty(), "DB should be empty after clean");
     }
-    //Todo: CHANGE STORE
+
     @Test
     void GivenOfflineUser_WhenNotifiedAndLogsIn_ThenNotificationsFlowWorks() {
         // Arrange
         UserDTO dto = createValidDTO();
         userService.registerUser(null, dto);
         String email = dto.getEmail();
+        int targetUserId = userRepo.findUserByEmail(email).getUserId();
 
-        DTO.NotifyDTO offlineNotification = new DTO.NotifyDTO(
-                DTO.NotifyType.GENERAL_POPUP,
-                new DTO.NotifyPayload("You missed this while offline!")
-        );
+        String ownerEmail = "owner_trigger2@test.com";
+        userService.registerUser(null, new UserDTO(ownerEmail, "O", "W", "pass", 1, 1, 2000, "City", "050-000-0000"));
+        String ownerToken = userService.login(ownerEmail, "pass").getValue();
+        int compId = 1501;
+        companyService.createProductionCompany(ownerToken, compId, "Trigger Co 2", "trig2@co.com", "050-111-1111", "bank");
 
-        boolean result = notifier.notifyUser(email, offlineNotification);
-        assertFalse(result, "Notification should not be delivered immediately to offline user");
-        Member mem = userRepo.findUserByEmail(email);
-        mem.addDelayedNotification(offlineNotification);
-        userRepo.store(mem);
+        companyService.requestAppointOwner(ownerToken, compId, targetUserId);
 
         // Act & Assert
         Response<String> loginResponse = userService.login(email, "Password123!");
@@ -770,29 +762,25 @@ class UserServiceTest {
         assertNotNull(memberAfterChaos.getDelayedNotifications());
     }
 
-    //Todo: CHANGE STORE
     @Test
     void GivenUserWithDelayedNotifications_WhenAdminRemovesUser_ThenLoginFailsAndDataInaccessible() {
         // Arrange
         UserDTO dto = createValidDTO();
         userService.registerUser(null, dto);
         String email = dto.getEmail();
-        int userId = userRepo.findUserByEmail(email).getUserId();
+        int targetUserId = userRepo.findUserByEmail(email).getUserId();
 
-        NotifyDTO offlineNotification = new DTO.NotifyDTO(
-                DTO.NotifyType.GENERAL_POPUP,
-                new DTO.NotifyPayload("You have a new private message!")
-        );
+        String ownerEmail = "owner_trigger3@test.com";
+        userService.registerUser(null, new UserDTO(ownerEmail, "O", "W", "pass", 1, 1, 2000, "City", "050-000-0000"));
+        String ownerToken = userService.login(ownerEmail, "pass").getValue();
+        int compId = 1502;
+        companyService.createProductionCompany(ownerToken, compId, "Trigger Co 3", "trig3@co.com", "050-111-1111", "bank");
 
-        boolean result = notifier.notifyUser(email, offlineNotification);
-        assertFalse(result, "Notification should not be delivered immediately to offline user");
-        Member mem = userRepo.findUserByEmail(email);
-        mem.addDelayedNotification(offlineNotification);
-        userRepo.store(mem);
+        companyService.requestAppointOwner(ownerToken, compId, targetUserId);
         assertFalse(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
 
         // Act
-        Response<Boolean> adminRes = adminService.removeUser(ADMIN_TOKEN, userId);
+        Response<Boolean> adminRes = adminService.removeUser(ADMIN_TOKEN, targetUserId);
         assertTrue(adminRes.getValue(), "Admin should successfully remove the user");
 
         // Assert
@@ -800,6 +788,7 @@ class UserServiceTest {
         assertTrue(loginResponse.isError());
         assertNull(loginResponse.getValue(), "Blocked user should not get a token");
     }
+
     @Test
     void GivenUsersInQueue_WhenGuestLeavesStore_ThenNextInLineNotifiedViaTab() throws Exception {
         // Arrange
