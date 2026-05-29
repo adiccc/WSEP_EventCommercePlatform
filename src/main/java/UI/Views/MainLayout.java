@@ -328,10 +328,16 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
         int resolvedCompanyId = companyId;
 
+        String tabId2 = UI.getCurrent().getElement().getProperty("currentTabId");
+        String userEmail = (String) VaadinSession.getCurrent().getAttribute("notificationUserIdentifier_" + tabId2);
+
         Button acceptBtn = new Button("Accept", e -> {
             var ownerRes = companyService.respondToOwnerAppointment(token, resolvedCompanyId, true);
             if (ownerRes.getValue() == null) {
                 companyService.respondToManagerAppointment(token, resolvedCompanyId, true);
+            }
+            if (userEmail != null && !userEmail.isBlank()) {
+                userService.cleanDelayedNotifications(userEmail);
             }
             dialog.close();
             showSuccess("You have accepted the appointment.");
@@ -342,6 +348,9 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
             var ownerRes = companyService.respondToOwnerAppointment(token, resolvedCompanyId, false);
             if (ownerRes.getValue() == null) {
                 companyService.respondToManagerAppointment(token, resolvedCompanyId, false);
+            }
+            if (userEmail != null && !userEmail.isBlank()) {
+                userService.cleanDelayedNotifications(userEmail);
             }
             dialog.close();
             showError("You have rejected the appointment.");
