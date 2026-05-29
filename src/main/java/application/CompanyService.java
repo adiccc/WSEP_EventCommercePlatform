@@ -208,7 +208,7 @@ public class CompanyService {
                 String role = getValidatedRole(token);
                 if (role == null) return Response.error("Invalid or expired token");
                 int userId = getUserIdFromToken(token);
-                if (userId != -1) return Response.error("Invalid or expired token");
+                if (userId == -1) return Response.error("Invalid or expired token");
 
                 Company company = companyRepo.findById(companyId);
                 return Response.ok(company.getUserRoleName(userId));
@@ -231,7 +231,7 @@ public class CompanyService {
                 String role = getValidatedRole(token);
                 if (role == null) return Response.error("Invalid or expired token");
                 int userId = getUserIdFromToken(token);
-                if (userId != -1) return Response.error("Invalid or expired token");
+                if (userId == -1) return Response.error("Invalid or expired token");
 
                 Company company = companyRepo.findById(companyId);
                 return Response.ok(company.getManagerPermissions(userId));
