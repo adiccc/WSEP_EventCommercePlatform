@@ -1113,6 +1113,8 @@ class ActiveOrderServiceTest {
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
         int ticketCountBefore = activeOrderRepo.findById(orderId).getTickets().size();
 
+        service.returnToEditSelection(validToken);
+
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 5));
 
@@ -1126,6 +1128,8 @@ class ActiveOrderServiceTest {
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
 
+        service.returnToEditSelection(validToken);
+
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 8));
 
@@ -1138,6 +1142,8 @@ class ActiveOrderServiceTest {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+
+        service.returnToEditSelection(validToken);
 
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 2));
@@ -1162,6 +1168,8 @@ class ActiveOrderServiceTest {
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId,
                 Map.of("tribune", List.of(seat)), new HashMap<>()).getValue();
+
+        service.returnToEditSelection(validToken);
 
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken,
@@ -1189,6 +1197,8 @@ class ActiveOrderServiceTest {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 1)).getValue();
+
+        service.returnToEditSelection(validToken);
 
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken,
@@ -1218,6 +1228,8 @@ class ActiveOrderServiceTest {
                 validToken, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(1, 1))),
                 new HashMap<>()).getValue();
+
+        service.returnToEditSelection(validToken);
 
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken,
@@ -1267,6 +1279,8 @@ class ActiveOrderServiceTest {
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))),
                 new HashMap<>()).getValue();
 
+        service.returnToEditSelection(validToken);
+
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken,
                 Map.of("tribune", List.of(new SeatingTicketDTO(9, 9))), // not theirs
@@ -1285,6 +1299,8 @@ class ActiveOrderServiceTest {
         service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
 
+        service.returnToEditSelection(validToken);
+
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", -1));
 
@@ -1293,7 +1309,7 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenEditFromCheckingOut_WhenEditTicketSelection_ThenStageStaysCheckingOutAndTimerRestarts() {
+    void GivenEditFromCheckingOut_WhenReturnToEditSelectionThenEditTicketSelection_ThenTimerIsUnchanged() {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
@@ -1304,16 +1320,21 @@ class ActiveOrderServiceTest {
         LocalDateTime checkoutStartedBefore = before.getCheckoutStartedAt();
         assertNotNull(checkoutStartedBefore);
 
+        Response<ActiveOrderDTO> entered = service.returnToEditSelection(validToken);
+        assertNotNull(entered.getValue(), "returnToEditSelection failed: " + entered.getMessage());
+        assertEquals(domain.activeOrder.STAGE.EDITING,
+                activeOrderRepo.findById(orderId).getStage());
+
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 6));
-
         assertNotNull(r.getValue(), "msg=" + r.getMessage());
 
-        // Editing keeps the seats held: stage stays CHECKING_OUT and the 10-min timer restarts.
+        // The continuous 10-minute deadline is enforced "in any case": checkoutStartedAt is
+        // preserved through EDITING and confirmEdit, never reset by the edit flow.
         ActiveOrder after = activeOrderRepo.findById(orderId);
         assertEquals(domain.activeOrder.STAGE.CHECKING_OUT, after.getStage());
-        assertTrue(after.getCheckoutStartedAt().isAfter(checkoutStartedBefore),
-                "edit must restart the checkout (seat-hold) timer");
+        assertEquals(checkoutStartedBefore, after.getCheckoutStartedAt(),
+                "edit must NOT change checkoutStartedAt (hard 10-min deadline is continuous)");
     }
 
     @Test
@@ -1327,21 +1348,26 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenOrderInCheckout_WhenEditTicketSelection_ThenPreExpirationWarningRescheduledNotEarlier() {
+    void GivenOrderInCheckout_WhenEditTicketSelection_ThenPreExpirationWarningKeepsOriginalDeadline() {
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
         LocalDateTime warningBefore = activeOrderRepo.findById(orderId).getCheckoutWarningTime();
+        assertTrue(preExpirationScheduler.hasPendingWarning(orderId));
+
+        service.returnToEditSelection(validToken);
 
         Response<ActiveOrderDTO> edit = service.editTicketSelection(
                 validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 4));
         assertNotNull(edit.getValue(), "edit failed: " + edit.getMessage());
 
-        // the edit restarted the timer: a warning is still scheduled, now for a later deadline
+        // The deadline (and hence the warning instant) is fixed at userSelectTickets time and
+        // must NOT change across the edit flow — the warning scheduled then is still valid,
+        // so editTicketSelection must NOT call scheduleOrReschedule again.
         assertTrue(preExpirationScheduler.hasPendingWarning(orderId));
         LocalDateTime warningAfter = activeOrderRepo.findById(orderId).getCheckoutWarningTime();
-        assertFalse(warningAfter.isBefore(warningBefore),
-                "edit must reschedule the warning to the new (later or equal) deadline");
+        assertEquals(warningBefore, warningAfter,
+                "edit must NOT change the pre-expiration warning instant (continuous timer)");
     }
 
     @Test
@@ -1392,9 +1418,11 @@ class ActiveOrderServiceTest {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         service.userSelectTickets(validToken, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))), new HashMap<>());
+        service.returnToEditSelection(validToken);
         service.enterEventPurchase(tokenB, companyId, concurrentEventId,null);
         service.userSelectTickets(tokenB, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(1, 1))), new HashMap<>());
+        service.returnToEditSelection(tokenB);
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -1433,10 +1461,12 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenTwoEditsToSameOrderConcurrently_WhenEditTicketSelection_ThenBothEventuallySucceed() throws Exception {
+    void GivenTwoEditsToSameOrderConcurrently_WhenEditTicketSelection_ThenExactlyOneSucceeds() throws Exception {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+
+        service.returnToEditSelection(validToken);
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -1457,12 +1487,16 @@ class ActiveOrderServiceTest {
         Response<ActiveOrderDTO> r2 = f2.get();
         pool.shutdown();
 
-        assertNotNull(r1.getValue(), "edit 1 unexpectedly failed: " + r1.getMessage());
-        assertNotNull(r2.getValue(), "edit 2 unexpectedly failed: " + r2.getMessage());
+        // confirmEdit flips stage out of EDITING after the first edit commits, so the second
+        // edit hits the new stage guard and is rejected. Exactly one commit can succeed.
+        int successes = (r1.getValue() != null ? 1 : 0) + (r2.getValue() != null ? 1 : 0);
+        assertEquals(1, successes,
+                "exactly one concurrent edit on the same order should succeed; r1=" + r1.getMessage()
+                        + " r2=" + r2.getMessage());
 
         int finalSize = activeOrderRepo.findById(orderId).getTickets().size();
         assertTrue(finalSize == 3 || finalSize == 7,
-                "final ticket count must be one of the two requested totals, got: " + finalSize);
+                "final ticket count must match the winning edit, got: " + finalSize);
     }
 
     // helper function for ticket status validation:
