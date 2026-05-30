@@ -41,18 +41,21 @@ public class DataSeeder implements ApplicationRunner {
     private final UserService userService;
     private final CompanyService companyService;
     private final EventCompanyManageService eventService;
+    private final LotteryService lotteryService;
     private final IAuth auth;
     private final IEventRepo eventRepo;
 
     public DataSeeder(UserService userService,
                       CompanyService companyService,
                       EventCompanyManageService eventService,
+                      LotteryService lotteryService,
                       IAuth auth,
                       ILotteryRepo lotteryRepo,
                       IEventRepo eventRepo) {
         this.userService = userService;
         this.companyService = companyService;
         this.eventService = eventService;
+        this.lotteryService = lotteryService;
         this.auth = auth;
         this.lotteryRepo = lotteryRepo;
         this.eventRepo = eventRepo;
@@ -122,6 +125,7 @@ public class DataSeeder implements ApplicationRunner {
         // Company 1 — SoundWave Events
         createEvent(aliceToken, 1, "Rock Under the Stars",   base.plusMonths(1),  CategoryEvent.LIVEMUSIC,  GeographicalArea.CENTER);
         createEvent(aliceToken, 1, "Electronic Night Vol.3", base.plusMonths(2),  CategoryEvent.FESTIVAL,   GeographicalArea.CENTER);
+        createScheduledLotteryDemoEvent(aliceToken, base);
 
         // Company 2 — Stadium Live
         createEvent(aliceToken, 2, "Champions Finals", base.plusDays(20), CategoryEvent.SPORTS, GeographicalArea.JERUSALEM, true, true, List.of(userService.getUserId(aliceToken).getValue(), userService.getUserId(bobToken).getValue()));
@@ -279,6 +283,79 @@ public class DataSeeder implements ApplicationRunner {
         if (hasLottery) {
             seedDemoLottery(eventId, name, demoLotteryWinnerUserIds);
         }
+    }
+
+    private void createScheduledLotteryDemoEvent(
+            String token,
+            LocalDateTime base
+    ) {
+
+        LocalDateTime eventDate = base.plusWeeks(1);
+
+        LocalDateTime registerWindow = base.plusMinutes(2);
+
+        LocalDateTime saleStartDate = base.plusMinutes(3);
+
+        var response = eventService.createEvent(
+                token,
+                1,
+                eventDate,
+                "LOTTERY",
+                saleStartDate,
+                true,
+                GeographicalArea.CENTER,
+                CategoryEvent.FESTIVAL
+        );
+
+        if (response.getValue() == null) {
+            log.warning(
+                    "DataSeeder: scheduled lottery demo event creation failed — "
+                            + response.getMessage()
+            );
+            return;
+        }
+
+        int eventId = response.getValue();
+
+        activateEvent(token, eventId, "LOTTERY");
+
+        var lotteryResponse = lotteryService.createLottery(
+                token,
+                eventId,
+                1,
+                registerWindow,
+                24
+        );
+
+        if (lotteryResponse.getValue() == null
+                || !lotteryResponse.getValue()) {
+
+            log.warning(
+                    "DataSeeder: scheduled lottery creation failed for LOTTERY — "
+                            + lotteryResponse.getMessage()
+            );
+            return;
+        }
+
+        log.info(
+                "DataSeeder: created scheduled lottery demo event [LOTTERY] id="
+                        + eventId
+        );
+
+        log.info(
+                "DataSeeder: LOTTERY registration closes at "
+                        + registerWindow
+        );
+
+        log.info(
+                "DataSeeder: LOTTERY sales open at "
+                        + saleStartDate
+        );
+
+        log.info(
+                "DataSeeder: LOTTERY event date is "
+                        + eventDate
+        );
     }
 
     private void seedDemoLottery(int eventId,
