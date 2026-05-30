@@ -421,7 +421,17 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         Response<String> roleResponse = auth.getRole(token);
         String role = roleResponse.getValue();
 
-        if ("MEMBER".equals(role)) {
+        if ("ADMIN".equals(role) || "SYSTEM_ADMIN".equals(role)) {
+            SideNavItem adminPurchaseHistory =
+                    new SideNavItem("Admin Purchase History", "admin/purchase-history");
+            adminPurchaseHistory.setPrefixComponent(VaadinIcon.CLIPBOARD_TEXT.create());
+
+            SideNavItem logout = new SideNavItem("Logout", "logout");
+            logout.setPrefixComponent(VaadinIcon.SIGN_IN.create());
+
+            nav.addItem(adminPurchaseHistory, logout);
+
+        } else if ("MEMBER".equals(role)) {
             // Registered member
             SideNavItem orders = new SideNavItem("My Orders", "my-orders");
             orders.setPrefixComponent(VaadinIcon.TICKET.create());
