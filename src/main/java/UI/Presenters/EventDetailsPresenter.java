@@ -3,6 +3,8 @@ package UI.Presenters;
 import application.CompanyService;
 import application.EventCompanyManageService;
 import application.EventService;
+import application.IAuth;
+import application.LotteryService;
 import application.Response;
 import domain.dataType.PermissionType;
 import domain.dto.EventDetailsDTO;
@@ -15,15 +17,21 @@ public class EventDetailsPresenter {
     private final EventService eventService;
     private final EventCompanyManageService eventCompanyManageService;
     private final CompanyService companyService;
+    private final LotteryService lotteryService;
+    private final IAuth auth;
 
     public EventDetailsPresenter(
             EventService eventService,
             EventCompanyManageService eventCompanyManageService,
-            CompanyService companyService
+            CompanyService companyService,
+            LotteryService lotteryService,
+            IAuth auth
     ) {
         this.eventService = eventService;
         this.eventCompanyManageService = eventCompanyManageService;
         this.companyService = companyService;
+        this.lotteryService = lotteryService;
+        this.auth = auth;
     }
 
     public Response<EventDetailsDTO> getDetails(
@@ -71,6 +79,30 @@ public class EventDetailsPresenter {
 
         return permissions != null
                 && permissions.contains(PermissionType.CREATE_EVENT);
+    }
+
+    public Response<Boolean> registerUserToLottery(
+            String token,
+            int eventId
+    ) {
+        return lotteryService.registerUserToLottery(
+                token,
+                eventId
+        );
+    }
+
+    public Response<Boolean> canRegisterToLottery(
+            String token,
+            int eventId
+    ) {
+        return lotteryService.canRegisterToLottery(
+                token,
+                eventId
+        );
+    }
+
+    public Response<String> getRole(String token) {
+        return auth.getRole(token);
     }
 
     private String getUserRole(
