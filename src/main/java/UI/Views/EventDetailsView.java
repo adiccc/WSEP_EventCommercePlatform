@@ -2,45 +2,66 @@ package UI.Views;
 
 import UI.Presenters.EventDetailsPresenter;
 import UI.Presenters.PurchasePresenter;
+import application.ActiveOrderService;
+import application.CompanyService;
+import application.EventCompanyManageService;
 import application.EventService;
+import application.IAuth;
 import application.LotteryService;
 import application.Response;
-import application.IAuth;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.datetimepicker.DateTimePicker;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.*;
+import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.notification.NotificationVariant;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.*;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dto.EventDetailsDTO;
-import java.util.Locale;
-import com.vaadin.flow.component.UI;
-import application.ActiveOrderService;
-import com.vaadin.flow.component.dialog.Dialog;
-import com.vaadin.flow.component.textfield.TextField;
-import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.notification.NotificationVariant;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import java.util.Map;
 
 @Route(value = "event/:companyId/:eventId", layout = MainLayout.class)
 @PageTitle("Event Details — EventCommerce")
 @AnonymousAllowed
 public class EventDetailsView extends VerticalLayout implements BeforeEnterObserver {
+
     private final PurchasePresenter purchasePresenter;
     private final EventDetailsPresenter presenter;
+
     private int companyId;
     private int eventId;
     private String token;
+
     private Button lotteryButton;
 
-    public EventDetailsView(EventService eventService, ActiveOrderService activeOrderService, LotteryService lotteryService, IAuth auth) {
+    public EventDetailsView(
+            EventService eventService,
+            ActiveOrderService activeOrderService,
+            EventCompanyManageService eventCompanyManageService,
+            CompanyService companyService,
+            LotteryService lotteryService,
+            IAuth auth
+    ) {
 
-        this.presenter = new EventDetailsPresenter(eventService, lotteryService, auth);
+        this.presenter = new EventDetailsPresenter(
+                eventService,
+                eventCompanyManageService,
+                companyService,
+                lotteryService,
+                auth
+        );
+
         this.purchasePresenter = new PurchasePresenter(activeOrderService);
 
         setSpacing(true);
@@ -70,8 +91,11 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     }
 
     private void loadEvent(int companyId, int eventId) {
+
         String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
-        token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
+
+        token = (String) VaadinSession.getCurrent()
+                .getAttribute("token_" + tabId);
 
         Button back = new Button(
                 "← Back to Company",
@@ -157,6 +181,19 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         purchaseButton.addClickListener(e -> handlePurchaseClick());
 
+        Button updateDateButton =
+                new Button("📅 Update Event Date");
+
+        updateDateButton.getStyle()
+                .set("margin-top", "1rem")
+                .set("font-weight", "600")
+                .set("background", "#7c3aed")
+                .set("color", "white")
+                .set("padding", "0.8rem 1.4rem")
+                .set("border-radius", "12px");
+
+        updateDateButton.addClickListener(e -> openUpdateDateDialog(dto));
+
         lotteryButton =
                 new Button("🎲 Register to Lottery");
 
@@ -171,9 +208,16 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         lotteryButton.addClickListener(e -> registerToLottery());
 
         HorizontalLayout actions = new HorizontalLayout();
+
         actions.setSpacing(true);
 
         actions.add(purchaseButton);
+
+        String token = getToken();
+
+        if (presenter.canUpdateEventDate(token, companyId)) {
+            actions.add(updateDateButton);
+        }
 
         if (dto.hasLottery()
                 && isMember()
@@ -191,17 +235,89 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         return header;
     }
 
+    private void openUpdateDateDialog(EventDetailsDTO dto) {
+
+        Dialog dialog = new Dialog();
+
+        dialog.setHeaderTitle("Update Event Date");
+        dialog.setWidth("420px");
+
+        DateTimePicker newDateField =
+                new DateTimePicker("New Event Date");
+
+        newDateField.setMin(LocalDateTime.now());
+        newDateField.setWidthFull();
+
+        try {
+            newDateField.setValue(LocalDateTime.parse(dto.getDate()));
+        } catch (Exception ignored) {
+        }
+
+        Button cancelButton =
+                new Button("Cancel", e -> dialog.close());
+
+        cancelButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        Button updateButton = new Button("Update", e -> {
+
+            LocalDateTime newDate = newDateField.getValue();
+
+            if (newDate == null) {
+                showError("Please select a new event date.");
+                return;
+            }
+
+            Response<Boolean> response =
+                    presenter.updateEventDate(
+                            getToken(),
+                            eventId,
+                            newDate
+                    );
+
+            if (response.getValue() != null
+                    && response.getValue()) {
+
+                dialog.close();
+
+                showSuccess("Event date updated successfully.");
+
+                loadEvent(companyId, eventId);
+
+                return;
+            }
+
+            showError(response.getMessage());
+        });
+
+        updateButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        VerticalLayout content =
+                new VerticalLayout(newDateField);
+
+        content.setPadding(false);
+        content.setSpacing(true);
+
+        dialog.add(content);
+
+        dialog.getFooter().add(cancelButton, updateButton);
+
+        dialog.open();
+    }
+
     private boolean isMember() {
+
         if (token == null || token.isBlank()) {
             return false;
         }
 
-        Response<String> roleResponse = presenter.getRole(token);
+        Response<String> roleResponse =
+                presenter.getRole(token);
 
         return "MEMBER".equals(roleResponse.getValue());
     }
 
     private boolean canRegisterToLottery() {
+
         Response<Boolean> response =
                 presenter.canRegisterToLottery(
                         token,
@@ -217,7 +333,11 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     }
 
     private void registerToLottery() {
-        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+
+        String tabId =
+                UI.getCurrent()
+                        .getElement()
+                        .getProperty("currentTabId");
 
         String token =
                 (String) VaadinSession.getCurrent()
@@ -229,15 +349,22 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                         eventId
                 );
 
-        if (response.getValue() != null && response.getValue()) {
+        if (response.getValue() != null
+                && response.getValue()) {
+
             Notification notification = Notification.show(
                     response.getMessage(),
                     4000,
                     Notification.Position.TOP_CENTER
             );
-            notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+
+            notification.addThemeVariants(
+                    NotificationVariant.LUMO_SUCCESS
+            );
+
             lotteryButton.setEnabled(false);
             lotteryButton.setText("✅ Registered to Lottery");
+
             return;
         }
 
@@ -246,15 +373,29 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                 5000,
                 Notification.Position.TOP_CENTER
         );
-        notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+
+        notification.addThemeVariants(
+                NotificationVariant.LUMO_ERROR
+        );
     }
 
     private void handlePurchaseClick() {
-        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
-        String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
+
+        String tabId =
+                UI.getCurrent()
+                        .getElement()
+                        .getProperty("currentTabId");
+
+        String token =
+                (String) VaadinSession.getCurrent()
+                        .getAttribute("token_" + tabId);
 
         Response<Boolean> response =
-                purchasePresenter.isRequiredLotteryCode(token, companyId, eventId);
+                purchasePresenter.isRequiredLotteryCode(
+                        token,
+                        companyId,
+                        eventId
+                );
 
         if (response.getValue() == null) {
             Notification.show(response.getMessage());
@@ -266,38 +407,57 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
             return;
         }
 
-        UI.getCurrent().navigate("purchase/" + companyId + "/" + eventId);
+        UI.getCurrent().navigate(
+                "purchase/" + companyId + "/" + eventId
+        );
     }
 
     private void openLotteryCodeDialog() {
+
         Dialog dialog = new Dialog();
 
-        H3 title = new H3("Lottery Code Required");
+        H3 title =
+                new H3("Lottery Code Required");
 
         Paragraph message = new Paragraph(
                 "This event is currently open only for lottery winners. Please enter your lottery code."
         );
 
-        TextField codeField = new TextField("Lottery code");
+        TextField codeField =
+                new TextField("Lottery code");
+
         codeField.setWidthFull();
         codeField.setClearButtonVisible(true);
+
         codeField.addValueChangeListener(e -> {
             codeField.setInvalid(false);
             codeField.setErrorMessage(null);
         });
+
         Button submit = new Button("Continue", e -> {
+
             String code = codeField.getValue();
 
             if (code == null || code.isBlank()) {
+
                 codeField.setInvalid(true);
-                codeField.setErrorMessage("Please enter your lottery code");
+                codeField.setErrorMessage(
+                        "Please enter your lottery code"
+                );
+
                 return;
             }
 
             String cleanedCode = code.trim();
 
-            String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
-            String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
+            String tabId =
+                    UI.getCurrent()
+                            .getElement()
+                            .getProperty("currentTabId");
+
+            String token =
+                    (String) VaadinSession.getCurrent()
+                            .getAttribute("token_" + tabId);
 
             Response<Boolean> response =
                     purchasePresenter.validateLotteryCode(
@@ -313,8 +473,12 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
             }
 
             if (!response.getValue()) {
+
                 codeField.setInvalid(true);
-                codeField.setErrorMessage(response.getMessage());
+                codeField.setErrorMessage(
+                        response.getMessage()
+                );
+
                 return;
             }
 
@@ -322,28 +486,41 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
             UI.getCurrent().navigate(
                     "purchase/" + companyId + "/" + eventId,
-                    QueryParameters.simple(Map.of("lotteryCode", cleanedCode))
+                    QueryParameters.simple(
+                            Map.of(
+                                    "lotteryCode",
+                                    cleanedCode
+                            )
+                    )
             );
         });
 
-        Button cancel = new Button("Cancel", e -> dialog.close());
+        Button cancel =
+                new Button("Cancel", e -> dialog.close());
 
-        HorizontalLayout actions = new HorizontalLayout(cancel, submit);
-        actions.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
+        HorizontalLayout actions =
+                new HorizontalLayout(cancel, submit);
+
+        actions.setJustifyContentMode(
+                FlexComponent.JustifyContentMode.END
+        );
+
         actions.setWidthFull();
 
-        VerticalLayout content = new VerticalLayout(
-                title,
-                message,
-                codeField,
-                actions
-        );
+        VerticalLayout content =
+                new VerticalLayout(
+                        title,
+                        message,
+                        codeField,
+                        actions
+                );
 
         content.setPadding(false);
         content.setSpacing(true);
         content.setWidth("400px");
 
         dialog.add(content);
+
         dialog.open();
     }
 
@@ -361,10 +538,6 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         return section;
     }
-
-    // =========================================================
-    // Policy Section
-    // =========================================================
 
     private VerticalLayout buildPolicySection(EventDetailsDTO dto) {
 
@@ -391,6 +564,17 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     // =========================================================
     // Helpers
     // =========================================================
+
+    private String getToken() {
+
+        String tabId =
+                UI.getCurrent()
+                        .getElement()
+                        .getProperty("currentTabId");
+
+        return (String) VaadinSession.getCurrent()
+                .getAttribute("token_" + tabId);
+    }
 
     private VerticalLayout section(String title) {
 
@@ -436,8 +620,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
             String value
     ) {
 
-        Span labelSpan =
-                new Span(label);
+        Span labelSpan = new Span(label);
 
         labelSpan.getStyle()
                 .set("font-weight", "600")
@@ -529,11 +712,29 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         }
     }
 
+    private void showSuccess(String message) {
+
+        Notification notification = Notification.show(
+                message,
+                3000,
+                Notification.Position.TOP_CENTER
+        );
+
+        notification.addThemeVariants(
+                NotificationVariant.LUMO_SUCCESS
+        );
+    }
+
     private void showError(String message) {
-        Notification.show(
+
+        Notification notification = Notification.show(
                 message,
                 4000,
                 Notification.Position.TOP_CENTER
+        );
+
+        notification.addThemeVariants(
+                NotificationVariant.LUMO_ERROR
         );
     }
 }
