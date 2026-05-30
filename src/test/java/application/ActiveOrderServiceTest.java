@@ -1410,6 +1410,51 @@ class ActiveOrderServiceTest {
     }
 
     @Test
+    void GivenGuest_WhenReturnToEditSelection_ThenStageBecomesEditing() {
+        String guestToken = userService.continueAsGuest().getValue();
+        assertNotNull(guestToken, "continueAsGuest must produce a token");
+
+        service.enterEventPurchase(guestToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                guestToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+
+        // Guest is looked up by its raw token (the role-conditional userIdentifier the order
+        // was stored under in enterEventPurchase) — would have failed before the guest fix.
+        Response<ActiveOrderDTO> entered = service.returnToEditSelection(guestToken);
+        assertNotNull(entered.getValue(),
+                "guest returnToEditSelection failed: " + entered.getMessage());
+        assertEquals(domain.activeOrder.STAGE.EDITING,
+                activeOrderRepo.findById(orderId).getStage());
+    }
+
+    @Test
+    void GivenGuestInEditing_WhenEditTicketSelection_ThenSelectionUpdatedAndTimerUnchanged() {
+        String guestToken = userService.continueAsGuest().getValue();
+        assertNotNull(guestToken, "continueAsGuest must produce a token");
+
+        service.enterEventPurchase(guestToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                guestToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+        LocalDateTime checkoutStartedBefore =
+                activeOrderRepo.findById(orderId).getCheckoutStartedAt();
+
+        service.returnToEditSelection(guestToken);
+
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                guestToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 5));
+        assertNotNull(r.getValue(),
+                "guest editTicketSelection failed: " + r.getMessage());
+
+        // Edit committed, stage cycled EDITING -> CHECKING_OUT, continuous timer unchanged.
+        ActiveOrder after = activeOrderRepo.findById(orderId);
+        assertEquals(5, after.getTickets().size(),
+                "edit must update the guest's ticket count");
+        assertEquals(domain.activeOrder.STAGE.CHECKING_OUT, after.getStage());
+        assertEquals(checkoutStartedBefore, after.getCheckoutStartedAt(),
+                "continuous 10-minute timer must not reset across the guest edit flow");
+    }
+
+    @Test
     void GivenTwoUsersAddingSameSeatConcurrently_WhenEditTicketSelection_ThenExactlyOneSucceeds() throws Exception {
         String emailB = "race_b@mail.com";
         userService.registerUser("", new UserDTO(

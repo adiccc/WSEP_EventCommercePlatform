@@ -300,8 +300,9 @@ public class Event {
             ticketsBoughtForEvent = countUserTickets(user);
         }
         if (!purchasePolicy.isSatisfied(user, quantity, ticketsBoughtForEvent)) {
+            String who = user != null ? String.valueOf(user.getUserId()) : "guest";
             throw new IllegalArgumentException(
-                    "Purchase policy not satisfied for user " + user.getUserId() + " and quantity " + quantity);
+                    "Purchase policy not satisfied for user " + who + " and quantity " + quantity);
         }
     }
 
@@ -396,8 +397,9 @@ public class Event {
 
     public void quantityTotalExceedsPolicy(UserDTO userDTO, int projected) {
         if (!purchasePolicy.isSatisfied(userDTO, 0, projected)) {
+            String who = userDTO != null ? String.valueOf(userDTO.getUserId()) : "guest";
             throw new IllegalArgumentException(
-                    "Purchase policy not satisfied for user " + userDTO.getUserId() + " and quantity " + projected);
+                    "Purchase policy not satisfied for user " + who + " and quantity " + projected);
         }
     }
 

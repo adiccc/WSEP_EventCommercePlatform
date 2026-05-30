@@ -939,13 +939,18 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
-                if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(token))) {
+                int userId = getUserIdFromToken(token);
+                if (userId != -1 && suspensionRepo.haveActiveSuspension(userId)) {
                     logger.severe("User does not have write access caused by suspension");
                     return new Response<>(null, "user does not have write access caused by suspension.");
                 }
-                String email = auth.getUserEmail(token).getValue();
+                // Match the ownership key the order was stored under in enterEventPurchase:
+                // member -> email, guest -> raw token.
+                String userIdentifier = role.equals("MEMBER")
+                        ? auth.getUserEmail(token).getValue()
+                        : token;
 
-                ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(email);
+                ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(userIdentifier);
                 ActiveOrder order = activeOrderRepo.findById(dto.getId());
 
                 if (order.isExpired(LocalDateTime.now())) {
@@ -991,11 +996,16 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
-                if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(token))) {
+                int userId = getUserIdFromToken(token);
+                if (userId != -1 && suspensionRepo.haveActiveSuspension(userId)) {
                     logger.severe("User does not have write access caused by suspension");
                     return new Response<>(null, "user does not have write access caused by suspension.");
                 }
-                String email = auth.getUserEmail(token).getValue();
+                // Match the ownership key the order was stored under in enterEventPurchase:
+                // member -> email, guest -> raw token.
+                String userIdentifier = role.equals("MEMBER")
+                        ? auth.getUserEmail(token).getValue()
+                        : token;
 
                 // the case that a user tries to remove and add the same tickets
                 if (seatingToRemove != null && seatingToAdd != null) {
@@ -1009,7 +1019,7 @@ public class ActiveOrderService {
                                 return new Response<>(null, "Seat cannot be both added and removed: zone="
                                         + e.getKey() + " row=" + s.getRow() + " col=" + s.getCol());
                 }
-                ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(email);
+                ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(userIdentifier);
                 ActiveOrder order = activeOrderRepo.findById(dto.getId());
 
                 if (order.isExpired(LocalDateTime.now())) {
