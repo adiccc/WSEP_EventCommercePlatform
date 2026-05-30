@@ -1,13 +1,10 @@
 package application;
 
-import DTO.NotifyDTO;
-import DTO.NotifyPayload;
-import DTO.NotifyType;
+import DTO.*;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.company.Permissions;
-import domain.dto.OrderDTO;
 import domain.dto.SuspensionDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
@@ -490,7 +487,7 @@ public class AdminService {
             }
         });
     }
-    public Response<List<OrderDTO>> getGlobalOrders(String token,List<String> usersFilter, List<Integer> eventsFilter,List<Integer> companiesFilter) {
+    public Response<List<AdminPurchaseHistoryDTO>> getGlobalOrders(String token, List<String> usersFilter, List<Integer> eventsFilter, List<Integer> companiesFilter) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("getGlobalOrders attempt for admin");
             try {
@@ -510,13 +507,13 @@ public class AdminService {
                     return new Response<>(null, "Cannot filter both users and companies");
                 }
                 List<Event> allEvents = eventRepo.getAll();
-                List<OrderDTO> historyOrders = new ArrayList<>();
+                List<AdminPurchaseHistoryDTO> historyOrders = new ArrayList<>();
                 if(hasUsers){
                    for (Event event : allEvents) {
                        List<Order> orders = event.getOrders();
                        for (Order order : orders) {
                            if(usersFilter.contains(order.getUserIdentifier()))
-                                historyOrders.add(new OrderDTO(order));
+                               historyOrders.add(toAdminPurchaseHistoryDTO(order, event));
                        }
                    }
                 }
@@ -540,7 +537,7 @@ public class AdminService {
                         if (toAdd) {
                             List<Order> orders = event.getOrders();
                             for (Order order : orders) {
-                                historyOrders.add(new OrderDTO(order));
+                                historyOrders.add(toAdminPurchaseHistoryDTO(order, event));
                             }
                         }
                     }
@@ -559,6 +556,43 @@ public class AdminService {
         }
         });
     }
+
+    private AdminPurchaseHistoryDTO toAdminPurchaseHistoryDTO(Order order, Event event) {
+        String companyName = "Unknown Company";
+
+        try {
+            Company company = companyRepo.findById(event.getCompanyId());
+            companyName = company.getCompanyName();
+        } catch (Exception ignored) {
+        }
+
+        List<PurchasedTicketDTO> tickets = order.getTickets()
+                .stream()
+                .map(ticketId -> new PurchasedTicketDTO(
+                        ticketId,
+                        "-",
+                        "-",
+                        null,
+                        null,
+                        0.0
+                ))
+                .toList();
+
+        return new AdminPurchaseHistoryDTO(
+                order.getOrderId(),
+                order.getUserIdentifier(),
+                event.getCompanyId(),
+                companyName,
+                event.getId(),
+                event.getName(),
+                String.valueOf(event.getDate()),
+                event.getLocation().toString(),
+                order.getStatus(),
+                tickets,
+                order.getTotalSum()
+        );
+    }
+
     public Response<List<String>> getAllPurchasers(String token) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("getAllPurchasers attempt for admin");
