@@ -18,6 +18,7 @@ public class EventDetailsDTO {
     private String saleStartDate;
     private String categoryEvent;
     private String eventLocation;
+    private boolean hasLottery;
     private EventMapDTO eventMap;
     private String purchasePolicy;
     private String discountPolicy;
@@ -27,6 +28,7 @@ public class EventDetailsDTO {
         this.eventName = event.getName();
         this.eventDate = event.getDate().toString();
         this.eventLocation = event.getLocation().name();
+        this.hasLottery = event.hasLottery();
         this.saleStartDate = event.getSaleStartDate().toString();
         this.categoryEvent = event.getCategoryEvent().name();
         this.creatorId = event.getCreatorId();
@@ -82,5 +84,9 @@ public class EventDetailsDTO {
 
     public String getDiscountPolicy() {
         return discountPolicy;
+    }
+
+    public boolean hasLottery() {
+        return hasLottery;
     }
 }

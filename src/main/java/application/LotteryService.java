@@ -240,6 +240,59 @@ public class LotteryService {
             }
         });
     }
+
+    public Response<Boolean> canRegisterToLottery(String token, int eventId) {
+        return RetryHelper.executeWithRetry(() -> {
+
+            logger.log(Level.INFO, "canRegisterToLottery called");
+
+            if (getValidatedRole(token) == null) {
+                return new Response<>(null, "Invalid token");
+            }
+
+            int userId = getUserIdFromToken(token);
+            if (userId == -1) {
+                return new Response<>(null, "User is not logged in");
+            }
+
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                return new Response<>(null, "user does not have write access caused by suspension.");
+            }
+
+            try {
+                Event event = eventRepo.findById(eventId);
+
+                if (!event.hasLottery()) {
+                    return new Response<>(false, "This event does not support lottery");
+                }
+
+                Lottery lottery = lotteryRepo.findById(eventId);
+
+                if (LocalDateTime.now().isAfter(lottery.getRegisterWindow())) {
+                    return new Response<>(false, "Lottery registration period has expired");
+                }
+
+                if (lottery.getRegistered().contains(userId)) {
+                    return new Response<>(false, "User is already registered to this lottery");
+                }
+
+                return new Response<>(true, "User can register to lottery");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (NoSuchElementException e) {
+                return new Response<>(null, "Lottery not found");
+            } catch (Exception e) {
+                return new Response<>(
+                        null,
+                        "Failed to check lottery registration availability: "
+                                + e.getMessage()
+                );
+            }
+        });
+    }
+
+
     private int getUserIdFromToken(String token) {
         String email = auth.getUserEmail(token).getValue();
         if (email != null) {

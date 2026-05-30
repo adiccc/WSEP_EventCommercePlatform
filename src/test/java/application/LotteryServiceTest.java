@@ -471,6 +471,95 @@ class LotteryServiceTest {
         }
 
         @Test
+        void GivenOneOnlineUserAndOneOfflineUser_WhenLotteryWithCapacityOneIsDrawn_ThenOnlyWinnerReceivesCodeThroughCorrectChannel()
+                throws InterruptedException {
+                // Arrange
+                LocalDateTime lotteryDate = LocalDateTime.now().plusDays(7);
+                lotteryService.createLottery(validToken, eventId, 1, lotteryDate, 24L);
+
+                Lottery lottery = lotteryRepo.getAll().get(0);
+
+                lotteryService.registerUserToLottery(validToken, eventId);
+                lotteryService.registerUserToLottery(validToken2, eventId);
+
+                String onlineUserId = auth.getUserIdentifier(validToken).getValue();
+                String offlineUserId = auth.getUserIdentifier(validToken2).getValue();
+
+                CountDownLatch onlineLatch = new CountDownLatch(1);
+                AtomicReference<NotifyDTO> onlineNotification = new AtomicReference<>();
+
+                Registration onlineRegistration = Broadcaster.registerUser(onlineUserId, dto -> {
+                        onlineNotification.set(dto);
+                        onlineLatch.countDown();
+                });
+
+                userService.logout(validToken2);
+
+                try {
+                        // Act
+                        lotteryService.drawLottery(lottery.getId());
+
+                        // Assert
+                        Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
+                        assertEquals(1, updatedLottery.getWinners().size(),
+                                "Exactly one user should win the lottery");
+
+                        Member onlineUser = userRepo.findUserByEmail(onlineUserId);
+                        Member offlineUser = userRepo.findUserByEmail(offlineUserId);
+
+                        int onlineUserNumericId = userRepo.findUserByEmail(onlineUserId).getUserId();
+                        int offlineUserNumericId = userRepo.findUserByEmail(offlineUserId).getUserId();
+
+                        boolean onlineUserWon = updatedLottery.getWinners().contains(onlineUserNumericId);
+                        boolean offlineUserWon = updatedLottery.getWinners().contains(offlineUserNumericId);
+
+                        assertTrue(onlineUserWon || offlineUserWon,
+                                "The winner should be one of the registered users");
+
+                        if (onlineUserWon) {
+                                assertTrue(onlineLatch.await(2000, TimeUnit.MILLISECONDS),
+                                        "Online winner should receive a live notification");
+
+                                assertNotNull(onlineNotification.get(),
+                                        "Online winner notification should exist");
+
+                                assertTrue(onlineNotification.get().getPayload().getMessage().contains("Your code is: "),
+                                        "Online winner notification should contain lottery code");
+
+                                assertFalse(onlineUser.getDelayedNotifications().stream()
+                                                .anyMatch(n -> n.getPayload() != null
+                                                        && n.getPayload().getMessage().contains("Your code is: ")),
+                                        "Online winner should not have the code saved as delayed");
+
+                                assertFalse(offlineUser.getDelayedNotifications().stream()
+                                                .anyMatch(n -> n.getPayload() != null
+                                                        && n.getPayload().getMessage().contains("Your code is: ")),
+                                        "Offline non-winner should not receive a delayed code");
+                        }
+
+                        if (offlineUserWon) {
+                                Thread.sleep(1000);
+
+                                assertTrue(offlineUser.getDelayedNotifications().stream()
+                                                .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                                        && n.getPayload() != null
+                                                        && n.getPayload().getMessage().contains("Your code is: ")),
+                                        "Offline winner should have a delayed lottery code notification");
+
+                                assertNull(onlineNotification.get(),
+                                        "Online non-winner should not receive a lottery code notification");
+
+                                assertFalse(onlineUser.getDelayedNotifications().stream()
+                                                .anyMatch(n -> n.getPayload() != null
+                                                        && n.getPayload().getMessage().contains("Your code is: ")),
+                                        "Online non-winner should not have delayed lottery code");
+                        }
+                } finally {
+                        onlineRegistration.remove();
+                }
+        }
+
+        @Test
         void GivenMoreRegistrationsThanCapacityAndUsersOffline_WhenDrawLotteryIsTriggered_ThenWinnersSelectedUpToCapacityAndNotificationsSavedAsDelayed() {
                 // Arrange: Create a lottery with capacity 2
                 LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
