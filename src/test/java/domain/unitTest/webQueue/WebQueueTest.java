@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -255,5 +256,275 @@ class WebQueueTest {
         // active + waiting should never exceed capacity + exitThreads
         assertTrue(queue.getActiveCount() <= capacity);
         assertTrue(queue.getWaitingCount() >= 0);
+    }
+
+    // --- removeFromQueue: basic correctness ---
+
+    @Test
+    void GivenUserWaiting_WhenRemoveFromQueue_ThenReturnsTrueAndCountsUpdated() {
+        WebQueue queue = WebQueue.getInstance(1);
+        queue.tryEnter(uuid -> {}); // fill the active slot
+        QueueEntryResultDTO waiting = queue.tryEnter(uuid -> {});
+
+        boolean removed = queue.removeFromQueue(waiting.getToken());
+
+        assertTrue(removed);
+        assertEquals(1, queue.getActiveCount());
+        assertEquals(0, queue.getWaitingCount());
+    }
+
+    @Test
+    void GivenAdmittedUser_WhenRemoveFromQueue_ThenReturnsFalse() {
+        WebQueue queue = WebQueue.getInstance(5);
+        QueueEntryResultDTO admitted = queue.tryEnter(uuid -> {});
+
+        assertFalse(queue.removeFromQueue(admitted.getToken()));
+        assertEquals(1, queue.getActiveCount()); // unchanged
+    }
+
+    @Test
+    void GivenUnknownToken_WhenRemoveFromQueue_ThenReturnsFalse() {
+        WebQueue queue = WebQueue.getInstance(5);
+
+        assertFalse(queue.removeFromQueue("non-existent-token"));
+        assertEquals(0, queue.getActiveCount());
+        assertEquals(0, queue.getWaitingCount());
+    }
+
+    @Test
+    void GivenRemovedWaitingUser_WhenActiveUserLeaves_ThenCallbackNeverFired() {
+        WebQueue queue = WebQueue.getInstance(1);
+        queue.tryEnter(uuid -> {}); // fill slot
+        AtomicInteger callbacks = new AtomicInteger(0);
+        QueueEntryResultDTO waiting = queue.tryEnter(uuid -> callbacks.incrementAndGet());
+
+        queue.removeFromQueue(waiting.getToken());
+        queue.notifyUserLeft(); // active user leaves — no one left to admit
+
+        assertEquals(0, callbacks.get());
+        assertEquals(0, queue.getActiveCount());
+        assertEquals(0, queue.getWaitingCount());
+    }
+
+    @Test
+    void GivenFirstWaitingUserRemoved_WhenActiveUserLeaves_ThenSecondUserIsAdmitted() {
+        WebQueue queue = WebQueue.getInstance(1);
+        queue.tryEnter(uuid -> {}); // fill slot
+        AtomicInteger firstCallbacks  = new AtomicInteger(0);
+        AtomicInteger secondCallbacks = new AtomicInteger(0);
+        QueueEntryResultDTO first  = queue.tryEnter(uuid -> firstCallbacks.incrementAndGet());
+        QueueEntryResultDTO second = queue.tryEnter(uuid -> secondCallbacks.incrementAndGet());
+
+        queue.removeFromQueue(first.getToken());
+        queue.notifyUserLeft(); // must skip removed first and admit second
+
+        assertEquals(0, firstCallbacks.get());
+        assertEquals(1, secondCallbacks.get());
+        assertEquals(1, queue.getActiveCount());
+        assertEquals(0, queue.getWaitingCount());
+    }
+
+    @Test
+    void GivenMiddleUserRemovedFromQueue_WhenSlotsOpen_ThenFifoOrderPreserved() {
+        WebQueue queue = WebQueue.getInstance(1);
+        queue.tryEnter(uuid -> {}); // fill slot
+        List<String> admissionOrder = Collections.synchronizedList(new ArrayList<>());
+        QueueEntryResultDTO first  = queue.tryEnter(admissionOrder::add);
+        QueueEntryResultDTO middle = queue.tryEnter(uuid -> {});
+        QueueEntryResultDTO last   = queue.tryEnter(admissionOrder::add);
+
+        queue.removeFromQueue(middle.getToken());
+        queue.notifyUserLeft(); // admits first
+        queue.notifyUserLeft(); // skips removed middle, admits last
+
+        assertEquals(List.of(first.getToken(), last.getToken()), admissionOrder);
+        assertEquals(1, queue.getActiveCount());
+        assertEquals(0, queue.getWaitingCount());
+    }
+
+    @Test
+    void GivenAllWaitingUsersRemoved_WhenActiveUserLeaves_ThenActiveCountDecrements() {
+        WebQueue queue = WebQueue.getInstance(1);
+        queue.tryEnter(uuid -> {}); // fill slot
+        QueueEntryResultDTO w1 = queue.tryEnter(uuid -> {});
+        QueueEntryResultDTO w2 = queue.tryEnter(uuid -> {});
+        queue.removeFromQueue(w1.getToken());
+        queue.removeFromQueue(w2.getToken());
+
+        queue.notifyUserLeft(); // no one left to admit — must decrement active
+
+        assertEquals(0, queue.getActiveCount());
+        assertEquals(0, queue.getWaitingCount());
+    }
+
+    // --- removeFromQueue: concurrency ---
+
+    @Test
+    void GivenSameToken_WhenTwoThreadsRemoveConcurrently_ThenExactlyOneSucceeds() throws InterruptedException {
+        WebQueue queue = WebQueue.getInstance(1);
+        queue.tryEnter(uuid -> {}); // fill slot
+        QueueEntryResultDTO waiting = queue.tryEnter(uuid -> {});
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done  = new CountDownLatch(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        for (int i = 0; i < 2; i++) {
+            executor.submit(() -> {
+                ready.countDown();
+                try { start.await(); } catch (InterruptedException ignored) {}
+                if (queue.removeFromQueue(waiting.getToken())) successCount.incrementAndGet();
+                done.countDown();
+            });
+        }
+
+        ready.await();
+        start.countDown(); // release both threads at the same instant
+        done.await();
+        executor.shutdown();
+
+        assertEquals(1, successCount.get());
+        assertEquals(0, queue.getWaitingCount());
+    }
+
+    @Test
+    void GivenConcurrentRemoveAndNotify_WhenRaced_ThenConservationHoldsAndEachCallbackFiredAtMostOnce() throws InterruptedException {
+        // n active users, n waiting users, n notifyUserLeft threads, n removeFromQueue threads.
+        // notifyUserLeft is called exactly once per admitted user — the only valid scenario.
+        int n = 20;
+        WebQueue queue = WebQueue.getInstance(n);
+        for (int i = 0; i < n; i++) queue.tryEnter(uuid -> {}); // fill all active slots
+
+        ConcurrentHashMap<String, AtomicInteger> callbackCounts = new ConcurrentHashMap<>();
+        List<String> tokens = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            QueueEntryResultDTO r = queue.tryEnter(uuid -> callbackCounts.get(uuid).incrementAndGet());
+            tokens.add(r.getToken());
+            callbackCounts.put(r.getToken(), new AtomicInteger(0));
+        }
+
+        AtomicInteger removedCount = new AtomicInteger(0);
+        int threads = n * 2;
+        CountDownLatch ready = new CountDownLatch(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done  = new CountDownLatch(threads);
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+
+        for (int i = 0; i < threads; i++) {
+            final int idx = i;
+            executor.submit(() -> {
+                ready.countDown();
+                try { start.await(); } catch (InterruptedException ignored) {}
+                if (idx < n) {
+                    // one removeFromQueue per waiting user
+                    if (queue.removeFromQueue(tokens.get(idx))) removedCount.incrementAndGet();
+                } else {
+                    // one notifyUserLeft per admitted active user — perfectly balanced
+                    queue.notifyUserLeft();
+                }
+                done.countDown();
+            });
+        }
+
+        ready.await();
+        start.countDown();
+        done.await();
+        executor.shutdown();
+
+        int admittedCount    = callbackCounts.values().stream().mapToInt(AtomicInteger::get).sum();
+        int remainingWaiting = queue.getWaitingCount();
+
+        // every waiting user must be accounted for: admitted XOR removed XOR still waiting
+        assertEquals(n, admittedCount + removedCount.get() + remainingWaiting,
+            "Conservation failed: users were lost or double-counted");
+
+        // no user was both admitted and removed — callback fires at most once
+        for (String token : tokens) {
+            assertTrue(callbackCounts.get(token).get() <= 1,
+                "Callback fired more than once for token: " + token);
+        }
+
+        assertTrue(queue.getActiveCount() >= 0,  "activeCount went negative");
+        assertTrue(queue.getWaitingCount() >= 0,  "waitingCount went negative");
+        assertTrue(queue.getActiveCount() <= n,   "activeCount exceeded maxCapacity");
+    }
+
+    @Test
+    void GivenHighConcurrency_WhenEnterRemoveAndNotifyMixed_ThenInvariantsAlwaysHold() throws InterruptedException {
+        // 10 active users, 30 waiting users.
+        // notifyUserLeft is called exactly 10 times — once per admitted active user.
+        // removeFromQueue is called once per waiting user (30 threads).
+        // tryEnter is called by 30 more threads (new arrivals competing for freed slots).
+        int capacity   = 10;
+        int preWaiting = 30;
+        WebQueue queue = WebQueue.getInstance(capacity);
+        for (int i = 0; i < capacity; i++) queue.tryEnter(uuid -> {});
+
+        ConcurrentHashMap<String, AtomicInteger> callbackCounts = new ConcurrentHashMap<>();
+        List<String> waitingTokens = new ArrayList<>();
+        for (int i = 0; i < preWaiting; i++) {
+            QueueEntryResultDTO w = queue.tryEnter(uuid -> callbackCounts.get(uuid).incrementAndGet());
+            waitingTokens.add(w.getToken());
+            callbackCounts.put(w.getToken(), new AtomicInteger(0));
+        }
+
+        AtomicInteger removedCount = new AtomicInteger(0);
+        int threads = capacity + preWaiting + preWaiting; // 10 + 30 + 30
+        CountDownLatch ready = new CountDownLatch(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done  = new CountDownLatch(threads);
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+
+        // notifyUserLeft threads — one per active user
+        for (int i = 0; i < capacity; i++) {
+            executor.submit(() -> {
+                ready.countDown();
+                try { start.await(); } catch (InterruptedException ignored) {}
+                queue.notifyUserLeft();
+                done.countDown();
+            });
+        }
+        // removeFromQueue threads — one per pre-populated waiting user
+        for (int i = 0; i < preWaiting; i++) {
+            final int idx = i;
+            executor.submit(() -> {
+                ready.countDown();
+                try { start.await(); } catch (InterruptedException ignored) {}
+                if (queue.removeFromQueue(waitingTokens.get(idx))) removedCount.incrementAndGet();
+                done.countDown();
+            });
+        }
+        // tryEnter threads — new arrivals
+        for (int i = 0; i < preWaiting; i++) {
+            executor.submit(() -> {
+                ready.countDown();
+                try { start.await(); } catch (InterruptedException ignored) {}
+                queue.tryEnter(uuid -> {});
+                done.countDown();
+            });
+        }
+
+        ready.await();
+        start.countDown();
+        done.await();
+        executor.shutdown();
+
+        int admittedFromPreWaiting = callbackCounts.values().stream().mapToInt(AtomicInteger::get).sum();
+
+        // admitted + removed must never exceed the original waiting population
+        assertTrue(admittedFromPreWaiting + removedCount.get() <= preWaiting,
+            "More pre-waiting users admitted/removed than existed");
+
+        // no pre-waiting user was both admitted and removed
+        for (String token : waitingTokens) {
+            assertTrue(callbackCounts.get(token).get() <= 1,
+                "Callback fired more than once for token: " + token);
+        }
+
+        assertTrue(queue.getActiveCount() >= 0,         "activeCount went negative");
+        assertTrue(queue.getWaitingCount() >= 0,         "waitingCount went negative");
+        assertTrue(queue.getActiveCount() <= capacity,   "activeCount exceeded maxCapacity");
     }
 }
