@@ -452,6 +452,12 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
                 nav.addItem(orders, notifications, company, logout);
             }
 
+            if (Boolean.TRUE.equals(auth.isAdmin(token).getValue())) {
+                SideNavItem adminItem = new SideNavItem("Admin Panel", "admin");
+                adminItem.setPrefixComponent(VaadinIcon.TOOLS.create());
+                nav.addItem(adminItem);
+            }
+
         } else if ("GUEST".equals(role)) {
             // Guest can still choose to log in
             addLoginItem(nav);
