@@ -851,4 +851,98 @@ class LotteryServiceTest {
                         tabReg.remove();
                 }
         }
+
+        @Test
+        void GivenLotteryAlreadyDrawnButWinnersNotNotified_WhenDrawLotteryRunsAgain_ThenMissingNotificationsAreSent() {
+                // Arrange
+                LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+                lotteryService.createLottery(validToken, eventId, 10, lotteryDate_X, 24L);
+
+                lotteryService.registerUserToLottery(validToken2, eventId);
+
+                String userIdentifier = auth.getUserIdentifier(validToken2).getValue();
+
+                userService.logout(validToken2);
+
+                Lottery lottery = lotteryRepo.findById(eventId);
+
+                // Simulate a state where winners were already drawn and stored,
+                // but notifications were not sent/marked yet.
+                lottery.drawWinners();
+                lotteryRepo.store(lottery);
+
+                Lottery alreadyDrawnLottery = lotteryRepo.findById(eventId);
+
+                assertEquals(1, alreadyDrawnLottery.getWinners().size(),
+                        "Lottery should already have winners before retrying draw");
+
+                assertTrue(alreadyDrawnLottery.getNotifiedWinners().isEmpty(),
+                        "Winner should not be marked as notified yet");
+
+                // Act
+                lotteryService.drawLottery(eventId);
+
+                // Assert
+                Member winner = userRepo.findUserByEmail(userIdentifier);
+
+                assertTrue(winner.getDelayedNotifications().stream()
+                                .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                        && n.getPayload() != null
+                                        && n.getPayload().getMessage().contains("Your code is: ")),
+                        "Missing winner notification should be saved as delayed");
+
+                Lottery updatedLottery = lotteryRepo.findById(eventId);
+
+                assertEquals(1, updatedLottery.getNotifiedWinners().size(),
+                        "Winner should be marked as notified after notification is saved");
+        }
+
+        @Test
+        void GivenOfflineWinnerAlreadyNotified_WhenDrawLotteryRunsAgain_ThenNoDuplicateDelayedNotificationIsCreated() {
+                // Arrange
+                LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+                lotteryService.createLottery(validToken, eventId, 10, lotteryDate_X, 24L);
+
+                lotteryService.registerUserToLottery(validToken2, eventId);
+
+                String userIdentifier = auth.getUserIdentifier(validToken2).getValue();
+
+                userService.logout(validToken2);
+
+                // First draw
+                lotteryService.drawLottery(eventId);
+
+                Member winnerAfterFirstDraw = userRepo.findUserByEmail(userIdentifier);
+
+                long notificationsAfterFirstDraw =
+                        winnerAfterFirstDraw.getDelayedNotifications().stream()
+                                .filter(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                        && n.getPayload() != null
+                                        && n.getPayload().getMessage().contains("Your code is: "))
+                                .count();
+
+                assertEquals(1, notificationsAfterFirstDraw,
+                        "Winner should have exactly one delayed lottery notification after first draw");
+
+                // Act: Run draw again
+                lotteryService.drawLottery(eventId);
+
+                // Assert
+                Member winnerAfterSecondDraw = userRepo.findUserByEmail(userIdentifier);
+
+                long notificationsAfterSecondDraw =
+                        winnerAfterSecondDraw.getDelayedNotifications().stream()
+                                .filter(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                        && n.getPayload() != null
+                                        && n.getPayload().getMessage().contains("Your code is: "))
+                                .count();
+
+                assertEquals(1, notificationsAfterSecondDraw,
+                        "Running draw again should not create duplicate delayed lottery notifications");
+
+                Lottery updatedLottery = lotteryRepo.findById(eventId);
+
+                assertEquals(1, updatedLottery.getNotifiedWinners().size(),
+                        "Winner should remain marked as notified");
+        }
 }
