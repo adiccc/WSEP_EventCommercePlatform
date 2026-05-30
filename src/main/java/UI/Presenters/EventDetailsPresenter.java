@@ -45,6 +45,16 @@ public class EventDetailsPresenter {
         );
     }
 
+    public Response<Boolean> canRegisterToLottery(
+            String token,
+            int eventId
+    ) {
+        return lotteryService.canRegisterToLottery(
+                token,
+                eventId
+        );
+    }
+
     public Response<String> getRole(String token) {
         return auth.getRole(token);
     }

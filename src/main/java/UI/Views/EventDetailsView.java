@@ -175,7 +175,10 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         actions.add(purchaseButton);
 
-        if (dto.hasLottery() && isMember()) {
+        if (dto.hasLottery()
+                && isMember()
+                && canRegisterToLottery()) {
+
             actions.add(lotteryButton);
         }
 
@@ -196,6 +199,17 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         Response<String> roleResponse = presenter.getRole(token);
 
         return "MEMBER".equals(roleResponse.getValue());
+    }
+
+    private boolean canRegisterToLottery() {
+        Response<Boolean> response =
+                presenter.canRegisterToLottery(
+                        token,
+                        eventId
+                );
+
+        return response.getValue() != null
+                && response.getValue();
     }
 
     private void registerToLottery() {
