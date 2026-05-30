@@ -208,8 +208,12 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                         eventId
                 );
 
-        return response.getValue() != null
-                && response.getValue();
+        if (response.getValue() == null) {
+            showError(response.getMessage());
+            return false;
+        }
+
+        return response.getValue();
     }
 
     private void registerToLottery() {
@@ -523,5 +527,13 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
             return rawDateTime;
         }
+    }
+
+    private void showError(String message) {
+        Notification.show(
+                message,
+                4000,
+                Notification.Position.TOP_CENTER
+        );
     }
 }
