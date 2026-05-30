@@ -65,6 +65,15 @@ public class DataSeeder implements ApplicationRunner {
         // ── 1. Register users ─────────────────────────────────────────────────
         String guest = guestToken();
 
+        registerUser(
+                guest,
+                "systemadmin@demo.com",
+                "System",
+                "Admin",
+                "Admin123!",
+                "1 Admin St",
+                "050-000-0000"
+        );
         registerUser(guest, "alice@demo.com",  "Alice",   "Cohen",   "Alice123!", "123 Main St", "050-123-4567");
         registerUser(guest, "bob@demo.com",    "Bob",     "Levi",    "Bob1234!",  "456 Elm Ave", "052-234-5678");
         registerUser(guest, "charlie@demo.com","Charlie", "Mizrahi", "Charlie1!", "789 Oak Rd",  "054-345-6789");
@@ -72,6 +81,7 @@ public class DataSeeder implements ApplicationRunner {
         registerUser(guest, "eve@demo.com",    "Eve",     "Shapiro", "Eve1234!",  "20 Cedar Ave","058-567-8901");
 
         // ── 2. Login as each user ─────────────────────────────────────────────
+        String adminToken = login("systemadmin@demo.com", "Admin123!");
         String aliceToken   = login("alice@demo.com",   "Alice123!");
         String bobToken     = login("bob@demo.com",     "Bob1234!");
         String charlieToken = login("charlie@demo.com", "Charlie1!");

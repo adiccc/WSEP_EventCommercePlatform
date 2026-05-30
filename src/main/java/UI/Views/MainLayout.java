@@ -421,17 +421,8 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         Response<String> roleResponse = auth.getRole(token);
         String role = roleResponse.getValue();
 
-        if ("ADMIN".equals(role) || "SYSTEM_ADMIN".equals(role)) {
-            SideNavItem adminPurchaseHistory =
-                    new SideNavItem("Admin Purchase History", "admin/purchase-history");
-            adminPurchaseHistory.setPrefixComponent(VaadinIcon.CLIPBOARD_TEXT.create());
 
-            SideNavItem logout = new SideNavItem("Logout", "logout");
-            logout.setPrefixComponent(VaadinIcon.SIGN_IN.create());
-
-            nav.addItem(adminPurchaseHistory, logout);
-
-        } else if ("MEMBER".equals(role)) {
+        if ("MEMBER".equals(role)) {
             // Registered member
             SideNavItem orders = new SideNavItem("My Orders", "my-orders");
             orders.setPrefixComponent(VaadinIcon.TICKET.create());
@@ -442,10 +433,24 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
             SideNavItem company = new SideNavItem("My Companies", "my-companies");
             company.setPrefixComponent(VaadinIcon.OFFICE.create());
 
+            Boolean adminValue = auth.isAdmin(token).getValue();
+            boolean isAdmin = Boolean.TRUE.equals(adminValue);
+
+            SideNavItem adminPurchaseHistory = null;
+            if (isAdmin) {
+                adminPurchaseHistory =
+                        new SideNavItem("Admin Purchase History", "admin/purchase-history");
+                adminPurchaseHistory.setPrefixComponent(VaadinIcon.CLIPBOARD_TEXT.create());
+            }
+
             SideNavItem logout = new SideNavItem("Logout", "logout");
             logout.setPrefixComponent(VaadinIcon.SIGN_IN.create());
 
-            nav.addItem(orders, notifications, company, logout);
+            if (isAdmin) {
+                nav.addItem(orders, notifications, company, adminPurchaseHistory, logout);
+            } else {
+                nav.addItem(orders, notifications, company, logout);
+            }
 
         } else if ("GUEST".equals(role)) {
             // Guest can still choose to log in
