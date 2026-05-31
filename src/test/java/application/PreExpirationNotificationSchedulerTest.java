@@ -33,15 +33,17 @@ class PreExpirationNotificationSchedulerTest {
     private PreExpirationNotificationScheduler scheduler;
     private BlockingQueue<NotifyDTO> delivered;
     private Registration recipientRegistration;
+    private String tabToken;
 
     @BeforeEach
     void setUp() {
         activeOrderRepo = new ActiveOrderRepoImpl();
         scheduler = new PreExpirationNotificationScheduler(activeOrderRepo, new VaadinNotifier());
 
-        // Capture, in real time, whatever the recipient's tab would receive via the Broadcaster.
+        tabToken = new TokenService().generateGuestToken();
+
         delivered = new LinkedBlockingQueue<>();
-        recipientRegistration = Broadcaster.registerUser(RECIPIENT, delivered::add);
+        recipientRegistration = Broadcaster.registerTab(tabToken, delivered::add);
     }
 
     @AfterEach
@@ -67,7 +69,7 @@ class PreExpirationNotificationSchedulerTest {
         order.forceExpireForTest(LocalDateTime.now().plusMinutes(2));
         activeOrderRepo.store(order);
 
-        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().minusSeconds(1)); // fire immediately
+        scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().minusSeconds(1)); // fire immediately
 
         NotifyDTO sent = delivered.poll(2, TimeUnit.SECONDS);
         assertNotNull(sent, "a real-time popup should have been delivered to the recipient");
@@ -81,7 +83,7 @@ class PreExpirationNotificationSchedulerTest {
         order.forceExpireForTest(LocalDateTime.now().plusMinutes(2)); // inside the warning window
         activeOrderRepo.store(order);
 
-        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().plusSeconds(1));
+        scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().plusSeconds(1));
         scheduler.cancel(ORDER_ID);
 
         assertFalse(scheduler.hasPendingWarning(ORDER_ID));
@@ -94,8 +96,8 @@ class PreExpirationNotificationSchedulerTest {
         order.forceExpireForTest(LocalDateTime.now().plusMinutes(2)); // inside the warning window
         activeOrderRepo.store(order);
 
-        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().plusSeconds(1));  // would fire at +1s
-        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().minusSeconds(1)); // reschedule: fire now
+        scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().plusSeconds(1));  // would fire at +1s
+        scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().minusSeconds(1)); // reschedule: fire now
 
         assertNotNull(delivered.poll(2, TimeUnit.SECONDS), "the rescheduled warning should fire");
         // the original +1s task must have been cancelled by the reschedule -> no second delivery
@@ -107,7 +109,7 @@ class PreExpirationNotificationSchedulerTest {
             throws InterruptedException {
         activeOrderRepo.store(checkingOutOrder()); // checkoutStartedAt = now -> warning is 9 min away
 
-        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().minusSeconds(1));
+        scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().minusSeconds(1));
 
         assertNull(delivered.poll(800, TimeUnit.MILLISECONDS));
     }
@@ -118,7 +120,7 @@ class PreExpirationNotificationSchedulerTest {
         order.forceExpireForTest(LocalDateTime.now()); // checkoutStartedAt = now-11min -> already expired
         activeOrderRepo.store(order);
 
-        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().minusSeconds(1));
+        scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().minusSeconds(1));
 
         assertNull(delivered.poll(800, TimeUnit.MILLISECONDS));
     }
@@ -126,7 +128,7 @@ class PreExpirationNotificationSchedulerTest {
     @Test
     void GivenOrderAlreadyRemoved_WhenScheduleOrReschedule_ThenSkippedWithoutSending() throws InterruptedException {
         // order never stored -> repo.findById throws NoSuchElementException, so the warning is skipped
-        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().minusSeconds(1));
+        scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().minusSeconds(1));
 
         assertNull(delivered.poll(800, TimeUnit.MILLISECONDS));
     }
@@ -137,8 +139,8 @@ class PreExpirationNotificationSchedulerTest {
         order.forceExpireForTest(LocalDateTime.now().plusMinutes(2));
         activeOrderRepo.store(order);
 
-        scheduler.scheduleOrReschedule(ORDER_ID, LocalDateTime.now().plusSeconds(1));
-        scheduler.scheduleOrReschedule(ORDER_ID, null); // order no longer CHECKING_OUT -> clear
+        scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().plusSeconds(1));
+        scheduler.scheduleOrReschedule(tabToken, ORDER_ID,null); // order no longer CHECKING_OUT -> clear
 
         assertFalse(scheduler.hasPendingWarning(ORDER_ID));
         assertNull(delivered.poll(1500, TimeUnit.MILLISECONDS));

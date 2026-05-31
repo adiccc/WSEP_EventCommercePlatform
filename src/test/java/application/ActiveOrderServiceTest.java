@@ -1561,7 +1561,7 @@ class ActiveOrderServiceTest {
         CountDownLatch notificationLatch = new CountDownLatch(1);
         AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
 
-        Registration registration = Broadcaster.registerUser(buyerEmail, notification -> {
+        Registration registration = Broadcaster.registerTab(validToken, notification -> {
             receivedNotification.set(notification);
             notificationLatch.countDown();
         });
@@ -1637,11 +1637,10 @@ class ActiveOrderServiceTest {
             assertEquals(0, buyer.getDelayedNotifications().size(),
                     "Online buyer should not have the confirmation saved as delayed");
 
-            Mockito.verify(notifier).notifyUser(
-                    Mockito.eq(buyerEmail),
+            Mockito.verify(notifier).notifyTab(
+                    Mockito.eq(validToken),
                     Mockito.any(NotifyDTO.class)
             );
-
         } finally {
             registration.remove();
         }

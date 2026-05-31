@@ -59,7 +59,7 @@ public class PreExpirationNotificationScheduler {
      * @param warningTime the instant to fire, i.e. {@link ActiveOrder#getCheckoutWarningTime()};
      *                    a null value (order not in CHECKING_OUT) simply clears the schedule.
      */
-    public void scheduleOrReschedule(int orderId, LocalDateTime warningTime) {
+    public void scheduleOrReschedule(String token,int orderId, LocalDateTime warningTime) {
         if (warningTime == null) {
             cancel(orderId);
             return;
@@ -73,7 +73,7 @@ public class PreExpirationNotificationScheduler {
             if (existing != null) {
                 existing.cancel(false);
             }
-            return scheduler.schedule(() -> fireWarning(id), delayMillis, TimeUnit.MILLISECONDS);
+            return scheduler.schedule(() -> fireWarning(token,id), delayMillis, TimeUnit.MILLISECONDS);
         });
     }
 
@@ -94,7 +94,7 @@ public class PreExpirationNotificationScheduler {
         return scheduledWarnings.containsKey(orderId);
     }
 
-    private void fireWarning(int orderId) {
+    private void fireWarning(String token,int orderId) {
         ActiveOrder order;
         try {
             order = activeOrderRepo.findById(orderId);
@@ -120,10 +120,7 @@ public class PreExpirationNotificationScheduler {
                                     + "Please complete checkout to avoid losing them.",
                             order.getEventId(),
                             null));
-            // Real-time only (never the delayed-notification queue). The identifier is the
-            // member email / guest token (order.getUserIdentifier()), matching how the UI
-            // registers its Broadcaster listener, so guests receive it too. Best-effort.
-            notifier.notifyUser(order.getUserIdentifier(), warning);
+            notifier.notifyTab(token, warning);
         } catch (Exception e) {
             logger.log(Level.WARNING,
                     "Failed to send pre-expiration warning for order " + orderId + ": " + e.getMessage());
