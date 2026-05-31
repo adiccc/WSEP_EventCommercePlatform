@@ -254,7 +254,7 @@ public class NotificationsView extends VerticalLayout {
     private void showSuccess(String message) {
         Notification notification = Notification.show(
                 message,
-                isLotteryCodeNotification(message) ? 10000 : 3000,
+                isLotteryCodeNotification(message) ? 10000 : 6000,
                 Notification.Position.TOP_CENTER
         );
 
@@ -268,7 +268,7 @@ public class NotificationsView extends VerticalLayout {
     private void showError(String message) {
         Notification notification = Notification.show(
                 message,
-                4000,
+                6000,
                 Notification.Position.TOP_CENTER
         );
         notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
