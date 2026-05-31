@@ -230,6 +230,23 @@ public class UserService {
         });
     }
 
+    public Response<Boolean> exitQueue(String token) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("exitQueue attempt started for token: " + token);
+            if (token == null || token.isBlank()) {
+                return new Response<>(false, "Invalid token");
+            }
+            boolean removed = WebQueue.getInstance().removeFromQueue(token);
+            if (removed) {
+                logger.info("User successfully removed from queue for token: " + token);
+                return new Response<>(true, "User removed from queue");
+            } else {
+                logger.warning("Token not found in waiting queue: " + token);
+                return new Response<>(false, "Token not found in waiting queue");
+            }
+        });
+    }
+
     public Response<Boolean> leaveStore(String token) { //leave button for Guests!
         return RetryHelper.executeWithRetry(() -> {
             logger.info("leaveStore attempt started for token: " + token);
