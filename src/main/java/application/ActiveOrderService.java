@@ -5,6 +5,7 @@ import DTO.*;
 import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
+import domain.activeOrder.STAGE;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dto.ActiveOrderDTO;
@@ -49,6 +50,7 @@ public class ActiveOrderService {
     private final IPaymentSystem paymentSystem;
     private final ITicketSupply ticketSupply;
     private final INotifier notifier;
+    private final PreExpirationNotificationScheduler preExpirationScheduler;
     private final int capacity;
     private final ScheduledExecutorService cleanupScheduler;
 
@@ -63,6 +65,7 @@ public class ActiveOrderService {
             ITicketSupply ticketSupply,
             ISuspensionRepo suspensionRepo,
             INotifier notifier,
+            PreExpirationNotificationScheduler preExpirationScheduler,
             IUserRepo userRepo,
             @Value("${active-order.capacity:20}") int capacity) {
         this.eventRepo = eventRepo;
@@ -74,6 +77,7 @@ public class ActiveOrderService {
         this.ticketSupply = ticketSupply;
         this.suspensionRepo=suspensionRepo;
         this.notifier = notifier;
+        this.preExpirationScheduler = preExpirationScheduler;
         this.capacity = capacity;
         this.userRepo = userRepo;
         this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -489,6 +493,9 @@ public class ActiveOrderService {
                 this.eventRepo.store(e);
                 activeOrderRepo.store(newActiveOrder);
 
+                preExpirationScheduler.scheduleOrReschedule(
+                        newActiveOrder.getId(), newActiveOrder.getCheckoutWarningTime());
+
                 logger.log(Level.INFO, "Tickets selected successfully");
                 return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
             } catch (NoSuchElementException e) {
@@ -842,6 +849,7 @@ public class ActiveOrderService {
                 }
                 if (shouldDeleteActiveOrder) {
                     activeOrderRepo.delete(activeOrderId);
+                    preExpirationScheduler.cancel(activeOrderId);
                     promoteNextInQueue(event.getId());
 
                 }
@@ -863,6 +871,7 @@ public class ActiveOrderService {
                         event.releaseTickets(current.getTickets());
                         eventRepo.store(event); // optimistic lock check
                         activeOrderRepo.delete(current.getId());
+                        preExpirationScheduler.cancel(current.getId());
                         promoteNextInQueue(event.getId());
                         return new Response<>(true, "expired");
                     } catch (NoSuchElementException e) {
@@ -921,6 +930,59 @@ public class ActiveOrderService {
         });
     }
 
+    public Response<ActiveOrderDTO> returnToEditSelection(String token) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "returnToEditSelection called");
+            try {
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid token");
+                    return new Response<>(null, "Invalid token");
+                }
+                int userId = getUserIdFromToken(token);
+                if (userId != -1 && suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
+                // Match the ownership key the order was stored under in enterEventPurchase:
+                // member -> email, guest -> raw token.
+                String userIdentifier = role.equals("MEMBER")
+                        ? auth.getUserEmail(token).getValue()
+                        : token;
+
+                ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(userIdentifier);
+                ActiveOrder order = activeOrderRepo.findById(dto.getId());
+
+                if (order.isExpired(LocalDateTime.now())) {
+                    logger.log(Level.SEVERE, "Active order has expired");
+                    return new Response<>(null, "Active order has expired");
+                }
+
+                if (order.getStage() != STAGE.CHECKING_OUT) {
+                    logger.log(Level.SEVERE, "Order is not at checkout; cannot enter edit mode");
+                    return new Response<>(null, "Order is not at checkout; cannot enter edit mode");
+                }
+
+                order.returnToEditSelection();
+                activeOrderRepo.store(order);
+                // checkoutStartedAt is intentionally NOT touched — the continuous 10-minute
+                // seat-hold timer and its pending pre-expiration warning carry over unchanged.
+
+                logger.log(Level.INFO, "Order moved to EDITING successfully");
+                return new Response<>(new ActiveOrderDTO(order), "Returned to edit selection");
+
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "Active order not found: " + e.getMessage());
+                return new Response<>(null, "Active order not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to return to edit selection: " + e.getMessage());
+                return new Response<>(null, "Failed to return to edit selection: " + e.getMessage());
+            }
+        });
+    }
+
     public Response<ActiveOrderDTO> editTicketSelection(
             String token,
             Map<String, List<SeatingTicketDTO>> seatingToRemove,
@@ -934,11 +996,16 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
-                if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(token))) {
+                int userId = getUserIdFromToken(token);
+                if (userId != -1 && suspensionRepo.haveActiveSuspension(userId)) {
                     logger.severe("User does not have write access caused by suspension");
                     return new Response<>(null, "user does not have write access caused by suspension.");
                 }
-                String email = auth.getUserEmail(token).getValue();
+                // Match the ownership key the order was stored under in enterEventPurchase:
+                // member -> email, guest -> raw token.
+                String userIdentifier = role.equals("MEMBER")
+                        ? auth.getUserEmail(token).getValue()
+                        : token;
 
                 // the case that a user tries to remove and add the same tickets
                 if (seatingToRemove != null && seatingToAdd != null) {
@@ -952,12 +1019,17 @@ public class ActiveOrderService {
                                 return new Response<>(null, "Seat cannot be both added and removed: zone="
                                         + e.getKey() + " row=" + s.getRow() + " col=" + s.getCol());
                 }
-                ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(email);
+                ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(userIdentifier);
                 ActiveOrder order = activeOrderRepo.findById(dto.getId());
 
                 if (order.isExpired(LocalDateTime.now())) {
                     logger.log(Level.SEVERE, "Active order has expired");
                     return new Response<>(null, "Active order has expired");
+                }
+
+                if (order.getStage() != STAGE.EDITING) {
+                    logger.log(Level.SEVERE, "Order is not in edit mode; call returnToEditSelection first");
+                    return new Response<>(null, "Order is not in edit mode; call returnToEditSelection first");
                 }
 
                 Event event = eventRepo.findById(order.getEventId());
@@ -1019,10 +1091,13 @@ public class ActiveOrderService {
                     newTickets.addAll(added);
                 }
                 order.setTickets(newTickets);
-                order.returnToSelecting();
+                order.confirmEdit();
 
                 eventRepo.store(event);
                 activeOrderRepo.store(order);
+
+                // The 10-minute seat-hold deadline is fixed at userSelectTickets time and never
+                // resets — the warning scheduled then remains valid, so no reschedule here.
 
                 logger.log(Level.INFO, "Selection updated successfully");
                 return new Response<>(new ActiveOrderDTO(order), "Selection updated successfully");
@@ -1031,7 +1106,6 @@ public class ActiveOrderService {
                 logger.log(Level.SEVERE, "Order or event not found: " + e.getMessage());
                 return new Response<>(null, "Order or event not found");
             } catch (IllegalArgumentException | IllegalStateException e) {
-                // thrown by quantityExceedsPolicy, bookTickets, etc.
                 logger.log(Level.SEVERE, "Invalid edit: " + e.getMessage());
                 return new Response<>(null, "Invalid edit: " + e.getMessage());
             } catch (OptimisticLockingFailureException e) {
@@ -1045,6 +1119,7 @@ public class ActiveOrderService {
 
     public void shutdown() {
         cleanupScheduler.shutdown();
+        preExpirationScheduler.shutdown();
     }
 
     public Response<Boolean> cancelEventQueueEntry(String token, int eventId) {

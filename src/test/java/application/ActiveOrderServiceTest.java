@@ -46,6 +46,7 @@ class ActiveOrderServiceTest {
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
     private INotifier notifier;
+    private PreExpirationNotificationScheduler preExpirationScheduler;
     private IUserRepo userRepo;
     private CompanyService companyService;
     private EventCompanyManageService companyEventService;
@@ -90,7 +91,7 @@ class ActiveOrderServiceTest {
         eventRepo = new EventRepoImpl();
         activeOrderRepo = new ActiveOrderRepoImpl();
         CompanyRepoImpl companyRepo = new CompanyRepoImpl();
-        lotteryRepo = new LotteryRepoImpl();
+        LotteryRepoImpl lotteryRepo = new LotteryRepoImpl();
 
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
@@ -142,6 +143,9 @@ class ActiveOrderServiceTest {
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
 
+        preExpirationScheduler =
+                new PreExpirationNotificationScheduler(activeOrderRepo, notifier);
+
         service = new ActiveOrderService(
                 auth,
                 activeOrderRepo,
@@ -152,6 +156,7 @@ class ActiveOrderServiceTest {
                 ticketSupply,
                 suspensionRepo,
                 notifier,
+                preExpirationScheduler,
                 userRepo,
                 capacity
         );
@@ -826,7 +831,7 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenMixedExpiredAndActiveOrders_WhenCleanupExpiredOrders_ThenOnlyExpiredAreRemoved() throws Exception {
+    void GivenMixedExpiredAndActiveOrders_WhenCleanupExpiredOrders_ThenOnlyExpiredAreRemoved() {
         String emailA = "mix_a@mail.com";
         String emailB = "mix_b@mail.com";
         userService.registerUser("", new UserDTO(emailA, "a", "a", "pass", 1, 1, 2000, "Israel", "050-100-2000"));
@@ -952,7 +957,7 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenExpiredActiveOrder_WhenMemberProceedActiveOrder_ThenExpiredError() throws Exception {
+    void GivenExpiredActiveOrder_WhenMemberProceedActiveOrder_ThenExpiredError() {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         Response<Integer> created = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
@@ -1088,7 +1093,7 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenExpiredOrder_WhenEditTicketSelection_ThenExpiredError() throws Exception {
+    void GivenExpiredOrder_WhenEditTicketSelection_ThenExpiredError() {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
@@ -1108,6 +1113,8 @@ class ActiveOrderServiceTest {
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
         int ticketCountBefore = activeOrderRepo.findById(orderId).getTickets().size();
 
+        service.returnToEditSelection(validToken);
+
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 5));
 
@@ -1121,6 +1128,8 @@ class ActiveOrderServiceTest {
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
 
+        service.returnToEditSelection(validToken);
+
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 8));
 
@@ -1133,6 +1142,8 @@ class ActiveOrderServiceTest {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+
+        service.returnToEditSelection(validToken);
 
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 2));
@@ -1157,6 +1168,8 @@ class ActiveOrderServiceTest {
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId,
                 Map.of("tribune", List.of(seat)), new HashMap<>()).getValue();
+
+        service.returnToEditSelection(validToken);
 
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken,
@@ -1184,6 +1197,8 @@ class ActiveOrderServiceTest {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 1)).getValue();
+
+        service.returnToEditSelection(validToken);
 
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken,
@@ -1213,6 +1228,8 @@ class ActiveOrderServiceTest {
                 validToken, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(1, 1))),
                 new HashMap<>()).getValue();
+
+        service.returnToEditSelection(validToken);
 
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken,
@@ -1262,6 +1279,8 @@ class ActiveOrderServiceTest {
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))),
                 new HashMap<>()).getValue();
 
+        service.returnToEditSelection(validToken);
+
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken,
                 Map.of("tribune", List.of(new SeatingTicketDTO(9, 9))), // not theirs
@@ -1280,6 +1299,8 @@ class ActiveOrderServiceTest {
         service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
 
+        service.returnToEditSelection(validToken);
+
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", -1));
 
@@ -1288,23 +1309,149 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenEditFromCheckingOut_WhenEditTicketSelection_ThenStageReturnsToSelecting() {
+    void GivenEditFromCheckingOut_WhenReturnToEditSelectionThenEditTicketSelection_ThenTimerIsUnchanged() {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
 
-        ActiveOrder o = activeOrderRepo.findById(orderId);
-        o.proceedToCheckout();
-        activeOrderRepo.store(o);
-        assertEquals(domain.activeOrder.STAGE.CHECKING_OUT,
+        // Locking seats already moves the order into CHECKING_OUT and starts the seat-hold timer.
+        ActiveOrder before = activeOrderRepo.findById(orderId);
+        assertEquals(domain.activeOrder.STAGE.CHECKING_OUT, before.getStage());
+        LocalDateTime checkoutStartedBefore = before.getCheckoutStartedAt();
+        assertNotNull(checkoutStartedBefore);
+
+        Response<ActiveOrderDTO> entered = service.returnToEditSelection(validToken);
+        assertNotNull(entered.getValue(), "returnToEditSelection failed: " + entered.getMessage());
+        assertEquals(domain.activeOrder.STAGE.EDITING,
                 activeOrderRepo.findById(orderId).getStage());
 
         Response<ActiveOrderDTO> r = service.editTicketSelection(
                 validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 6));
-
         assertNotNull(r.getValue(), "msg=" + r.getMessage());
-        assertEquals(domain.activeOrder.STAGE.SELECTING_TICKETS,
+
+        // The continuous 10-minute deadline is enforced "in any case": checkoutStartedAt is
+        // preserved through EDITING and confirmEdit, never reset by the edit flow.
+        ActiveOrder after = activeOrderRepo.findById(orderId);
+        assertEquals(domain.activeOrder.STAGE.CHECKING_OUT, after.getStage());
+        assertEquals(checkoutStartedBefore, after.getCheckoutStartedAt(),
+                "edit must NOT change checkoutStartedAt (hard 10-min deadline is continuous)");
+    }
+
+    @Test
+    void GivenEnteredPurchase_WhenUserSelectTickets_ThenPreExpirationWarningScheduled() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+
+        // locking seats moved the order to CHECKING_OUT, so a warning is now scheduled for it
+        assertTrue(preExpirationScheduler.hasPendingWarning(orderId));
+    }
+
+    @Test
+    void GivenOrderInCheckout_WhenEditTicketSelection_ThenPreExpirationWarningKeepsOriginalDeadline() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+        LocalDateTime warningBefore = activeOrderRepo.findById(orderId).getCheckoutWarningTime();
+        assertTrue(preExpirationScheduler.hasPendingWarning(orderId));
+
+        service.returnToEditSelection(validToken);
+
+        Response<ActiveOrderDTO> edit = service.editTicketSelection(
+                validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 4));
+        assertNotNull(edit.getValue(), "edit failed: " + edit.getMessage());
+
+        // The deadline (and hence the warning instant) is fixed at userSelectTickets time and
+        // must NOT change across the edit flow — the warning scheduled then is still valid,
+        // so editTicketSelection must NOT call scheduleOrReschedule again.
+        assertTrue(preExpirationScheduler.hasPendingWarning(orderId));
+        LocalDateTime warningAfter = activeOrderRepo.findById(orderId).getCheckoutWarningTime();
+        assertEquals(warningBefore, warningAfter,
+                "edit must NOT change the pre-expiration warning instant (continuous timer)");
+    }
+
+    @Test
+    void GivenExpiredOrderInCheckout_WhenCleanupExpiredOrders_ThenPreExpirationWarningCancelled() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+        assertTrue(preExpirationScheduler.hasPendingWarning(orderId));
+
+        forceExpireOrder(orderId);
+        service.cleanupExpiredOrders();
+
+        assertFalse(preExpirationScheduler.hasPendingWarning(orderId));
+        assertThrows(NoSuchElementException.class, () -> activeOrderRepo.findById(orderId));
+    }
+
+    @Test
+    void GivenSuccessfulCheckout_WhenCheckoutAndPayment_ThenPreExpirationWarningCancelled() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 2)).getValue();
+        assertTrue(preExpirationScheduler.hasPendingWarning(orderId));
+
+        Response<CheckoutPriceDTO> price = service.prepareCheckout(validToken, orderId);
+        assertNotNull(price.getValue(), "setup prepareCheckout failed: " + price.getMessage());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-confirmed");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+        Response<Integer> result = service.checkoutAndPayment(validToken, orderId, paymentDetails);
+
+        assertNotNull(result.getValue(), "checkout failed: " + result.getMessage());
+        assertFalse(preExpirationScheduler.hasPendingWarning(orderId));
+    }
+
+    @Test
+    void GivenGuest_WhenReturnToEditSelection_ThenStageBecomesEditing() {
+        String guestToken = userService.continueAsGuest().getValue();
+        assertNotNull(guestToken, "continueAsGuest must produce a token");
+
+        service.enterEventPurchase(guestToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                guestToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+
+        // Guest is looked up by its raw token (the role-conditional userIdentifier the order
+        // was stored under in enterEventPurchase) — would have failed before the guest fix.
+        Response<ActiveOrderDTO> entered = service.returnToEditSelection(guestToken);
+        assertNotNull(entered.getValue(),
+                "guest returnToEditSelection failed: " + entered.getMessage());
+        assertEquals(domain.activeOrder.STAGE.EDITING,
                 activeOrderRepo.findById(orderId).getStage());
+    }
+
+    @Test
+    void GivenGuestInEditing_WhenEditTicketSelection_ThenSelectionUpdatedAndTimerUnchanged() {
+        String guestToken = userService.continueAsGuest().getValue();
+        assertNotNull(guestToken, "continueAsGuest must produce a token");
+
+        service.enterEventPurchase(guestToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                guestToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+        LocalDateTime checkoutStartedBefore =
+                activeOrderRepo.findById(orderId).getCheckoutStartedAt();
+
+        service.returnToEditSelection(guestToken);
+
+        Response<ActiveOrderDTO> r = service.editTicketSelection(
+                guestToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 5));
+        assertNotNull(r.getValue(),
+                "guest editTicketSelection failed: " + r.getMessage());
+
+        // Edit committed, stage cycled EDITING -> CHECKING_OUT, continuous timer unchanged.
+        ActiveOrder after = activeOrderRepo.findById(orderId);
+        assertEquals(5, after.getTickets().size(),
+                "edit must update the guest's ticket count");
+        assertEquals(domain.activeOrder.STAGE.CHECKING_OUT, after.getStage());
+        assertEquals(checkoutStartedBefore, after.getCheckoutStartedAt(),
+                "continuous 10-minute timer must not reset across the guest edit flow");
     }
 
     @Test
@@ -1316,9 +1463,11 @@ class ActiveOrderServiceTest {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         service.userSelectTickets(validToken, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(0, 0))), new HashMap<>());
+        service.returnToEditSelection(validToken);
         service.enterEventPurchase(tokenB, companyId, concurrentEventId,null);
         service.userSelectTickets(tokenB, concurrentEventId,
                 Map.of("tribune", List.of(new SeatingTicketDTO(1, 1))), new HashMap<>());
+        service.returnToEditSelection(tokenB);
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -1357,10 +1506,12 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenTwoEditsToSameOrderConcurrently_WhenEditTicketSelection_ThenBothEventuallySucceed() throws Exception {
+    void GivenTwoEditsToSameOrderConcurrently_WhenEditTicketSelection_ThenExactlyOneSucceeds() throws Exception {
         service.enterEventPurchase(validToken, companyId, concurrentEventId,null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5)).getValue();
+
+        service.returnToEditSelection(validToken);
 
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -1381,12 +1532,16 @@ class ActiveOrderServiceTest {
         Response<ActiveOrderDTO> r2 = f2.get();
         pool.shutdown();
 
-        assertNotNull(r1.getValue(), "edit 1 unexpectedly failed: " + r1.getMessage());
-        assertNotNull(r2.getValue(), "edit 2 unexpectedly failed: " + r2.getMessage());
+        // confirmEdit flips stage out of EDITING after the first edit commits, so the second
+        // edit hits the new stage guard and is rejected. Exactly one commit can succeed.
+        int successes = (r1.getValue() != null ? 1 : 0) + (r2.getValue() != null ? 1 : 0);
+        assertEquals(1, successes,
+                "exactly one concurrent edit on the same order should succeed; r1=" + r1.getMessage()
+                        + " r2=" + r2.getMessage());
 
         int finalSize = activeOrderRepo.findById(orderId).getTickets().size();
         assertTrue(finalSize == 3 || finalSize == 7,
-                "final ticket count must be one of the two requested totals, got: " + finalSize);
+                "final ticket count must match the winning edit, got: " + finalSize);
     }
 
     // helper function for ticket status validation:
@@ -3891,7 +4046,7 @@ class ActiveOrderServiceTest {
         assertEquals(1, countSoldOutNotifications(manager2), "Manager2 (appointed by another owner) should also receive the sold-out notification");
     }
     @Test
-    void GivenSoldOutEventWithWaitingUser_WhenSomeoneCheckouts_ThenWaitingUserPromotedAndNotified() throws Exception {
+    void GivenSoldOutEventWithWaitingUser_WhenCheckoutAndPayment_ThenWaitingUserPromotedAndNotified() throws Exception {
         // Arrange
         WebQueue.resetForTesting();
         WebQueue.getInstance(100);
@@ -4190,7 +4345,7 @@ class ActiveOrderServiceTest {
         // Arrange
         String email = "expired_select@mail.com";
         userService.registerUser("", new UserDTO(
-                email, "f", "l", "pass", 1, 1, 2000, "Israel", "050-123-4568" 
+                email, "f", "l", "pass", 1, 1, 2000, "Israel", "050-123-4568"
         ));
         String token = userService.login(email, "pass").getValue();
 
