@@ -182,13 +182,15 @@ public class LotteryService {
                     continue;
                 }
 
+                Event event = eventRepo.findById(lotteryId); //lotteryId is the same as eventId
+
                 String userEmail = userRepo.getUserEmail(winnerUserId);
 
                 NotifyDTO notification = new NotifyDTO(
                         NotifyType.GENERAL_POPUP,
                         new NotifyPayload(
                                 "Congratulations! You have won the lottery for event "
-                                        + lotteryId + ". Your code is: " + code
+                                        + event.getName() + ". Your code is: " + code
                         )
                 );
 
