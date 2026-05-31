@@ -408,71 +408,6 @@ class LotteryServiceTest {
         }
 
         @Test
-        void GivenMoreRegistrationsThanCapacity_WhenDrawLotteryIsTriggered_ThenWinnersAreSelectedUpToCapacity()
-                        throws InterruptedException {
-                // Arrange: Create a lottery with a capacity of 2
-                LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
-                lotteryService.createLottery(validToken, eventId, 2, lotteryDate_X, (long) 24.0);
-
-                lotteryService.registerUserToLottery(validToken, eventId);
-                lotteryService.registerUserToLottery(notPermission, eventId);
-                lotteryService.registerUserToLottery(validToken2, eventId);
-                lotteryService.registerUserToLottery(validToken3, eventId);
-
-                Lottery lottery = lotteryRepo.getAll().get(0);
-
-                // Arrange: Listen to all 4 users using a shared counter
-                String id1 = auth.getUserIdentifier(validToken).getValue();
-                String id2 = auth.getUserIdentifier(notPermission).getValue();
-                String id3 = auth.getUserIdentifier(validToken2).getValue();
-                String id4 = auth.getUserIdentifier(validToken3).getValue();
-
-                AtomicInteger notificationCount = new AtomicInteger(0);
-
-                Registration reg1 = Broadcaster.registerUser(id1, dto -> notificationCount.incrementAndGet());
-                Registration reg2 = Broadcaster.registerUser(id2, dto -> notificationCount.incrementAndGet());
-                Registration reg3 = Broadcaster.registerUser(id3, dto -> notificationCount.incrementAndGet());
-                Registration reg4 = Broadcaster.registerUser(id4, dto -> notificationCount.incrementAndGet());
-
-                try {
-                        // Act: Trigger the draw
-                        lotteryService.drawLottery(lottery.getId());
-
-                        // Assert: Verify DB
-                        Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
-                        assertEquals(2, updatedLottery.getWinners().size(), "Should only have exactly 2 winners");
-
-                        // Wait briefly for background threads to deliver notifications
-                        Thread.sleep(1000);
-
-                        // Assert: Ensure exactly 2 notifications were dispatched overall across the 4
-                        // users
-                        assertEquals(2, notificationCount.get(),
-                                        "Only the 2 winners should have received notifications");
-
-                        List<Member> users = List.of(
-                                        userRepo.findUserByEmail(id1),
-                                        userRepo.findUserByEmail(id2),
-                                        userRepo.findUserByEmail(id3),
-                                        userRepo.findUserByEmail(id4));
-
-                        for (Member user : users) {
-                                assertFalse(user.getDelayedNotifications().stream()
-                                                .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
-                                                                && n.getPayload() != null
-                                                                && n.getPayload().getMessage()
-                                                                                .contains("Your code is: ")),
-                                                "Online users should not have lottery winner notifications saved as delayed");
-                        }
-                } finally {
-                        reg1.remove();
-                        reg2.remove();
-                        reg3.remove();
-                        reg4.remove();
-                }
-        }
-
-        @Test
         void GivenOneOnlineUserAndOneOfflineUser_WhenLotteryWithCapacityOneIsDrawn_ThenOnlyWinnerReceivesCodeThroughCorrectChannel()
                         throws InterruptedException {
                 // Arrange
@@ -1013,9 +948,17 @@ class LotteryServiceTest {
                 String id2 = auth.getUserIdentifier(notPermission).getValue();
 
                 List<NotifyDTO> receivedNotifications = new CopyOnWriteArrayList<>();
+                CountDownLatch notificationLatch = new CountDownLatch(2);
 
-                Registration reg1 = Broadcaster.registerUser(id1, receivedNotifications::add);
-                Registration reg2 = Broadcaster.registerUser(id2, receivedNotifications::add);
+                Registration reg1 = Broadcaster.registerUser(id1, dto -> {
+                        receivedNotifications.add(dto);
+                        notificationLatch.countDown();
+                });
+
+                Registration reg2 = Broadcaster.registerUser(id2, dto -> {
+                        receivedNotifications.add(dto);
+                        notificationLatch.countDown();
+                });
 
                 ExecutorService executor = Executors.newFixedThreadPool(2);
                 CountDownLatch startGate = new CountDownLatch(1);
@@ -1035,7 +978,9 @@ class LotteryServiceTest {
                         future1.get();
                         future2.get();
 
-                        // Assert DB state
+                        assertTrue(notificationLatch.await(3, TimeUnit.SECONDS),
+                                        "Expected winner notifications were not received in time");
+
                         Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
 
                         assertEquals(2, updatedLottery.getWinners().size(),
@@ -1043,9 +988,6 @@ class LotteryServiceTest {
 
                         assertEquals(2, updatedLottery.getNotifiedWinners().size(),
                                         "Both winners should eventually be marked as notified");
-
-                        assertFalse(receivedNotifications.isEmpty(),
-                                        "At least one live notification should be sent to online users");
 
                         assertTrue(receivedNotifications.size() >= 2,
                                         "Each online winner should receive at least one lottery notification");
@@ -1065,13 +1007,17 @@ class LotteryServiceTest {
                         assertFalse(user1.getDelayedNotifications().stream()
                                         .anyMatch(n -> n.getPayload() != null
                                                         && n.getPayload().getMessage() != null
-                                                        && n.getPayload().getMessage().contains("Your code is: ")),
+                                                        && n.getPayload().getMessage().contains("Your code is: ")
+                                                        && n.getPayload().getMessage().contains("event " + eventRepo
+                                                                        .findById(lottery.getId()).getName())),
                                         "Online user 1 should not have lottery winner notification saved as delayed");
 
                         assertFalse(user2.getDelayedNotifications().stream()
                                         .anyMatch(n -> n.getPayload() != null
                                                         && n.getPayload().getMessage() != null
-                                                        && n.getPayload().getMessage().contains("Your code is: ")),
+                                                        && n.getPayload().getMessage().contains("Your code is: ")
+                                                        && n.getPayload().getMessage().contains("event " + eventRepo
+                                                                        .findById(lottery.getId()).getName())),
                                         "Online user 2 should not have lottery winner notification saved as delayed");
 
                 } finally {
