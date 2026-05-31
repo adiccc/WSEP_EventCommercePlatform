@@ -771,10 +771,6 @@ public class ActiveOrderService {
                                             + event.getName() + "\" was completed successfully.",
                                     event.getId(), event.getCompanyId()));
                     notifier.notifyTab(token, confirmation);
-//                    String recipientIdentifier = auth.getUserIdentifier(token).getValue();
-//                    if (recipientIdentifier != null) {
-//                        sendOrSaveNotification(recipientIdentifier, confirmation);
-//                    }
                 } catch (Exception e) {
                     logger.log(Level.WARNING, "Purchase confirmation notification failed: " + e.getMessage());
                 }
