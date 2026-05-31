@@ -44,6 +44,32 @@ public class LotteryRepoImpl implements ILotteryRepo {
     }
 
     @Override
+    public synchronized void delete(Lottery lottery) {
+        Lottery currentLottery = lotteries.get(lottery.getId());
+
+        // already gone — nothing to delete
+        if (currentLottery == null) {
+            return;
+        }
+
+        if (currentLottery.getVersion() != lottery.getVersion()) {
+            throw new OptimisticLockingFailureException(
+                    "Lottery " + lottery.getId() + " version mismatch. Expected: " +
+                            lottery.getVersion() + ", but found: " + currentLottery.getVersion()
+            );
+        }
+
+        // atomic remove: only succeeds if currentLottery is still exactly what's in the map
+        boolean removed = lotteries.remove(lottery.getId(), currentLottery);
+
+        if (!removed) {
+            throw new OptimisticLockingFailureException(
+                    "Lottery " + lottery.getId() + " was modified concurrently"
+            );
+        }
+    }
+
+    @Override
     public synchronized void store(Lottery lottery) {
         Lottery currentLottery = lotteries.get(lottery.getId());
 
