@@ -19,6 +19,8 @@
   - Debugging and adapting code to the actual project structure.
   - Final test assertions and verification of expected behavior.
 
+Version 1:
+
 ---
 
 ## Feature / Component: Acceptance Tests and Test Naming
@@ -448,3 +450,36 @@
   - The main uncertainty was how to structure the cleanup logic so that every failure path leaves the system in a valid state without duplicating cleanup code across multiple branches.
 - Final understanding (brief explanation in your own words):
   - A failure-safe checkout flow should make each side effect explicit: payment state, ticket reservation, order persistence, refund handling, and active-order cleanup must each have a clear owner in the control flow. The `try-catch-finally` structure helps centralize cleanup while still allowing each edge case to return the correct user-facing result.
+
+
+Version 2:
+
+---
+
+## Feature / Component: Notification Infrastructure — Spring Services, Notifier, and Broadcaster Design
+
+- Purpose of LLM use:
+  - To discuss and refine the design of the notification mechanism, especially the responsibility split between application services, `INotifier`, `VaadinNotifier`, and `Broadcaster`.
+- Summary of prompt(s):
+  - Asked how to design the notifier so it supports both real-time pop-up delivery and delayed notifications for offline users.
+  - Discussed whether the notifier should directly depend on `UserRepo`, and whether this creates an incorrect coupling between notification delivery and user persistence.
+  - Asked how to reason about the responsibilities of Spring services versus infrastructure-level broadcasting logic.
+- Output received (short description):
+  - The LLM explained separation-of-concerns trade-offs: the notifier should focus on delivering notifications, while user lookup and delayed-notification persistence should preferably remain in the service/application layer or a dedicated notification service.
+  - It also helped clarify the difference between notifying a currently connected UI listener and saving a notification for later retrieval.
+- Files / components affected:
+  - `INotifier`
+  - `VaadinNotifier`
+  - `Broadcaster`
+  - `UserService`
+  - Services that send notifications, especially lottery and checkout-related services.
+- Modifications made:
+  - Refined the notification flow so services explicitly decide when to send real-time notifications and when to save delayed notifications.
+  - Added or adjusted logic around offline users, delayed notifications, and UI listener registration.
+  - Opened/refined a design issue to decouple notifier responsibilities from user repository concerns.
+- Initial gaps in understanding (if any):
+  - It was unclear whether the notifier itself should know how to find and persist users, or whether it should only try to deliver notifications to currently connected listeners.
+- Final understanding (brief explanation in your own words):
+  - The notification system should have clear responsibility boundaries. `Broadcaster` handles active UI listeners, the notifier abstracts delivery, and application services decide what should happen when delivery fails. This makes the design easier to test, reduces coupling to persistence, and avoids mixing UI delivery concerns with user-domain storage logic.
+
+---
