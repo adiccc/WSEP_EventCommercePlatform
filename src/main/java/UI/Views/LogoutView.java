@@ -33,7 +33,7 @@ public class LogoutView extends VerticalLayout {
 
         Button cancelButton = new Button(
                 "Cancel",
-                e -> getUI().ifPresent(ui -> ui.navigate(""))
+                e -> getUI().ifPresent(ui -> ui.getPage().getHistory().back())
         );
 
         add(title, logoutButton, cancelButton);
