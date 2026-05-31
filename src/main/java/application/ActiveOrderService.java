@@ -8,10 +8,9 @@ import domain.activeOrder.IActiveOrderRepo;
 import domain.activeOrder.STAGE;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
-import domain.dto.ActiveOrderDTO;
-import domain.dto.EventMapDTO;
-import domain.dto.SeatingTicketDTO;
-import domain.dto.UserDTO;
+import domain.dto.*;
+import domain.dto.ActiveOrderSeatDTO;
+import domain.dto.ActiveOrderSelectionDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.Order;
@@ -1331,6 +1330,57 @@ public class ActiveOrderService {
                 return new Response<>(
                         null,
                         "Failed to retrieve company ID"
+                );
+            }
+        });
+    }
+
+    public Response<ActiveOrderSelectionDTO> getCurrentActiveOrderSelection(String token) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "getCurrentActiveOrderSelection called");
+
+            try {
+                String role = getValidatedRole(token);
+
+                if (role == null) {
+                    return new Response<>(null, "Invalid token");
+                }
+
+                int userId = getUserIdFromToken(token);
+
+                if (userId != -1 && suspensionRepo.haveActiveSuspension(userId)) {
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
+
+                String userIdentifier = role.equals("MEMBER")
+                        ? auth.getUserEmail(token).getValue()
+                        : token;
+
+                ActiveOrderDTO activeOrderDTO =
+                        activeOrderRepo.findOrderByUserId(userIdentifier);
+
+                ActiveOrder activeOrder =
+                        activeOrderRepo.findById(activeOrderDTO.getId());
+
+                if (activeOrder.isExpired(LocalDateTime.now())) {
+                    return new Response<>(null, "Active order has expired");
+                }
+
+                Event event =
+                        eventRepo.findById(activeOrder.getEventId());
+
+                return new Response<>(
+                        event.getActiveOrderSelection(activeOrder.getTickets()),
+                        "Current active order selection retrieved successfully"
+                );
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                return new Response<>(
+                        null,
+                        "Failed to retrieve current active order selection: " + e.getMessage()
                 );
             }
         });

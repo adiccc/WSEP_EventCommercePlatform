@@ -4,6 +4,7 @@ import DTO.ElementPositionDTO;
 import DTO.PurchasedTicketDTO;
 import domain.dataType.ElementPosition;
 import domain.dataType.TicketStatus;
+import domain.dto.ActiveOrderSeatDTO;
 
 import java.util.List;
 
@@ -39,4 +40,5 @@ public abstract class Zone {
     public abstract List<PurchasedTicketDTO> getPurchasedTicketDetails(List<Integer> ticketIds);
     public abstract TicketStatus getTicketStatus(int ticketId);
     public abstract boolean hasAvailableTickets();
+    public abstract List<ActiveOrderSeatDTO> getActiveOrderSeats(List<Integer> ticketIds);
 }

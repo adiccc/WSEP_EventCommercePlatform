@@ -2,9 +2,12 @@ package domain.event;
 import DTO.PurchasedTicketDTO;
 import domain.dataType.ElementPosition;
 import domain.dataType.TicketStatus;
+import domain.dto.ActiveOrderSeatDTO;
+import domain.dto.ActiveOrderSelectionDTO;
 import domain.dto.SeatingTicketDTO;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -168,6 +171,37 @@ public class EventMap {
             }
         }
         return true;
+    }
+
+    public List<ActiveOrderSeatDTO> getActiveOrderSeats(List<Integer> ticketIds) {
+        List<ActiveOrderSeatDTO> result = new ArrayList<>();
+
+        for (Zone zone : zones) {
+            result.addAll(zone.getActiveOrderSeats(ticketIds));
+        }
+
+        return result;
+    }
+
+    public ActiveOrderSelectionDTO getActiveOrderSelection(List<Integer> ticketIds) {
+        List<ActiveOrderSeatDTO> seats = new ArrayList<>();
+        Map<String, Integer> standingTicketsByZone = new HashMap<>();
+
+        for (Zone zone : zones) {
+            if (zone instanceof SeatingZone seatingZone) {
+                seats.addAll(seatingZone.getActiveOrderSeats(ticketIds));
+            }
+
+            if (zone instanceof StandingZone standingZone) {
+                int count = standingZone.countActiveOrderTickets(ticketIds);
+
+                if (count > 0) {
+                    standingTicketsByZone.put(standingZone.getName(), count);
+                }
+            }
+        }
+
+        return new ActiveOrderSelectionDTO(seats, standingTicketsByZone);
     }
 
 }

@@ -167,7 +167,25 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         titleBlock.setPadding(false);
         titleBlock.setSpacing(false);
 
-        HorizontalLayout header = new HorizontalLayout(titleBlock);        header.setWidthFull();
+        Button editTicketsButton =
+                new Button(
+                        "← Back to Ticket Selection",
+                        e -> returnToEditSelection()
+                );
+
+        editTicketsButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        editTicketsButton.getStyle()
+                .set("font-weight", "600")
+                .set("margin-left", "auto");
+
+        HorizontalLayout header =
+                new HorizontalLayout(
+                        titleBlock,
+                        editTicketsButton
+                );
+
+        header.setWidthFull();
         header.setAlignItems(Alignment.CENTER);
         header.expand(titleBlock);
 
@@ -215,10 +233,7 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         payButton.setWidth("220px");
         payButton.setEnabled(false);
 
-        Button editTicketsButton = new Button("← Edit Tickets", e -> returnToEditSelection());
-        editTicketsButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-
-        HorizontalLayout actions = new HorizontalLayout(editTicketsButton, payButton);
+        HorizontalLayout actions = new HorizontalLayout(payButton);
         actions.setWidthFull();
         actions.setJustifyContentMode(JustifyContentMode.END);
 

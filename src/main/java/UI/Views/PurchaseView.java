@@ -1,5 +1,6 @@
 package UI.Views;
-
+import domain.dto.ActiveOrderSeatDTO;
+import java.util.Optional;
 import DTO.ElementPositionDTO;
 import DTO.EnterPurchaseDTO;
 import DTO.SeatingZoneDTO;
@@ -20,6 +21,7 @@ import com.vaadin.flow.router.*;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dto.*;
+import domain.dto.ActiveOrderSelectionDTO;
 
 import java.util.*;
 
@@ -35,7 +37,12 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
     private String lotteryCode;
     private int companyId;
     private int eventId;
+    private boolean editingMode;
+    private final List<ActiveOrderSeatDTO> currentOrderSeats = new ArrayList<>();
 
+    private final Map<String, List<SeatingTicketDTO>> seatingToRemove = new HashMap<>();
+    private final Map<String, List<SeatingTicketDTO>> seatingToAdd = new HashMap<>();
+    private final Map<String, Integer> currentStandingByZone = new HashMap<>();
     private EventMapDTO eventMap;
 
     private final Map<String, List<SeatingTicketDTO>> selectedSeats = new HashMap<>();
@@ -117,14 +124,34 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         }
 
         if (response.getValue().isExistingOrder()) {
-            ActiveOrderDTO order = response.getValue().getActiveOrder();
 
+            ActiveOrderDTO order = response.getValue().getActiveOrder();
+            if (order.getStage() == STAGE.EDITING) {
+                editingMode = true;
+                Response<ActiveOrderSelectionDTO> selectionResponse =
+                        presenter.getCurrentActiveOrderSelection(token);
+
+                currentOrderSeats.clear();
+                currentStandingByZone.clear();
+
+                if (selectionResponse.getValue() != null) {
+                    currentOrderSeats.addAll(selectionResponse.getValue().getSeats());
+                    currentStandingByZone.putAll(selectionResponse.getValue().getStandingTicketsByZone());
+                }
+
+                Notification.show(
+                        "You are editing your ticket selection. Changes are applied only after clicking Continue to Checkout."
+                );
+            } else {
+                editingMode = false;
+                Notification.show("You already started this order. Continue selecting tickets.");
+
+            }
             if (order.getStage() == STAGE.CHECKING_OUT) {
                 event.rerouteTo("checkout/" + order.getId());
                 return;
             }
 
-            Notification.show("You already started this order. Continue selecting tickets.");
         }
 
         this.eventMap = response.getValue().getEventMap();
@@ -294,13 +321,74 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
                         continue;
                     }
 
-                    if (status == TicketStatus.LOCKED) {
+                    boolean isMySeat =
+                            editingMode
+                                    && isMyCurrentSeat(zoneName, finalR, finalC);
+
+                    if (status == TicketStatus.LOCKED && !isMySeat) {
                         seat.getStyle()
                                 .set("background", "#BDBDBD")
                                 .set("color", "white");
 
                         seat.setEnabled(false);
-                        seat.getElement().setProperty("title", "Already selected by another user");
+                        seat.getElement().setProperty(
+                                "title",
+                                "Already selected by another user"
+                        );
+
+                        grid.add(seat);
+                        continue;
+                    }
+
+                    if (isMySeat) {
+
+                        seat.getStyle()
+                                .set("background", "#7c3aed")
+                                .set("color", "white");
+
+                        seat.getElement().setProperty(
+                                "title",
+                                "Current ticket"
+                        );
+
+                        seat.addClickListener(e -> {
+
+                            toggleSeat(
+                                    seatingToRemove,
+                                    zoneName,
+                                    finalR,
+                                    finalC
+                            );
+
+                            if (containsSeat(
+                                    seatingToRemove,
+                                    zoneName,
+                                    finalR,
+                                    finalC
+                            )) {
+
+                                seat.getStyle()
+                                        .set("background", "#ef4444");
+
+                                seat.getElement().setProperty(
+                                        "title",
+                                        "Will be removed"
+                                );
+
+                            } else {
+
+                                seat.getStyle()
+                                        .set("background", "#7c3aed");
+
+                                seat.getElement().setProperty(
+                                        "title",
+                                        "Current ticket"
+                                );
+                            }
+
+                            refreshSummary();
+                        });
+
                         grid.add(seat);
                         continue;
                     }
@@ -310,20 +398,62 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
                             .set("color", "white");
 
                     seat.addClickListener(e -> {
+
+                        if (editingMode) {
+
+                            toggleSeat(
+                                    seatingToAdd,
+                                    zoneName,
+                                    finalR,
+                                    finalC
+                            );
+
+                            if (containsSeat(
+                                    seatingToAdd,
+                                    zoneName,
+                                    finalR,
+                                    finalC
+                            )) {
+
+                                seat.getStyle()
+                                        .set("background", "#2196F3");
+
+                            } else {
+
+                                seat.getStyle()
+                                        .set("background", "#4CAF50");
+                            }
+
+                            refreshSummary();
+                            return;
+                        }
+
                         List<SeatingTicketDTO> list =
-                                selectedSeats.computeIfAbsent(zoneName, z -> new ArrayList<>());
+                                selectedSeats.computeIfAbsent(
+                                        zoneName,
+                                        z -> new ArrayList<>()
+                                );
 
                         Optional<SeatingTicketDTO> existing =
                                 list.stream()
-                                        .filter(s -> s.getRow() == finalR && s.getCol() == finalC)
+                                        .filter(s ->
+                                                s.getRow() == finalR
+                                                        && s.getCol() == finalC)
                                         .findFirst();
 
                         if (existing.isPresent()) {
+
                             list.remove(existing.get());
-                            seat.getStyle().set("background", "#4CAF50");
+
+                            seat.getStyle()
+                                    .set("background", "#4CAF50");
+
                         } else {
+
                             list.add(new SeatingTicketDTO(finalR, finalC));
-                            seat.getStyle().set("background", "#2196F3");
+
+                            seat.getStyle()
+                                    .set("background", "#2196F3");
                         }
 
                         refreshSummary();
@@ -376,12 +506,20 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
 
             IntegerField amount = new IntegerField("Tickets");
             amount.setMin(0);
-            amount.setMax(zone.getAvailable());
-            amount.setValue(0);
+            int currentAmount = editingMode
+                    ? currentStandingByZone.getOrDefault(zone.getName(), 0)
+                    : 0;
+
+            amount.setMax(zone.getAvailable() + currentAmount);
+            amount.setValue(currentAmount);
+
+            if (editingMode && currentAmount > 0) {
+                selectedStanding.put(zone.getName(), currentAmount);
+            }
             amount.setStepButtonsVisible(true);
             amount.setWidthFull();
 
-            if (zone.getAvailable() == 0) {
+            if (!editingMode && zone.getAvailable() == 0) {
                 amount.setEnabled(false);
                 amount.setValue(0);
             }
@@ -418,8 +556,30 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         Button continueBtn = new Button("Continue to Checkout");
 
         continueBtn.addClickListener(e -> {
-            if (getSelectedTicketsCount() == 0) {
+            if (!editingMode && getSelectedTicketsCount() == 0) {
                 Notification.show("Please select at least one ticket before continuing to checkout");
+                return;
+            }
+
+            if (editingMode) {
+                if (getFinalEditingTicketCount() == 0) {
+                    Notification.show("Please keep at least one ticket in the order.");
+                    return;
+                }
+                Response<ActiveOrderDTO> res =
+                        presenter.editTicketSelection(
+                                token,
+                                seatingToRemove,
+                                seatingToAdd,
+                                selectedStanding
+                        );
+
+                if (res.getValue() == null) {
+                    Notification.show(res.getMessage());
+                    return;
+                }
+
+                UI.getCurrent().navigate("checkout/" + res.getValue().getId());
                 return;
             }
 
@@ -464,6 +624,35 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         selectedSummary.removeAll();
 
         int total = 0;
+        if (editingMode) {
+            for (var entry : seatingToAdd.entrySet()) {
+                for (SeatingTicketDTO seat : entry.getValue()) {
+                    total++;
+                    selectedSummary.add(new Span(
+                            "Add: " + entry.getKey() + " seat " + (seat.getRow() + 1) + "-" + (seat.getCol() + 1)
+                    ));
+                }
+            }
+
+            for (var entry : seatingToRemove.entrySet()) {
+                for (SeatingTicketDTO seat : entry.getValue()) {
+                    selectedSummary.add(new Span(
+                            "Remove: " + entry.getKey() + " seat " + (seat.getRow() + 1) + "-" + (seat.getCol() + 1)
+                    ));
+                }
+            }
+            for (var entry : selectedStanding.entrySet()) {
+                selectedSummary.add(new Span(
+                        "Standing: " + entry.getKey() + " x" + entry.getValue()
+                ));
+                total += entry.getValue();
+            }
+
+            totalLabel.setText(
+                    "Final order: " + getFinalEditingTicketCount() + " tickets"
+            );
+            return;
+        }
 
         for (var entry : selectedSeats.entrySet()) {
             for (SeatingTicketDTO seat : entry.getValue()) {
@@ -483,6 +672,88 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
             ));
         }
 
-        totalLabel.setText(total + " tickets selected");
+        int finalCount = getFinalEditingTicketCount();
+
+        totalLabel.setText(
+                "Final order: " + finalCount + " tickets"
+        );
+    }
+
+    private boolean isMyCurrentSeat(String zoneName, int row, int col) {
+        return currentOrderSeats.stream().anyMatch(seat ->
+                zoneName.equals(seat.getZoneName())
+                        && seat.getRow() == row
+                        && seat.getCol() == col
+        );
+    }
+
+    private boolean containsSeat(
+            Map<String, List<SeatingTicketDTO>> map,
+            String zoneName,
+            int row,
+            int col
+    ) {
+        List<SeatingTicketDTO> seats = map.get(zoneName);
+
+        if (seats == null) {
+            return false;
+        }
+
+        return seats.stream().anyMatch(seat ->
+                seat.getRow() == row
+                        && seat.getCol() == col
+        );
+    }
+
+    private void toggleSeat(
+            Map<String, List<SeatingTicketDTO>> map,
+            String zoneName,
+            int row,
+            int col
+    ) {
+        List<SeatingTicketDTO> seats =
+                map.computeIfAbsent(zoneName, z -> new ArrayList<>());
+
+        Optional<SeatingTicketDTO> existing =
+                seats.stream()
+                        .filter(seat ->
+                                seat.getRow() == row
+                                        && seat.getCol() == col)
+                        .findFirst();
+
+        if (existing.isPresent()) {
+            seats.remove(existing.get());
+        } else {
+            seats.add(new SeatingTicketDTO(row, col));
+        }
+
+        if (seats.isEmpty()) {
+            map.remove(zoneName);
+        }
+    }
+
+    private int getFinalEditingTicketCount() {
+        int currentSeats = currentOrderSeats.size();
+        int removedSeats = 0;
+
+        for (List<SeatingTicketDTO> seats : seatingToRemove.values()) {
+            removedSeats += seats.size();
+        }
+
+        int addedSeats = 0;
+
+        for (List<SeatingTicketDTO> seats : seatingToAdd.values()) {
+            addedSeats += seats.size();
+        }
+
+        int standing = 0;
+
+        for (Integer amount : selectedStanding.values()) {
+            if (amount != null) {
+                standing += amount;
+            }
+        }
+
+        return currentSeats - removedSeats + addedSeats + standing;
     }
 }
