@@ -6,7 +6,7 @@ import UI.Presenters.CheckoutPresenter;
 import application.ActiveOrderService;
 import application.Response;
 import application.IAuth;
-
+import com.vaadin.flow.shared.Registration;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -41,7 +41,8 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
     private int activeOrderId;
     private String token;
     private String appliedCouponCode;
-
+    private final Span checkoutTimer = new Span();
+    private Registration timerRegistration;
     private final Span originalPrice = new Span();
     private final Span finalPrice = new Span();
     private final Paragraph eventDiscountDescription = new Paragraph();
@@ -98,6 +99,7 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
 
         buildPage();
         prepareCheckout();
+        startCheckoutTimer();
     }
 
     private void configureFields() {
@@ -188,7 +190,14 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         header.setWidthFull();
         header.setAlignItems(Alignment.CENTER);
         header.expand(titleBlock);
-
+        Div timerCard = new Div(checkoutTimer);
+        timerCard.getStyle()
+                .set("background", "#fff7ed")
+                .set("border", "1px solid #fed7aa")
+                .set("border-radius", "14px")
+                .set("padding", "0.9rem 1rem")
+                .set("font-weight", "700")
+                .set("color", "#9a3412");
         Div priceCard = createCard();
         H3 priceTitle = new H3("Order Summary");
 
@@ -237,7 +246,7 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         actions.setWidthFull();
         actions.setJustifyContentMode(JustifyContentMode.END);
 
-        page.add(header, priceCard, couponRow, paymentCard, actions);
+        page.add(header, timerCard, priceCard, couponRow, paymentCard, actions);
         add(page);
     }
 
@@ -379,6 +388,65 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
 
     private String formatPrice(double price) {
         return String.format("NIS %.2f", price);
+    }
+
+    private void startCheckoutTimer() {
+        stopCheckoutTimer();
+
+        UI ui = UI.getCurrent();
+        ui.setPollInterval(1000);
+
+        refreshCheckoutTimer();
+
+        timerRegistration = ui.addPollListener(e -> refreshCheckoutTimer());
+    }
+
+    private void refreshCheckoutTimer() {
+        Response<Long> response =
+                presenter.getCheckoutRemainingSeconds(token, activeOrderId);
+
+        if (response.getValue() == null) {
+            checkoutTimer.setText("Could not load reservation timer");
+            return;
+        }
+
+        long remainingSeconds = response.getValue();
+
+        if (remainingSeconds <= 0) {
+            stopCheckoutTimer();
+
+            if (payButton != null) {
+                payButton.setEnabled(false);
+            }
+
+            showError("Your reserved tickets expired. Please select tickets again.");
+            UI.getCurrent().navigate("home");
+            return;
+        }
+
+        checkoutTimer.setText(
+                "Tickets reserved for: " + formatRemainingTime(remainingSeconds)
+        );
+    }
+
+    private String formatRemainingTime(long totalSeconds) {
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+
+        return String.format("%02d:%02d", minutes, seconds);
+    }
+
+    private void stopCheckoutTimer() {
+        if (timerRegistration != null) {
+            timerRegistration.remove();
+            timerRegistration = null;
+        }
+    }
+
+    @Override
+    protected void onDetach(com.vaadin.flow.component.DetachEvent detachEvent) {
+        stopCheckoutTimer();
+        super.onDetach(detachEvent);
     }
 
     private void showSuccess(String message) {

@@ -5,6 +5,7 @@ import DTO.ElementPositionDTO;
 import DTO.EnterPurchaseDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
+import com.vaadin.flow.shared.Registration;
 import domain.activeOrder.STAGE;
 import UI.Presenters.PurchasePresenter;
 import application.ActiveOrderService;
@@ -31,7 +32,9 @@ import java.util.*;
 public class PurchaseView extends VerticalLayout implements BeforeEnterObserver {
 
     private final PurchasePresenter presenter;
-
+    private Integer activeOrderId;
+    private final Span checkoutTimer = new Span();
+    private Registration timerRegistration;
     private static final int OFFSET_X = 50;
     private static final int OFFSET_Y = 50;
     private String lotteryCode;
@@ -126,6 +129,7 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         if (response.getValue().isExistingOrder()) {
 
             ActiveOrderDTO order = response.getValue().getActiveOrder();
+            activeOrderId = order.getId();
             if (order.getStage() == STAGE.EDITING) {
                 editingMode = true;
                 Response<ActiveOrderSelectionDTO> selectionResponse =
@@ -599,9 +603,82 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
             UI.getCurrent().navigate("checkout/" + res.getValue());
         });
 
+        if (editingMode && activeOrderId != null) {
+            checkoutTimer.getStyle()
+                    .set("background", "#fff7ed")
+                    .set("border", "1px solid #fed7aa")
+                    .set("border-radius", "12px")
+                    .set("padding", "0.75rem")
+                    .set("font-weight", "700")
+                    .set("color", "#9a3412")
+                    .set("width", "calc(100% - 1.5rem)")
+                    .set("box-sizing", "border-box");
+            box.add(new H3("Summary"), checkoutTimer, totalLabel, selectedSummary, continueBtn);
+            startCheckoutTimer(token);
+            return box;
+        }
+
         box.add(new H3("Summary"), totalLabel, selectedSummary, continueBtn);
 
         return box;
+    }
+
+    private void startCheckoutTimer(String token) {
+        stopCheckoutTimer();
+
+        UI ui = UI.getCurrent();
+        ui.setPollInterval(1000);
+
+        refreshCheckoutTimer(token);
+
+        timerRegistration = ui.addPollListener(e -> refreshCheckoutTimer(token));
+    }
+
+    private void refreshCheckoutTimer(String token) {
+        if (activeOrderId == null) {
+            return;
+        }
+
+        Response<Long> response =
+                presenter.getCheckoutRemainingSeconds(token, activeOrderId);
+
+        if (response.getValue() == null) {
+            checkoutTimer.setText("Could not load reservation timer");
+            return;
+        }
+
+        long remainingSeconds = response.getValue();
+
+        if (remainingSeconds <= 0) {
+            stopCheckoutTimer();
+            Notification.show("Your reserved tickets expired. Please select tickets again.");
+            UI.getCurrent().navigate("event/" + companyId + "/" + eventId);
+            return;
+        }
+
+        checkoutTimer.setText(
+                "Tickets reserved for: " + formatRemainingTime(remainingSeconds)
+        );
+    }
+
+    private String formatRemainingTime(long totalSeconds) {
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+
+        return String.format("%02d:%02d", minutes, seconds);
+    }
+
+    private void stopCheckoutTimer() {
+        if (timerRegistration != null) {
+            timerRegistration.remove();
+            timerRegistration = null;
+        }
+    }
+
+    @Override
+    protected void onDetach(com.vaadin.flow.component.DetachEvent detachEvent) {
+        stopCheckoutTimer();
+        super.onDetach(detachEvent);
     }
 
     private int getSelectedTicketsCount() {
