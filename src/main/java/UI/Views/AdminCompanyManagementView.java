@@ -6,6 +6,9 @@ import application.Response;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.dialog.Dialog;
+import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.notification.Notification;
@@ -46,8 +49,8 @@ public class AdminCompanyManagementView extends VerticalLayout {
         companyIdField.setStepButtonsVisible(true);
         companyIdField.setWidth("220px");
 
-        Button closeCompanyButton = new Button("Close Company", event -> closeCompany());
-        closeCompanyButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+        Button closeCompanyButton =
+                new Button("Close Company", event -> openCloseCompanyDialog());        closeCompanyButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
 
         add(title, subtitle, companyIdField, closeCompanyButton);
     }
@@ -68,6 +71,48 @@ public class AdminCompanyManagementView extends VerticalLayout {
         } else {
             showError(response.getMessage());
         }
+    }
+
+    private void openCloseCompanyDialog() {
+        Integer companyId = companyIdField.getValue();
+
+        if (companyId == null || companyId < 1) {
+            showError("Please enter a valid company ID.");
+            return;
+        }
+
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Close Company");
+
+        Span warning = new Span(
+                "Are you sure you want to close company #" + companyId + "?\n" +
+                        "All company events will be cancelled and refunds will be processed."
+        );
+
+        warning.getStyle()
+                .set("white-space", "pre-line")
+                .set("color", "#b91c1c")
+                .set("font-weight", "600");
+
+        Button cancelButton = new Button("Cancel", event -> dialog.close());
+
+        Button confirmButton = new Button("Close Company", event -> {
+            dialog.close();
+            closeCompany();
+        });
+
+        confirmButton.addThemeVariants(
+                ButtonVariant.LUMO_ERROR,
+                ButtonVariant.LUMO_PRIMARY
+        );
+
+        HorizontalLayout actions =
+                new HorizontalLayout(cancelButton, confirmButton);
+
+        dialog.add(warning);
+        dialog.getFooter().add(actions);
+
+        dialog.open();
     }
 
     private String getToken() {
