@@ -97,19 +97,33 @@ public class WebQueue {
 
     // called by other domain classes when an active user leaves the system
     public void notifyUserLeft() {
-        String next = waitingLine.poll();
-        if (next == null) {
-            activeCount.decrementAndGet();
-        } else {
-            admittedFromQueue.incrementAndGet();
-            waitingCount.decrementAndGet();
-            sequenceMap.remove(next);
-            AdmissionCallback callback = callbacks.remove(next);
-            if (callback != null) {
-                callback.onAdmitted(next);
+        String next;
+        while ((next = waitingLine.poll()) != null) {
+            if (sequenceMap.remove(next) != null) {
+                admittedFromQueue.incrementAndGet();
+                waitingCount.decrementAndGet();
+                AdmissionCallback callback = callbacks.remove(next);
+                if (callback != null) {
+                    callback.onAdmitted(next);
+                }
+                // activeCount unchanged: one left, one from waitingLine entered
+                return;
             }
-            // activeCount unchanged: one left, one from waitingLine entered
+            // this uuid was already claimed by removeFromQueue — try the next one
         }
+        activeCount.decrementAndGet();
+    }
+
+    // removes a waiting user from the queue by their token; returns false if not found
+    public boolean removeFromQueue(String uuid) {
+        Integer seq = sequenceMap.remove(uuid);
+        if (seq == null) {
+            return false;
+        }
+        waitingLine.remove(uuid);
+        callbacks.remove(uuid);
+        waitingCount.decrementAndGet();
+        return true;
     }
 
     public QueueEntryResultDTO getStatus(String uuid) {
