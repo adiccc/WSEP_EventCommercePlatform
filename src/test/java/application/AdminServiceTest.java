@@ -992,7 +992,7 @@ class AdminServiceTest {
         event.getOrders().add(order1);
         event.getOrders().add(order2);
         eventRepo.store(event);
-        Response<List<OrderDTO>> response = adminService.getGlobalOrders(
+        Response<List<AdminPurchaseHistoryDTO>> response = adminService.getGlobalOrders(
                 adminToken,
                 List.of("buyer1@bgu.ac.il"),
                 null,
@@ -1043,7 +1043,7 @@ class AdminServiceTest {
         eventRepo.store(event);
 
         // Act:
-        Response<List<OrderDTO>> response = adminService.getGlobalOrders(
+        Response<List<AdminPurchaseHistoryDTO>> response = adminService.getGlobalOrders(
                 adminToken,
                 null,
                 List.of(eventId),
@@ -1059,7 +1059,7 @@ class AdminServiceTest {
     @Test
     void GivenNonAdminToken_WhenGetGlobalOrders_ThenUnauthorized() {
         // Act
-        Response<List<OrderDTO>> response = adminService.getGlobalOrders(
+        Response<List<AdminPurchaseHistoryDTO>> response = adminService.getGlobalOrders(
                 nonAdminToken,
                 List.of("buyer1@bgu.ac.il"),
                 null,
@@ -1077,8 +1077,7 @@ class AdminServiceTest {
         userService.logout(adminToken);
 
         // Act
-        Response<List<OrderDTO>> response = adminService.getGlobalOrders(
-                adminToken,
+        Response<List<AdminPurchaseHistoryDTO>> response = adminService.getGlobalOrders(                adminToken,
                 List.of("buyer1@bgu.ac.il"),
                 null,
                 null
@@ -1091,8 +1090,7 @@ class AdminServiceTest {
     @Test
     void GivenAdminWithConflictingFilters_WhenGetGlobalOrders_ThenInvalidFilterError() {
         // Act
-        Response<List<OrderDTO>> response = adminService.getGlobalOrders(
-                adminToken,
+        Response<List<AdminPurchaseHistoryDTO>> response = adminService.getGlobalOrders(                adminToken,
                 List.of("buyer1@bgu.ac.il"),
                 null,
                 List.of(companyId)
@@ -1106,8 +1104,7 @@ class AdminServiceTest {
     @Test
     void GivenAdminAndNoMatchingOrders_WhenGetGlobalOrders_ThenReturnEmptyList() {
         // Act
-        Response<List<OrderDTO>> response = adminService.getGlobalOrders(
-                adminToken,
+        Response<List<AdminPurchaseHistoryDTO>> response = adminService.getGlobalOrders(                adminToken,
                 List.of("nonexistent@bgu.ac.il"),
                 null,
                 null
@@ -1166,8 +1163,7 @@ class AdminServiceTest {
             return adminService.closeCompanyByAdmin(adminToken, companyId);
         });
 
-        Future<Response<List<OrderDTO>>> reportFuture = pool.submit(() -> {
-            start.await();
+        Future<Response<List<AdminPurchaseHistoryDTO>>> reportFuture = pool.submit(() -> {            start.await();
             return adminService.getGlobalOrders(adminToken, null, null, List.of(companyId));
         });
 
@@ -1175,8 +1171,7 @@ class AdminServiceTest {
         start.countDown();
 
         Response<Boolean> closeRes = closeFuture.get();
-        Response<List<OrderDTO>> reportRes = reportFuture.get();
-        pool.shutdown();
+        Response<List<AdminPurchaseHistoryDTO>> reportRes = reportFuture.get();        pool.shutdown();
 
         // Assert
         assertTrue(closeRes.getValue(), "Company closure should succeed");
