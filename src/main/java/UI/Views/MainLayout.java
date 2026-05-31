@@ -437,17 +437,42 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
             boolean isAdmin = Boolean.TRUE.equals(adminValue);
 
             SideNavItem adminPurchaseHistory = null;
+            SideNavItem adminCompanyManagement = null;
+
             if (isAdmin) {
                 adminPurchaseHistory =
-                        new SideNavItem("Admin Purchase History", "admin/purchase-history");
-                adminPurchaseHistory.setPrefixComponent(VaadinIcon.CLIPBOARD_TEXT.create());
+                        new SideNavItem(
+                                "Admin Purchase History",
+                                "admin/purchase-history"
+                        );
+
+                adminPurchaseHistory.setPrefixComponent(
+                        VaadinIcon.CLIPBOARD_TEXT.create()
+                );
+
+                adminCompanyManagement =
+                        new SideNavItem(
+                                "Company Management",
+                                "admin/company-management"
+                        );
+
+                adminCompanyManagement.setPrefixComponent(
+                        VaadinIcon.OFFICE.create()
+                );
             }
 
             SideNavItem logout = new SideNavItem("Logout", "logout");
             logout.setPrefixComponent(VaadinIcon.SIGN_IN.create());
 
             if (isAdmin) {
-                nav.addItem(orders, notifications, company, adminPurchaseHistory, logout);
+                nav.addItem(
+                        orders,
+                        notifications,
+                        company,
+                        adminPurchaseHistory,
+                        adminCompanyManagement,
+                        logout
+                );
             } else {
                 nav.addItem(orders, notifications, company, logout);
             }
