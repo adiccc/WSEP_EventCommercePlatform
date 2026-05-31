@@ -3,6 +3,8 @@ package domain.webQueue;
 import DTO.QueueEntryResultDTO;
 import application.AdmissionCallback;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -123,6 +125,19 @@ public class WebQueue {
         waitingLine.remove(uuid);
         callbacks.remove(uuid);
         waitingCount.decrementAndGet();
+        int fin = sequenceGenerator.decrementAndGet();
+
+        // shift every user who was behind the removed one up by a spot.
+        // we work off a snapshot rather than the live map: this only updates the
+        // position users see, so it need not be atomic, and the snapshot gives a
+        // stable pass instead of relying on the map's arbitrary iteration order.
+        // computeIfPresent (not put) so a user who left mid-pass isn't re-added.
+        Map<String, Integer> snapshot = new HashMap<>(sequenceMap);
+        for (Map.Entry<String, Integer> entry : snapshot.entrySet()) {
+            if (entry.getValue() > seq && fin > entry.getValue()) {
+                sequenceMap.computeIfPresent(entry.getKey(), (k, v) -> v - 1);
+            }
+        }
         return true;
     }
 
