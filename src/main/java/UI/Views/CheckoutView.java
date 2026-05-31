@@ -42,7 +42,6 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
     private String token;
     private String appliedCouponCode;
     private final Span checkoutTimer = new Span();
-    private Registration timerRegistration;
     private final Span originalPrice = new Span();
     private final Span finalPrice = new Span();
     private final Paragraph eventDiscountDescription = new Paragraph();
@@ -391,17 +390,6 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
     }
 
     private void startCheckoutTimer() {
-        stopCheckoutTimer();
-
-        UI ui = UI.getCurrent();
-        ui.setPollInterval(1000);
-
-        refreshCheckoutTimer();
-
-        timerRegistration = ui.addPollListener(e -> refreshCheckoutTimer());
-    }
-
-    private void refreshCheckoutTimer() {
         Response<Long> response =
                 presenter.getCheckoutRemainingSeconds(token, activeOrderId);
 
@@ -413,21 +401,64 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         long remainingSeconds = response.getValue();
 
         if (remainingSeconds <= 0) {
-            stopCheckoutTimer();
-
-            if (payButton != null) {
-                payButton.setEnabled(false);
-            }
-
-            showError("Your reserved tickets expired. Please select tickets again.");
-            UI.getCurrent().navigate("home");
+            handleExpiredReservation();
             return;
         }
+
+        int initialRemainingSeconds = Math.toIntExact(remainingSeconds);
 
         checkoutTimer.setText(
                 "Tickets reserved for: " + formatRemainingTime(remainingSeconds)
         );
+
+        checkoutTimer.getElement().executeJs("""
+    const element = this;
+    let remaining = $0;
+
+    if (element._timerInterval) {
+        clearInterval(element._timerInterval);
     }
+
+    function formatTime(totalSeconds) {
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+
+        return String(minutes).padStart(2, '0')
+                + ':'
+                + String(seconds).padStart(2, '0');
+    }
+
+    element._timerInterval = setInterval(() => {
+        remaining--;
+
+        if (remaining <= 0) {
+            clearInterval(element._timerInterval);
+            element._timerInterval = null;
+            element.textContent = 'Tickets reserved for: 00:00';
+            element.dispatchEvent(new CustomEvent('reservation-expired'));
+            return;
+        }
+
+        element.textContent = 'Tickets reserved for: ' + formatTime(remaining);
+    }, 1000);
+""", initialRemainingSeconds);
+
+        checkoutTimer.getElement().addEventListener(
+                "reservation-expired",
+                e -> handleExpiredReservation()
+        );
+    }
+
+    private void handleExpiredReservation() {
+        if (payButton != null) {
+            payButton.setEnabled(false);
+        }
+
+        showError("Your reserved tickets expired. Please select tickets again.");
+
+        UI.getCurrent().navigate("home");
+    }
+
 
     private String formatRemainingTime(long totalSeconds) {
         long minutes = totalSeconds / 60;
@@ -437,10 +468,12 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
     }
 
     private void stopCheckoutTimer() {
-        if (timerRegistration != null) {
-            timerRegistration.remove();
-            timerRegistration = null;
+        checkoutTimer.getElement().executeJs("""
+        if (this._timerInterval) {
+            clearInterval(this._timerInterval);
+            this._timerInterval = null;
         }
+    """);
     }
 
     @Override
