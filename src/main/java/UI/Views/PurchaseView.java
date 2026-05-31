@@ -279,7 +279,7 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
                     .set("left", (zone.getPosition().getX() + OFFSET_X) + "px")
                     .set("top", (zone.getPosition().getY() + OFFSET_Y) + "px")
                     .set("border", "1px solid #999")
-                    .set("padding", "8px")
+                    .set("padding", "10px")
                     .set("background", "white")
                     .set("z-index", "2")
                     .set("border-radius", "10px")
@@ -290,23 +290,28 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
                     .set("margin", "0 0 8px 0")
                     .set("font-size", "14px");
 
+            int cols = zone.getCols();
+            int seatSize = cols > 20 ? 10 : cols > 14 ? 14 : 18;
+
             Div grid = new Div();
             grid.getStyle()
                     .set("display", "grid")
-                    .set("grid-template-columns", "repeat(" + zone.getCols() + ", 32px)")
+                    .set("grid-template-columns", "repeat(" + Math.max(cols, 1) + ", " + seatSize + "px)")
                     .set("gap", "4px");
 
             for (int r = 0; r < zone.getRows(); r++) {
                 for (int c = 0; c < zone.getCols(); c++) {
                     Button seat = new Button((r + 1) + "-" + (c + 1));
 
-                    seat.setWidth("28px");
-                    seat.setHeight("28px");
+                    seat.setWidth(seatSize + "px");
+                    seat.setHeight(seatSize + "px");
 
                     seat.getStyle()
-                            .set("font-size", "10px")
+                            .set("font-size", seatSize <= 14 ? "0" : "8px")
                             .set("padding", "0")
-                            .set("min-width", "28px");
+                            .set("min-width", seatSize + "px")
+                            .set("width", seatSize + "px")
+                            .set("height", seatSize + "px");
 
                     String zoneName = zone.getName();
                     int finalR = r;
