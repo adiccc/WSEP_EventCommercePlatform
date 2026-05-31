@@ -2,6 +2,9 @@ package UI.Views;
 
 import UI.Presenters.HomePresenter;
 import application.CompanyService;
+import application.IAuth;
+import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Paragraph;
@@ -25,6 +28,7 @@ import java.util.List;
 public class HomeView extends VerticalLayout {
 
     private final HomePresenter presenter;
+    private final IAuth auth;
     private final FlexLayout cardsContainer;
     private List<CompanyDTO> allCompanies;
 
@@ -33,8 +37,9 @@ public class HomeView extends VerticalLayout {
         "#4A90D9", "#E67E22", "#27AE60", "#8E44AD", "#E74C3C", "#16A085"
     };
 
-    public HomeView(CompanyService companyService) {
+    public HomeView(CompanyService companyService, IAuth auth) {
         this.presenter = new HomePresenter(companyService);
+        this.auth = auth;
 
         setPadding(true);
         setSpacing(true);
@@ -47,18 +52,34 @@ public class HomeView extends VerticalLayout {
                 .set("color", "var(--lumo-secondary-text-color)")
                 .set("margin-top", "0");
 
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
+
+        HorizontalLayout topBar = new HorizontalLayout();
+        topBar.setWidthFull();
+        topBar.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+
         TextField searchField = new TextField();
         searchField.setPlaceholder("Filter by company name...");
         searchField.setWidth("20rem");
         searchField.setClearButtonVisible(true);
         searchField.setValueChangeMode(ValueChangeMode.LAZY);
         searchField.addValueChangeListener(e -> filterCards(e.getValue()));
+        topBar.add(searchField);
+        topBar.setFlexGrow(1, searchField);
+
+        if (Boolean.TRUE.equals(auth.isAdmin(token).getValue())) {
+            Button adminBtn = new Button("🔧 Admin Panel",
+                    e -> UI.getCurrent().navigate("admin"));
+            adminBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+            topBar.add(adminBtn);
+        }
 
         cardsContainer = new FlexLayout();
         cardsContainer.setFlexWrap(FlexLayout.FlexWrap.WRAP);
         cardsContainer.getStyle().set("gap", "1.25rem").set("padding", "0.5rem 0");
 
-        add(title, subtitle, searchField, cardsContainer);
+        add(title, subtitle, topBar, cardsContainer);
         loadCompanies();
     }
 

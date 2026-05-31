@@ -38,12 +38,12 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
     private final PurchasePresenter purchasePresenter;
     private final EventDetailsPresenter presenter;
-
     private int companyId;
     private int eventId;
     private String token;
 
     private Button lotteryButton;
+    private EventDetailsDTO currentDto;
 
     public EventDetailsView(
             EventService eventService,
@@ -124,13 +124,13 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
             return;
         }
 
-        EventDetailsDTO dto = response.getValue();
+        currentDto = response.getValue();
 
         add(
                 back,
-                buildHeader(dto),
-                buildInfoSection(dto),
-                buildPolicySection(dto)
+                buildHeader(currentDto),
+                buildInfoSection(currentDto),
+                buildPolicySection(currentDto)
         );
     }
 
@@ -380,22 +380,27 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     }
 
     private void handlePurchaseClick() {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String currentToken = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
 
-        String tabId =
-                UI.getCurrent()
-                        .getElement()
-                        .getProperty("currentTabId");
+        String role = presenter.getRole(currentToken).getValue();
+        if ("GUEST".equals(role)) {
+            int requiredAge = getRequiredMinAge(currentToken);
+            if (requiredAge > 0) {
+                openAgeConfirmationDialog(requiredAge, this::proceedToPurchase);
+                return;
+            }
+        }
 
-        String token =
-                (String) VaadinSession.getCurrent()
-                        .getAttribute("token_" + tabId);
+        proceedToPurchase();
+    }
+
+    private void proceedToPurchase() {
+        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
+        String currentToken = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
 
         Response<Boolean> response =
-                purchasePresenter.isRequiredLotteryCode(
-                        token,
-                        companyId,
-                        eventId
-                );
+                purchasePresenter.isRequiredLotteryCode(currentToken, companyId, eventId);
 
         if (response.getValue() == null) {
             Notification.show(response.getMessage());
@@ -410,6 +415,35 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         UI.getCurrent().navigate(
                 "purchase/" + companyId + "/" + eventId
         );
+    }
+
+    private int getRequiredMinAge(String currentToken) {
+        String eventPolicy = currentDto != null ? currentDto.getPurchasePolicy() : null;
+        return presenter.getRequiredMinAge(currentToken, companyId, eventPolicy);
+    }
+
+    private void openAgeConfirmationDialog(int requiredAge, Runnable onConfirm) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Age Verification Required");
+        dialog.setCloseOnEsc(false);
+        dialog.setCloseOnOutsideClick(false);
+
+        Paragraph msg = new Paragraph(
+                "This event requires attendees to be at least " + requiredAge
+                        + " years old. Do you confirm that you meet this age requirement?");
+
+        Button confirmBtn = new Button("Yes, I confirm", e -> {
+            dialog.close();
+            onConfirm.run();
+        });
+        confirmBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);
+
+        Button cancelBtn = new Button("No, cancel", e -> dialog.close());
+        cancelBtn.addThemeVariants(ButtonVariant.LUMO_ERROR);
+
+        HorizontalLayout buttons = new HorizontalLayout(confirmBtn, cancelBtn);
+        dialog.add(msg, buttons);
+        dialog.open();
     }
 
     private void openLotteryCodeDialog() {

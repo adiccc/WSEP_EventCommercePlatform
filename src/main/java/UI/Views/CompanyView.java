@@ -5,6 +5,7 @@ import UI.Presenters.CompanyPresenter;
 import application.CompanyService;
 import application.EventCompanyManageService;
 import application.EventService;
+import application.IAuth;
 import domain.dto.OrderDTO;
 import domain.dto.SalesReportDTO;
 import com.vaadin.flow.component.button.Button;
@@ -51,6 +52,7 @@ import java.util.Set;
 public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
 
     private final CompanyPresenter presenter;
+    private final IAuth auth;
 
     // Filter fields — kept as instance variables so buildFilter() can read them
     private final TextField keywordField   = new TextField("Keyword");
@@ -67,8 +69,9 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
     // Loaded once from the URL parameter
     private int companyId;
 
-    public CompanyView(CompanyService companyService, EventService eventService, EventCompanyManageService eventCompanyManageService) {
+    public CompanyView(CompanyService companyService, EventService eventService, EventCompanyManageService eventCompanyManageService, IAuth auth) {
         this.presenter = new CompanyPresenter(companyService, eventService, eventCompanyManageService);
+        this.auth = auth;
         setPadding(true);
         setSpacing(true);
     }
@@ -89,9 +92,15 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
 
         String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
         String token = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
-        // Back button
-        Button back = new Button("← My Companies",
-                e -> getUI().ifPresent(ui -> ui.navigate("my-companies")));
+
+        // Back button — guests/anonymous go to Search, registered members go to My Companies
+        String globalRole = (token != null && !token.isBlank()) ? auth.getRole(token).getValue() : null;
+        Button back;
+        if ("MEMBER".equals(globalRole)) {
+            back = new Button("← My Companies", e -> getUI().ifPresent(ui -> ui.navigate("my-companies")));
+        } else {
+            back = new Button("← Search", e -> getUI().ifPresent(ui -> ui.navigate("search")));
+        }
         back.getElement().setAttribute("theme", "tertiary");
 
         // Load and display company header.
@@ -166,6 +175,14 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
         meta.add(metaChip("📞 " + company.getPhone()));
 
         header.add(name, meta);
+
+        String policy = company.getPurchasePolicy();
+        if (policy != null && !policy.isBlank() && !"No purchase restrictions".equals(policy)) {
+            Span policyChip = metaChip("📋 Purchase Policy: " + policy);
+            policyChip.getStyle().set("margin-top", "0.4rem");
+            header.add(policyChip);
+        }
+
         return header;
     }
 
