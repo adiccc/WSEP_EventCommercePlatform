@@ -38,8 +38,8 @@ public class CheckoutPresenter {
         return activeOrderService.returnToEditSelection(token);
     }
 
-    public Response<Integer> getCompanyIdByActiveOrder(int activeOrderId) {
-        return activeOrderService.getCompanyIdByActiveOrder(activeOrderId);
+    public Response<Integer> getCompanyIdByActiveOrder(String token, int activeOrderId) {
+        return activeOrderService.getCompanyIdByActiveOrder(token, activeOrderId);
     }
 
     public Response<String> getRole(String token) {

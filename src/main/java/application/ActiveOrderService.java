@@ -1306,10 +1306,29 @@ public class ActiveOrderService {
         return role;
     }
 
-    public Response<Integer> getCompanyIdByActiveOrder(int activeOrderId) {
+    public Response<Integer> getCompanyIdByActiveOrder(String token, int activeOrderId) {
         return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "getCompanyIdByActiveOrder called");
+
             try {
+                String role = getValidatedRole(token);
+
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid token");
+                    return new Response<>(null, "Invalid token");
+                }
+
+                String userIdentifier = role.equals("MEMBER")
+                        ? auth.getUserEmail(token).getValue()
+                        : token;
+
                 ActiveOrder order = activeOrderRepo.findById(activeOrderId);
+
+                if (!order.getUserIdentifier().equals(userIdentifier)) {
+                    logger.log(Level.SEVERE, "Unauthorized active order access");
+                    return new Response<>(null, "Unauthorized active order access");
+                }
+
                 Event event = eventRepo.findById(order.getEventId());
 
                 return new Response<>(
@@ -1334,7 +1353,6 @@ public class ActiveOrderService {
             }
         });
     }
-
     public Response<ActiveOrderSelectionDTO> getCurrentActiveOrderSelection(String token) {
         return RetryHelper.executeWithRetry(() -> {
             logger.log(Level.INFO, "getCurrentActiveOrderSelection called");

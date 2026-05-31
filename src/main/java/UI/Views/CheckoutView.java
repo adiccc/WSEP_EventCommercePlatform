@@ -251,8 +251,7 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         }
 
         Response<Integer> companyResponse =
-                presenter.getCompanyIdByActiveOrder(activeOrderId);
-
+                presenter.getCompanyIdByActiveOrder(token, activeOrderId);
         if (companyResponse.getValue() == null) {
             showError(companyResponse.getMessage());
             return;
