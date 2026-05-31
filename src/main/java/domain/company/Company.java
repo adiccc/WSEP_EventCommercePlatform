@@ -199,7 +199,8 @@ public class Company {
 
     public void quantityExceedsPolicy(UserDTO user, int ticketsToBuy, int ticketsAlreadyBought) {
         if( !purchasePolicy.isSatisfied(user, ticketsToBuy,ticketsAlreadyBought)) {
-            throw new IllegalArgumentException("Purchase policy not satisfied for user " + user.getUserId() + " and quantity " + ticketsToBuy);
+            String who = user != null ? String.valueOf(user.getUserId()) : "guest";
+            throw new IllegalArgumentException("Purchase policy not satisfied for user " + who + " and quantity " + ticketsToBuy);
         }
     }
 }

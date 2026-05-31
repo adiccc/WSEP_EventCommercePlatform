@@ -95,7 +95,6 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
         for (ActiveOrder order : activeOrders.values()) {
             if (order.getUserIdentifier().equals(userId)) {
                 return new ActiveOrderDTO(order);
-                // a member can have up to one active order.
             }
         }
         throw new NoSuchElementException("No active order found for user ID: " + userId);

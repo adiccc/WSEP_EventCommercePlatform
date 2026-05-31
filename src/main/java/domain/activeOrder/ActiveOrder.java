@@ -16,6 +16,7 @@ public class ActiveOrder {
     private Double approvedCheckoutPrice;
     private static final int SELECTING_TICKETS_TIMEOUT_MINUTES = 5;
     private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
+    private static final int WARNING_BEFORE_CHECKOUT_EXPIRY_MINUTES = 1;
 
     public ActiveOrder(int orderId, String userIdentifier, Integer eventId, List<Integer> tickets) {
         this.orderId = orderId;
@@ -87,17 +88,35 @@ public class ActiveOrder {
         }
     }
 
-    public void returnToSelecting() {
+    public void returnToEditSelection() {
         if (stage == STAGE.CHECKING_OUT) {
-            stage = STAGE.SELECTING_TICKETS;
+            stage = STAGE.EDITING;
         }
+        // checkoutStartedAt is deliberately NOT touched: the 10-minute seat-hold deadline
+        // is continuous from the original lock and must not be extended by entering edit mode.
+    }
+
+    public void confirmEdit() {
+        if (stage == STAGE.EDITING) {
+            stage = STAGE.CHECKING_OUT;
+        }
+        // checkoutStartedAt is deliberately NOT touched: the timer keeps running against the
+        // original lock instant, enforcing the hard 10-minute deadline "in any case".
+    }
+
+    public LocalDateTime getCheckoutWarningTime() {
+        if ((stage == STAGE.CHECKING_OUT || stage == STAGE.EDITING) && checkoutStartedAt != null) {
+            return checkoutStartedAt.plusMinutes(
+                    CHECKOUT_TIMEOUT_MINUTES - WARNING_BEFORE_CHECKOUT_EXPIRY_MINUTES);
+        }
+        return null;
     }
 
     public boolean isExpired(LocalDateTime now) {
         if (stage == STAGE.SELECTING_TICKETS) {
             return createdAt.plusMinutes(SELECTING_TICKETS_TIMEOUT_MINUTES).isBefore(now);
         }
-        if (stage == STAGE.CHECKING_OUT) {
+        if (stage == STAGE.CHECKING_OUT || stage == STAGE.EDITING) {
             return checkoutStartedAt.plusMinutes(CHECKOUT_TIMEOUT_MINUTES).isBefore(now);
         }
         return false;
@@ -119,7 +138,7 @@ public class ActiveOrder {
     public void forceExpireForTest(LocalDateTime now) {
         if (stage == STAGE.SELECTING_TICKETS) {
             this.createdAt = now.minusMinutes(6);
-        } else if (stage == STAGE.CHECKING_OUT) {
+        } else if (stage == STAGE.CHECKING_OUT || stage == STAGE.EDITING) {
             this.checkoutStartedAt = now.minusMinutes(11);
         }
     }
