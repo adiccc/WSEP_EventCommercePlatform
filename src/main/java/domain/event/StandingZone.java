@@ -4,6 +4,7 @@ import DTO.PurchasedTicketDTO;
 import DTO.StandingZoneDTO;
 import domain.dataType.ElementPosition;
 import domain.dataType.TicketStatus;
+import domain.dto.ActiveOrderSeatDTO;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -213,5 +214,22 @@ public class StandingZone extends Zone {
     public boolean hasAvailableTickets() {
         return available > 0;
 
+    }
+
+    @Override
+    public List<ActiveOrderSeatDTO> getActiveOrderSeats(List<Integer> ticketIds) {
+        return Collections.emptyList();
+    }
+
+    public int countActiveOrderTickets(List<Integer> ticketIds) {
+        int count = 0;
+
+        for (Integer ticketId : ticketIds) {
+            if (containsTicketId(ticketId)) {
+                count++;
+            }
+        }
+
+        return count;
     }
 }

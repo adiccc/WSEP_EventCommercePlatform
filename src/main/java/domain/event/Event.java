@@ -6,6 +6,8 @@ import DTO.PurchaseRuleDTO;
 import domain.dataType.CategoryEvent;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
+import domain.dto.ActiveOrderSeatDTO;
+import domain.dto.ActiveOrderSelectionDTO;
 import domain.dto.SeatingTicketDTO;
 import domain.dto.UserDTO;
 import domain.policy.*;
@@ -415,4 +417,11 @@ public class Event {
         this.saleStartDate = saleStartDate;
     }
 
+    public List<ActiveOrderSeatDTO> getActiveOrderSeats(List<Integer> ticketIds) {
+        return eventMap.getActiveOrderSeats(ticketIds);
+    }
+
+    public ActiveOrderSelectionDTO getActiveOrderSelection(List<Integer> ticketIds) {
+        return eventMap.getActiveOrderSelection(ticketIds);
+    }
 }

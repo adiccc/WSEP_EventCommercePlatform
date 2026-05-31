@@ -4,6 +4,7 @@ import DTO.PurchasedTicketDTO;
 import DTO.SeatingZoneDTO;
 import domain.dataType.ElementPosition;
 import domain.dataType.TicketStatus;
+import domain.dto.ActiveOrderSeatDTO;
 import domain.dto.SeatingTicketDTO;
 
 
@@ -181,5 +182,26 @@ public class SeatingZone extends Zone {
         }
         return false;
 
+    }
+
+    @Override
+    public List<ActiveOrderSeatDTO> getActiveOrderSeats(List<Integer> ticketIds) {
+        List<ActiveOrderSeatDTO> result = new ArrayList<>();
+
+        for (Integer ticketId : ticketIds) {
+            for (SeatingTicket ticket : ticketMap.values()) {
+                if (ticket.getTicketId() == ticketId) {
+                    result.add(new ActiveOrderSeatDTO(
+                            ticket.getTicketId(),
+                            getName(),
+                            ticket.getRow(),
+                            ticket.getCol()
+                    ));
+                    break;
+                }
+            }
+        }
+
+        return result;
     }
 }

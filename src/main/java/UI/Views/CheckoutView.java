@@ -5,6 +5,7 @@ import DTO.PaymentDetailsDTO;
 import UI.Presenters.CheckoutPresenter;
 import application.ActiveOrderService;
 import application.Response;
+import application.IAuth;
 
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -22,6 +23,7 @@ import com.vaadin.flow.component.textfield.Autocomplete;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
@@ -52,9 +54,10 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
     private final PasswordField cvv = new PasswordField("CVV");
     private final TextField cardHolderId = new TextField("Card holder ID");
     private final IntegerField numberOfPayments = new IntegerField("Number of payments");
+    private Button payButton;
 
-    public CheckoutView(ActiveOrderService activeOrderService) {
-        this.presenter = new CheckoutPresenter(activeOrderService);
+    public CheckoutView(ActiveOrderService activeOrderService, IAuth auth) {
+        this.presenter = new CheckoutPresenter(activeOrderService, auth);
 
         setSizeFull();
         setPadding(true);
@@ -117,6 +120,12 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         cvv.setPlaceholder("CVV");
         cardHolderId.setPlaceholder("ID number");
 
+        cardNumber.setValueChangeMode(ValueChangeMode.EAGER);
+        expirationDate.setValueChangeMode(ValueChangeMode.EAGER);
+        cvv.setValueChangeMode(ValueChangeMode.EAGER);
+        cardHolderId.setValueChangeMode(ValueChangeMode.EAGER);
+        numberOfPayments.setValueChangeMode(ValueChangeMode.EAGER);
+
         numberOfPayments.setMin(1);
         numberOfPayments.setValue(1);
         numberOfPayments.setStepButtonsVisible(true);
@@ -127,6 +136,12 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         cardHolderId.setWidthFull();
         numberOfPayments.setWidthFull();
         couponCode.setWidthFull();
+
+        cardNumber.addValueChangeListener(e -> updatePayButtonState());
+        expirationDate.addValueChangeListener(e -> updatePayButtonState());
+        cvv.addValueChangeListener(e -> updatePayButtonState());
+        cardHolderId.addValueChangeListener(e -> updatePayButtonState());
+        numberOfPayments.addValueChangeListener(e -> updatePayButtonState());
     }
 
     private void buildPage() {
@@ -152,7 +167,25 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         titleBlock.setPadding(false);
         titleBlock.setSpacing(false);
 
-        HorizontalLayout header = new HorizontalLayout(titleBlock);        header.setWidthFull();
+        Button editTicketsButton =
+                new Button(
+                        "← Back to Ticket Selection",
+                        e -> returnToEditSelection()
+                );
+
+        editTicketsButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        editTicketsButton.getStyle()
+                .set("font-weight", "600")
+                .set("margin-left", "auto");
+
+        HorizontalLayout header =
+                new HorizontalLayout(
+                        titleBlock,
+                        editTicketsButton
+                );
+
+        header.setWidthFull();
         header.setAlignItems(Alignment.CENTER);
         header.expand(titleBlock);
 
@@ -195,16 +228,41 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
 
         paymentCard.add(paymentTitle, paymentRow1, paymentRow2);
 
-        Button pay = new Button("Pay Now", e -> pay());
-        pay.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);
-        pay.setWidth("220px");
+        payButton = new Button("Pay Now", e -> pay());
+        payButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);
+        payButton.setWidth("220px");
+        payButton.setEnabled(false);
 
-        HorizontalLayout actions = new HorizontalLayout(pay);
+        HorizontalLayout actions = new HorizontalLayout(payButton);
         actions.setWidthFull();
         actions.setJustifyContentMode(JustifyContentMode.END);
 
         page.add(header, priceCard, couponRow, paymentCard, actions);
         add(page);
+    }
+
+    private void returnToEditSelection() {
+        Response<domain.dto.ActiveOrderDTO> editResponse =
+                presenter.returnToEditSelection(token);
+
+        if (editResponse.getValue() == null) {
+            showError(editResponse.getMessage());
+            return;
+        }
+
+        Response<Integer> companyResponse =
+                presenter.getCompanyIdByActiveOrder(token, activeOrderId);
+        if (companyResponse.getValue() == null) {
+            showError(companyResponse.getMessage());
+            return;
+        }
+
+        UI.getCurrent().navigate(
+                "purchase/"
+                        + companyResponse.getValue()
+                        + "/"
+                        + editResponse.getValue().getEventId()
+        );
     }
 
     private Div createCard() {
@@ -258,6 +316,22 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         showSuccess("Coupon applied");
     }
 
+    private void updatePayButtonState() {
+        if (payButton == null) {
+            return;
+        }
+
+        boolean hasRequiredDetails =
+                !cardNumber.isEmpty()
+                        && !expirationDate.isEmpty()
+                        && !cvv.isEmpty()
+                        && !cardHolderId.isEmpty()
+                        && numberOfPayments.getValue() != null
+                        && numberOfPayments.getValue() > 0;
+
+        payButton.setEnabled(hasRequiredDetails);
+    }
+
     private void pay() {
         PaymentDetailsDTO paymentDetails = new PaymentDetailsDTO(
                 cardNumber.getValue(),
@@ -275,14 +349,25 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
             showError(response.getMessage());
 
             if ("Ticket issuance failed".equals(response.getMessage())) {
-                UI.getCurrent().navigate("my-orders");
+                navigateAfterCheckoutAttempt();
             }
 
             return;
         }
 
         showSuccess("Payment completed successfully");
-        UI.getCurrent().navigate("my-orders");
+        navigateAfterCheckoutAttempt();
+    }
+
+    private void navigateAfterCheckoutAttempt() {
+        Response<String> roleResponse = presenter.getRole(token);
+        String role = roleResponse.getValue();
+
+        if ("MEMBER".equals(role)) {
+            UI.getCurrent().navigate("my-orders");
+        } else {
+            UI.getCurrent().navigate("home");
+        }
     }
 
     private void updatePrice(CheckoutPriceDTO price) {

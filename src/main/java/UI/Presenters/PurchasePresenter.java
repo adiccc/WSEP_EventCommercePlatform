@@ -3,7 +3,8 @@ package UI.Presenters;
 import DTO.EnterPurchaseDTO;
 import application.ActiveOrderService;
 import application.Response;
-import domain.dto.EventMapDTO;
+import domain.dto.ActiveOrderDTO;
+import domain.dto.ActiveOrderSelectionDTO;
 import domain.dto.SeatingTicketDTO;
 
 import java.util.HashMap;
@@ -65,5 +66,23 @@ public class PurchasePresenter {
             String code
     ) {
         return activeOrderService.validateLotteryCode(token, companyId, eventId, code);
+    }
+
+    public Response<ActiveOrderDTO> editTicketSelection(
+            String token,
+            Map<String, List<SeatingTicketDTO>> seatingToRemove,
+            Map<String, List<SeatingTicketDTO>> seatingToAdd,
+            Map<String, Integer> standingDesired
+    ) {
+        return activeOrderService.editTicketSelection(
+                token,
+                seatingToRemove,
+                seatingToAdd,
+                standingDesired
+        );
+    }
+
+    public Response<ActiveOrderSelectionDTO> getCurrentActiveOrderSelection(String token) {
+        return activeOrderService.getCurrentActiveOrderSelection(token);
     }
 }
