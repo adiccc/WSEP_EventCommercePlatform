@@ -215,12 +215,40 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         payButton.setWidth("220px");
         payButton.setEnabled(false);
 
-        HorizontalLayout actions = new HorizontalLayout(payButton);
+        Button editTicketsButton = new Button("← Edit Tickets", e -> returnToEditSelection());
+        editTicketsButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        HorizontalLayout actions = new HorizontalLayout(editTicketsButton, payButton);
         actions.setWidthFull();
         actions.setJustifyContentMode(JustifyContentMode.END);
 
         page.add(header, priceCard, couponRow, paymentCard, actions);
         add(page);
+    }
+
+    private void returnToEditSelection() {
+        Response<domain.dto.ActiveOrderDTO> editResponse =
+                presenter.returnToEditSelection(token);
+
+        if (editResponse.getValue() == null) {
+            showError(editResponse.getMessage());
+            return;
+        }
+
+        Response<Integer> companyResponse =
+                presenter.getCompanyIdByActiveOrder(activeOrderId);
+
+        if (companyResponse.getValue() == null) {
+            showError(companyResponse.getMessage());
+            return;
+        }
+
+        UI.getCurrent().navigate(
+                "purchase/"
+                        + companyResponse.getValue()
+                        + "/"
+                        + editResponse.getValue().getEventId()
+        );
     }
 
     private Div createCard() {

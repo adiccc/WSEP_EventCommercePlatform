@@ -5,6 +5,7 @@ import DTO.PaymentDetailsDTO;
 import application.ActiveOrderService;
 import application.IAuth;
 import application.Response;
+import domain.dto.ActiveOrderDTO;
 
 public class CheckoutPresenter {
 
@@ -31,6 +32,14 @@ public class CheckoutPresenter {
             PaymentDetailsDTO paymentDetails) {
 
         return activeOrderService.checkoutAndPayment(token, activeOrderId, paymentDetails);
+    }
+
+    public Response<ActiveOrderDTO> returnToEditSelection(String token) {
+        return activeOrderService.returnToEditSelection(token);
+    }
+
+    public Response<Integer> getCompanyIdByActiveOrder(int activeOrderId) {
+        return activeOrderService.getCompanyIdByActiveOrder(activeOrderId);
     }
 
     public Response<String> getRole(String token) {

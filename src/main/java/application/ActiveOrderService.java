@@ -1307,4 +1307,33 @@ public class ActiveOrderService {
         return role;
     }
 
+    public Response<Integer> getCompanyIdByActiveOrder(int activeOrderId) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                ActiveOrder order = activeOrderRepo.findById(activeOrderId);
+                Event event = eventRepo.findById(order.getEventId());
+
+                return new Response<>(
+                        event.getCompanyId(),
+                        "Company ID retrieved successfully"
+                );
+
+            } catch (NoSuchElementException e) {
+                return new Response<>(
+                        null,
+                        "Active order or event not found"
+                );
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                return new Response<>(
+                        null,
+                        "Failed to retrieve company ID"
+                );
+            }
+        });
+    }
+
 }
