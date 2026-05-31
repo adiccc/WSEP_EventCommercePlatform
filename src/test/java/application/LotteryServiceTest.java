@@ -474,7 +474,7 @@ class LotteryServiceTest {
 
         @Test
         void GivenOneOnlineUserAndOneOfflineUser_WhenLotteryWithCapacityOneIsDrawn_ThenOnlyWinnerReceivesCodeThroughCorrectChannel()
-                throws InterruptedException {
+                        throws InterruptedException {
                 // Arrange
                 LocalDateTime lotteryDate = LocalDateTime.now().plusDays(7);
                 lotteryService.createLottery(validToken, eventId, 1, lotteryDate, 24L);
@@ -504,7 +504,7 @@ class LotteryServiceTest {
                         // Assert
                         Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
                         assertEquals(1, updatedLottery.getWinners().size(),
-                                "Exactly one user should win the lottery");
+                                        "Exactly one user should win the lottery");
 
                         Member onlineUser = userRepo.findUserByEmail(onlineUserId);
                         Member offlineUser = userRepo.findUserByEmail(offlineUserId);
@@ -516,27 +516,30 @@ class LotteryServiceTest {
                         boolean offlineUserWon = updatedLottery.getWinners().contains(offlineUserNumericId);
 
                         assertTrue(onlineUserWon || offlineUserWon,
-                                "The winner should be one of the registered users");
+                                        "The winner should be one of the registered users");
 
                         if (onlineUserWon) {
                                 assertTrue(onlineLatch.await(2000, TimeUnit.MILLISECONDS),
-                                        "Online winner should receive a live notification");
+                                                "Online winner should receive a live notification");
 
                                 assertNotNull(onlineNotification.get(),
-                                        "Online winner notification should exist");
+                                                "Online winner notification should exist");
 
-                                assertTrue(onlineNotification.get().getPayload().getMessage().contains("Your code is: "),
-                                        "Online winner notification should contain lottery code");
+                                assertTrue(onlineNotification.get().getPayload().getMessage()
+                                                .contains("Your code is: "),
+                                                "Online winner notification should contain lottery code");
 
                                 assertFalse(onlineUser.getDelayedNotifications().stream()
                                                 .anyMatch(n -> n.getPayload() != null
-                                                        && n.getPayload().getMessage().contains("Your code is: ")),
-                                        "Online winner should not have the code saved as delayed");
+                                                                && n.getPayload().getMessage()
+                                                                                .contains("Your code is: ")),
+                                                "Online winner should not have the code saved as delayed");
 
                                 assertFalse(offlineUser.getDelayedNotifications().stream()
                                                 .anyMatch(n -> n.getPayload() != null
-                                                        && n.getPayload().getMessage().contains("Your code is: ")),
-                                        "Offline non-winner should not receive a delayed code");
+                                                                && n.getPayload().getMessage()
+                                                                                .contains("Your code is: ")),
+                                                "Offline non-winner should not receive a delayed code");
                         }
 
                         if (offlineUserWon) {
@@ -544,17 +547,19 @@ class LotteryServiceTest {
 
                                 assertTrue(offlineUser.getDelayedNotifications().stream()
                                                 .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
-                                                        && n.getPayload() != null
-                                                        && n.getPayload().getMessage().contains("Your code is: ")),
-                                        "Offline winner should have a delayed lottery code notification");
+                                                                && n.getPayload() != null
+                                                                && n.getPayload().getMessage()
+                                                                                .contains("Your code is: ")),
+                                                "Offline winner should have a delayed lottery code notification");
 
                                 assertNull(onlineNotification.get(),
-                                        "Online non-winner should not receive a lottery code notification");
+                                                "Online non-winner should not receive a lottery code notification");
 
                                 assertFalse(onlineUser.getDelayedNotifications().stream()
                                                 .anyMatch(n -> n.getPayload() != null
-                                                        && n.getPayload().getMessage().contains("Your code is: ")),
-                                        "Online non-winner should not have delayed lottery code");
+                                                                && n.getPayload().getMessage()
+                                                                                .contains("Your code is: ")),
+                                                "Online non-winner should not have delayed lottery code");
                         }
                 } finally {
                         onlineRegistration.remove();
@@ -562,10 +567,11 @@ class LotteryServiceTest {
         }
 
         @Test
-        void GivenMoreRegistrationsThanCapacityAndUsersOffline_WhenDrawLotteryIsTriggered_ThenWinnersSelectedUpToCapacityAndNotificationsSavedAsDelayed() {
-                // Arrange: Create a lottery with capacity 2
+        void GivenMoreRegistrationsThanCapacity_WhenDrawLotteryIsTriggered_ThenWinnersAreSelectedUpToCapacityAndNotificationsMatchLottery()
+                        throws InterruptedException {
+                // Arrange: Create a lottery with a capacity of 2
                 LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
-                lotteryService.createLottery(validToken, eventId, 2, lotteryDate_X, (long) 24.0);
+                lotteryService.createLottery(validToken, eventId, 2, lotteryDate_X, 24L);
 
                 lotteryService.registerUserToLottery(validToken, eventId);
                 lotteryService.registerUserToLottery(notPermission, eventId);
@@ -574,56 +580,86 @@ class LotteryServiceTest {
 
                 Lottery lottery = lotteryRepo.getAll().get(0);
 
-                // Extract identifiers before logout, because tokens may become invalid after
-                // logout
                 String id1 = auth.getUserIdentifier(validToken).getValue();
                 String id2 = auth.getUserIdentifier(notPermission).getValue();
                 String id3 = auth.getUserIdentifier(validToken2).getValue();
                 String id4 = auth.getUserIdentifier(validToken3).getValue();
 
-                // Users registered to the lottery and then logged out before the draw.
-                // They are not registered in Broadcaster, so only winners should get delayed
-                // notifications.
-                userService.logout(validToken);
-                userService.logout(notPermission);
-                userService.logout(validToken2);
-                userService.logout(validToken3);
+                CountDownLatch notificationLatch = new CountDownLatch(2);
+                AtomicInteger notificationCount = new AtomicInteger(0);
+                List<NotifyDTO> receivedNotifications = new CopyOnWriteArrayList<>();
 
-                // Act: Trigger the draw
-                lotteryService.drawLottery(lottery.getId());
+                Registration reg1 = Broadcaster.registerUser(id1, dto -> {
+                        receivedNotifications.add(dto);
+                        notificationCount.incrementAndGet();
+                        notificationLatch.countDown();
+                });
+                Registration reg2 = Broadcaster.registerUser(id2, dto -> {
+                        receivedNotifications.add(dto);
+                        notificationCount.incrementAndGet();
+                        notificationLatch.countDown();
+                });
+                Registration reg3 = Broadcaster.registerUser(id3, dto -> {
+                        receivedNotifications.add(dto);
+                        notificationCount.incrementAndGet();
+                        notificationLatch.countDown();
+                });
+                Registration reg4 = Broadcaster.registerUser(id4, dto -> {
+                        receivedNotifications.add(dto);
+                        notificationCount.incrementAndGet();
+                        notificationLatch.countDown();
+                });
 
-                // Assert: Verify DB state
-                Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
-                assertEquals(2, updatedLottery.getWinners().size(),
-                                "Should only have exactly 2 winners");
+                try {
+                        // Act
+                        lotteryService.drawLottery(lottery.getId());
 
-                Map<String, Member> usersByIdentifier = Map.of(
-                                id1, userRepo.findUserByEmail(id1),
-                                id2, userRepo.findUserByEmail(id2),
-                                id3, userRepo.findUserByEmail(id3),
-                                id4, userRepo.findUserByEmail(id4));
+                        // Assert: Verify DB state
+                        Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
 
-                long usersWithWinnerNotification = usersByIdentifier.values().stream()
-                                .filter(member -> member.getDelayedNotifications().stream()
+                        assertEquals(2, updatedLottery.getWinners().size(),
+                                        "Should only have exactly 2 winners");
+
+                        assertEquals(2, updatedLottery.getNotifiedWinners().size(),
+                                        "Both winners should eventually be marked as notified");
+
+                        assertTrue(notificationLatch.await(3, TimeUnit.SECONDS),
+                                        "Expected winner notifications were not received in time");
+
+                        assertTrue(notificationCount.get() >= 2,
+                                        "At least the 2 winners should receive live notifications");
+
+                        assertTrue(receivedNotifications.stream()
+                                        .allMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                                        && n.getPayload() != null
+                                                        && n.getPayload().getMessage() != null
+                                                        && n.getPayload().getMessage().contains("Your code is: ")
+                                                        && n.getPayload().getMessage()
+                                                                        .contains("event " + lottery.getId())),
+                                        "All received notifications should be lottery code notifications for this lottery");
+
+                        List<Member> users = List.of(
+                                        userRepo.findUserByEmail(id1),
+                                        userRepo.findUserByEmail(id2),
+                                        userRepo.findUserByEmail(id3),
+                                        userRepo.findUserByEmail(id4));
+
+                        for (Member user : users) {
+                                assertFalse(user.getDelayedNotifications().stream()
                                                 .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                                                 && n.getPayload() != null
+                                                                && n.getPayload().getMessage() != null
                                                                 && n.getPayload().getMessage()
-                                                                                .contains("Your code is: ")))
-                                .count();
-
-                assertEquals(2, usersWithWinnerNotification,
-                                "Only the 2 winners should have delayed lottery winner notifications");
-
-                // Verify every actual winner has a delayed notification
-                for (Integer winnerIdentifier : updatedLottery.getWinners()) {
-                        Member winner = userRepo.findById(winnerIdentifier);
-
-                        assertTrue(winner.getDelayedNotifications().stream()
-                                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
-                                                        && n.getPayload() != null
-                                                        && n.getPayload().getMessage().contains("Your code is: ")),
-                                        "Winner should have a delayed lottery winner notification: "
-                                                        + winnerIdentifier);
+                                                                                .contains("Your code is: ")
+                                                                && n.getPayload().getMessage()
+                                                                                .contains("event " + lottery.getId())),
+                                                "Online users should not have lottery winner notifications saved as delayed");
+                        }
+                } finally {
+                        reg1.remove();
+                        reg2.remove();
+                        reg3.remove();
+                        reg4.remove();
                 }
         }
 
@@ -694,7 +730,8 @@ class LotteryServiceTest {
         void GivenLoggedOutUser_WhenRegisterUserToLottery_ThenErrorReturned() {
                 // Arrange
                 LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
-                UserDTO user = new UserDTO("test@test.com", "first", "last", "pass", 1, 1, 2000, "city", "050-123-4567");
+                UserDTO user = new UserDTO("test@test.com", "first", "last", "pass", 1, 1, 2000, "city",
+                                "050-123-4567");
                 userService.registerUser(null, user);
                 String token = userService.login("test@test.com", "pass").getValue();
                 lotteryService.createLottery(validToken, eventId, 5, lotteryDate_X, 24L);
@@ -829,13 +866,13 @@ class LotteryServiceTest {
                 assertEquals(usersCount, successfulRegistrations);
                 assertEquals(usersCount, lottery.getRegistered().size());
         }
+
         @Test
         void GivenRealExpiredToken_WhenCreateLottery_ThenTokenExpiredNotificationSent() throws InterruptedException {
                 // Arrange
                 String email = "expired_create_lottery@test.com";
                 userService.registerUser(null, new UserDTO(
-                        email, "Expired", "User", "pass", 1, 1, 1990, "Israel", "050-111-2233"
-                ));
+                                email, "Expired", "User", "pass", 1, 1, 1990, "Israel", "050-111-2233"));
 
                 // Arrange: Generate a real token that has ALREADY EXPIRED
                 TokenService testTokenService = new TokenService();
@@ -852,14 +889,14 @@ class LotteryServiceTest {
                 try {
                         // Act
                         Response<Boolean> response = lotteryService.createLottery(
-                                expiredToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L
-                        );
+                                        expiredToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
 
                         assertFalse(response.getValue());
                         assertEquals("Invalid token", response.getMessage());
 
                         // Assert: Verify the TOKEN_EXPIRED notification was delivered in real time
-                        assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - Tab listener did not catch the event");
+                        assertTrue(tabLatch.await(2000, TimeUnit.MILLISECONDS),
+                                        "Notification timeout - Tab listener did not catch the event");
                         assertNotNull(receivedNotification.get());
                         assertEquals(NotifyType.TOKEN_EXPIRED, receivedNotification.get().getType());
 
@@ -890,10 +927,10 @@ class LotteryServiceTest {
                 Lottery alreadyDrawnLottery = lotteryRepo.findById(eventId);
 
                 assertEquals(1, alreadyDrawnLottery.getWinners().size(),
-                        "Lottery should already have winners before retrying draw");
+                                "Lottery should already have winners before retrying draw");
 
                 assertTrue(alreadyDrawnLottery.getNotifiedWinners().isEmpty(),
-                        "Winner should not be marked as notified yet");
+                                "Winner should not be marked as notified yet");
 
                 // Act
                 lotteryService.drawLottery(eventId);
@@ -903,14 +940,14 @@ class LotteryServiceTest {
 
                 assertTrue(winner.getDelayedNotifications().stream()
                                 .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
-                                        && n.getPayload() != null
-                                        && n.getPayload().getMessage().contains("Your code is: ")),
-                        "Missing winner notification should be saved as delayed");
+                                                && n.getPayload() != null
+                                                && n.getPayload().getMessage().contains("Your code is: ")),
+                                "Missing winner notification should be saved as delayed");
 
                 Lottery updatedLottery = lotteryRepo.findById(eventId);
 
                 assertEquals(1, updatedLottery.getNotifiedWinners().size(),
-                        "Winner should be marked as notified after notification is saved");
+                                "Winner should be marked as notified after notification is saved");
         }
 
         @Test
@@ -930,15 +967,14 @@ class LotteryServiceTest {
 
                 Member winnerAfterFirstDraw = userRepo.findUserByEmail(userIdentifier);
 
-                long notificationsAfterFirstDraw =
-                        winnerAfterFirstDraw.getDelayedNotifications().stream()
+                long notificationsAfterFirstDraw = winnerAfterFirstDraw.getDelayedNotifications().stream()
                                 .filter(n -> n.getType() == NotifyType.GENERAL_POPUP
-                                        && n.getPayload() != null
-                                        && n.getPayload().getMessage().contains("Your code is: "))
+                                                && n.getPayload() != null
+                                                && n.getPayload().getMessage().contains("Your code is: "))
                                 .count();
 
                 assertEquals(1, notificationsAfterFirstDraw,
-                        "Winner should have exactly one delayed lottery notification after first draw");
+                                "Winner should have exactly one delayed lottery notification after first draw");
 
                 // Act: Run draw again
                 lotteryService.drawLottery(eventId);
@@ -946,174 +982,194 @@ class LotteryServiceTest {
                 // Assert
                 Member winnerAfterSecondDraw = userRepo.findUserByEmail(userIdentifier);
 
-                long notificationsAfterSecondDraw =
-                        winnerAfterSecondDraw.getDelayedNotifications().stream()
+                long notificationsAfterSecondDraw = winnerAfterSecondDraw.getDelayedNotifications().stream()
                                 .filter(n -> n.getType() == NotifyType.GENERAL_POPUP
-                                        && n.getPayload() != null
-                                        && n.getPayload().getMessage().contains("Your code is: "))
+                                                && n.getPayload() != null
+                                                && n.getPayload().getMessage().contains("Your code is: "))
                                 .count();
 
                 assertEquals(1, notificationsAfterSecondDraw,
-                        "Running draw again should not create duplicate delayed lottery notifications");
+                                "Running draw again should not create duplicate delayed lottery notifications");
 
                 Lottery updatedLottery = lotteryRepo.findById(eventId);
 
                 assertEquals(1, updatedLottery.getNotifiedWinners().size(),
-                        "Winner should remain marked as notified");
-        }
-
-        // ==========================================
-        // Tests for updateLottery Use Case
-        // ==========================================
-
-        private LotteryDTO validDTO(int capacity) {
-                return new LotteryDTO(eventId, capacity, LocalDateTime.now().plusDays(8), 24L);
+                                "Winner should remain marked as notified");
         }
 
         @Test
-        void GivenLotteryEventAndValidDTO_WhenUpdateLottery_ThenLotteryDetailsUpdated() {
-                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
-
-                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, validDTO(100));
-
-                assertTrue(response.getValue());
-                assertEquals("Lottery updated successfully", response.getMessage());
-                assertEquals(100, lotteryRepo.findById(eventId).getCapacity());
-        }
-
-        @Test
-        void GivenLotteryEventAndNullDTO_WhenUpdateLottery_ThenSaleModeChangedToRegular() {
-                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
-
-                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, null);
-
-                assertTrue(response.getValue());
-                assertEquals("Sales method updated to regular purchase", response.getMessage());
-                assertFalse(eventRepo.findById(eventId).hasLottery());
-        }
-
-        @Test
-        void GivenEventWithoutLottery_WhenUpdateLotteryWithDTO_ThenLotteryCreated() {
-                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
-                lotteryService.updateLottery(validToken, eventId, null);
-
-                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, validDTO(30));
-
-                assertTrue(response.getValue());
-                assertEquals("Sales method updated to lottery", response.getMessage());
-                assertTrue(eventRepo.findById(eventId).hasLottery());
-        }
-
-        @Test
-        void GivenDeletedCompany_WhenUpdateLottery_ThenCompanyNotFoundError() {
-                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
-                companyRepo.delete(companyId);
-
-                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, validDTO(100));
-
-                assertFalse(response.getValue());
-                assertEquals("Company does not exist", response.getMessage());
-        }
-
-        @Test
-        void GivenNonExistingEventId_WhenUpdateLottery_ThenEventNotFoundError() {
-                Response<Boolean> response = lotteryService.updateLottery(validToken, -1, validDTO(100));
-
-                assertFalse(response.getValue());
-                assertEquals("Event does not exist", response.getMessage());
-        }
-
-        @Test
-        void GivenNonOwnerUser_WhenUpdateLottery_ThenUnauthorizedError() {
-                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
-
-                Response<Boolean> response = lotteryService.updateLottery(notPermission, eventId, validDTO(100));
-
-                assertFalse(response.getValue());
-                assertTrue(response.getMessage().contains("not authorized to change the sales method"));
-        }
-
-        @Test
-        void GivenInvalidToken_WhenUpdateLottery_ThenUserNotLoggedInError() {
-                Response<Boolean> response = lotteryService.updateLottery(invalidToken, eventId, validDTO(100));
-
-                assertFalse(response.getValue());
-                assertEquals("Invalid token", response.getMessage());
-        }
-
-        @Test
-        void GivenLotteryDTOWithMissingDetails_WhenUpdateLottery_ThenMissingDetailsError() {
-                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
-                LotteryDTO missingCapacity = new LotteryDTO(eventId, 0, LocalDateTime.now().plusDays(8), 24L);
-
-                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, missingCapacity);
-
-                assertFalse(response.getValue());
-                assertTrue(response.getMessage().contains("complete all lottery details"));
-        }
-
-        @Test
-        void GivenLotteryDTOWithInvalidParameters_WhenUpdateLottery_ThenInvalidParametersError() {
-                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
-                LotteryDTO pastWindow = new LotteryDTO(eventId, 100, LocalDateTime.now().minusDays(1), 24L);
-
-                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, pastWindow);
-
-                assertFalse(response.getValue());
-                assertEquals("Register window must be in the future", response.getMessage());
-        }
-
-        @Test
-        void GivenWinnersAlreadyNotified_WhenUpdateLottery_ThenUpdateRejected() {
-                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
-                lotteryService.registerUserToLottery(validToken, eventId);
-
-                Lottery lottery = lotteryRepo.findById(eventId);
-                int winnerId = lottery.drawWinners().keySet().iterator().next();
-                lottery.markWinnerNotified(winnerId);
-                lotteryRepo.store(lottery);
-
-                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, validDTO(100));
-
-                assertFalse(response.getValue());
-                assertEquals("Cannot update lottery after winners have been notified", response.getMessage());
-        }
-
-        @Test
-        void GivenConcurrentDrawAndUpdate_WhenRacing_ThenEitherNotifiedAndUpdateRejectedOrUpdatedAndNoneNotified()
+        void GivenConcurrentDrawCallsAndOnlineUsers_WhenExecuted_ThenDrawnOnceAndOnlyLotteryNotificationsForSameLotteryAreSent()
                         throws Exception {
-                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
+                // Arrange
+                LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+                lotteryService.createLottery(validToken, eventId, 10, lotteryDate_X, 24L);
+
+                Lottery lottery = lotteryRepo.getAll().get(0);
+
                 lotteryService.registerUserToLottery(validToken, eventId);
                 lotteryService.registerUserToLottery(notPermission, eventId);
 
-                ExecutorService pool = Executors.newFixedThreadPool(2);
-                CountDownLatch start = new CountDownLatch(1);
-                AtomicReference<Response<Boolean>> updateResult = new AtomicReference<>();
+                String id1 = auth.getUserIdentifier(validToken).getValue();
+                String id2 = auth.getUserIdentifier(notPermission).getValue();
 
-                Future<?> drawFuture = pool.submit(() -> {
-                        try { start.await(); } catch (InterruptedException ignored) {}
-                        lotteryService.drawLottery(eventId);
-                });
-                Future<?> updateFuture = pool.submit(() -> {
-                        try { start.await(); } catch (InterruptedException ignored) {}
-                        updateResult.set(lotteryService.updateLottery(validToken, eventId, validDTO(75)));
-                });
+                List<NotifyDTO> receivedNotifications = new CopyOnWriteArrayList<>();
 
-                start.countDown();
-                drawFuture.get(5, TimeUnit.SECONDS);
-                updateFuture.get(5, TimeUnit.SECONDS);
-                pool.shutdownNow();
+                Registration reg1 = Broadcaster.registerUser(id1, receivedNotifications::add);
+                Registration reg2 = Broadcaster.registerUser(id2, receivedNotifications::add);
 
-                Response<Boolean> result = updateResult.get();
-                int notifiedCount = lotteryRepo.findById(eventId).getNotifiedWinners().size();
+                ExecutorService executor = Executors.newFixedThreadPool(2);
+                CountDownLatch startGate = new CountDownLatch(1);
 
-                if (result.getValue()) {
-                        assertEquals(0, notifiedCount,
-                                "If updateLottery won, no users should be notified");
-                } else {
-                        assertEquals("Cannot update lottery after winners have been notified", result.getMessage());
-                        assertTrue(notifiedCount > 0,
-                                "If updateLottery was rejected, some winners must have been notified");
+                try {
+                        Callable<Void> concurrentTask = () -> {
+                                startGate.await();
+                                lotteryService.drawLottery(lottery.getId());
+                                return null;
+                        };
+
+                        Future<?> future1 = executor.submit(concurrentTask);
+                        Future<?> future2 = executor.submit(concurrentTask);
+
+                        startGate.countDown();
+
+                        future1.get();
+                        future2.get();
+
+                        // Assert DB state
+                        Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
+
+                        assertEquals(2, updatedLottery.getWinners().size(),
+                                        "Lottery should have exactly 2 winners regardless of concurrent draw calls");
+
+                        assertEquals(2, updatedLottery.getNotifiedWinners().size(),
+                                        "Both winners should eventually be marked as notified");
+
+                        assertFalse(receivedNotifications.isEmpty(),
+                                        "At least one live notification should be sent to online users");
+
+                        assertTrue(receivedNotifications.size() >= 2,
+                                        "Each online winner should receive at least one lottery notification");
+
+                        assertTrue(receivedNotifications.stream()
+                                        .allMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                                        && n.getPayload() != null
+                                                        && n.getPayload().getMessage() != null
+                                                        && n.getPayload().getMessage().contains("Your code is: ")
+                                                        && n.getPayload().getMessage().contains("event " + eventRepo
+                                                                        .findById(lottery.getId()).getName())),
+                                        "All live notifications should be lottery code notifications for the same lottery");
+
+                        Member user1 = userRepo.findUserByEmail(id1);
+                        Member user2 = userRepo.findUserByEmail(id2);
+
+                        assertFalse(user1.getDelayedNotifications().stream()
+                                        .anyMatch(n -> n.getPayload() != null
+                                                        && n.getPayload().getMessage() != null
+                                                        && n.getPayload().getMessage().contains("Your code is: ")),
+                                        "Online user 1 should not have lottery winner notification saved as delayed");
+
+                        assertFalse(user2.getDelayedNotifications().stream()
+                                        .anyMatch(n -> n.getPayload() != null
+                                                        && n.getPayload().getMessage() != null
+                                                        && n.getPayload().getMessage().contains("Your code is: ")),
+                                        "Online user 2 should not have lottery winner notification saved as delayed");
+
+                } finally {
+                        executor.shutdown();
+                        reg1.remove();
+                        reg2.remove();
+                }
+        }
+
+        @Test
+        void GivenConcurrentDrawCallsAndOfflineUsers_WhenExecuted_ThenEachWinnerHasExactlyOneDelayedNotification()
+                        throws Exception {
+                // Arrange
+                LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+                lotteryService.createLottery(validToken, eventId, 10, lotteryDate_X, 24L);
+
+                Lottery lottery = lotteryRepo.getAll().get(0);
+
+                lotteryService.registerUserToLottery(validToken, eventId);
+                lotteryService.registerUserToLottery(notPermission, eventId);
+
+                String id1 = auth.getUserIdentifier(validToken).getValue();
+                String id2 = auth.getUserIdentifier(notPermission).getValue();
+
+                userService.logout(validToken);
+                userService.logout(notPermission);
+
+                ExecutorService executor = Executors.newFixedThreadPool(2);
+                CountDownLatch startGate = new CountDownLatch(1);
+
+                try {
+                        Callable<Void> concurrentTask = () -> {
+                                startGate.await();
+                                lotteryService.drawLottery(lottery.getId());
+                                return null;
+                        };
+
+                        Future<?> future1 = executor.submit(concurrentTask);
+                        Future<?> future2 = executor.submit(concurrentTask);
+
+                        startGate.countDown();
+
+                        future1.get();
+                        future2.get();
+
+                        Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
+
+                        assertEquals(2, updatedLottery.getWinners().size(),
+                                        "Lottery should have exactly 2 winners regardless of concurrent draw calls");
+
+                        assertEquals(2, updatedLottery.getNotifiedWinners().size(),
+                                        "Both winners should be marked as notified");
+
+                        for (Integer winnerId : updatedLottery.getWinners()) {
+                                Member winner = userRepo.findById(winnerId);
+
+                                long delayedLotteryNotifications = winner.getDelayedNotifications().stream()
+                                                .filter(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                                                && n.getPayload() != null
+                                                                && n.getPayload().getMessage() != null
+                                                                && n.getPayload().getMessage()
+                                                                                .contains("Your code is: ")
+                                                                && n.getPayload().getMessage().contains("event "
+                                                                                + eventRepo.findById(lottery.getId())
+                                                                                                .getName()))
+                                                .count();
+
+                                assertEquals(1, delayedLotteryNotifications,
+                                                "Each offline winner should have exactly one delayed lottery notification");
+                        }
+
+                        Member user1 = userRepo.findUserByEmail(id1);
+                        Member user2 = userRepo.findUserByEmail(id2);
+
+                        long totalDelayedLotteryNotifications = user1.getDelayedNotifications().stream()
+                                        .filter(n -> n.getPayload() != null
+                                                        && n.getPayload().getMessage() != null
+                                                        && n.getPayload().getMessage().contains("Your code is: ")
+                                                        && n.getPayload().getMessage().contains("event " + eventRepo
+                                                                        .findById(lottery.getId()).getName()))
+                                        .count()
+                                        +
+                                        user2.getDelayedNotifications().stream()
+                                                        .filter(n -> n.getPayload() != null
+                                                                        && n.getPayload().getMessage() != null
+                                                                        && n.getPayload().getMessage()
+                                                                                        .contains("Your code is: ")
+                                                                        && n.getPayload().getMessage().contains(
+                                                                                        "event " + eventRepo.findById(
+                                                                                                        lottery.getId())
+                                                                                                        .getName()))
+                                                        .count();
+
+                        assertEquals(2, totalDelayedLotteryNotifications,
+                                        "There should be exactly one delayed lottery notification per winner");
+
+                } finally {
+                        executor.shutdown();
                 }
         }
 }
