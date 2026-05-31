@@ -20,6 +20,7 @@ import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
 import domain.user.IUserRepo;
 import domain.user.Member;
+import infrastructure.VaadinNotifier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -493,7 +494,7 @@ public class ActiveOrderService {
                 this.eventRepo.store(e);
                 activeOrderRepo.store(newActiveOrder);
 
-                preExpirationScheduler.scheduleOrReschedule(
+                preExpirationScheduler.scheduleOrReschedule(identifier,
                         newActiveOrder.getId(), newActiveOrder.getCheckoutWarningTime());
 
                 logger.log(Level.INFO, "Tickets selected successfully");
@@ -769,10 +770,11 @@ public class ActiveOrderService {
                                     "Your order #" + order.getOrderId() + " for \""
                                             + event.getName() + "\" was completed successfully.",
                                     event.getId(), event.getCompanyId()));
-                    String recipientIdentifier = auth.getUserIdentifier(token).getValue();
-                    if (recipientIdentifier != null) {
-                        sendOrSaveNotification(recipientIdentifier, confirmation);
-                    }
+                    notifier.notifyTab(token, confirmation);
+//                    String recipientIdentifier = auth.getUserIdentifier(token).getValue();
+//                    if (recipientIdentifier != null) {
+//                        sendOrSaveNotification(recipientIdentifier, confirmation);
+//                    }
                 } catch (Exception e) {
                     logger.log(Level.WARNING, "Purchase confirmation notification failed: " + e.getMessage());
                 }
