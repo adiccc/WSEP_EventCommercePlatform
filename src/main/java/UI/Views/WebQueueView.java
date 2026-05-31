@@ -71,8 +71,7 @@ public class WebQueueView extends VerticalLayout {
                 """
                 const TAB_ID_KEY = "eventCommerceTabId";
                 const QUEUE_TOKEN_KEY = "eventCommerceWebQueueToken";
-
-                // Always generate a fresh tabId so duplicate tabs don't share session state
+    
                 let tabId;
                 if (window.crypto && window.crypto.randomUUID) {
                     tabId = window.crypto.randomUUID();
@@ -80,10 +79,35 @@ public class WebQueueView extends VerticalLayout {
                     tabId = Date.now() + "-" + Math.random().toString(36).substring(2);
                 }
                 sessionStorage.setItem(TAB_ID_KEY, tabId);
-
-                // Pass any saved queue token for resumption after a page refresh
+    
                 const savedQueueToken = sessionStorage.getItem(QUEUE_TOKEN_KEY) || "";
-
+    
+                if (!window.eventCommerceWebQueueExitRegistered) {
+                    window.eventCommerceWebQueueExitRegistered = true;
+    
+                    const exitWebQueue = () => {
+                        const queueToken = sessionStorage.getItem(QUEUE_TOKEN_KEY);
+                        if (!queueToken) {
+                            return;
+                        }
+    
+                        const admitted = sessionStorage.getItem("eventCommerceWebQueueAdmitted") === "true";
+                        if (admitted) {
+                            return;
+                        }
+    
+                        navigator.sendBeacon(
+                            "/api/session/exit-web-queue",
+                            new Blob([queueToken], { type: "text/plain" })
+                        );
+    
+                        sessionStorage.removeItem(QUEUE_TOKEN_KEY);
+                    };
+    
+                    window.addEventListener("pagehide", exitWebQueue);
+                    window.addEventListener("beforeunload", exitWebQueue);
+                }
+    
                 this.$server.onBrowserTabReady(tabId, savedQueueToken);
                 """
         );
@@ -134,8 +158,10 @@ public class WebQueueView extends VerticalLayout {
         VaadinSession.getCurrent().setAttribute("webQueueAdmitted_" + tabId, false);
 
         // Keep sessionStorage in sync so refresh can resume
-        getElement().executeJs("sessionStorage.setItem('eventCommerceWebQueueToken', $0)", webQueueToken);
-
+        getElement().executeJs("""
+            sessionStorage.setItem('eventCommerceWebQueueToken', $0);
+            sessionStorage.setItem('eventCommerceWebQueueAdmitted', 'false');
+            """, webQueueToken);
         showWaitingState(result.getPosition());
         registerToBroadcaster(webQueueToken);
     }
@@ -156,8 +182,10 @@ public class WebQueueView extends VerticalLayout {
         VaadinSession.getCurrent().setAttribute("notificationUserIdentifier_" + tabId, token);
 
         // Persist token so a page refresh can resume queue position
-        getElement().executeJs("sessionStorage.setItem('eventCommerceWebQueueToken', $0)", token);
-
+        getElement().executeJs("""
+        sessionStorage.setItem('eventCommerceWebQueueToken', $0);
+        sessionStorage.setItem('eventCommerceWebQueueAdmitted', 'false');
+        """, token);
         if (result.isAdmitted()) {
             admitUserAndNavigateToLogin(token);
             return;
@@ -252,8 +280,10 @@ public class WebQueueView extends VerticalLayout {
         VaadinSession.getCurrent().setAttribute("notificationUserIdentifier_" + tabId, null);
 
         // Clear queue token from sessionStorage so a later duplicate/new tab starts fresh
-        getElement().executeJs("sessionStorage.removeItem('eventCommerceWebQueueToken')");
-
+        getElement().executeJs("""
+        sessionStorage.setItem('eventCommerceWebQueueAdmitted', 'true');
+        sessionStorage.removeItem('eventCommerceWebQueueToken');
+        """);
         showSuccess("Your turn has arrived. Please sign in or continue as guest.");
 
         UI ui = UI.getCurrent();

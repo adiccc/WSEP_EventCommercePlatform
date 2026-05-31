@@ -59,4 +59,18 @@ public class SessionExitController {
             userService.logout(token);
         }
     }
+
+    @PostMapping(value = "/exit-web-queue", consumes = "text/plain")
+    public void exitWebQueue(@RequestBody String token) {
+        if (token == null || token.isBlank()) {
+            return;
+        }
+
+        token = token.replace("\"", "").trim();
+
+        try {
+            userService.exitQueue(token);
+        } catch (Exception ignored) {
+        }
+    }
 }
