@@ -30,8 +30,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Route(value = "event/:companyId/:eventId", layout = MainLayout.class)
 @PageTitle("Event Details — EventCommerce")
@@ -40,7 +38,6 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
     private final PurchasePresenter purchasePresenter;
     private final EventDetailsPresenter presenter;
-    private final CompanyService companyService;
     private int companyId;
     private int eventId;
     private String token;
@@ -66,7 +63,6 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         );
 
         this.purchasePresenter = new PurchasePresenter(activeOrderService);
-        this.companyService = companyService;
 
         setSpacing(true);
         setPadding(true);
@@ -422,26 +418,8 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     }
 
     private int getRequiredMinAge(String currentToken) {
-        int eventAge = extractMinAge(currentDto != null ? currentDto.getPurchasePolicy() : null);
-
-        int companyAge = -1;
-        var companyResponse = companyService.getProductionCompany(currentToken, companyId);
-        if (companyResponse.getValue() != null) {
-            companyAge = extractMinAge(companyResponse.getValue().getPurchasePolicy());
-        }
-
-        return Math.max(eventAge, companyAge);
-    }
-
-    private int extractMinAge(String policyText) {
-        if (policyText == null) return -1;
-        Matcher m = Pattern.compile("Minimum age: (\\d+)").matcher(policyText);
-        int max = -1;
-        while (m.find()) {
-            int age = Integer.parseInt(m.group(1));
-            if (age > max) max = age;
-        }
-        return max;
+        String eventPolicy = currentDto != null ? currentDto.getPurchasePolicy() : null;
+        return presenter.getRequiredMinAge(currentToken, companyId, eventPolicy);
     }
 
     private void openAgeConfirmationDialog(int requiredAge, Runnable onConfirm) {

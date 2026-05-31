@@ -11,6 +11,8 @@ import domain.dto.EventDetailsDTO;
 
 import java.time.LocalDateTime;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class EventDetailsPresenter {
 
@@ -103,6 +105,29 @@ public class EventDetailsPresenter {
 
     public Response<String> getRole(String token) {
         return auth.getRole(token);
+    }
+
+    public int getRequiredMinAge(String token, int companyId, String eventPurchasePolicy) {
+        int eventAge = extractMinAge(eventPurchasePolicy);
+
+        int companyAge = -1;
+        var companyResponse = companyService.getProductionCompany(token, companyId);
+        if (companyResponse.getValue() != null) {
+            companyAge = extractMinAge(companyResponse.getValue().getPurchasePolicy());
+        }
+
+        return Math.max(eventAge, companyAge);
+    }
+
+    private int extractMinAge(String policyText) {
+        if (policyText == null) return -1;
+        Matcher m = Pattern.compile("Minimum age: (\\d+)").matcher(policyText);
+        int max = -1;
+        while (m.find()) {
+            int age = Integer.parseInt(m.group(1));
+            if (age > max) max = age;
+        }
+        return max;
     }
 
     private String getUserRole(
