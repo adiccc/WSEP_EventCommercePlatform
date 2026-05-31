@@ -483,3 +483,37 @@ Version 2:
   - The notification system should have clear responsibility boundaries. `Broadcaster` handles active UI listeners, the notifier abstracts delivery, and application services decide what should happen when delivery fails. This makes the design easier to test, reduces coupling to persistence, and avoids mixing UI delivery concerns with user-domain storage logic.
 
 ---
+
+---
+
+## Feature / Component: Lottery Winner Notification Tracking
+
+- Purpose of LLM use:
+  - To discuss a design improvement for tracking which lottery winners had already been notified, in order to make the lottery notification flow more reliable and easier to reason about.
+
+- Summary of prompt(s):
+  - Asked how to design the winner-notification flow after a lottery draw.
+  - Discussed whether the lottery should store only the selected winners, or also track which winners had already received or saved their notification.
+  - Asked how to avoid sending unnecessary duplicate notifications while still allowing the system to complete notification handling safely.
+
+- Output received (short description):
+  - The LLM suggested separating the concept of “winner was selected” from “winner was notified”.
+  - It proposed adding a `notifiedWinners` collection to the `Lottery` domain object, alongside the existing winner-code mapping.
+  - It also suggested marking a winner as notified only after the notification was successfully sent in real time or saved as a delayed notification.
+
+- Files / components affected:
+  - `Lottery`
+  - `LotteryService`
+  - lottery notification tests
+
+- Modifications made:
+  - Added tracking for notified lottery winners.
+  - Added domain methods such as checking whether a winner was already notified and marking a winner as notified.
+  - Updated the lottery draw flow so that winner selection and winner notification tracking are handled as separate steps.
+  - Added or adjusted tests to validate that winner notifications are associated with the correct lottery and that delayed notifications are not duplicated.
+
+- Initial gaps in understanding (if any):
+  - The main design question was whether notification state should be tracked separately from winner selection state, and where that responsibility should live.
+
+- Final understanding (brief explanation in your own words):
+  - Winner selection and winner notification are two different state changes. The lottery result should remain stable once winners are selected, while notification handling can be tracked separately. Keeping `notifiedWinners` inside the lottery object makes the flow clearer: the system can know who won, who received a notification, and which notification work is already complete.
