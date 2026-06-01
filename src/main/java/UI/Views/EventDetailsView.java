@@ -194,6 +194,23 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         updateDateButton.addClickListener(e -> openUpdateDateDialog(dto));
 
+        Button addSeatingAreasButton =
+                new Button("🪑 Add Seating Areas");
+
+        addSeatingAreasButton.getStyle()
+                .set("margin-top", "1rem")
+                .set("font-weight", "600")
+                .set("background", "#0f766e")
+                .set("color", "white")
+                .set("padding", "0.8rem 1.4rem")
+                .set("border-radius", "12px");
+
+        addSeatingAreasButton.addClickListener(e ->
+                UI.getCurrent().navigate(
+                        "event/" + eventId + "/add-seating-area"
+                )
+        );
+
         lotteryButton =
                 new Button("🎲 Register to Lottery");
 
@@ -217,6 +234,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         if (presenter.canUpdateEventDate(token, companyId)) {
             actions.add(updateDateButton);
+            actions.add(addSeatingAreasButton);
         }
 
         if (dto.hasLottery()
