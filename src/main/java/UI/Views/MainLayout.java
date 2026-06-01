@@ -229,6 +229,7 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
             case TOKEN_EXPIRED -> handleTokenExpired();
             case KICKOUT_TAB_NAVIGATION -> handleKickout(notification);
             case ROLE_APPOINTMENT_REQUEST -> showAppointmentDialog(notification);
+            case ACCOUNT_REMOVED -> handleAccountRemoved(notification);
             default -> { }
         }
     }
@@ -528,5 +529,41 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
                 Notification.Position.TOP_CENTER
         );
         notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+    }
+    private void handleAccountRemoved(NotifyDTO notification) {
+        UI ui = UI.getCurrent();
+        if (ui == null) return;
+
+        String message = "Your account has been removed by the administrator.";
+        if (notification != null && notification.getPayload() != null && notification.getPayload().getMessage() != null) {
+            message = notification.getPayload().getMessage();
+        }
+
+        Notification vaadinNotification = Notification.show(
+                message,
+                6000,
+                Notification.Position.TOP_CENTER
+        );
+        vaadinNotification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+
+        String tabId = ui.getElement().getProperty("currentTabId");
+        if (tabId != null && !tabId.isBlank()) {
+            VaadinSession session = VaadinSession.getCurrent();
+            session.setAttribute("token_" + tabId, null);
+            session.setAttribute("notificationUserIdentifier_" + tabId, null);
+            session.setAttribute("eventQueueTabId_" + tabId, null);
+            session.setAttribute("eventQueueCompanyId_" + tabId, null);
+            session.setAttribute("eventQueueEventId_" + tabId, null);
+            session.setAttribute("eventQueueAdmitted_" + tabId, null);
+        }
+
+        ui.getPage().executeJs(
+                """
+                sessionStorage.removeItem("eventCommerceEventQueueToken");
+                sessionStorage.removeItem("eventCommerceEventQueueEventId");
+                """
+        );
+
+        ui.navigate("");
     }
 }
