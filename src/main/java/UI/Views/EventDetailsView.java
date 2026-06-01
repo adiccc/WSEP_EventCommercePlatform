@@ -210,6 +210,14 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                         "manage/company/" + companyId + "/event/" + eventId + "/sales-method"
                 )
         );
+        if (!dto.hasLottery() && saleAlreadyStarted(dto)) {
+            updateSalesMethodButton.setEnabled(false);
+            updateSalesMethodButton.setText("🎲 Update Sales Method");
+            updateSalesMethodButton.getElement().setAttribute(
+                    "title",
+                    "Sale already started, so this event cannot be changed to lottery sale."
+            );
+        }
 
         lotteryButton =
                 new Button("🎲 Register to Lottery");
@@ -619,6 +627,15 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     // =========================================================
     // Helpers
     // =========================================================
+
+    private boolean saleAlreadyStarted(EventDetailsDTO dto) {
+        try {
+            return dto.getSaleStartDate() != null
+                    && !LocalDateTime.parse(dto.getSaleStartDate()).isAfter(LocalDateTime.now());
+        } catch (Exception e) {
+            return false;
+        }
+    }
 
     private String getToken() {
 

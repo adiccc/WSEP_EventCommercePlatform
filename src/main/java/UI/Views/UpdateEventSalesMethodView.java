@@ -169,6 +169,15 @@ public class UpdateEventSalesMethodView extends VerticalLayout implements Before
         VerticalLayout section =
                 cardSection();
 
+        if (!currentEvent.hasLottery() && saleAlreadyStarted()) {
+            section.add(
+                    new H3("Switch To Lottery Sale"),
+                    new Paragraph("This event sale has already started, so it cannot be changed to lottery sale.")
+            );
+
+            return section;
+        }
+
         if (currentEvent.hasLottery()) {
 
             section.add(
@@ -414,6 +423,15 @@ public class UpdateEventSalesMethodView extends VerticalLayout implements Before
 
         return (String) VaadinSession.getCurrent()
                 .getAttribute("token_" + tabId);
+    }
+
+    private boolean saleAlreadyStarted() {
+        try {
+            return currentEvent.getSaleStartDate() != null
+                    && !java.time.LocalDateTime.parse(currentEvent.getSaleStartDate()).isAfter(java.time.LocalDateTime.now());
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private void showSuccess(String message) {
