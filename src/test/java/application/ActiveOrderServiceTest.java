@@ -144,7 +144,7 @@ class ActiveOrderServiceTest {
                 5);
 
         preExpirationScheduler =
-                new PreExpirationNotificationScheduler(activeOrderRepo, notifier);
+                new PreExpirationNotificationScheduler(activeOrderRepo, notifier, auth);
 
         service = new ActiveOrderService(
                 auth,

@@ -16,7 +16,7 @@ public class ActiveOrder {
     private STAGE stage;
     private Double approvedCheckoutPrice;
     private static final int SELECTING_TICKETS_TIMEOUT_MINUTES = 5;
-    private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
+    private static final int CHECKOUT_TIMEOUT_MINUTES = 2;
     private static final int WARNING_BEFORE_CHECKOUT_EXPIRY_MINUTES = 1;
 
     public ActiveOrder(int orderId, String userIdentifier, Integer eventId, List<Integer> tickets) {
@@ -140,7 +140,7 @@ public class ActiveOrder {
         if (stage == STAGE.SELECTING_TICKETS) {
             this.createdAt = now.minusMinutes(6);
         } else if (stage == STAGE.CHECKING_OUT || stage == STAGE.EDITING) {
-            this.checkoutStartedAt = now.minusMinutes(11);
+            this.checkoutStartedAt = now.minusMinutes(CHECKOUT_TIMEOUT_MINUTES + 1);
         }
     }
         public void startPayment() {

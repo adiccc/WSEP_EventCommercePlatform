@@ -142,13 +142,34 @@ public class ActiveOrderService {
                         : token;
 
                 try {
-                    ActiveOrderDTO existingOrderDTO = activeOrderRepo.findOrderByUserId(userIdentifier);
-                    ActiveOrder existingOrder = activeOrderRepo.findById(existingOrderDTO.getId());
+                    ActiveOrderDTO existingOrderDTO =
+                            activeOrderRepo.findOrderByUserId(userIdentifier);
+
+                    ActiveOrder existingOrder =
+                            activeOrderRepo.findById(existingOrderDTO.getId());
 
                     if (!existingOrder.isExpired(LocalDateTime.now())) {
+
+                        if (!existingOrder.getEventId().equals(eventId)) {
+                            return new Response<>(
+                                    null,
+                                    "You already have an active order. Please complete or cancel it before starting a new purchase."
+                            );
+                        }
+
+                        logger.log(Level.INFO,
+                                "Existing active order found for this event. Order ID: "
+                                        + existingOrder.getId());
+
                         return new Response<>(
-                                null,
-                                "You already have an active order. Please complete or cancel it before starting a new purchase."
+                                new EnterPurchaseDTO(
+                                        new EventMapDTO(e.getMap()),
+                                        new ActiveOrderDTO(existingOrder),
+                                        true,
+                                        false,
+                                        null
+                                ),
+                                "Existing active order found"
                         );
                     }
 
@@ -740,7 +761,7 @@ public class ActiveOrderService {
                             NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId()
                                     + " in event " + event.getId() + " because ticket issuance failed", event.getId(),
                                     null);
-                            sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
+                            notifier.notifyUser(auth.getUserIdentifier(token).getValue(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
                         } catch (Exception e) {
                             logger.log(Level.WARNING,
                                     "Failed to notify user about successful refund: " + e.getMessage());
@@ -752,7 +773,7 @@ public class ActiveOrderService {
                                     "Refund for order " + order.getOrderId() + " in event " + event.getId()
                                             + " because ticket issuance failed has been failed, please contact support",
                                     event.getId(), null);
-                            sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
+                            notifier.notifyUser(auth.getUserIdentifier(token).getValue(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
                         } catch (Exception e) {
                             logger.log(Level.WARNING, "Failed to notify user about required refund: " + e.getMessage());
                         }
