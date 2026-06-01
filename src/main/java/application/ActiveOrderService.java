@@ -1443,6 +1443,8 @@ public class ActiveOrderService {
 
             } catch (NoSuchElementException e) {
                 return new Response<>(null, "Active order not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
             } catch (Exception e) {
                 return new Response<>(
                         null,
