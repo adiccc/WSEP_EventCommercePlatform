@@ -14,6 +14,7 @@ import domain.lottery.Lottery;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import infrastructure.*;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import Exception.OptimisticLockingFailureException;
@@ -174,6 +175,13 @@ class LotteryServiceTest {
                 userService.registerUser(null, userDTO3);
                 validToken3 = userService.login("user12@test.com", "test1").getValue();
 
+        }
+
+        @AfterEach
+        void tearDown() {
+                if (lotteryService != null) {
+                        lotteryService.shutdown();
+                }
         }
 
         // ==========================================
@@ -570,7 +578,9 @@ class LotteryServiceTest {
                                                         && n.getPayload().getMessage() != null
                                                         && n.getPayload().getMessage().contains("Your code is: ")
                                                         && n.getPayload().getMessage()
-                                                                        .contains("event " + lottery.getId())),
+                                                                        .contains("event " + eventRepo
+                                                                                        .findById(lottery.getId())
+                                                                                        .getName())),
                                         "All received notifications should be lottery code notifications for this lottery");
 
                         List<Member> users = List.of(
@@ -587,7 +597,9 @@ class LotteryServiceTest {
                                                                 && n.getPayload().getMessage()
                                                                                 .contains("Your code is: ")
                                                                 && n.getPayload().getMessage()
-                                                                                .contains("event " + lottery.getId())),
+                                                                                .contains("event " + eventRepo.findById(
+                                                                                                lottery.getId())
+                                                                                                .getName())),
                                                 "Online users should not have lottery winner notifications saved as delayed");
                         }
                 } finally {
@@ -975,8 +987,8 @@ class LotteryServiceTest {
 
                         startGate.countDown();
 
-                        future1.get();
-                        future2.get();
+                        future1.get(5, TimeUnit.SECONDS);
+                        future2.get(5, TimeUnit.SECONDS);
 
                         assertTrue(notificationLatch.await(3, TimeUnit.SECONDS),
                                         "Expected winner notifications were not received in time");
@@ -1060,8 +1072,8 @@ class LotteryServiceTest {
 
                         startGate.countDown();
 
-                        future1.get();
-                        future2.get();
+                        future1.get(5, TimeUnit.SECONDS);
+                        future2.get(5, TimeUnit.SECONDS);
 
                         Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
 
