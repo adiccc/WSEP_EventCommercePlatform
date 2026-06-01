@@ -194,6 +194,23 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         updateDateButton.addClickListener(e -> openUpdateDateDialog(dto));
 
+        Button updateSalesMethodButton =
+                new Button("🎲 Update Sales Method");
+
+        updateSalesMethodButton.getStyle()
+                .set("margin-top", "1rem")
+                .set("font-weight", "600")
+                .set("background", "#0f766e")
+                .set("color", "white")
+                .set("padding", "0.8rem 1.4rem")
+                .set("border-radius", "12px");
+
+        updateSalesMethodButton.addClickListener(e ->
+                UI.getCurrent().navigate(
+                        "manage/company/" + companyId + "/event/" + eventId + "/sales-method"
+                )
+        );
+
         lotteryButton =
                 new Button("🎲 Register to Lottery");
 
@@ -217,6 +234,10 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         if (presenter.canUpdateEventDate(token, companyId)) {
             actions.add(updateDateButton);
+        }
+
+        if (presenter.canUpdateSalesMethod(token, companyId)) {
+            actions.add(updateSalesMethodButton);
         }
 
         if (dto.hasLottery()
