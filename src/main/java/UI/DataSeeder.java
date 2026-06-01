@@ -3,6 +3,7 @@ package UI;
 import DTO.DiscountDTO;
 import DTO.ElementPositionDTO;
 import DTO.PurchasedTicketDTO;
+import DTO.PurchaseRuleDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import application.*;
@@ -122,7 +123,16 @@ public class DataSeeder implements ApplicationRunner {
                        PermissionType.VIEW_ORDERS_HISTORY,
                        PermissionType.CREATE_EVENT));
 
-        // ── 5. Create events (2 per company, each activated via map) ──────────
+        // ── 5. Add min-age 18 purchase policy to Company 1 ───────────────────
+        var minAgeRule = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        var policyRes = companyService.addRuleToCompany(aliceToken, 1, minAgeRule);
+        if (policyRes.getValue() == null || !policyRes.getValue()) {
+            log.warning("DataSeeder: failed to add min-age policy to company 1 — " + policyRes.getMessage());
+        } else {
+            log.info("DataSeeder: added min-age 18 policy to company 1 (SoundWave Events)");
+        }
+
+        // ── 7. Create events (2 per company, each activated via map) ──────────
         LocalDateTime base = LocalDateTime.now();
 
         // Company 1 — SoundWave Events
@@ -166,7 +176,7 @@ public class DataSeeder implements ApplicationRunner {
         createEvent(charlieToken,10, "Sunset Open Air",      base.plusMonths(1),  CategoryEvent.FESTIVAL,   GeographicalArea.SOUTH);
         createEvent(charlieToken,10, "Food & Music Weekend", base.plusMonths(3),  CategoryEvent.FESTIVAL,   GeographicalArea.SOUTH);
 
-        // ── 6. Seed demo sales orders for Company 1 ──────────────────────────
+        // ── 8. Seed demo sales orders for Company 1 ──────────────────────────
         seedDemoOrders(eventId1, eventId2, aliceToken);
 
         log.info("=== DataSeeder: done — 5 users, 10 companies, 20 events ===");
