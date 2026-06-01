@@ -152,9 +152,7 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
                     currentStandingByZone.putAll(selectionResponse.getValue().getStandingTicketsByZone());
                 }
 
-                Notification.show(
-                        "You are editing your ticket selection. Changes are applied only after clicking Continue to Checkout."
-                );
+                Notification.show("You are editing your ticket selection. Changes are applied only after clicking Continue to Checkout.");
             } else {
                 editingMode = false;
                 Notification.show("You already started this order. Continue selecting tickets.");
