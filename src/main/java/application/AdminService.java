@@ -492,16 +492,13 @@ public class AdminService {
             logger.info("getGlobalOrders attempt for admin");
             try {
                 if (!isVerifiedAdmin(token)) {
-                    logger.warning("closeCompanyByAdmin failed: unauthorized");
+                    logger.warning("getGlobalOrders failed: unauthorized");
                     return new Response<>(null, "Unauthorized: admin access required");
                 }
                 boolean hasUsers = (usersFilter != null && !usersFilter.isEmpty());
                 boolean hasCompanies = (companiesFilter != null && !companiesFilter.isEmpty());
                 boolean hasEvents = (eventsFilter != null && !eventsFilter.isEmpty());
-                if(!hasUsers && !hasCompanies && !hasEvents) {
-                    logger.warning("getGlobalOrders failed: no users or companies found");
-                    return new Response<>(null, "No users or companies to filter");
-                }
+
                 if(hasUsers && (hasCompanies || hasEvents)) {
                     logger.warning("getGlobalOrders failed: cannot filter both users and companies");
                     return new Response<>(null, "Cannot filter both users and companies");
@@ -537,7 +534,7 @@ public class AdminService {
                 }
                 else { // in case we have filter on companies or events
                     for (Event event : allEvents) {
-                        boolean toAdd = false;
+                        boolean toAdd = !hasUsers && !hasCompanies && !hasEvents;
                         if (hasCompanies && !hasEvents) {
                             if (companiesFilter.contains(event.getCompanyId())){
                                 toAdd = true;
