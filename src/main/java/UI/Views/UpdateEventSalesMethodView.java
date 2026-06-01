@@ -2,6 +2,7 @@ package UI.Views;
 
 import UI.Presenters.UpdateEventSalesMethodPresenter;
 import application.CompanyService;
+import application.EventService;
 import application.LotteryService;
 import application.Response;
 import com.vaadin.flow.component.UI;
@@ -13,8 +14,8 @@ import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
@@ -22,6 +23,7 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
+import domain.dto.EventDetailsDTO;
 import domain.dto.LotteryDTO;
 
 @Route(value = "manage/company/:companyId(\\d+)/event/:eventId(\\d+)/sales-method", layout = MainLayout.class)
@@ -34,20 +36,29 @@ public class UpdateEventSalesMethodView extends VerticalLayout implements Before
     private int companyId;
     private int eventId;
 
-    private final RadioButtonGroup<String> saleMethodGroup = new RadioButtonGroup<>();
-    private final VerticalLayout lotteryFields = new VerticalLayout();
+    private EventDetailsDTO currentEvent;
 
-    private final DateTimePicker registerWindowField = new DateTimePicker("Lottery Registration End Time");
-    private final IntegerField capacityField = new IntegerField("Number of Winners");
-    private final IntegerField expirationHoursField = new IntegerField("Purchase Authorization Expiration Hours");
+    private final VerticalLayout lotterySection = new VerticalLayout();
 
-    private final Button saveButton = new Button("Save Sales Method");
+    private final IntegerField lotteryCapacityField =
+            new IntegerField("Lottery Capacity");
+
+    private final DateTimePicker lotteryDateField =
+            new DateTimePicker("Lottery Draw Time");
+
+    private final IntegerField lotteryExpirationHoursField =
+            new IntegerField("Code Expiration Hours");
 
     public UpdateEventSalesMethodView(
             LotteryService lotteryService,
-            CompanyService companyService
+            CompanyService companyService,
+            EventService eventService
     ) {
-        this.presenter = new UpdateEventSalesMethodPresenter(lotteryService, companyService);
+        this.presenter = new UpdateEventSalesMethodPresenter(
+                lotteryService,
+                companyService,
+                eventService
+        );
 
         setPadding(true);
         setSpacing(true);
@@ -56,25 +67,92 @@ public class UpdateEventSalesMethodView extends VerticalLayout implements Before
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
-        companyId = Integer.parseInt(event.getRouteParameters().get("companyId").orElse("0"));
-        eventId = Integer.parseInt(event.getRouteParameters().get("eventId").orElse("0"));
+
+        companyId = Integer.parseInt(
+                event.getRouteParameters()
+                        .get("companyId")
+                        .orElse("0")
+        );
+
+        eventId = Integer.parseInt(
+                event.getRouteParameters()
+                        .get("eventId")
+                        .orElse("0")
+        );
 
         buildPage();
     }
 
     private void buildPage() {
+
         removeAll();
 
-        Button backButton = new Button("← Back", e -> UI.getCurrent().getPage().getHistory().back());
-        backButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        Button backButton =
+                new Button(
+                        "← Back",
+                        e -> UI.getCurrent()
+                                .getPage()
+                                .getHistory()
+                                .back()
+                );
+
+        backButton.addThemeVariants(
+                ButtonVariant.LUMO_TERTIARY
+        );
 
         if (!presenter.canUpdateSalesMethod(getToken(), companyId)) {
-            add(backButton, new Paragraph("You do not have permission to update this event sales method."));
+
+            add(
+                    backButton,
+                    new Paragraph(
+                            "You do not have permission to update this event sales method."
+                    )
+            );
+
             return;
         }
 
-        H2 title = new H2("Update Event Sales Method");
-        Paragraph subtitle = new Paragraph("Choose whether this event will use regular sale or lottery sale.");
+        Response<EventDetailsDTO> response =
+                presenter.getEventDetails(
+                        getToken(),
+                        companyId,
+                        eventId
+                );
+
+        if (response.getValue() == null) {
+
+            add(
+                    backButton,
+                    new Paragraph(
+                            "Failed loading event: "
+                                    + response.getMessage()
+                    )
+            );
+
+            return;
+        }
+
+        currentEvent = response.getValue();
+
+        H2 title =
+                new H2("Update Event Sales Method");
+
+        title.getStyle()
+                .set("font-size", "2rem")
+                .set("font-weight", "800");
+
+        Paragraph subtitle =
+                new Paragraph(
+                        currentEvent.hasLottery()
+                                ? "This event currently uses lottery sale."
+                                : "This event currently uses regular sale."
+                );
+
+        subtitle.getStyle()
+                .set(
+                        "color",
+                        "var(--lumo-secondary-text-color)"
+                );
 
         configureFields();
 
@@ -82,179 +160,289 @@ public class UpdateEventSalesMethodView extends VerticalLayout implements Before
                 backButton,
                 title,
                 subtitle,
-                buildMainSection(),
-                saveButton
+                buildMainSection()
         );
-
-        refreshLotteryFields();
-        updateSaveButtonState();
     }
 
     private VerticalLayout buildMainSection() {
-        VerticalLayout section = cardSection();
+
+        VerticalLayout section =
+                cardSection();
+
+        if (currentEvent.hasLottery()) {
+
+            section.add(
+                    new H3("Switch To Regular Sale"),
+                    new Paragraph(
+                            "This will cancel the lottery if winners were not notified yet."
+                    ),
+                    buildSwitchToRegularButton()
+            );
+
+            return section;
+        }
+
+        buildLotterySection();
 
         section.add(
-                new H3("Sales Method"),
-                saleMethodGroup,
-                lotteryFields
+                new H3("Switch To Lottery Sale"),
+                new Paragraph(
+                        "Configure the lottery settings for this event."
+                ),
+                lotterySection,
+                buildSwitchToLotteryButton()
         );
 
         return section;
     }
 
     private void configureFields() {
-        saleMethodGroup.setLabel("Sales Method");
-        saleMethodGroup.setItems("Regular Sale", "Lottery Sale");
-        saleMethodGroup.setValue("Regular Sale");
-        saleMethodGroup.addValueChangeListener(e -> {
-            refreshLotteryFields();
-            updateSaveButtonState();
-        });
 
-        capacityField.setMin(1);
-        capacityField.setStepButtonsVisible(true);
-        capacityField.setWidth("18rem");
+        lotteryCapacityField.setMin(1);
+        lotteryCapacityField.setStepButtonsVisible(true);
+        lotteryCapacityField.setWidth("18rem");
 
-        expirationHoursField.setMin(1);
-        expirationHoursField.setStepButtonsVisible(true);
-        expirationHoursField.setValue(24);
-        expirationHoursField.setWidth("18rem");
+        lotteryDateField.setWidth("20rem");
 
-        registerWindowField.setWidth("22rem");
-
-        capacityField.addValueChangeListener(e -> updateSaveButtonState());
-        expirationHoursField.addValueChangeListener(e -> updateSaveButtonState());
-        registerWindowField.addValueChangeListener(e -> updateSaveButtonState());
-
-        saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        saveButton.setEnabled(false);
-        saveButton.addClickListener(e -> submit());
+        lotteryExpirationHoursField.setMin(1);
+        lotteryExpirationHoursField.setStepButtonsVisible(true);
+        lotteryExpirationHoursField.setValue(24);
+        lotteryExpirationHoursField.setWidth("18rem");
     }
 
-    private void refreshLotteryFields() {
-        lotteryFields.removeAll();
-        lotteryFields.setPadding(true);
-        lotteryFields.setSpacing(true);
+    private void buildLotterySection() {
 
-        if (!isLotteryMode()) {
-            lotteryFields.setVisible(false);
-            return;
-        }
+        lotterySection.removeAll();
 
-        lotteryFields.setVisible(true);
-        lotteryFields.getStyle()
-                .set("background", "var(--lumo-primary-color-10pct)")
-                .set("border", "1px solid var(--lumo-primary-color-50pct)")
-                .set("border-radius", "18px");
+        lotterySection.setPadding(true);
+        lotterySection.setSpacing(true);
 
-        lotteryFields.add(
-                new H3("Lottery Details"),
-                registerWindowField,
-                capacityField,
-                expirationHoursField
+        lotterySection.getStyle()
+                .set(
+                        "background",
+                        "var(--lumo-primary-color-10pct)"
+                )
+                .set(
+                        "border",
+                        "1px solid var(--lumo-primary-color-50pct)"
+                )
+                .set(
+                        "border-radius",
+                        "18px"
+                );
+
+        HorizontalLayout row =
+                new HorizontalLayout(
+                        lotteryCapacityField,
+                        lotteryDateField,
+                        lotteryExpirationHoursField
+                );
+
+        row.setWidthFull();
+        row.getStyle().set("flex-wrap", "wrap");
+
+        lotterySection.add(
+                new H3("🎲 Lottery Setup"),
+                new Paragraph(
+                        "Fill all lottery fields before saving."
+                ),
+                row
         );
     }
 
-    private void submit() {
-        if (!isFormValid(true)) {
+    private Button buildSwitchToRegularButton() {
+
+        Button button =
+                new Button(
+                        "Switch To Regular Sale"
+                );
+
+        button.addThemeVariants(
+                ButtonVariant.LUMO_PRIMARY,
+                ButtonVariant.LUMO_ERROR
+        );
+
+        button.addClickListener(e -> {
+
+            Response<Boolean> response =
+                    presenter.updateToRegularSale(
+                            getToken(),
+                            eventId
+                    );
+
+            if (response.getValue() != null
+                    && response.getValue()) {
+
+                showSuccess(response.getMessage());
+
+                UI.getCurrent()
+                        .getPage()
+                        .getHistory()
+                        .back();
+
+                return;
+            }
+
+            showError(response.getMessage());
+        });
+
+        return button;
+    }
+
+    private Button buildSwitchToLotteryButton() {
+
+        Button button =
+                new Button(
+                        "Switch To Lottery Sale"
+                );
+
+        button.addThemeVariants(
+                ButtonVariant.LUMO_PRIMARY
+        );
+
+        button.addClickListener(e -> submitLottery());
+
+        return button;
+    }
+
+    private void submitLottery() {
+
+        if (!isLotteryValid(true)) {
             return;
         }
 
-        Response<Boolean> response;
+        LotteryDTO lotteryDTO =
+                new LotteryDTO(
+                        eventId,
+                        lotteryCapacityField.getValue(),
+                        lotteryDateField.getValue(),
+                        lotteryExpirationHoursField.getValue()
+                );
 
-        if (isLotteryMode()) {
-            LotteryDTO lotteryDTO = new LotteryDTO(
-                    eventId,
-                    capacityField.getValue(),
-                    registerWindowField.getValue(),
-                    expirationHoursField.getValue()
-            );
+        Response<Boolean> response =
+                presenter.updateToLotterySale(
+                        getToken(),
+                        eventId,
+                        lotteryDTO
+                );
 
-            response = presenter.updateToLotterySale(getToken(), eventId, lotteryDTO);
-        } else {
-            response = presenter.updateToRegularSale(getToken(), eventId);
-        }
+        if (response.getValue() != null
+                && response.getValue()) {
 
-        if (response.getValue() != null && response.getValue()) {
             showSuccess(response.getMessage());
-            UI.getCurrent().getPage().getHistory().back();
+
+            UI.getCurrent()
+                    .getPage()
+                    .getHistory()
+                    .back();
+
             return;
         }
 
         showError(response.getMessage());
     }
 
-    private boolean isFormValid(boolean showErrors) {
-        if (saleMethodGroup.getValue() == null) {
-            return fail(showErrors, "Please select a sales method.");
+    private boolean isLotteryValid(boolean showErrors) {
+
+        if (lotteryCapacityField.getValue() == null
+                || lotteryCapacityField.getValue() < 1) {
+
+            return fail(
+                    showErrors,
+                    "Lottery capacity must be at least 1."
+            );
         }
 
-        if (!isLotteryMode()) {
-            return true;
+        if (lotteryDateField.getValue() == null) {
+
+            return fail(
+                    showErrors,
+                    "Lottery draw time is required."
+            );
         }
 
-        if (registerWindowField.getValue() == null) {
-            return fail(showErrors, "Lottery registration end time is required.");
-        }
+        if (lotteryExpirationHoursField.getValue() == null
+                || lotteryExpirationHoursField.getValue() < 1) {
 
-        if (capacityField.getValue() == null || capacityField.getValue() < 1) {
-            return fail(showErrors, "Number of winners must be at least 1.");
-        }
-
-        if (expirationHoursField.getValue() == null || expirationHoursField.getValue() < 1) {
-            return fail(showErrors, "Expiration hours must be at least 1.");
+            return fail(
+                    showErrors,
+                    "Code expiration hours must be at least 1."
+            );
         }
 
         return true;
     }
 
-    private boolean isLotteryMode() {
-        return "Lottery Sale".equals(saleMethodGroup.getValue());
-    }
+    private boolean fail(
+            boolean showErrors,
+            String message
+    ) {
 
-    private void updateSaveButtonState() {
-        try {
-            saveButton.setEnabled(isFormValid(false));
-        } catch (Exception e) {
-            saveButton.setEnabled(false);
-        }
-    }
-
-    private boolean fail(boolean showErrors, String message) {
         if (showErrors) {
             showError(message);
         }
+
         return false;
     }
 
     private VerticalLayout cardSection() {
-        VerticalLayout section = new VerticalLayout();
+
+        VerticalLayout section =
+                new VerticalLayout();
+
         section.setPadding(true);
         section.setSpacing(true);
+
         section.getStyle()
                 .set("background", "white")
                 .set("border-radius", "20px")
                 .set("padding", "2rem")
-                .set("box-shadow", "0 4px 12px rgba(0,0,0,0.08)");
+                .set(
+                        "box-shadow",
+                        "0 4px 12px rgba(0,0,0,0.08)"
+                );
+
         return section;
     }
 
     private String getToken() {
-        String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
-        return (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
+
+        String tabId =
+                UI.getCurrent()
+                        .getElement()
+                        .getProperty("currentTabId");
+
+        return (String) VaadinSession.getCurrent()
+                .getAttribute("token_" + tabId);
     }
 
     private void showSuccess(String message) {
-        Notification notification = Notification.show(message, 3000, Notification.Position.TOP_CENTER);
-        notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
+
+        Notification notification =
+                Notification.show(
+                        message,
+                        3000,
+                        Notification.Position.TOP_CENTER
+                );
+
+        notification.addThemeVariants(
+                NotificationVariant.LUMO_SUCCESS
+        );
     }
 
     private void showError(String message) {
-        Notification notification = Notification.show(
-                message != null ? message : "Operation failed.",
-                4000,
-                Notification.Position.TOP_CENTER
+
+        Notification notification =
+                Notification.show(
+                        message != null
+                                ? message
+                                : "Operation failed.",
+                        4000,
+                        Notification.Position.TOP_CENTER
+                );
+
+        notification.addThemeVariants(
+                NotificationVariant.LUMO_ERROR
         );
-        notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
     }
 }
