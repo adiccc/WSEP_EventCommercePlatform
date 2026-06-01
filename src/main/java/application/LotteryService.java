@@ -150,7 +150,7 @@ public class LotteryService {
                 if (!company.isOwner(userId)) {
                     return new Response<>(false, "User id " + userId + " is not authorized to change the sales method");
                 }
-                if (lotteryDTO == null) {
+                if (lotteryDTO == null && event.hasLottery()) {
                     Lottery lottery = lotteryRepo.findById(eventId);
                     if (lottery.getNotifiedWinners().size() == 0) {
                         lotteryRepo.delete(lottery);
@@ -160,9 +160,16 @@ public class LotteryService {
                         return new Response<>(true, "Sales method updated to regular purchase");
                     }
                     else {
-                        logger.log(Level.WARNING, "Lottery can't be cancelled, users where notified");
+                        logger.log(Level.WARNING, "Lottery can't be cancelled, users were notified");
                         return new Response<>(false, "Lottery can't be cancelled, users where notified");
                     }
+                }
+                if (lotteryDTO == null) {
+                    event.setHasLottery(false);
+                    eventRepo.store(event);
+
+                    logger.log(Level.INFO, "Event already uses regular purchase");
+                    return new Response<>(true, "Sales method is already regular purchase");
                 }
                 Lottery lottery;
                 boolean isNew;
