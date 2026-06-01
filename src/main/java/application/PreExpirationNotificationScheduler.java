@@ -38,9 +38,10 @@ public class PreExpirationNotificationScheduler {
     private final INotifier notifier;
     private final ScheduledExecutorService scheduler;
     private final ConcurrentHashMap<Integer, ScheduledFuture<?>> scheduledWarnings;
+    private final IAuth auth;
 
     @Autowired
-    public PreExpirationNotificationScheduler(IActiveOrderRepo activeOrderRepo, INotifier notifier) {
+    public PreExpirationNotificationScheduler(IActiveOrderRepo activeOrderRepo, INotifier notifier, IAuth auth) {
         this.activeOrderRepo = activeOrderRepo;
         this.notifier = notifier;
         this.scheduledWarnings = new ConcurrentHashMap<>();
@@ -49,6 +50,7 @@ public class PreExpirationNotificationScheduler {
             t.setDaemon(true);
             return t;
         });
+        this.auth = auth;
     }
 
     /**
@@ -120,7 +122,8 @@ public class PreExpirationNotificationScheduler {
                                     + "Please complete checkout to avoid losing them.",
                             order.getEventId(),
                             null));
-            notifier.notifyTab(token, warning);
+            String identifier = auth.getUserIdentifier(token).getValue();
+            notifier.notifyUser(identifier, warning);
         } catch (Exception e) {
             logger.log(Level.WARNING,
                     "Failed to send pre-expiration warning for order " + orderId + ": " + e.getMessage());
