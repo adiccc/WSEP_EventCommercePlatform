@@ -1,21 +1,34 @@
 package UI.Presenters;
 
 import application.CompanyService;
+import application.EventService;
 import application.LotteryService;
 import application.Response;
+import domain.dto.EventDetailsDTO;
 import domain.dto.LotteryDTO;
 
 public class UpdateEventSalesMethodPresenter {
 
     private final LotteryService lotteryService;
     private final CompanyService companyService;
+    private final EventService eventService;
 
     public UpdateEventSalesMethodPresenter(
             LotteryService lotteryService,
-            CompanyService companyService
+            CompanyService companyService,
+            EventService eventService
     ) {
         this.lotteryService = lotteryService;
         this.companyService = companyService;
+        this.eventService = eventService;
+    }
+
+    public Response<EventDetailsDTO> getEventDetails(
+            String token,
+            int companyId,
+            int eventId
+    ) {
+        return eventService.ViewEventDetails(token, companyId, eventId);
     }
 
     public Response<Boolean> updateToRegularSale(String token, int eventId) {
