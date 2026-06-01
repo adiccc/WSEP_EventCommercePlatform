@@ -205,18 +205,31 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                 .set("padding", "0.8rem 1.4rem")
                 .set("border-radius", "12px");
 
-        updateSalesMethodButton.addClickListener(e ->
-                UI.getCurrent().navigate(
-                        "manage/company/" + companyId + "/event/" + eventId + "/sales-method"
-                )
-        );
+        updateSalesMethodButton.addClickListener(e -> {
+
+            if (!dto.hasLottery() && saleAlreadyStarted(dto)) {
+
+                showError(
+                        "Lottery sale cannot be enabled after ticket sales already started."
+                );
+
+                return;
+            }
+
+            UI.getCurrent().navigate(
+                    "manage/company/" + companyId + "/event/" + eventId + "/sales-method"
+            );
+        });
         if (!dto.hasLottery() && saleAlreadyStarted(dto)) {
-            updateSalesMethodButton.setEnabled(false);
-            updateSalesMethodButton.setText("🎲 Update Sales Method");
+            updateSalesMethodButton.getStyle()
+                    .set("opacity", "0.55")
+                    .set("cursor", "not-allowed")
+                    .set("filter", "grayscale(0.25)");
             updateSalesMethodButton.getElement().setAttribute(
                     "title",
-                    "Sale already started, so this event cannot be changed to lottery sale."
+                    "Lottery sale cannot be enabled after ticket sales already started."
             );
+            updateSalesMethodButton.setText("🎲 Update Sales Method");
         }
 
         lotteryButton =
@@ -245,7 +258,27 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         }
 
         if (presenter.canUpdateSalesMethod(token, companyId)) {
-            actions.add(updateSalesMethodButton);
+            VerticalLayout salesMethodLayout = new VerticalLayout();
+            salesMethodLayout.setPadding(false);
+            salesMethodLayout.setSpacing(false);
+
+            salesMethodLayout.add(updateSalesMethodButton);
+
+            if (!dto.hasLottery() && saleAlreadyStarted(dto)) {
+
+                Span disabledReason = new Span(
+                        "Lottery sale cannot be enabled after ticket sales already started."
+                );
+
+                disabledReason.getStyle()
+                        .set("font-size", "0.8rem")
+                        .set("color", "var(--lumo-secondary-text-color)")
+                        .set("margin-top", "0.2rem");
+
+                salesMethodLayout.add(disabledReason);
+            }
+
+            actions.add(salesMethodLayout);
         }
 
         if (dto.hasLottery()
