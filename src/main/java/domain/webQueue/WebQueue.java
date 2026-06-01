@@ -3,6 +3,8 @@ package domain.webQueue;
 import DTO.QueueEntryResultDTO;
 import application.AdmissionCallback;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -116,13 +118,24 @@ public class WebQueue {
 
     // removes a waiting user from the queue by their token; returns false if not found
     public boolean removeFromQueue(String uuid) {
-        Integer seq = sequenceMap.remove(uuid);
-        if (seq == null) {
+        Integer removedSeq = sequenceMap.remove(uuid);
+
+        if (removedSeq == null) {
             return false;
         }
+
         waitingLine.remove(uuid);
         callbacks.remove(uuid);
         waitingCount.decrementAndGet();
+        sequenceGenerator.decrementAndGet();
+        Map<String, Integer> snapshot = new HashMap<>(sequenceMap);
+
+        for (Map.Entry<String, Integer> entry : snapshot.entrySet()) {
+            if (entry.getValue() > removedSeq) {
+                sequenceMap.computeIfPresent(entry.getKey(), (k, v) -> v - 1);
+            }
+        }
+
         return true;
     }
 
