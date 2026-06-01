@@ -6,6 +6,7 @@ import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.activeOrder.STAGE;
+import java.time.Duration;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dto.*;
@@ -1402,4 +1403,52 @@ public class ActiveOrderService {
         });
     }
 
+    public Response<Long> getCheckoutRemainingSeconds(String token, int activeOrderId) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                String role = getValidatedRole(token);
+
+                if (role == null) {
+                    return new Response<>(null, "Invalid token");
+                }
+
+                String userIdentifier = role.equals("MEMBER")
+                        ? auth.getUserEmail(token).getValue()
+                        : token;
+
+                if (userIdentifier == null || userIdentifier.isBlank()) {
+                    return new Response<>(null, "Invalid user identifier");
+                }
+
+                ActiveOrder activeOrder = activeOrderRepo.findById(activeOrderId);
+
+                if (!activeOrder.getUserIdentifier().equals(userIdentifier)) {
+                    return new Response<>(null, "Active order does not belong to user");
+                }
+
+                if (activeOrder.isExpired(LocalDateTime.now())) {
+                    cleanupExpiredOrders();
+                    return new Response<>(0L, "Active order expired");
+                }
+
+                long remainingSeconds =
+                        activeOrder.getRemainingCheckoutSeconds(LocalDateTime.now());
+
+                return new Response<>(
+                        remainingSeconds,
+                        "Checkout timer retrieved successfully"
+                );
+
+            } catch (NoSuchElementException e) {
+                return new Response<>(null, "Active order not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                return new Response<>(
+                        null,
+                        "Failed to get checkout timer: " + e.getMessage()
+                );
+            }
+        });
+    }
 }

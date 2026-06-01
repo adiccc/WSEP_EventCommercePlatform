@@ -45,4 +45,8 @@ public class CheckoutPresenter {
     public Response<String> getRole(String token) {
         return auth.getRole(token);
     }
+
+    public Response<Long> getCheckoutRemainingSeconds(String token, int activeOrderId) {
+        return activeOrderService.getCheckoutRemainingSeconds(token, activeOrderId);
+    }
 }

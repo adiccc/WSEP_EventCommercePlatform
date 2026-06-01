@@ -85,4 +85,8 @@ public class PurchasePresenter {
     public Response<ActiveOrderSelectionDTO> getCurrentActiveOrderSelection(String token) {
         return activeOrderService.getCurrentActiveOrderSelection(token);
     }
+
+    public Response<Long> getCheckoutRemainingSeconds(String token, int activeOrderId) {
+        return activeOrderService.getCheckoutRemainingSeconds(token, activeOrderId);
+    }
 }

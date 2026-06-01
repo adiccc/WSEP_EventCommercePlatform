@@ -5,6 +5,7 @@ import DTO.ElementPositionDTO;
 import DTO.EnterPurchaseDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
+import com.vaadin.flow.shared.Registration;
 import domain.activeOrder.STAGE;
 import UI.Presenters.PurchasePresenter;
 import application.ActiveOrderService;
@@ -31,7 +32,8 @@ import java.util.*;
 public class PurchaseView extends VerticalLayout implements BeforeEnterObserver {
 
     private final PurchasePresenter presenter;
-
+    private Integer activeOrderId;
+    private final Span checkoutTimer = new Span();
     private static final int OFFSET_X = 50;
     private static final int OFFSET_Y = 50;
     private String lotteryCode;
@@ -126,6 +128,7 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         if (response.getValue().isExistingOrder()) {
 
             ActiveOrderDTO order = response.getValue().getActiveOrder();
+            activeOrderId = order.getId();
             if (order.getStage() == STAGE.EDITING) {
                 editingMode = true;
                 Response<ActiveOrderSelectionDTO> selectionResponse =
@@ -275,7 +278,7 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
                     .set("left", (zone.getPosition().getX() + OFFSET_X) + "px")
                     .set("top", (zone.getPosition().getY() + OFFSET_Y) + "px")
                     .set("border", "1px solid #999")
-                    .set("padding", "8px")
+                    .set("padding", "10px")
                     .set("background", "white")
                     .set("z-index", "2")
                     .set("border-radius", "10px")
@@ -286,23 +289,28 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
                     .set("margin", "0 0 8px 0")
                     .set("font-size", "14px");
 
+            int cols = zone.getCols();
+            int seatSize = cols > 20 ? 10 : cols > 14 ? 14 : 18;
+
             Div grid = new Div();
             grid.getStyle()
                     .set("display", "grid")
-                    .set("grid-template-columns", "repeat(" + zone.getCols() + ", 32px)")
+                    .set("grid-template-columns", "repeat(" + Math.max(cols, 1) + ", " + seatSize + "px)")
                     .set("gap", "4px");
 
             for (int r = 0; r < zone.getRows(); r++) {
                 for (int c = 0; c < zone.getCols(); c++) {
                     Button seat = new Button((r + 1) + "-" + (c + 1));
 
-                    seat.setWidth("28px");
-                    seat.setHeight("28px");
+                    seat.setWidth(seatSize + "px");
+                    seat.setHeight(seatSize + "px");
 
                     seat.getStyle()
-                            .set("font-size", "10px")
+                            .set("font-size", seatSize <= 14 ? "0" : "8px")
                             .set("padding", "0")
-                            .set("min-width", "28px");
+                            .set("min-width", seatSize + "px")
+                            .set("width", seatSize + "px")
+                            .set("height", seatSize + "px");
 
                     String zoneName = zone.getName();
                     int finalR = r;
@@ -599,9 +607,119 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
             UI.getCurrent().navigate("checkout/" + res.getValue());
         });
 
+        if (editingMode && activeOrderId != null) {
+            checkoutTimer.getStyle()
+                    .set("background", "#fff7ed")
+                    .set("border", "1px solid #fed7aa")
+                    .set("border-radius", "12px")
+                    .set("padding", "0.75rem")
+                    .set("font-weight", "700")
+                    .set("color", "#9a3412")
+                    .set("width", "calc(100% - 1.5rem)")
+                    .set("box-sizing", "border-box");
+            box.add(new H3("Summary"), checkoutTimer, totalLabel, selectedSummary, continueBtn);
+            startCheckoutTimer(token);
+            return box;
+        }
+
         box.add(new H3("Summary"), totalLabel, selectedSummary, continueBtn);
 
         return box;
+    }
+
+    private void startCheckoutTimer(String token) {
+        stopCheckoutTimer();
+
+        if (activeOrderId == null) {
+            return;
+        }
+
+        Response<Long> response =
+                presenter.getCheckoutRemainingSeconds(token, activeOrderId);
+
+        if (response.getValue() == null) {
+            checkoutTimer.setText("Could not load reservation timer");
+            return;
+        }
+
+        long remainingSeconds = response.getValue();
+
+        if (remainingSeconds <= 0) {
+            handleExpiredReservation();
+            return;
+        }
+        int initialRemainingSeconds = Math.toIntExact(remainingSeconds);
+
+        checkoutTimer.setText(
+                "Tickets reserved for: " + formatRemainingTime(remainingSeconds)
+        );
+
+        checkoutTimer.getElement().executeJs("""
+        const element = this;
+        let remaining = $0;
+
+        if (element._timerInterval) {
+            clearInterval(element._timerInterval);
+        }
+
+        function formatTime(totalSeconds) {
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+
+            return String(minutes).padStart(2, '0')
+                    + ':'
+                    + String(seconds).padStart(2, '0');
+        }
+
+        element._timerInterval = setInterval(() => {
+            remaining--;
+
+            if (remaining <= 0) {
+                clearInterval(element._timerInterval);
+                element._timerInterval = null;
+                element.textContent = 'Tickets reserved for: 00:00';
+                element.dispatchEvent(new CustomEvent('reservation-expired'));
+                return;
+            }
+
+            element.textContent = 'Tickets reserved for: ' + formatTime(remaining);
+        }, 1000);
+    """, initialRemainingSeconds);
+
+        checkoutTimer.getElement().addEventListener(
+                "reservation-expired",
+                e -> handleExpiredReservation()
+        );
+    }
+
+    private String formatRemainingTime(long totalSeconds) {
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+
+        return String.format("%02d:%02d", minutes, seconds);
+    }
+
+    private void handleExpiredReservation() {
+        stopCheckoutTimer();
+
+        Notification.show("Your reserved tickets expired. Please select tickets again.");
+
+        UI.getCurrent().navigate("event/" + companyId + "/" + eventId);
+    }
+
+    private void stopCheckoutTimer() {
+        checkoutTimer.getElement().executeJs("""
+        if (this._timerInterval) {
+            clearInterval(this._timerInterval);
+            this._timerInterval = null;
+        }
+    """);
+    }
+
+    @Override
+    protected void onDetach(com.vaadin.flow.component.DetachEvent detachEvent) {
+        stopCheckoutTimer();
+        super.onDetach(detachEvent);
     }
 
     private int getSelectedTicketsCount() {

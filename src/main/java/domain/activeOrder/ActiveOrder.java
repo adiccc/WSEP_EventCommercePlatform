@@ -3,6 +3,7 @@ package domain.activeOrder;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.time.Duration;
 
 public class ActiveOrder {
     private final int orderId;
@@ -186,5 +187,20 @@ public class ActiveOrder {
 
     public void clearApprovedCheckoutPrice() {
         this.approvedCheckoutPrice = null;
+    }
+
+    public long getRemainingCheckoutSeconds(LocalDateTime now) {
+        if (checkoutStartedAt == null) {
+            return 0;
+        }
+
+        if (stage != STAGE.CHECKING_OUT && stage != STAGE.EDITING) {
+            return 0;
+        }
+
+        LocalDateTime expiresAt =
+                checkoutStartedAt.plusMinutes(CHECKOUT_TIMEOUT_MINUTES);
+
+        return Math.max(0, Duration.between(now, expiresAt).getSeconds());
     }
 }
