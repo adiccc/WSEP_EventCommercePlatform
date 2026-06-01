@@ -938,22 +938,8 @@ class AdminServiceTest {
                 "2026-01-01T20:00",
                 "TEL_AVIV",
                 List.of(
-                        new PurchasedTicketDTO(
-                                1,
-                                "floor",
-                                "STANDING",
-                                null,
-                                null,
-                                50.0
-                        ),
-                        new PurchasedTicketDTO(
-                                2,
-                                "floor",
-                                "STANDING",
-                                null,
-                                null,
-                                50.0
-                        )
+                        new PurchasedTicketDTO(1, "floor", "STANDING", null, null, 50.0),
+                        new PurchasedTicketDTO(2, "floor", "STANDING", null, null, 50.0)
                 ),
                 List.of(1, 2),
                 100.0,
@@ -968,22 +954,8 @@ class AdminServiceTest {
                 "2026-01-01T20:00",
                 "TEL_AVIV",
                 List.of(
-                        new PurchasedTicketDTO(
-                                3,
-                                "floor",
-                                "STANDING",
-                                null,
-                                null,
-                                50.0
-                        ),
-                        new PurchasedTicketDTO(
-                                4,
-                                "floor",
-                                "STANDING",
-                                null,
-                                null,
-                                50.0
-                        )
+                        new PurchasedTicketDTO(3, "floor", "STANDING", null, null, 50.0),
+                        new PurchasedTicketDTO(4, "floor", "STANDING", null, null, 50.0)
                 ),
                 List.of(3, 4),
                 100.0,
@@ -1002,7 +974,11 @@ class AdminServiceTest {
         // Assert
         assertNotNull(response.getValue(), "Response value should not be null");
         assertEquals(1, response.getValue().size(), "Should filter and return exactly 1 order");
-        assertEquals("buyer1@bgu.ac.il", response.getValue().get(0).getUserIdentifier(), "Should match the requested buyer");
+
+        AdminPurchaseHistoryDTO fetchedOrder = response.getValue().get(0);
+        assertEquals("buyer1@bgu.ac.il", fetchedOrder.getUserIdentifier(), "Should match the requested buyer");
+
+        assertEquals(List.of(1, 2), fetchedOrder.getPurchasedTickets(), "Should return the list of ticket IDs directly");
         assertEquals("Retrieved history orders successfully for filter", response.getMessage());
     }
 
@@ -1973,5 +1949,23 @@ class AdminServiceTest {
         } finally {
             tabReg.remove();
         }
+    }
+    @Test
+    void GivenAdminAndNoFiltersProvided_WhenGetGlobalOrders_ThenReturnAllOrders() {
+        // Arrange
+        Event event = eventRepo.findById(eventId);
+        event.getOrders().add(new Order(1, "buyer1@bgu.ac.il", eventId, "Test Event", "2026-01-01T20:00", "CENTER", List.of(), List.of(1), 50.0, "pay1"));
+        event.getOrders().add(new Order(2, "buyer2@bgu.ac.il", eventId, "Test Event", "2026-01-01T20:00", "CENTER", List.of(), List.of(2), 50.0, "pay2"));
+        eventRepo.store(event);
+
+        // Act
+        Response<List<AdminPurchaseHistoryDTO>> response = adminService.getGlobalOrders(
+                adminToken, null, null, null
+        );
+
+        // Assert
+        assertNotNull(response.getValue());
+        assertEquals(2, response.getValue().size(), "Should return all system orders when no filters are provided");
+        assertEquals("Retrieved history orders successfully for filter", response.getMessage());
     }
 }

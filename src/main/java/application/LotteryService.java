@@ -537,4 +537,9 @@ public class LotteryService {
             }
         });
     }
+
+    //for tests
+    public void shutdown() {
+        scheduler.shutdownNow();
+    }
 }
