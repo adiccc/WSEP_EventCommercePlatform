@@ -27,7 +27,7 @@ public class Event {
     private LocalDateTime date;
     private final String name;
     private LocalDateTime saleStartDate;
-    private final boolean hasLottery;
+    private boolean hasLottery;
     private PurchasePolicy purchasePolicy;
     private DiscountPolicy discountPolicy;
     private boolean active;
@@ -146,6 +146,10 @@ public class Event {
 
     public boolean hasLottery() {
         return hasLottery;
+    }
+
+    public void setHasLottery(boolean hasLottery) {
+        this.hasLottery = hasLottery;
     }
 
     public int getId() {

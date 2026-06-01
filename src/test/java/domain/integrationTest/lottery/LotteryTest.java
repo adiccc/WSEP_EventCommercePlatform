@@ -1,5 +1,6 @@
 package domain.integrationTest.lottery;
 
+import domain.dto.LotteryDTO;
 import domain.lottery.Lottery;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -92,4 +93,93 @@ class LotteryTest {
         assertFalse(lottery.codeMatchesUser(999, assignedCode), "Validation should fail for an unregistered user");
     }
 
+    // ==========================================
+    // Unit tests for updateLottery
+    // ==========================================
+
+    private final LocalDateTime saleStartDate = LocalDateTime.now().plusDays(10);
+
+    @Test
+    void GivenValidDTO_WhenUpdateLottery_ThenFieldsAreUpdated() {
+        LocalDateTime newWindow = LocalDateTime.now().plusDays(5);
+        LotteryDTO dto = new LotteryDTO(201, 10, newWindow, 48L);
+
+        lottery.updateLottery(dto, saleStartDate);
+
+        assertEquals(10, lottery.getCapacity());
+        assertEquals(newWindow, lottery.getRegisterWindow());
+        assertEquals(48L, lottery.getExpirationTime());
+    }
+
+    @Test
+    void GivenCapacityZero_WhenUpdateLottery_ThenThrowsMissingDetails() {
+        LotteryDTO dto = new LotteryDTO(201, 0, LocalDateTime.now().plusDays(5), 48L);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> lottery.updateLottery(dto, saleStartDate));
+        assertTrue(ex.getMessage().contains("complete all lottery details"));
+    }
+
+    @Test
+    void GivenNullRegisterWindow_WhenUpdateLottery_ThenThrowsMissingDetails() {
+        LotteryDTO dto = new LotteryDTO(201, 10, null, 48L);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> lottery.updateLottery(dto, saleStartDate));
+        assertTrue(ex.getMessage().contains("complete all lottery details"));
+    }
+
+    @Test
+    void GivenZeroExpirationTime_WhenUpdateLottery_ThenThrowsMissingDetails() {
+        LotteryDTO dto = new LotteryDTO(201, 10, LocalDateTime.now().plusDays(5), 0L);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> lottery.updateLottery(dto, saleStartDate));
+        assertTrue(ex.getMessage().contains("complete all lottery details"));
+    }
+
+    @Test
+    void GivenRegisterWindowInPast_WhenUpdateLottery_ThenThrowsInvalid() {
+        LotteryDTO dto = new LotteryDTO(201, 10, LocalDateTime.now().minusDays(1), 48L);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> lottery.updateLottery(dto, saleStartDate));
+        assertEquals("Register window must be in the future", ex.getMessage());
+    }
+
+    @Test
+    void GivenRegisterWindowAfterSaleStart_WhenUpdateLottery_ThenThrowsInvalid() {
+        LotteryDTO dto = new LotteryDTO(201, 10, saleStartDate.plusDays(1), 48L);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> lottery.updateLottery(dto, saleStartDate));
+        assertEquals("Register window must be before sale start date", ex.getMessage());
+    }
+
+    @Test
+    void GivenWinnersDrawnButNotNotified_WhenUpdateLottery_ThenWinnersAreCleared() {
+        lottery.registerUserToLottery(101);
+        lottery.registerUserToLottery(102);
+        lottery.drawWinners();
+        assertFalse(lottery.getWinners().isEmpty(), "Precondition: winners should be drawn");
+
+        LotteryDTO dto = new LotteryDTO(201, 5, LocalDateTime.now().plusDays(5), 48L);
+        lottery.updateLottery(dto, saleStartDate);
+
+        assertTrue(lottery.getWinners().isEmpty(), "Winners should be cleared after update");
+        assertEquals(5, lottery.getCapacity());
+    }
+
+    @Test
+    void GivenWinnersAlreadyNotified_WhenUpdateLottery_ThenThrows() {
+        lottery.registerUserToLottery(101);
+        int winnerId = lottery.drawWinners().keySet().iterator().next();
+        lottery.markWinnerNotified(winnerId);
+
+        LotteryDTO dto = new LotteryDTO(201, 5, LocalDateTime.now().plusDays(5), 48L);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> lottery.updateLottery(dto, saleStartDate));
+        assertEquals("Cannot update lottery after winners have been notified", ex.getMessage());
+    }
 }

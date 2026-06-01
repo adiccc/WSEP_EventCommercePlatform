@@ -1,7 +1,9 @@
 package domain.lottery;
 
+import domain.dto.LotteryDTO;
 import java.time.LocalDateTime;
 import java.util.*;
+
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -103,6 +105,22 @@ public class Lottery {
     public void setVersion(long version) {
         this.version = version;
     }
+
+    public void updateLottery(LotteryDTO dto, LocalDateTime eventSaleStartDate) {
+        if (!notifiedWinners.isEmpty())
+            throw new IllegalStateException("Cannot update lottery after winners have been notified");
+        if (dto.getCapacity() <= 0 || dto.getRegisterWindow() == null || dto.getExpirationTime() <= 0)
+            throw new IllegalArgumentException("Please complete all lottery details: capacity, register window, and expiration time");
+        if (dto.getRegisterWindow().isBefore(LocalDateTime.now()))
+            throw new IllegalArgumentException("Register window must be in the future");
+        if (dto.getRegisterWindow().isAfter(eventSaleStartDate))
+            throw new IllegalArgumentException("Register window must be before sale start date");
+        this.capacity = dto.getCapacity();
+        this.registerWindow = dto.getRegisterWindow();
+        this.expirationTime = dto.getExpirationTime();
+        winners.clear();
+    }
+
 
     public void registerUserToLottery(int userId) {
         registered.add(userId);

@@ -7,6 +7,7 @@ import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
+import domain.dto.LotteryDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.lottery.Lottery;
@@ -40,6 +41,7 @@ class LotteryServiceTest {
         private TokenService tokenService;
         private EventRepoImpl eventRepo;
         private LotteryRepoImpl lotteryRepo;
+        private CompanyRepoImpl companyRepo;
         private LotteryService lotteryService;
 
         private LocalDateTime saleStartDate_Y;
@@ -68,7 +70,7 @@ class LotteryServiceTest {
                 userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier);
                 suspensionRepo = new SuspensionRepoImpl();
 
-                CompanyRepoImpl companyRepo = new CompanyRepoImpl();
+                companyRepo = new CompanyRepoImpl();
                 eventRepo = new EventRepoImpl();
                 lotteryRepo = new LotteryRepoImpl();
 
@@ -958,5 +960,160 @@ class LotteryServiceTest {
 
                 assertEquals(1, updatedLottery.getNotifiedWinners().size(),
                         "Winner should remain marked as notified");
+        }
+
+        // ==========================================
+        // Tests for updateLottery Use Case
+        // ==========================================
+
+        private LotteryDTO validDTO(int capacity) {
+                return new LotteryDTO(eventId, capacity, LocalDateTime.now().plusDays(8), 24L);
+        }
+
+        @Test
+        void GivenLotteryEventAndValidDTO_WhenUpdateLottery_ThenLotteryDetailsUpdated() {
+                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, validDTO(100));
+
+                assertTrue(response.getValue());
+                assertEquals("Lottery updated successfully", response.getMessage());
+                assertEquals(100, lotteryRepo.findById(eventId).getCapacity());
+        }
+
+        @Test
+        void GivenLotteryEventAndNullDTO_WhenUpdateLottery_ThenSaleModeChangedToRegular() {
+                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, null);
+
+                assertTrue(response.getValue());
+                assertEquals("Sales method updated to regular purchase", response.getMessage());
+                assertFalse(eventRepo.findById(eventId).hasLottery());
+        }
+
+        @Test
+        void GivenEventWithoutLottery_WhenUpdateLotteryWithDTO_ThenLotteryCreated() {
+                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
+                lotteryService.updateLottery(validToken, eventId, null);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, validDTO(30));
+
+                assertTrue(response.getValue());
+                assertEquals("Sales method updated to lottery", response.getMessage());
+                assertTrue(eventRepo.findById(eventId).hasLottery());
+        }
+
+        @Test
+        void GivenDeletedCompany_WhenUpdateLottery_ThenCompanyNotFoundError() {
+                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
+                companyRepo.delete(companyId);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, validDTO(100));
+
+                assertFalse(response.getValue());
+                assertEquals("Company does not exist", response.getMessage());
+        }
+
+        @Test
+        void GivenNonExistingEventId_WhenUpdateLottery_ThenEventNotFoundError() {
+                Response<Boolean> response = lotteryService.updateLottery(validToken, -1, validDTO(100));
+
+                assertFalse(response.getValue());
+                assertEquals("Event does not exist", response.getMessage());
+        }
+
+        @Test
+        void GivenNonOwnerUser_WhenUpdateLottery_ThenUnauthorizedError() {
+                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
+
+                Response<Boolean> response = lotteryService.updateLottery(notPermission, eventId, validDTO(100));
+
+                assertFalse(response.getValue());
+                assertTrue(response.getMessage().contains("not authorized to change the sales method"));
+        }
+
+        @Test
+        void GivenInvalidToken_WhenUpdateLottery_ThenUserNotLoggedInError() {
+                Response<Boolean> response = lotteryService.updateLottery(invalidToken, eventId, validDTO(100));
+
+                assertFalse(response.getValue());
+                assertEquals("Invalid token", response.getMessage());
+        }
+
+        @Test
+        void GivenLotteryDTOWithMissingDetails_WhenUpdateLottery_ThenMissingDetailsError() {
+                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
+                LotteryDTO missingCapacity = new LotteryDTO(eventId, 0, LocalDateTime.now().plusDays(8), 24L);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, missingCapacity);
+
+                assertFalse(response.getValue());
+                assertTrue(response.getMessage().contains("complete all lottery details"));
+        }
+
+        @Test
+        void GivenLotteryDTOWithInvalidParameters_WhenUpdateLottery_ThenInvalidParametersError() {
+                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
+                LotteryDTO pastWindow = new LotteryDTO(eventId, 100, LocalDateTime.now().minusDays(1), 24L);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, pastWindow);
+
+                assertFalse(response.getValue());
+                assertEquals("Register window must be in the future", response.getMessage());
+        }
+
+        @Test
+        void GivenWinnersAlreadyNotified_WhenUpdateLottery_ThenUpdateRejected() {
+                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
+                lotteryService.registerUserToLottery(validToken, eventId);
+
+                Lottery lottery = lotteryRepo.findById(eventId);
+                int winnerId = lottery.drawWinners().keySet().iterator().next();
+                lottery.markWinnerNotified(winnerId);
+                lotteryRepo.store(lottery);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, validDTO(100));
+
+                assertFalse(response.getValue());
+                assertEquals("Cannot update lottery after winners have been notified", response.getMessage());
+        }
+
+        @Test
+        void GivenConcurrentDrawAndUpdate_WhenRacing_ThenEitherNotifiedAndUpdateRejectedOrUpdatedAndNoneNotified()
+                        throws Exception {
+                lotteryService.createLottery(validToken, eventId, 50, LocalDateTime.now().plusDays(7), 24L);
+                lotteryService.registerUserToLottery(validToken, eventId);
+                lotteryService.registerUserToLottery(notPermission, eventId);
+
+                ExecutorService pool = Executors.newFixedThreadPool(2);
+                CountDownLatch start = new CountDownLatch(1);
+                AtomicReference<Response<Boolean>> updateResult = new AtomicReference<>();
+
+                Future<?> drawFuture = pool.submit(() -> {
+                        try { start.await(); } catch (InterruptedException ignored) {}
+                        lotteryService.drawLottery(eventId);
+                });
+                Future<?> updateFuture = pool.submit(() -> {
+                        try { start.await(); } catch (InterruptedException ignored) {}
+                        updateResult.set(lotteryService.updateLottery(validToken, eventId, validDTO(75)));
+                });
+
+                start.countDown();
+                drawFuture.get(5, TimeUnit.SECONDS);
+                updateFuture.get(5, TimeUnit.SECONDS);
+                pool.shutdownNow();
+
+                Response<Boolean> result = updateResult.get();
+                int notifiedCount = lotteryRepo.findById(eventId).getNotifiedWinners().size();
+
+                if (result.getValue()) {
+                        assertEquals(0, notifiedCount,
+                                "If updateLottery won, no users should be notified");
+                } else {
+                        assertEquals("Cannot update lottery after winners have been notified", result.getMessage());
+                        assertTrue(notifiedCount > 0,
+                                "If updateLottery was rejected, some winners must have been notified");
+                }
         }
 }

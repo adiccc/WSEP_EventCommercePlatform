@@ -9,6 +9,7 @@ import domain.company.ICompanyRepo;
 import domain.dataType.PermissionType;
 import domain.event.Event;
 import domain.event.IEventRepo;
+import domain.dto.LotteryDTO;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
@@ -111,6 +112,89 @@ public class LotteryService {
         });
     }
 
+    // getting lotteryDTO as null means we want to switch to regular sell
+    public Response<Boolean> updateLottery(String token, int eventId, LotteryDTO lotteryDTO) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "updateLottery called");
+            if (getValidatedRole(token) == null) return new Response<>(false, "Invalid token");
+            int userId = getUserIdFromToken(token);
+            if (userId == -1) {
+                logger.severe("Only members can update lottery");
+                return new Response<>(false, "Only members can update lottery");
+            }
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
+            }
+            Event event;
+            try {
+                event = eventRepo.findById(eventId);
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
+                return new Response<>(false, "Event does not exist");
+            }
+            Company company;
+            try {
+                company = companyRepo.findById(event.getCompanyId());
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "Company not found: " + e.getMessage());
+                return new Response<>(false, "Company does not exist");
+            }
+            try {
+                if (!company.isActive()) {
+                    return new Response<>(false, "Company is not active");
+                }
+                if (!event.isActive()) {
+                    return new Response<>(false, "Event is not active");
+                }
+                if (!company.isOwner(userId)) {
+                    return new Response<>(false, "User id " + userId + " is not authorized to change the sales method");
+                }
+                if (lotteryDTO == null) {
+                    Lottery lottery = lotteryRepo.findById(eventId);
+                    if (lottery.getNotifiedWinners().size() == 0) {
+                        lotteryRepo.delete(lottery);
+                        event.setHasLottery(false);
+                        eventRepo.store(event);
+                        logger.log(Level.INFO, "Lottery cancelled, event sales method set to regular purchase");
+                        return new Response<>(true, "Sales method updated to regular purchase");
+                    }
+                    else {
+                        logger.log(Level.WARNING, "Lottery can't be cancelled, users where notified");
+                        return new Response<>(false, "Lottery can't be cancelled, users where notified");
+                    }
+                }
+                Lottery lottery;
+                boolean isNew;
+                try {
+                    lottery = lotteryRepo.findById(eventId);
+                    isNew = false;
+                } catch (NoSuchElementException e) {
+                    lottery = new Lottery(eventId, 0, LocalDateTime.now(), 0);
+                    isNew = true;
+                }
+                lottery.updateLottery(lotteryDTO, event.getSaleStartDate());
+                if (isNew) {
+                    event.setHasLottery(true);
+                    event.setActive(true);
+                    eventRepo.store(event);
+                }
+                lotteryRepo.store(lottery);
+                scheduleLotteryDraw(lottery);
+                String msg = isNew ? "Sales method updated to lottery" : "Lottery updated successfully";
+                logger.log(Level.INFO, msg);
+                return new Response<>(true, msg);
+            } catch (IllegalStateException | IllegalArgumentException e) {
+                logger.log(Level.SEVERE, "Invalid lottery update: " + e.getMessage());
+                return new Response<>(false, e.getMessage());
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "failed updating lottery: " + e.getMessage());
+                return new Response<>(false, "failed to update lottery: " + e.getMessage());
+            }
+        });
+    }
 
     //Calculates the time difference and schedules the drawLottery method to execute automatically.
     private void scheduleLotteryDraw(Lottery lottery) {
