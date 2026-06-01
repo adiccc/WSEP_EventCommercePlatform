@@ -207,7 +207,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         addSeatingAreasButton.addClickListener(e ->
                 UI.getCurrent().navigate(
-                        "event/" + eventId + "/add-seating-area"
+                        "manage/event/" + eventId + "/add-seating-area"
                 )
         );
 

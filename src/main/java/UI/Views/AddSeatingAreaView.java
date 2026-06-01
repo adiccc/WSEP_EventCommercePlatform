@@ -28,7 +28,7 @@ import domain.dto.EventMapDTO;
 import java.util.ArrayList;
 import java.util.List;
 
-@Route(value = "event/:eventId(\\d+)/add-seating-area", layout = MainLayout.class)
+@Route(value = "manage/event/:eventId(\\d+)/add-seating-area", layout = MainLayout.class)
 @PageTitle("Add Seating Area")
 @AnonymousAllowed
 public class AddSeatingAreaView extends VerticalLayout implements BeforeEnterObserver {
