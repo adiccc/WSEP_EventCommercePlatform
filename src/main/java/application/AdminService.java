@@ -510,10 +510,28 @@ public class AdminService {
                 List<AdminPurchaseHistoryDTO> historyOrders = new ArrayList<>();
                 if(hasUsers){
                    for (Event event : allEvents) {
+                       String companyName = "";
+                       try {
+                           Company company = companyRepo.findById(event.getCompanyId());
+                           companyName = company.getCompanyName();
+                       } catch (Exception ignored) {}
+
                        List<Order> orders = event.getOrders();
                        for (Order order : orders) {
                            if(usersFilter.contains(order.getUserIdentifier()))
-                               historyOrders.add(toAdminPurchaseHistoryDTO(order, event));
+                               historyOrders.add(new AdminPurchaseHistoryDTO(
+                                       order.getOrderId(),
+                                       order.getUserIdentifier(),
+                                       event.getCompanyId(),
+                                       companyName,
+                                       event.getId(),
+                                       event.getName(),
+                                       String.valueOf(event.getDate()),
+                                       event.getLocation().toString(),
+                                       order.getStatus(),
+                                       order.getTickets(),
+                                       order.getTotalSum()
+                               ));
                        }
                    }
                 }
@@ -535,10 +553,26 @@ public class AdminService {
                             }
                         }
                         if (toAdd) {
+                            String companyName = "";
+                            try {
+                                Company company = companyRepo.findById(event.getCompanyId());
+                                companyName = company.getCompanyName();
+                            } catch (Exception ignored) {}
                             List<Order> orders = event.getOrders();
                             for (Order order : orders) {
-                                historyOrders.add(toAdminPurchaseHistoryDTO(order, event));
-                            }
+                                historyOrders.add(new AdminPurchaseHistoryDTO(
+                                        order.getOrderId(),
+                                        order.getUserIdentifier(),
+                                        event.getCompanyId(),
+                                        companyName,
+                                        event.getId(),
+                                        event.getName(),
+                                        String.valueOf(event.getDate()),
+                                        event.getLocation().toString(),
+                                        order.getStatus(),
+                                        order.getTickets(), // מעבירים ישירות את ה-List<Integer>
+                                        order.getTotalSum()
+                                ));                            }
                         }
                     }
                 }
@@ -557,41 +591,6 @@ public class AdminService {
         });
     }
 
-    private AdminPurchaseHistoryDTO toAdminPurchaseHistoryDTO(Order order, Event event) {
-        String companyName = "Unknown Company";
-
-        try {
-            Company company = companyRepo.findById(event.getCompanyId());
-            companyName = company.getCompanyName();
-        } catch (Exception ignored) {
-        }
-
-        List<PurchasedTicketDTO> tickets = order.getTickets()
-                .stream()
-                .map(ticketId -> new PurchasedTicketDTO(
-                        ticketId,
-                        "-",
-                        "-",
-                        null,
-                        null,
-                        0.0
-                ))
-                .toList();
-
-        return new AdminPurchaseHistoryDTO(
-                order.getOrderId(),
-                order.getUserIdentifier(),
-                event.getCompanyId(),
-                companyName,
-                event.getId(),
-                event.getName(),
-                String.valueOf(event.getDate()),
-                event.getLocation().toString(),
-                order.getStatus(),
-                tickets,
-                order.getTotalSum()
-        );
-    }
 
     public Response<List<String>> getAllPurchasers(String token) {
         return RetryHelper.executeWithRetry(() -> {
