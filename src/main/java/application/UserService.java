@@ -238,7 +238,6 @@ public class UserService {
             }
             boolean removed = WebQueue.getInstance().removeFromQueue(token);
             if (removed) {
-                WebQueue.getInstance().notifyUserLeft();
                 logger.info("User successfully removed from queue for token: " + token);
                 return new Response<>(true, "User removed from queue");
             } else {
