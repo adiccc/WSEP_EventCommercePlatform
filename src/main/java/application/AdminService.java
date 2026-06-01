@@ -567,7 +567,7 @@ public class AdminService {
                                         String.valueOf(event.getDate()),
                                         event.getLocation().toString(),
                                         order.getStatus(),
-                                        order.getTickets(), // מעבירים ישירות את ה-List<Integer>
+                                        order.getTickets(), 
                                         order.getTotalSum()
                                 ));                            }
                         }
