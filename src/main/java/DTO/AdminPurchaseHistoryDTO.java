@@ -21,7 +21,7 @@ public class AdminPurchaseHistoryDTO {
 
     private final OrderStatus status;
 
-    private final List<PurchasedTicketDTO> purchasedTickets;
+    private final List<Integer> purchasedTickets;
 
     private final double totalSum;
 
@@ -35,7 +35,7 @@ public class AdminPurchaseHistoryDTO {
             String eventDate,
             String eventLocation,
             OrderStatus status,
-            List<PurchasedTicketDTO> purchasedTickets,
+            List<Integer> purchasedTickets,
             double totalSum
     ) {
         this.orderId = orderId;
@@ -94,7 +94,7 @@ public class AdminPurchaseHistoryDTO {
         return status;
     }
 
-    public List<PurchasedTicketDTO> getPurchasedTickets() {
+    public List<Integer> getPurchasedTickets() {
         return Collections.unmodifiableList(purchasedTickets);
     }
 
