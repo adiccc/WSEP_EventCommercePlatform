@@ -332,6 +332,60 @@ public class EventCompanyManageService {
             }
         });
     }
+
+    public Response<EventMapDTO> getEventMapForManagement(String token, Integer eventId) {
+        return RetryHelper.executeWithRetry(() -> {
+            logger.log(Level.INFO, "getEventMapForManagement called");
+
+            String role = getValidatedRole(token);
+            if (role == null) {
+                logger.log(Level.SEVERE, "Invalid token");
+                return new Response<>(null, "Invalid token");
+            }
+
+            int userId = getUserIdFromToken(token);
+            if (userId == -1) {
+                logger.severe("Only members can view event map for management");
+                return new Response<>(null, "Only members can view event map for management");
+            }
+
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
+            }
+
+            try {
+                Event event = eventRepo.findById(eventId);
+                Company company = companyRepo.findById(event.getCompanyId());
+
+                if (!company.checkPermission(userId, CREATE_EVENT)) {
+                    logger.severe("User does not have permission to view event map for management");
+                    return new Response<>(null, "Permission required");
+                }
+
+                EventMap map = event.getMap();
+
+                if (map == null) {
+                    logger.severe("Event map not defined yet");
+                    return new Response<>(null, "Event map not defined yet");
+                }
+
+                return new Response<>(new EventMapDTO(map), "Event map retrieved successfully");
+
+            } catch (NoSuchElementException e) {
+                logger.log(Level.SEVERE, "event not found: " + e.getMessage());
+                return new Response<>(null, "Event not found");
+
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "failed retrieving event map : " + e.getMessage());
+                return new Response<>(null, "failed to retrieve event map : " + e.getMessage());
+            }
+        });
+    }
+
     public Response<Boolean> DeleteEvent(String token, Integer eventId) {
         return RetryHelper.executeWithRetry(()->{
             logger.log(Level.INFO, "DeleteEvent called");
