@@ -100,14 +100,24 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         Response<EnterPurchaseDTO> response = presenter.enterPurchase(token, companyId, eventId, lotteryCode);
 
         if (response.getValue() == null) {
-            Notification.show(response.getMessage());
+            String message = response.getMessage();
+
+            if ("You already have an active order. Please complete or cancel it before starting a new purchase.".equals(message)) {
+                Notification.show(
+                        "You already have an active order. Please complete or cancel it before starting a new purchase.",
+                        5000,
+                        Notification.Position.TOP_CENTER
+                );
+            } else {
+                Notification.show(message);
+            }
 
             Button back = new Button("Back to Event", e ->
                     UI.getCurrent().navigate("event/" + companyId + "/" + eventId)
             );
 
             add(
-                    new Paragraph("Error: " + response.getMessage()),
+                    new Paragraph("Error: " + message),
                     back
             );
 

@@ -141,20 +141,19 @@ public class ActiveOrderService {
                         ? auth.getUserEmail(token).getValue()
                         : token;
 
-                Optional<ActiveOrder> existingOrder = activeOrderRepo.findActiveOrderByUserAndEvent(userIdentifier,
-                        eventId);
+                try {
+                    ActiveOrderDTO existingOrderDTO = activeOrderRepo.findOrderByUserId(userIdentifier);
+                    ActiveOrder existingOrder = activeOrderRepo.findById(existingOrderDTO.getId());
 
-                if (existingOrder.isPresent()) {
-                    logger.log(Level.INFO,
-                            "Existing active order found. Redirecting user to checkout. Order ID: "
-                                    + existingOrder.get().getId());
-                    return new Response<>(
-                            new EnterPurchaseDTO(
-                                    new EventMapDTO(e.getMap()),
-                                    new ActiveOrderDTO(existingOrder.get()),
-                                    true,
-                                    false, null),
-                            "Existing active order found");
+                    if (!existingOrder.isExpired(LocalDateTime.now())) {
+                        return new Response<>(
+                                null,
+                                "You already have an active order. Please complete or cancel it before starting a new purchase."
+                        );
+                    }
+
+                } catch (NoSuchElementException ignored) {
+                    // No active order for this user, continue normally
                 }
 
                 if (e.hasLottery()) {
