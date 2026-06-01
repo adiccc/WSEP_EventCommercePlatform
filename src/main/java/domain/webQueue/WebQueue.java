@@ -127,7 +127,7 @@ public class WebQueue {
         waitingLine.remove(uuid);
         callbacks.remove(uuid);
         waitingCount.decrementAndGet();
-
+        sequenceGenerator.decrementAndGet();
         Map<String, Integer> snapshot = new HashMap<>(sequenceMap);
 
         for (Map.Entry<String, Integer> entry : snapshot.entrySet()) {
@@ -135,8 +135,6 @@ public class WebQueue {
                 sequenceMap.computeIfPresent(entry.getKey(), (k, v) -> v - 1);
             }
         }
-
-        sequenceGenerator.decrementAndGet();
 
         return true;
     }
