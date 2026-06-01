@@ -16,7 +16,7 @@ public class ActiveOrder {
     private STAGE stage;
     private Double approvedCheckoutPrice;
     private static final int SELECTING_TICKETS_TIMEOUT_MINUTES = 5;
-    private static final int CHECKOUT_TIMEOUT_MINUTES = 2;
+    private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
     private static final int WARNING_BEFORE_CHECKOUT_EXPIRY_MINUTES = 1;
 
     public ActiveOrder(int orderId, String userIdentifier, Integer eventId, List<Integer> tickets) {
