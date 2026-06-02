@@ -2358,4 +2358,33 @@ class CompanyServiceUpdatedTest {
                 "Offline removed manager should have a delayed KICKOUT_TAB_NAVIGATION notification");
     }
 
+    @Test
+    void GivenOwnerAddsAndRemovesSameDiscount_WhenUsingDiscountService_ThenSuccess() {
+
+        LocalDate endDate = LocalDate.now().plusDays(5);
+
+        DiscountDTO discountDTO =
+                new DiscountDTO(25.0, endDate);
+
+        Response<Boolean> addResponse =
+                service.addDiscountToCompany(
+                        OWNER_TOKEN,
+                        COMPANY_ID,
+                        discountDTO
+                );
+
+        assertFalse(addResponse.isError());
+        assertEquals(Boolean.TRUE, addResponse.getValue());
+
+        Response<Boolean> removeResponse =
+                service.removeDiscountFromCompany(
+                        OWNER_TOKEN,
+                        COMPANY_ID,
+                        discountDTO
+                );
+
+        assertFalse(removeResponse.isError());
+        assertEquals(Boolean.TRUE, removeResponse.getValue());
+    }
+
 }
