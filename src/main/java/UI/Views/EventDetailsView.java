@@ -193,7 +193,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         updateDateButton.getStyle()
                 .set("margin-top", "1rem")
                 .set("font-weight", "600")
-                .set("background", "#7c3aed")
+                .set("background", "#0891b2")
                 .set("color", "white")
                 .set("padding", "0.8rem 1.4rem")
                 .set("border-radius", "12px");
@@ -205,7 +205,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         updateSalesMethodButton.getStyle()
                 .set("margin-top", "1rem")
                 .set("font-weight", "600")
-                .set("background", "#0f766e")
+                .set("background", "#ca8a04")
                 .set("color", "white")
                 .set("padding", "0.8rem 1.4rem")
                 .set("border-radius", "12px");
@@ -300,47 +300,69 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         lotteryButton.addClickListener(e -> registerToLottery());
 
-        HorizontalLayout actions = new HorizontalLayout();
+        VerticalLayout actionsWrapper = new VerticalLayout();
+        actionsWrapper.setPadding(false);
+        actionsWrapper.setSpacing(true);
+        actionsWrapper.setWidthFull();
 
-        actions.setSpacing(true);
+        HorizontalLayout userActions = new HorizontalLayout();
+        userActions.setSpacing(true);
+        userActions.setWidthFull();
+        userActions.getStyle()
+                .set("flex-wrap", "wrap")
+                .set("gap", "0.75rem");
 
-        actions.add(purchaseButton);
+        HorizontalLayout managementActions = new HorizontalLayout();
+        managementActions.setSpacing(true);
+        managementActions.setWidthFull();
+        managementActions.getStyle()
+                .set("flex-wrap", "wrap")
+                .set("gap", "0.75rem");
+
+        userActions.add(purchaseButton);
 
         String token = getToken();
-
-        if (presenter.canUpdateEventDate(token, companyId)) {
-            actions.add(updateDateButton);
-            actions.add(addSeatingAreasButton);
-        }
-        if (presenter.canDeleteEvent(token, companyId)) {
-            actions.add(deleteEventButton);
-        }
-
-        if (presenter.canManageEventDiscounts(token, companyId)) {
-            actions.add(manageDiscountsButton);
-        }
-
-        if (presenter.canUpdateSalesMethod(token, companyId)) {
-            VerticalLayout salesMethodLayout = new VerticalLayout();
-            salesMethodLayout.setPadding(false);
-            salesMethodLayout.setSpacing(false);
-
-            salesMethodLayout.add(updateSalesMethodButton);
-
-            actions.add(salesMethodLayout);
-        }
 
         if (dto.hasLottery()
                 && isMember()
                 && canRegisterToLottery()) {
 
-            actions.add(lotteryButton);
+            userActions.add(lotteryButton);
+        }
+
+        if (presenter.canUpdateEventDate(token, companyId)) {
+            managementActions.add(updateDateButton);
+            managementActions.add(addSeatingAreasButton);
+        }
+
+        if (presenter.canManageEventDiscounts(token, companyId)) {
+            managementActions.add(manageDiscountsButton);
+        }
+
+        if (presenter.canUpdateSalesMethod(token, companyId)) {
+            managementActions.add(updateSalesMethodButton);
+        }
+
+        if (presenter.canDeleteEvent(token, companyId)) {
+            managementActions.add(deleteEventButton);
+        }
+
+        actionsWrapper.add(userActions);
+
+        if (managementActions.getComponentCount() > 0) {
+            Span managementLabel = new Span("Event Management");
+            managementLabel.getStyle()
+                    .set("font-size", "0.85rem")
+                    .set("font-weight", "700")
+                    .set("color", "var(--lumo-secondary-text-color)");
+
+            actionsWrapper.add(managementLabel, managementActions);
         }
 
         header.add(
                 name,
                 chips,
-                actions
+                actionsWrapper
         );
 
         return header;
