@@ -226,10 +226,23 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
         List.of(createEventBtn, rolesBtn, policyBtn, discountBtn, ordersBtn, salesBtn)
                 .forEach(this::styleActionButton);
 
+        setActionButtonColor(createEventBtn, "#eff6ff", "#bfdbfe");
+        setActionButtonColor(rolesBtn, "#f5f3ff", "#ddd6fe");
+        setActionButtonColor(policyBtn, "#fff7ed", "#fed7aa");
+        setActionButtonColor(discountBtn, "#fffbeb", "#fde68a");
+        setActionButtonColor(ordersBtn, "#fff1f2", "#fecdd3");
+        setActionButtonColor(salesBtn, "#ecfdf5", "#bbf7d0");
+
         HorizontalLayout bar = new HorizontalLayout(createEventBtn, rolesBtn, policyBtn, discountBtn, ordersBtn, salesBtn);
+        bar.setWidthFull();
+        bar.setSpacing(true);
+        bar.setPadding(false);
         bar.getStyle()
                 .set("padding", "0.5rem 0")
-                .set("margin-bottom", "0.25rem");
+                .set("margin-bottom", "0.25rem")
+                .set("flex-wrap", "wrap")
+                .set("gap", "0.75rem")
+                .set("overflow", "hidden");
         return bar;
     }
 
@@ -241,9 +254,15 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
         styleActionButton(rolesBtn);
 
         HorizontalLayout bar = new HorizontalLayout(rolesBtn);
+        bar.setWidthFull();
+        bar.setSpacing(true);
+        bar.setPadding(false);
         bar.getStyle()
                 .set("padding", "0.5rem 0")
-                .set("margin-bottom", "0.25rem");
+                .set("margin-bottom", "0.25rem")
+                .set("flex-wrap", "wrap")
+                .set("gap", "0.75rem")
+                .set("overflow", "hidden");
 
         var permResponse = presenter.getMyPermissions(token, companyId);
         Set<PermissionType> perms = permResponse.getValue();
@@ -1009,14 +1028,26 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     private void styleActionButton(Button button) {
-        button.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+        button.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
         button.getStyle()
                 .set("height", "48px")
                 .set("font-weight", "800")
                 .set("border-radius", "14px")
                 .set("padding-left", "1.2rem")
                 .set("padding-right", "1.2rem")
-                .set("box-shadow", "0 3px 10px rgba(0,0,0,0.10)");
+                .set("box-shadow", "0 3px 10px rgba(0,0,0,0.08)")
+                .set("border", "1px solid var(--lumo-contrast-10pct)");
+    }
+
+    private void setActionButtonColor(
+            Button button,
+            String background,
+            String border
+    ) {
+        button.getStyle()
+                .set("background", background)
+                .set("border", "1px solid " + border);
     }
 
     private String getToken() {
