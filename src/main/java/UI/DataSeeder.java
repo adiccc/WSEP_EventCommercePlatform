@@ -179,6 +179,10 @@ public class DataSeeder implements ApplicationRunner {
         // ── 8. Seed demo sales orders for Company 1 ──────────────────────────
         seedDemoOrders(eventId1, eventId2, aliceToken);
 
+        // ── 9. Clear delayed notifications for seeded appointees ─────────────
+        clearSeededNotifications(daveToken);
+        clearSeededNotifications(eveToken);
+
         log.info("=== DataSeeder: done — 5 users, 10 companies, 20 events ===");
     }
 
@@ -254,6 +258,14 @@ public class DataSeeder implements ApplicationRunner {
         } else {
             log.info("DataSeeder: appointed user " + appointeeId + " as Manager of company " + companyId);
         }
+    }
+
+    private void clearSeededNotifications(String appointeeToken) {
+        var emailRes = userService.getUserIdentifier(appointeeToken);
+        if (emailRes == null || emailRes.getValue() == null) {
+            return;
+        }
+        userService.cleanDelayedNotifications(emailRes.getValue());
     }
 
     private int createEvent(String token, int companyId, String name, LocalDateTime date, CategoryEvent category, GeographicalArea area) {
