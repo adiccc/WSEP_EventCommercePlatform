@@ -179,6 +179,10 @@ public class DataSeeder implements ApplicationRunner {
         // ── 8. Seed demo sales orders for Company 1 ──────────────────────────
         seedDemoOrders(eventId1, eventId2, aliceToken);
 
+        // ── 9. Clear delayed notifications for seeded appointees ─────────────
+        clearSeededNotifications(daveToken);
+        clearSeededNotifications(eveToken);
+
         log.info("=== DataSeeder: done — 5 users, 10 companies, 20 events ===");
     }
 
@@ -232,7 +236,6 @@ public class DataSeeder implements ApplicationRunner {
             log.warning("DataSeeder: appoint owner request failed — " + req.getMessage());
             return;
         }
-        clearSeededNotifications(appointeeToken);
         var res = companyService.respondToOwnerAppointment(appointeeToken, companyId, true);
         if (res.getValue() == null || !res.getValue()) {
             log.warning("DataSeeder: appoint owner response failed — " + res.getMessage());
@@ -249,7 +252,6 @@ public class DataSeeder implements ApplicationRunner {
             log.warning("DataSeeder: appoint manager request failed — " + req.getMessage());
             return;
         }
-        clearSeededNotifications(appointeeToken);
         var res = companyService.respondToManagerAppointment(appointeeToken, companyId, true);
         if (res.getValue() == null || !res.getValue()) {
             log.warning("DataSeeder: appoint manager response failed — " + res.getMessage());
