@@ -237,6 +237,7 @@ public class DataSeeder implements ApplicationRunner {
             log.warning("DataSeeder: appoint owner response failed — " + res.getMessage());
         } else {
             log.info("DataSeeder: appointed user " + appointeeId + " as Owner of company " + companyId);
+            clearSeededNotifications(appointeeToken);
         }
     }
 
@@ -253,7 +254,16 @@ public class DataSeeder implements ApplicationRunner {
             log.warning("DataSeeder: appoint manager response failed — " + res.getMessage());
         } else {
             log.info("DataSeeder: appointed user " + appointeeId + " as Manager of company " + companyId);
+            clearSeededNotifications(appointeeToken);
         }
+    }
+
+    private void clearSeededNotifications(String appointeeToken) {
+        var emailRes = userService.getUserIdentifier(appointeeToken);
+        if (emailRes == null || emailRes.getValue() == null) {
+            return;
+        }
+        userService.cleanDelayedNotifications(emailRes.getValue());
     }
 
     private int createEvent(String token, int companyId, String name, LocalDateTime date, CategoryEvent category, GeographicalArea area) {
