@@ -25,7 +25,13 @@ import com.vaadin.flow.router.*;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dto.EventDetailsDTO;
-
+import DTO.DiscountDTO;
+import com.vaadin.flow.component.combobox.ComboBox;
+import com.vaadin.flow.component.datepicker.DatePicker;
+import com.vaadin.flow.component.textfield.IntegerField;
+import com.vaadin.flow.component.textfield.NumberField;
+import domain.policy.DiscountPolicyType;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -266,6 +272,21 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                 openDeleteEventDialog()
         );
 
+        Button manageDiscountsButton =
+                new Button("🏷 Manage Discounts");
+
+        manageDiscountsButton.getStyle()
+                .set("margin-top", "1rem")
+                .set("font-weight", "600")
+                .set("background", "#9333ea")
+                .set("color", "white")
+                .set("padding", "0.8rem 1.4rem")
+                .set("border-radius", "12px");
+
+        manageDiscountsButton.addClickListener(e ->
+                openDiscountManagementDialog(dto)
+        );
+
         lotteryButton =
                 new Button("🎲 Register to Lottery");
 
@@ -293,6 +314,10 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         }
         if (presenter.canDeleteEvent(token, companyId)) {
             actions.add(deleteEventButton);
+        }
+
+        if (presenter.canManageEventDiscounts(token, companyId)) {
+            actions.add(manageDiscountsButton);
         }
 
         if (presenter.canUpdateSalesMethod(token, companyId)) {
@@ -448,6 +473,328 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         );
 
         dialog.open();
+    }
+
+    private void openDiscountManagementDialog(EventDetailsDTO dto) {
+
+        Dialog dialog = new Dialog();
+
+        dialog.setHeaderTitle("Manage Event Discounts");
+        dialog.setWidth("520px");
+
+        VerticalLayout content = new VerticalLayout();
+        content.setPadding(false);
+        content.setSpacing(true);
+
+        Paragraph currentPolicy = new Paragraph(
+                dto.getDiscountPolicy() != null
+                        ? dto.getDiscountPolicy()
+                        : "No discount policy defined."
+        );
+
+        currentPolicy.getStyle()
+                .set("background", "var(--lumo-contrast-5pct)")
+                .set("border-radius", "var(--lumo-border-radius-m)")
+                .set("padding", "0.75rem 1rem")
+                .set("white-space", "pre-wrap")
+                .set("width", "100%");
+
+        ComboBox<DiscountPolicyType> policyTypeBox =
+                new ComboBox<>("Discount Policy Type");
+
+        policyTypeBox.setItems(DiscountPolicyType.values());
+        policyTypeBox.setWidthFull();
+
+        Button changePolicyTypeButton =
+                new Button("Change Policy Type", e -> {
+
+                    DiscountPolicyType selectedType =
+                            policyTypeBox.getValue();
+
+                    if (selectedType == null) {
+                        showError("Please select a discount policy type.");
+                        return;
+                    }
+
+                    Response<Void> response =
+                            presenter.changeEventDiscountPolicyType(
+                                    getToken(),
+                                    eventId,
+                                    selectedType
+                            );
+
+                    if (response.getMessage() != null
+                            && response.getMessage().toLowerCase().contains("error")) {
+                        showError(response.getMessage());
+                        return;
+                    }
+
+                    showSuccess("Discount policy type updated successfully.");
+                    dialog.close();
+                    loadEvent(companyId, eventId);
+                });
+
+        changePolicyTypeButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        ComboBox<DiscountDTO.Type> discountTypeBox =
+                new ComboBox<>("Discount Type");
+
+        discountTypeBox.setItems(
+                DiscountDTO.Type.VISUAL,
+                DiscountDTO.Type.CODE_COUPON,
+                DiscountDTO.Type.MIN_QUANTITY,
+                DiscountDTO.Type.MAX_QUANTITY,
+                DiscountDTO.Type.DATE_RANGE
+        );
+
+        discountTypeBox.setWidthFull();
+
+        NumberField percentageField =
+                new NumberField("Percentage");
+
+        percentageField.setMin(0);
+        percentageField.setMax(100);
+        percentageField.setWidthFull();
+        percentageField.setHelperText("Enter discount percentage between 0 and 100");
+
+        TextField codeField =
+                new TextField("Coupon Code");
+
+        codeField.setWidthFull();
+        codeField.setVisible(false);
+
+        IntegerField quantityField =
+                new IntegerField("Quantity");
+
+        quantityField.setMin(1);
+        quantityField.setWidthFull();
+        quantityField.setVisible(false);
+
+        DatePicker startDateField =
+                new DatePicker("Start Date");
+
+        startDateField.setWidthFull();
+        startDateField.setVisible(false);
+
+        DatePicker endDateField =
+                new DatePicker("End Date");
+
+        endDateField.setWidthFull();
+
+        discountTypeBox.addValueChangeListener(e -> {
+
+            DiscountDTO.Type selectedType = e.getValue();
+
+            boolean isCoupon =
+                    selectedType == DiscountDTO.Type.CODE_COUPON;
+
+            boolean isQuantity =
+                    selectedType == DiscountDTO.Type.MIN_QUANTITY
+                            || selectedType == DiscountDTO.Type.MAX_QUANTITY;
+
+            boolean isDateRange =
+                    selectedType == DiscountDTO.Type.DATE_RANGE;
+
+            codeField.setVisible(isCoupon);
+            quantityField.setVisible(isQuantity);
+            startDateField.setVisible(isDateRange);
+            endDateField.setVisible(
+                    selectedType == DiscountDTO.Type.VISUAL
+                            || selectedType == DiscountDTO.Type.CODE_COUPON
+                            || isDateRange
+            );
+        });
+
+        Button addDiscountButton =
+                new Button("Add Discount", e -> {
+
+                    DiscountDTO discount =
+                            buildDiscountFromFields(
+                                    discountTypeBox,
+                                    percentageField,
+                                    codeField,
+                                    quantityField,
+                                    startDateField,
+                                    endDateField
+                            );
+
+                    if (discount == null) {
+                        return;
+                    }
+
+                    Response<Boolean> response =
+                            presenter.addDiscountToEvent(
+                                    getToken(),
+                                    eventId,
+                                    discount
+                            );
+
+                    if (Boolean.TRUE.equals(response.getValue())) {
+                        showSuccess("Discount added successfully.");
+                        dialog.close();
+                        loadEvent(companyId, eventId);
+                        return;
+                    }
+
+                    showError(response.getMessage());
+                });
+
+        addDiscountButton.addThemeVariants(ButtonVariant.LUMO_SUCCESS);
+
+        Button removeDiscountButton =
+                new Button("Remove Matching Discount", e -> {
+
+                    DiscountDTO discount =
+                            buildDiscountFromFields(
+                                    discountTypeBox,
+                                    percentageField,
+                                    codeField,
+                                    quantityField,
+                                    startDateField,
+                                    endDateField
+                            );
+
+                    if (discount == null) {
+                        return;
+                    }
+
+                    Response<Boolean> response =
+                            presenter.removeDiscountFromEvent(
+                                    getToken(),
+                                    eventId,
+                                    discount
+                            );
+
+                    if (Boolean.TRUE.equals(response.getValue())) {
+                        showSuccess("Discount removed successfully.");
+                        dialog.close();
+                        loadEvent(companyId, eventId);
+                        return;
+                    }
+
+                    showError(response.getMessage());
+                });
+
+        removeDiscountButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+
+        HorizontalLayout actions =
+                new HorizontalLayout(
+                        addDiscountButton,
+                        removeDiscountButton
+                );
+
+        content.add(
+                new H4("Current Discount Policy"),
+                currentPolicy,
+                new H4("Policy Type"),
+                policyTypeBox,
+                changePolicyTypeButton,
+                new Hr(),
+                new H4("Add or Remove Discount"),
+                discountTypeBox,
+                percentageField,
+                codeField,
+                quantityField,
+                startDateField,
+                endDateField,
+                actions
+        );
+
+        dialog.add(content);
+
+        Button closeButton =
+                new Button("Close", e -> dialog.close());
+
+        closeButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        dialog.getFooter().add(closeButton);
+
+        dialog.open();
+    }
+
+    private DiscountDTO buildDiscountFromFields(
+            ComboBox<DiscountDTO.Type> discountTypeBox,
+            NumberField percentageField,
+            TextField codeField,
+            IntegerField quantityField,
+            DatePicker startDateField,
+            DatePicker endDateField
+    ) {
+
+        DiscountDTO.Type type = discountTypeBox.getValue();
+        Double percentage = percentageField.getValue();
+
+        if (type == null) {
+            showError("Please select a discount type.");
+            return null;
+        }
+
+        if (percentage == null || percentage <= 0 || percentage > 100) {
+            showError("Please enter a valid percentage between 1 and 100.");
+            return null;
+        }
+
+        if (type == DiscountDTO.Type.VISUAL) {
+            LocalDate endDate = endDateField.getValue();
+
+            if (endDate == null) {
+                showError("Please select an end date.");
+                return null;
+            }
+
+            return new DiscountDTO(percentage, endDate);
+        }
+
+        if (type == DiscountDTO.Type.CODE_COUPON) {
+            String code = codeField.getValue();
+
+            if (code == null || code.isBlank()) {
+                showError("Please enter a coupon code.");
+                return null;
+            }
+
+            LocalDate endDate = endDateField.getValue();
+
+            if (endDate == null) {
+                showError("Please select an end date.");
+                return null;
+            }
+
+            return new DiscountDTO(code.trim(), percentage, endDate);
+        }
+
+        if (type == DiscountDTO.Type.MIN_QUANTITY
+                || type == DiscountDTO.Type.MAX_QUANTITY) {
+
+            Integer quantity = quantityField.getValue();
+
+            if (quantity == null || quantity < 1) {
+                showError("Please enter a valid quantity.");
+                return null;
+            }
+
+            return new DiscountDTO(type, percentage, quantity);
+        }
+
+        if (type == DiscountDTO.Type.DATE_RANGE) {
+            LocalDate startDate = startDateField.getValue();
+            LocalDate endDate = endDateField.getValue();
+
+            if (startDate == null || endDate == null) {
+                showError("Please select start and end dates.");
+                return null;
+            }
+
+            if (endDate.isBefore(startDate)) {
+                showError("End date cannot be before start date.");
+                return null;
+            }
+
+            return new DiscountDTO(percentage, startDate, endDate);
+        }
+
+        showError("Unsupported discount type.");
+        return null;
     }
 
     private boolean isMember() {
