@@ -193,6 +193,16 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                 .set("border-radius", "12px");
 
         updateDateButton.addClickListener(e -> openUpdateDateDialog(dto));
+        Button updateSalesMethodButton =
+                new Button("🎲 Update Sales Method");
+
+        updateSalesMethodButton.getStyle()
+                .set("margin-top", "1rem")
+                .set("font-weight", "600")
+                .set("background", "#0f766e")
+                .set("color", "white")
+                .set("padding", "0.8rem 1.4rem")
+                .set("border-radius", "12px");
 
         Button addSeatingAreasButton =
                 new Button("🪑 Add Seating Areas");
@@ -204,11 +214,56 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                 .set("color", "white")
                 .set("padding", "0.8rem 1.4rem")
                 .set("border-radius", "12px");
+        updateSalesMethodButton.addClickListener(e -> {
 
+            if (!dto.hasLottery() && saleAlreadyStarted(dto)) {
+
+                showError(
+                        "Lottery sale cannot be enabled after ticket sales already started."
+                );
+
+                return;
+            }
+
+            UI.getCurrent().navigate(
+                    "manage/company/" + companyId + "/event/" + eventId + "/sales-method"
+            );
+        });
+        if (!dto.hasLottery() && saleAlreadyStarted(dto)) {
+            updateSalesMethodButton.getStyle()
+                    .set("opacity", "0.55")
+                    .set("cursor", "not-allowed")
+                    .set("filter", "grayscale(0.25)");
+            updateSalesMethodButton.getElement().setAttribute(
+                    "title",
+                    "Lottery sale cannot be enabled after ticket sales already started."
+            );
+            updateSalesMethodButton.setText("🎲 Update Sales Method");
+        }
         addSeatingAreasButton.addClickListener(e ->
                 UI.getCurrent().navigate(
                         "manage/event/" + eventId + "/add-seating-area"
                 )
+        );
+
+        Button deleteEventButton =
+                new Button("🗑 Remove Event");
+
+        deleteEventButton.getStyle()
+                .set("margin-top", "1rem")
+                .set("font-weight", "600")
+                .set("background", "#dc2626")
+                .set("color", "white")
+                .set("padding", "0.8rem 1.4rem")
+                .set("border-radius", "12px");
+
+        deleteEventButton.getElement().setProperty(
+                "title",
+                "Remove this event and refund all related orders"
+        );
+
+        deleteEventButton.addClickListener(e ->
+                openDeleteEventDialog()
         );
 
         lotteryButton =
@@ -235,6 +290,19 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         if (presenter.canUpdateEventDate(token, companyId)) {
             actions.add(updateDateButton);
             actions.add(addSeatingAreasButton);
+        }
+        if (presenter.canDeleteEvent(token, companyId)) {
+            actions.add(deleteEventButton);
+        }
+
+        if (presenter.canUpdateSalesMethod(token, companyId)) {
+            VerticalLayout salesMethodLayout = new VerticalLayout();
+            salesMethodLayout.setPadding(false);
+            salesMethodLayout.setSpacing(false);
+
+            salesMethodLayout.add(updateSalesMethodButton);
+
+            actions.add(salesMethodLayout);
         }
 
         if (dto.hasLottery()
@@ -318,6 +386,66 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         dialog.add(content);
 
         dialog.getFooter().add(cancelButton, updateButton);
+
+        dialog.open();
+    }
+
+    private void openDeleteEventDialog() {
+
+        Dialog dialog = new Dialog();
+
+        dialog.setHeaderTitle("Remove Event");
+
+        Paragraph warning = new Paragraph(
+                "This action will deactivate the event, refund relevant orders and notify purchasers. This action cannot be undone."
+        );
+
+        warning.getStyle()
+                .set("color", "var(--lumo-error-text-color)")
+                .set("font-weight", "500");
+
+        Button cancelButton =
+                new Button("Cancel", e -> dialog.close());
+
+        cancelButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        Button deleteButton =
+                new Button("Remove Event", e -> {
+
+                    Response<Boolean> response =
+                            presenter.deleteEvent(
+                                    getToken(),
+                                    eventId
+                            );
+
+                    if (response.getValue() != null
+                            && response.getValue()) {
+
+                        dialog.close();
+
+                        showSuccess("Event removed successfully.");
+
+                        UI.getCurrent().navigate(
+                                "company/" + companyId
+                        );
+
+                        return;
+                    }
+
+                    showError(response.getMessage());
+                });
+
+        deleteButton.addThemeVariants(
+                ButtonVariant.LUMO_ERROR,
+                ButtonVariant.LUMO_PRIMARY
+        );
+
+        dialog.add(warning);
+
+        dialog.getFooter().add(
+                cancelButton,
+                deleteButton
+        );
 
         dialog.open();
     }
@@ -616,6 +744,15 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     // =========================================================
     // Helpers
     // =========================================================
+
+    private boolean saleAlreadyStarted(EventDetailsDTO dto) {
+        try {
+            return dto.getSaleStartDate() != null
+                    && !LocalDateTime.parse(dto.getSaleStartDate()).isAfter(LocalDateTime.now());
+        } catch (Exception e) {
+            return false;
+        }
+    }
 
     private String getToken() {
 

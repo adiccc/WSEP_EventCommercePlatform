@@ -140,7 +140,7 @@ public class ActiveOrder {
         if (stage == STAGE.SELECTING_TICKETS) {
             this.createdAt = now.minusMinutes(6);
         } else if (stage == STAGE.CHECKING_OUT || stage == STAGE.EDITING) {
-            this.checkoutStartedAt = now.minusMinutes(11);
+            this.checkoutStartedAt = now.minusMinutes(CHECKOUT_TIMEOUT_MINUTES + 1);
         }
     }
         public void startPayment() {

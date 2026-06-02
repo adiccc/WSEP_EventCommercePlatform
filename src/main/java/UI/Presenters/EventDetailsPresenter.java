@@ -60,6 +60,16 @@ public class EventDetailsPresenter {
         );
     }
 
+    public Response<Boolean> deleteEvent(
+            String token,
+            int eventId
+    ) {
+        return eventCompanyManageService.DeleteEvent(
+                token,
+                eventId
+        );
+    }
+
     public boolean canUpdateEventDate(
             String token,
             int companyId
@@ -83,6 +93,29 @@ public class EventDetailsPresenter {
                 && permissions.contains(PermissionType.CREATE_EVENT);
     }
 
+    public boolean canDeleteEvent(
+            String token,
+            int companyId
+    ) {
+        String role = getUserRole(token, companyId);
+
+        if ("FOUNDER".equals(role) || "OWNER".equals(role)) {
+            return true;
+        }
+
+        if (!"MANAGER".equals(role)) {
+            return false;
+        }
+
+        Response<Set<PermissionType>> permissionsResponse =
+                companyService.getMyPermissions(token, companyId);
+
+        Set<PermissionType> permissions = permissionsResponse.getValue();
+
+        return permissions != null
+                && permissions.contains(PermissionType.DELETE_EVENT);
+    }
+
     public Response<Boolean> registerUserToLottery(
             String token,
             int eventId
@@ -101,6 +134,12 @@ public class EventDetailsPresenter {
                 token,
                 eventId
         );
+    }
+
+    public boolean canUpdateSalesMethod(String token, int companyId) {
+        String role = getUserRole(token, companyId);
+
+        return "FOUNDER".equals(role) || "OWNER".equals(role);
     }
 
     public Response<String> getRole(String token) {

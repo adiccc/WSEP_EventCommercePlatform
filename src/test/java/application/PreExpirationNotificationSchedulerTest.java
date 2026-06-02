@@ -6,6 +6,7 @@ import com.vaadin.flow.shared.Registration;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import infrastructure.ActiveOrderRepoImpl;
+import infrastructure.Auth;
 import infrastructure.Broadcaster;
 import infrastructure.VaadinNotifier;
 import org.junit.jupiter.api.AfterEach;
@@ -38,12 +39,16 @@ class PreExpirationNotificationSchedulerTest {
     @BeforeEach
     void setUp() {
         activeOrderRepo = new ActiveOrderRepoImpl();
-        scheduler = new PreExpirationNotificationScheduler(activeOrderRepo, new VaadinNotifier());
+        TokenService tokenService = new TokenService();
+        IAuth auth = new Auth(tokenService);
+        scheduler = new PreExpirationNotificationScheduler(activeOrderRepo, new VaadinNotifier(), auth);
 
-        tabToken = new TokenService().generateGuestToken();
+        tabToken = tokenService.generateGuestToken();
+        String userIdentifier = auth.getUserIdentifier(tabToken).getValue();
 
         delivered = new LinkedBlockingQueue<>();
-        recipientRegistration = Broadcaster.registerTab(tabToken, delivered::add);
+        // Warnings now go to the user listener keyed by the token's identifier, not a tab listener.
+        recipientRegistration = Broadcaster.registerUser(userIdentifier, delivered::add);
     }
 
     @AfterEach
@@ -63,9 +68,6 @@ class PreExpirationNotificationSchedulerTest {
     void GivenOrderInWarningWindow_WhenScheduleOrReschedule_ThenRealTimePopupSentToOrderIdentifier()
             throws InterruptedException {
         ActiveOrder order = checkingOutOrder();
-        // forceExpireForTest stamps checkoutStartedAt = (arg - 11 min). Passing now+2 min lands it
-        // 9 min ago: the warning instant (checkoutStartedAt + 9 min) has just passed, while the
-        // 10-min checkout deadline is still ~1 min away (so the order is NOT yet expired).
         order.forceExpireForTest(LocalDateTime.now().plusMinutes(2));
         activeOrderRepo.store(order);
 
@@ -117,7 +119,7 @@ class PreExpirationNotificationSchedulerTest {
     @Test
     void GivenOrderAlreadyExpired_WhenScheduleOrReschedule_ThenSkippedWithoutSending() throws InterruptedException {
         ActiveOrder order = checkingOutOrder();
-        order.forceExpireForTest(LocalDateTime.now()); // checkoutStartedAt = now-11min -> already expired
+        order.forceExpireForTest(LocalDateTime.now()); // deadline lands at now-1min -> already expired
         activeOrderRepo.store(order);
 
         scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().minusSeconds(1));
