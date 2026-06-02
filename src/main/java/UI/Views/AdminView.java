@@ -67,23 +67,27 @@ public class AdminView extends VerticalLayout implements BeforeEnterObserver {
         Tab suspendTab   = new Tab("Suspend User");
         Tab unsuspendTab = new Tab("Unsuspend User");
         Tab listTab      = new Tab("Suspended Users");
-        Tabs tabs = new Tabs(suspendTab, unsuspendTab, listTab);
+        Tab removeTab    = new Tab("Remove User");
+        Tabs tabs = new Tabs(suspendTab, unsuspendTab, listTab,removeTab);
         tabs.setWidthFull();
 
         VerticalLayout suspendContent   = buildSuspendSection(token);
         VerticalLayout unsuspendContent = buildUnsuspendSection(token);
         VerticalLayout listContent      = buildSuspendedListSection(token);
+        VerticalLayout removeContent    = buildRemoveSection(token);
 
         unsuspendContent.setVisible(false);
         listContent.setVisible(false);
+        removeContent.setVisible(false);
 
         tabs.addSelectedChangeListener(e -> {
             suspendContent.setVisible(tabs.getSelectedTab() == suspendTab);
             unsuspendContent.setVisible(tabs.getSelectedTab() == unsuspendTab);
             listContent.setVisible(tabs.getSelectedTab() == listTab);
+            removeContent.setVisible(tabs.getSelectedTab() == removeTab);
         });
 
-        add(title, tabs, suspendContent, unsuspendContent, listContent);
+        add(title, tabs, suspendContent, unsuspendContent, listContent, removeContent);
     }
 
     // ── Suspend User ──────────────────────────────────────────────────────────
@@ -252,5 +256,33 @@ public class AdminView extends VerticalLayout implements BeforeEnterObserver {
     private void showError(String message) {
         Notification n = Notification.show(message, 4000, Notification.Position.TOP_CENTER);
         n.addThemeVariants(NotificationVariant.LUMO_ERROR);
+    }
+
+    private VerticalLayout buildRemoveSection(String token) {
+        VerticalLayout layout = sectionLayout();
+
+        IntegerField userIdField = new IntegerField("User ID");
+        userIdField.setMin(1);
+        userIdField.setWidth("14rem");
+        userIdField.setHelperText("Enter the numeric user ID to permanently remove");
+
+        Button removeBtn = new Button("🗑️ Remove User", e -> {
+            Integer userId = userIdField.getValue();
+            if (userId == null || userId < 1) {
+                showError("Please enter a valid user ID.");
+                return;
+            }
+
+            var res = presenter.removeUser(token, userId);
+            handleResult(res, "User " + userId + " has been permanently removed.");
+            userIdField.clear();
+        });
+
+        removeBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
+
+        layout.add(new Paragraph("Permanently remove a user from the system. This will revoke all their permissions and log them out immediately."),
+                userIdField, removeBtn);
+
+        return layout;
     }
 }

@@ -29,4 +29,7 @@ public class AdminPresenter {
     public Response<List<SuspensionDTO>> getAllSuspensions(String token) {
         return adminService.getAllUsersSuspensions(token);
     }
+    public Response<Boolean> removeUser(String token, int userId) {
+        return adminService.removeUser(token, userId);
+    }
 }
