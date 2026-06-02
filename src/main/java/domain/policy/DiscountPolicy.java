@@ -69,8 +69,6 @@ public abstract class DiscountPolicy implements Discount {
     public void removeDiscount(Discount discount) {
         for (Discount dis : discounts) {
             if (discount.equals(dis)) {
-                if (discounts.size() == 1)
-                    throw new RuntimeException("can't remove discount, there must be at least one discount");
                 discounts.remove(dis);
                 return;
             }
