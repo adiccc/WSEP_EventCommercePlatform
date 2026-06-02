@@ -232,12 +232,12 @@ public class DataSeeder implements ApplicationRunner {
             log.warning("DataSeeder: appoint owner request failed — " + req.getMessage());
             return;
         }
+        clearSeededNotifications(appointeeToken);
         var res = companyService.respondToOwnerAppointment(appointeeToken, companyId, true);
         if (res.getValue() == null || !res.getValue()) {
             log.warning("DataSeeder: appoint owner response failed — " + res.getMessage());
         } else {
             log.info("DataSeeder: appointed user " + appointeeId + " as Owner of company " + companyId);
-            clearSeededNotifications(appointeeToken);
         }
     }
 
@@ -249,12 +249,12 @@ public class DataSeeder implements ApplicationRunner {
             log.warning("DataSeeder: appoint manager request failed — " + req.getMessage());
             return;
         }
+        clearSeededNotifications(appointeeToken);
         var res = companyService.respondToManagerAppointment(appointeeToken, companyId, true);
         if (res.getValue() == null || !res.getValue()) {
             log.warning("DataSeeder: appoint manager response failed — " + res.getMessage());
         } else {
             log.info("DataSeeder: appointed user " + appointeeId + " as Manager of company " + companyId);
-            clearSeededNotifications(appointeeToken);
         }
     }
 
