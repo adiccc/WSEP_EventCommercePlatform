@@ -1,5 +1,6 @@
 package UI.Presenters;
 
+import DTO.DiscountDTO;
 import application.CompanyService;
 import application.EventCompanyManageService;
 import application.EventService;
@@ -8,6 +9,7 @@ import application.LotteryService;
 import application.Response;
 import domain.dataType.PermissionType;
 import domain.dto.EventDetailsDTO;
+import domain.policy.DiscountPolicyType;
 
 import java.time.LocalDateTime;
 import java.util.Set;
@@ -70,6 +72,42 @@ public class EventDetailsPresenter {
         );
     }
 
+    public Response<Boolean> addDiscountToEvent(
+            String token,
+            int eventId,
+            DiscountDTO discountDTO
+    ) {
+        return eventCompanyManageService.addDiscountToEvent(
+                token,
+                eventId,
+                discountDTO
+        );
+    }
+
+    public Response<Boolean> removeDiscountFromEvent(
+            String token,
+            int eventId,
+            DiscountDTO discountDTO
+    ) {
+        return eventCompanyManageService.removeDiscountFromEvent(
+                token,
+                eventId,
+                discountDTO
+        );
+    }
+
+    public Response<Void> changeEventDiscountPolicyType(
+            String token,
+            int eventId,
+            DiscountPolicyType policyType
+    ) {
+        return eventCompanyManageService.changeEventDiscountPolicyType(
+                token,
+                eventId,
+                policyType
+        );
+    }
+
     public boolean canUpdateEventDate(
             String token,
             int companyId
@@ -114,6 +152,29 @@ public class EventDetailsPresenter {
 
         return permissions != null
                 && permissions.contains(PermissionType.DELETE_EVENT);
+    }
+
+    public boolean canManageEventDiscounts(
+            String token,
+            int companyId
+    ) {
+        String role = getUserRole(token, companyId);
+
+        if ("FOUNDER".equals(role) || "OWNER".equals(role)) {
+            return true;
+        }
+
+        if (!"MANAGER".equals(role)) {
+            return false;
+        }
+
+        Response<Set<PermissionType>> permissionsResponse =
+                companyService.getMyPermissions(token, companyId);
+
+        Set<PermissionType> permissions = permissionsResponse.getValue();
+
+        return permissions != null
+                && permissions.contains(PermissionType.MANAGE_POLICIES);
     }
 
     public Response<Boolean> registerUserToLottery(
