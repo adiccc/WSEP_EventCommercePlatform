@@ -285,6 +285,11 @@ public class AdminService {
                     logger.warning("removeUser: userId " + userIdToRemove + " already inactive");
                     return Response.error("User is already removed");
                 }
+                int currentId = getUserIdFromToken(adminToken);
+                if(currentId == userIdToRemove) {
+                    logger.warning("removeUser: Can't remove userId " + userIdToRemove + " because it is admin");
+                    return Response.error("Can't remove user admin");
+                }
 
                 // Step 1: cascade company permissions
                 for (Company company : companyRepo.getAll()) {
@@ -334,6 +339,16 @@ public class AdminService {
                 // Step 3: deactivate the user
                 member.deactivate();
                 userRepo.store(member);
+                //sending notification so the user is removed he can't do anything on the website
+                try {
+                    NotifyPayload payload = new NotifyPayload("Your account has been removed by the administrator.");
+                    NotifyDTO kickoutNotify = new NotifyDTO(NotifyType.ACCOUNT_REMOVED, payload);
+
+                    notifier.notifyUser(member.getIdentifier(), kickoutNotify); //notify for all tabs just in realtime
+                    logger.info("Sent real-time kickout notification to removed user: " + member.getIdentifier());
+                } catch (Exception ex) {
+                    logger.warning("Failed to send kickout notification to user: " + member.getIdentifier());
+                }
 
                 logger.info("removeUser succeeded for userId: " + userIdToRemove);
                 return Response.ok(true);

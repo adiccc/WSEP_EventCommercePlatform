@@ -168,6 +168,7 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         this.eventMap = response.getValue().getEventMap();
 
         add(buildHeader());
+        add(buildPurchasePoliciesNotice(response.getValue()));
 
         Component map = buildMapSection();
         Component summary = buildSummary(token);
@@ -195,6 +196,67 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
         header.expand(title);
 
         return header;
+    }
+
+    private Component buildPurchasePoliciesNotice(
+            EnterPurchaseDTO dto
+    ) {
+        VerticalLayout notice = new VerticalLayout();
+
+        notice.setSpacing(false);
+        notice.setPadding(true);
+
+        notice.getStyle()
+                .set("background", "#eff6ff")
+                .set("border", "1px solid #bfdbfe")
+                .set("border-radius", "14px")
+                .set("margin-bottom", "0.5rem");
+
+        H4 title = new H4(
+                "Please make sure you meet the purchase requirements before selecting tickets."
+        );
+
+        title.getStyle()
+                .set("margin", "0 0 0.5rem 0")
+                .set("font-size", "1rem")
+                .set("color", "#1e3a8a");
+
+        String companyPolicy =
+                normalizePolicy(dto.getCompanyPurchasePolicy());
+
+        String eventPolicy =
+                normalizePolicy(dto.getEventPurchasePolicy());
+
+        Paragraph companyText = new Paragraph(
+                "Company policy: " + companyPolicy
+        );
+
+        Paragraph eventText = new Paragraph(
+                "Event policy: " + eventPolicy
+        );
+
+        companyText.getStyle()
+                .set("margin", "0");
+
+        eventText.getStyle()
+                .set("margin", "0");
+
+        notice.add(
+                title,
+                companyText,
+                eventText
+        );
+
+        return notice;
+    }
+
+    private String normalizePolicy(String policy) {
+
+        if (policy == null || policy.isBlank()) {
+            return "No purchase restrictions";
+        }
+
+        return policy;
     }
 
     private Component buildMapSection() {

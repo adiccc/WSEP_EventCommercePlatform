@@ -77,6 +77,7 @@ public class AdminView extends VerticalLayout implements BeforeEnterObserver {
                         removeTab,
                         listTab
                 );
+
         tabs.setWidthFull();
 
         VerticalLayout suspendContent   = buildSuspendSection(token);

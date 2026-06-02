@@ -723,15 +723,54 @@ class AdminServiceTest {
 
     // --- Successful_Removal (plain member) ---
     @Test
-    void GivenAdminToken_WhenRemovePlainUser_ThenUserDeactivated() {
-        int plainId = registerUser("plain@accept.com");
+    void GivenAdminToken_WhenRemovePlainUser_ThenUserDeactivatedAndNotificationSent() throws InterruptedException {
+        // Arrange
+        int plainId = registerUser("plain_notify@accept.com");
+        Member targetUser = userRepo.findById(plainId);
+        String targetIdentifier = targetUser.getIdentifier();
 
-        Response<Boolean> response = adminService.removeUser(adminToken, plainId);
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<NotifyDTO> receivedNotification = new AtomicReference<>();
 
-        assertFalse(response.isError(), "Expected success but got: " + response.getMessage());
-        assertTrue(response.getValue());
-        assertFalse(userRepo.findById(plainId).isActive(),
-                "User should be deactivated in the repo after removal");
+        Registration reg = Broadcaster.registerUser(targetIdentifier, dto -> {
+            receivedNotification.set(dto);
+            latch.countDown();
+        });
+
+        try {
+            // Act
+            Response<Boolean> response = adminService.removeUser(adminToken, plainId);
+
+            // Assert
+            assertFalse(response.isError(), "Expected success but got: " + response.getMessage());
+            assertTrue(response.getValue());
+            assertFalse(userRepo.findById(plainId).isActive(), "User should be deactivated in the repo after removal");
+
+            // Assert
+            assertTrue(latch.await(2000, TimeUnit.MILLISECONDS), "Notification timeout - user did not receive the kickout notification");
+            assertNotNull(receivedNotification.get(), "Notification should not be null");
+            assertEquals(NotifyType.ACCOUNT_REMOVED, receivedNotification.get().getType(), "Notification type must be ACCOUNT_REMOVED");
+            assertTrue(receivedNotification.get().getPayload().getMessage().contains("removed by the administrator"), "Payload message should indicate admin removal");
+
+        } finally {
+            reg.remove();
+        }
+    }
+    // --- Admin_Self_Removal_Blocked ---
+    @Test
+    void GivenAdminToken_WhenAdminTriesToRemoveThemselves_ThenErrorReturnedAndAdminRemainsActive() {
+        // Arrange
+        int currentAdminId = userService.getUserId(adminToken).getValue();
+
+        // Act
+        Response<Boolean> response = adminService.removeUser(adminToken, currentAdminId);
+
+        // Assert
+        assertTrue(response.isError(), "Self-removal should fail and return an error");
+        assertEquals("Can't remove user admin", response.getMessage(), "Should return the specific self-removal error message");
+
+        // Assert
+        assertTrue(userRepo.findById(currentAdminId).isActive(), "Admin user must remain active in the repository");
     }
 
     // --- Unauthorized_Non_Admin ---
@@ -769,16 +808,31 @@ class AdminServiceTest {
 
     // --- Founder_Blocked ---
     @Test
-    void GivenUserIsCompanyFounder_WhenRemoveUser_ThenBlockedWithFounderError() {
+    void GivenUserIsCompanyFounder_WhenRemoveUser_ThenBlockedWithAdminError() {
         // The admin user is the founder of the company created in setUp()
         int adminId = userRepo.findUserByEmail(ADMIN_EMAIL).getUserId();
 
         Response<Boolean> response = adminService.removeUser(adminToken, adminId);
 
         assertTrue(response.isError());
+        assertEquals(response.getMessage(), "Can't remove user admin");
+        assertTrue(userRepo.findById(adminId).isActive(), "Founder should remain active");
+    }
+    // --- Founder_Blocked ---
+    @Test
+    void GivenUserIsCompanyFounder_WhenRemoveUser_ThenBlockedWithFounderError() {
+        // Arrange
+        int regularUserId = userRepo.findUserByEmail(USER_EMAIL).getUserId();
+        companyService.createProductionCompany(nonAdminToken, 999, "Regular User Company", "reg@comp.com", "050-1234567", "bank123");
+
+        // Act
+        Response<Boolean> response = adminService.removeUser(adminToken, regularUserId);
+
+        // Assert
+        assertTrue(response.isError());
         assertTrue(response.getMessage().toLowerCase().contains("founder"),
                 "Error should mention 'founder'; got: " + response.getMessage());
-        assertTrue(userRepo.findById(adminId).isActive(), "Founder should remain active");
+        assertTrue(userRepo.findById(regularUserId).isActive(), "Founder should remain active");
     }
 
     // --- Logged_Out_Admin_Token ---
