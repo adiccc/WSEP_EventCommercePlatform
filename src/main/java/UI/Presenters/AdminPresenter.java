@@ -26,10 +26,11 @@ public class AdminPresenter {
         return adminService.UnsuspendUser(token, userId);
     }
 
-    public Response<List<SuspensionDTO>> getAllSuspensions(String token) {
-        return adminService.getAllUsersSuspensions(token);
-    }
     public Response<Boolean> removeUser(String token, int userId) {
         return adminService.removeUser(token, userId);
+    }
+
+    public Response<List<SuspensionDTO>> getAllSuspensions(String token) {
+        return adminService.getAllUsersSuspensions(token);
     }
 }
