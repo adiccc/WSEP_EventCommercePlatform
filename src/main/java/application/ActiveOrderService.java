@@ -136,6 +136,13 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "The sale for this event has not started yet");
                     return new Response<>(null, "The sale for this event has not started yet");
                 }
+                Company company = companyRepo.findById(companyId);
+
+                String companyPurchasePolicy =
+                        company.getPurchasePolicy().describe();
+
+                String eventPurchasePolicy =
+                        e.getPurchasePolicy().describe();
 
                 String userIdentifier = role.equals("MEMBER")
                         ? auth.getUserEmail(token).getValue()
@@ -167,7 +174,9 @@ public class ActiveOrderService {
                                         new ActiveOrderDTO(existingOrder),
                                         true,
                                         false,
-                                        null
+                                        null,
+                                        companyPurchasePolicy,
+                                        eventPurchasePolicy
                                 ),
                                 "Existing active order found"
                         );
@@ -209,7 +218,9 @@ public class ActiveOrderService {
                                         null,
                                         false,
                                         true,
-                                        position),
+                                        position,
+                                        companyPurchasePolicy,
+                                        eventPurchasePolicy),
                                 "User is still waiting in queue. Position: " + position);
                     }
 
@@ -224,7 +235,9 @@ public class ActiveOrderService {
                                     null,
                                     false,
                                     true,
-                                    position),
+                                    position,
+                                    companyPurchasePolicy,
+                                    eventPurchasePolicy),
                             "Event is full, user added to waiting queue. Position: " + position);
                 }
 
@@ -246,7 +259,7 @@ public class ActiveOrderService {
                         new EnterPurchaseDTO(
                                 new EventMapDTO(e.getMap()),
                                 new ActiveOrderDTO(newActiveOrder),
-                                false, false, null),
+                                false, false, null, companyPurchasePolicy, eventPurchasePolicy),
                         "Event map retrieved successfully");
 
             } catch (NoSuchElementException e) {

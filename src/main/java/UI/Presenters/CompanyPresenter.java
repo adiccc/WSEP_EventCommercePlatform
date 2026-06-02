@@ -1,5 +1,6 @@
 package UI.Presenters;
 
+import DTO.DiscountDTO;
 import DTO.PurchaseRuleDTO;
 import application.CompanyService;
 import application.EventCompanyManageService;
@@ -7,6 +8,7 @@ import application.EventService;
 import application.Response;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.PermissionType;
+import domain.policy.DiscountPolicyType;
 import domain.policy.PurchasePolicyType;
 import domain.dto.CompanyDetailsDTO;
 import domain.dto.EventDTO;
@@ -72,6 +74,42 @@ public class CompanyPresenter {
     /** Removes a purchase rule from the company policy. */
     public Response<Boolean> removeRuleFromCompany(String token, int companyId, PurchaseRuleDTO ruleDTO) {
         return companyService.removeRuleFromCompany(token, companyId, ruleDTO);
+    }
+
+    public Response<Boolean> addDiscountToCompany(
+            String token,
+            int companyId,
+            DiscountDTO discountDTO
+    ) {
+        return companyService.addDiscountToCompany(
+                token,
+                companyId,
+                discountDTO
+        );
+    }
+
+    public Response<Boolean> removeDiscountFromCompany(
+            String token,
+            int companyId,
+            DiscountDTO discountDTO
+    ) {
+        return companyService.removeDiscountFromCompany(
+                token,
+                companyId,
+                discountDTO
+        );
+    }
+
+    public Response<Void> changeDiscountPolicyType(
+            String token,
+            int companyId,
+            DiscountPolicyType policyType
+    ) {
+        return companyService.changeDiscountPolicyType(
+                token,
+                companyId,
+                policyType
+        );
     }
 
     /** Returns all orders for the company's events. Requires VIEW_ORDERS_HISTORY permission. */
