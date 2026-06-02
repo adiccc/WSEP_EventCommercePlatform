@@ -2,11 +2,14 @@ package UI;
 
 import DTO.DiscountDTO;
 import DTO.ElementPositionDTO;
+import DTO.PurchasedTicketDTO;
+import DTO.PurchaseRuleDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import application.*;
 import domain.event.IEventRepo;
 import domain.event.Event;
+import domain.event.Order;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dataType.PermissionType;
@@ -19,6 +22,7 @@ import domain.lottery.Lottery;
 import java.util.Map;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.logging.Logger;
@@ -119,12 +123,21 @@ public class DataSeeder implements ApplicationRunner {
                        PermissionType.VIEW_ORDERS_HISTORY,
                        PermissionType.CREATE_EVENT));
 
-        // ── 5. Create events (2 per company, each activated via map) ──────────
+        // ── 5. Add min-age 18 purchase policy to Company 1 ───────────────────
+        var minAgeRule = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        var policyRes = companyService.addRuleToCompany(aliceToken, 1, minAgeRule);
+        if (policyRes.getValue() == null || !policyRes.getValue()) {
+            log.warning("DataSeeder: failed to add min-age policy to company 1 — " + policyRes.getMessage());
+        } else {
+            log.info("DataSeeder: added min-age 18 policy to company 1 (SoundWave Events)");
+        }
+
+        // ── 7. Create events (2 per company, each activated via map) ──────────
         LocalDateTime base = LocalDateTime.now();
 
         // Company 1 — SoundWave Events
-        createEvent(aliceToken, 1, "Rock Under the Stars",   base.plusMonths(1),  CategoryEvent.LIVEMUSIC,  GeographicalArea.CENTER);
-        createEvent(aliceToken, 1, "Electronic Night Vol.3", base.plusMonths(2),  CategoryEvent.FESTIVAL,   GeographicalArea.CENTER);
+        int eventId1 = createEvent(aliceToken, 1, "Rock Under the Stars",   base.plusMonths(1),  CategoryEvent.LIVEMUSIC,  GeographicalArea.CENTER);
+        int eventId2 = createEvent(aliceToken, 1, "Electronic Night Vol.3", base.plusMonths(2),  CategoryEvent.FESTIVAL,   GeographicalArea.CENTER);
         createScheduledLotteryDemoEvent(aliceToken, base);
 
         // Company 2 — Stadium Live
@@ -162,6 +175,9 @@ public class DataSeeder implements ApplicationRunner {
         // Company 10 — Open Air Fest
         createEvent(charlieToken,10, "Sunset Open Air",      base.plusMonths(1),  CategoryEvent.FESTIVAL,   GeographicalArea.SOUTH);
         createEvent(charlieToken,10, "Food & Music Weekend", base.plusMonths(3),  CategoryEvent.FESTIVAL,   GeographicalArea.SOUTH);
+
+        // ── 8. Seed demo sales orders for Company 1 ──────────────────────────
+        seedDemoOrders(eventId1, eventId2, aliceToken);
 
         log.info("=== DataSeeder: done — 5 users, 10 companies, 20 events ===");
     }
@@ -240,11 +256,11 @@ public class DataSeeder implements ApplicationRunner {
         }
     }
 
-    private void createEvent(String token, int companyId, String name, LocalDateTime date, CategoryEvent category, GeographicalArea area) {
-        createEvent(token, companyId, name, date, category, area, false, false, List.of());
+    private int createEvent(String token, int companyId, String name, LocalDateTime date, CategoryEvent category, GeographicalArea area) {
+        return createEvent(token, companyId, name, date, category, area, false, false, List.of());
     }
 
-    private void createEvent(String token,
+    private int createEvent(String token,
                              int companyId,
                              String name,
                              LocalDateTime date,
@@ -271,7 +287,7 @@ public class DataSeeder implements ApplicationRunner {
 
         if (r.getValue() == null) {
             log.warning("DataSeeder: event creation failed [" + name + "] — " + r.getMessage());
-            return;
+            return -1;
         }
         int eventId = r.getValue();
         log.info("DataSeeder: created event [" + name + "] id=" + eventId);
@@ -283,6 +299,7 @@ public class DataSeeder implements ApplicationRunner {
         if (hasLottery) {
             seedDemoLottery(eventId, name, demoLotteryWinnerUserIds);
         }
+        return eventId;
     }
 
     private void createScheduledLotteryDemoEvent(
@@ -426,6 +443,61 @@ public class DataSeeder implements ApplicationRunner {
             log.warning("DataSeeder: coupon creation failed for event " + eventId + " — " + r.getMessage());
         } else {
             log.info("DataSeeder: added demo coupon [" + couponCode + "] to event " + eventId);
+        }
+    }
+
+    private void seedDemoOrders(int rockEventId, int electronicEventId, String ownerToken) {
+        if (rockEventId == -1 && electronicEventId == -1) {
+            log.warning("DataSeeder: skipping order seeding — event IDs invalid");
+            return;
+        }
+
+        int orderId = 1000;
+        String eventDate = LocalDateTime.now().plusMonths(1).toString();
+
+        record OrderSpec(int eventId, String eventName, String buyer, int tickets, double total) {}
+
+        List<OrderSpec> specs = new ArrayList<>();
+        if (rockEventId != -1) {
+            specs.add(new OrderSpec(rockEventId, "Rock Under the Stars", "alice@demo.com",   2, 600.0));
+            specs.add(new OrderSpec(rockEventId, "Rock Under the Stars", "bob@demo.com",     3, 900.0));
+            specs.add(new OrderSpec(rockEventId, "Rock Under the Stars", "charlie@demo.com", 1, 300.0));
+            specs.add(new OrderSpec(rockEventId, "Rock Under the Stars", "dave@demo.com",    4, 1200.0));
+            specs.add(new OrderSpec(rockEventId, "Rock Under the Stars", "eve@demo.com",     2, 540.0));
+        }
+        if (electronicEventId != -1) {
+            specs.add(new OrderSpec(electronicEventId, "Electronic Night Vol.3", "alice@demo.com",   3, 240.0));
+            specs.add(new OrderSpec(electronicEventId, "Electronic Night Vol.3", "bob@demo.com",     5, 400.0));
+            specs.add(new OrderSpec(electronicEventId, "Electronic Night Vol.3", "charlie@demo.com", 2, 160.0));
+            specs.add(new OrderSpec(electronicEventId, "Electronic Night Vol.3", "dave@demo.com",    1, 80.0));
+            specs.add(new OrderSpec(electronicEventId, "Electronic Night Vol.3", "eve@demo.com",     4, 320.0));
+        }
+
+        for (OrderSpec spec : specs) {
+            try {
+                Event event = eventRepo.findById(spec.eventId());
+                List<Integer> ticketIds = new ArrayList<>();
+                for (int i = 0; i < spec.tickets(); i++) {
+                    ticketIds.add(orderId * 10 + i);
+                }
+                Order order = new Order(
+                        orderId++,
+                        spec.buyer(),
+                        spec.eventId(),
+                        spec.eventName(),
+                        eventDate,
+                        "CENTER",
+                        List.of(),
+                        ticketIds,
+                        spec.total(),
+                        "SEED-PAY-" + orderId
+                );
+                event.getOrders().add(order);
+                eventRepo.store(event);
+                log.info("DataSeeder: seeded order for [" + spec.eventName() + "] buyer=" + spec.buyer() + " total=" + spec.total());
+            } catch (Exception e) {
+                log.warning("DataSeeder: failed to seed order for event " + spec.eventId() + " — " + e.getMessage());
+            }
         }
     }
 

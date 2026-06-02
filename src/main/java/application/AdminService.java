@@ -62,6 +62,10 @@ public class AdminService {
                     logger.log(Level.INFO, "SuspendUser failed : user is not admin");
                     return new Response<>(false, "SuspendUser failed : user is not admin");
                 }
+                if(getUserIdFromToken(token) == userId){
+                    logger.log(Level.INFO, "SuspendUser failed : admin cannot suspend himself");
+                    return new Response<>(false, "SuspendUser failed : admin cannot suspend himself");
+                }
                 Member member=userRepo.findById(userId);
                 if(member.isSuspended()){
                     logger.log(Level.INFO, "SuspendUser failed : user is already suspended");
@@ -92,6 +96,10 @@ public class AdminService {
                 if(!isVerifiedAdmin(token)){
                     logger.log(Level.INFO, "SuspendUser failed : user is not admin");
                     return new Response<>(false, "SuspendUser failed : user is not admin");
+                }
+                if(getUserIdFromToken(token) == userId){
+                    logger.log(Level.INFO, "SuspendUser failed : admin cannot suspend himself");
+                    return new Response<>(false, "SuspendUser failed : admin cannot suspend himself");
                 }
                 Member member=userRepo.findById(userId);
                 if(member.isSuspended()){
