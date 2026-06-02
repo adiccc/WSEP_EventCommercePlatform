@@ -246,6 +246,26 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                 )
         );
 
+        Button deleteEventButton =
+                new Button("🗑 Remove Event");
+
+        deleteEventButton.getStyle()
+                .set("margin-top", "1rem")
+                .set("font-weight", "600")
+                .set("background", "#dc2626")
+                .set("color", "white")
+                .set("padding", "0.8rem 1.4rem")
+                .set("border-radius", "12px");
+
+        deleteEventButton.getElement().setProperty(
+                "title",
+                "Remove this event and refund all related orders"
+        );
+
+        deleteEventButton.addClickListener(e ->
+                openDeleteEventDialog()
+        );
+
         lotteryButton =
                 new Button("🎲 Register to Lottery");
 
@@ -271,6 +291,9 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
             actions.add(updateDateButton);
             actions.add(addSeatingAreasButton);
         }
+        if (presenter.canDeleteEvent(token, companyId)) {
+            actions.add(deleteEventButton);
+        }
 
         if (presenter.canUpdateSalesMethod(token, companyId)) {
             VerticalLayout salesMethodLayout = new VerticalLayout();
@@ -278,20 +301,6 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
             salesMethodLayout.setSpacing(false);
 
             salesMethodLayout.add(updateSalesMethodButton);
-
-            if (!dto.hasLottery() && saleAlreadyStarted(dto)) {
-
-                Span disabledReason = new Span(
-                        "Lottery sale cannot be enabled after ticket sales already started."
-                );
-
-                disabledReason.getStyle()
-                        .set("font-size", "0.8rem")
-                        .set("color", "var(--lumo-secondary-text-color)")
-                        .set("margin-top", "0.2rem");
-
-                salesMethodLayout.add(disabledReason);
-            }
 
             actions.add(salesMethodLayout);
         }
@@ -377,6 +386,66 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         dialog.add(content);
 
         dialog.getFooter().add(cancelButton, updateButton);
+
+        dialog.open();
+    }
+
+    private void openDeleteEventDialog() {
+
+        Dialog dialog = new Dialog();
+
+        dialog.setHeaderTitle("Remove Event");
+
+        Paragraph warning = new Paragraph(
+                "This action will deactivate the event, refund relevant orders and notify purchasers. This action cannot be undone."
+        );
+
+        warning.getStyle()
+                .set("color", "var(--lumo-error-text-color)")
+                .set("font-weight", "500");
+
+        Button cancelButton =
+                new Button("Cancel", e -> dialog.close());
+
+        cancelButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        Button deleteButton =
+                new Button("Remove Event", e -> {
+
+                    Response<Boolean> response =
+                            presenter.deleteEvent(
+                                    getToken(),
+                                    eventId
+                            );
+
+                    if (response.getValue() != null
+                            && response.getValue()) {
+
+                        dialog.close();
+
+                        showSuccess("Event removed successfully.");
+
+                        UI.getCurrent().navigate(
+                                "company/" + companyId
+                        );
+
+                        return;
+                    }
+
+                    showError(response.getMessage());
+                });
+
+        deleteButton.addThemeVariants(
+                ButtonVariant.LUMO_ERROR,
+                ButtonVariant.LUMO_PRIMARY
+        );
+
+        dialog.add(warning);
+
+        dialog.getFooter().add(
+                cancelButton,
+                deleteButton
+        );
 
         dialog.open();
     }
