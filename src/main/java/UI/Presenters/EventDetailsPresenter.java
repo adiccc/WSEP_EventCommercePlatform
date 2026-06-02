@@ -103,6 +103,12 @@ public class EventDetailsPresenter {
         );
     }
 
+    public boolean canUpdateSalesMethod(String token, int companyId) {
+        String role = getUserRole(token, companyId);
+
+        return "FOUNDER".equals(role) || "OWNER".equals(role);
+    }
+
     public Response<String> getRole(String token) {
         return auth.getRole(token);
     }

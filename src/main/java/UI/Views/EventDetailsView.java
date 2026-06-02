@@ -193,6 +193,16 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                 .set("border-radius", "12px");
 
         updateDateButton.addClickListener(e -> openUpdateDateDialog(dto));
+        Button updateSalesMethodButton =
+                new Button("🎲 Update Sales Method");
+
+        updateSalesMethodButton.getStyle()
+                .set("margin-top", "1rem")
+                .set("font-weight", "600")
+                .set("background", "#0f766e")
+                .set("color", "white")
+                .set("padding", "0.8rem 1.4rem")
+                .set("border-radius", "12px");
 
         Button addSeatingAreasButton =
                 new Button("🪑 Add Seating Areas");
@@ -204,7 +214,32 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                 .set("color", "white")
                 .set("padding", "0.8rem 1.4rem")
                 .set("border-radius", "12px");
+        updateSalesMethodButton.addClickListener(e -> {
 
+            if (!dto.hasLottery() && saleAlreadyStarted(dto)) {
+
+                showError(
+                        "Lottery sale cannot be enabled after ticket sales already started."
+                );
+
+                return;
+            }
+
+            UI.getCurrent().navigate(
+                    "manage/company/" + companyId + "/event/" + eventId + "/sales-method"
+            );
+        });
+        if (!dto.hasLottery() && saleAlreadyStarted(dto)) {
+            updateSalesMethodButton.getStyle()
+                    .set("opacity", "0.55")
+                    .set("cursor", "not-allowed")
+                    .set("filter", "grayscale(0.25)");
+            updateSalesMethodButton.getElement().setAttribute(
+                    "title",
+                    "Lottery sale cannot be enabled after ticket sales already started."
+            );
+            updateSalesMethodButton.setText("🎲 Update Sales Method");
+        }
         addSeatingAreasButton.addClickListener(e ->
                 UI.getCurrent().navigate(
                         "manage/event/" + eventId + "/add-seating-area"
@@ -235,6 +270,30 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         if (presenter.canUpdateEventDate(token, companyId)) {
             actions.add(updateDateButton);
             actions.add(addSeatingAreasButton);
+        }
+
+        if (presenter.canUpdateSalesMethod(token, companyId)) {
+            VerticalLayout salesMethodLayout = new VerticalLayout();
+            salesMethodLayout.setPadding(false);
+            salesMethodLayout.setSpacing(false);
+
+            salesMethodLayout.add(updateSalesMethodButton);
+
+            if (!dto.hasLottery() && saleAlreadyStarted(dto)) {
+
+                Span disabledReason = new Span(
+                        "Lottery sale cannot be enabled after ticket sales already started."
+                );
+
+                disabledReason.getStyle()
+                        .set("font-size", "0.8rem")
+                        .set("color", "var(--lumo-secondary-text-color)")
+                        .set("margin-top", "0.2rem");
+
+                salesMethodLayout.add(disabledReason);
+            }
+
+            actions.add(salesMethodLayout);
         }
 
         if (dto.hasLottery()
@@ -616,6 +675,15 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
     // =========================================================
     // Helpers
     // =========================================================
+
+    private boolean saleAlreadyStarted(EventDetailsDTO dto) {
+        try {
+            return dto.getSaleStartDate() != null
+                    && !LocalDateTime.parse(dto.getSaleStartDate()).isAfter(LocalDateTime.now());
+        } catch (Exception e) {
+            return false;
+        }
+    }
 
     private String getToken() {
 
