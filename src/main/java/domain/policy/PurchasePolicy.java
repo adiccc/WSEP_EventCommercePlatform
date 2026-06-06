@@ -2,18 +2,24 @@ package domain.policy;
 
 import DTO.PurchaseRuleDTO;
 import domain.dto.UserDTO;
+import jakarta.persistence.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public abstract class PurchasePolicy implements Purchase {
-    protected List<Purchase> rules;
+@Entity
+@Table(name = "purchase_policies")
+public abstract class PurchasePolicy extends PurchaseNode {
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "parent_id")
+    protected List<PurchaseNode> rules;
 
     protected PurchasePolicy() {
         this.rules = new ArrayList<>();
     }
 
-    protected PurchasePolicy(List<Purchase> rules) {
+    protected PurchasePolicy(List<PurchaseNode> rules) {
         this.rules = new ArrayList<>(rules);
     }
 
@@ -29,9 +35,9 @@ public abstract class PurchasePolicy implements Purchase {
     @Override
     public Purchase copy() { return copyPolicy(); }
 
-    protected List<Purchase> copyRules() {
-        List<Purchase> copied = new ArrayList<>();
-        for (Purchase p : rules) copied.add(p.copy());
+    protected List<PurchaseNode> copyRules() {
+        List<PurchaseNode> copied = new ArrayList<>();
+        for (PurchaseNode p : rules) copied.add((PurchaseNode) p.copy());
         return copied;
     }
 
@@ -64,13 +70,13 @@ public abstract class PurchasePolicy implements Purchase {
             throw new IllegalArgumentException("Invalid rule data");
         if (ruleExists(rule))
             throw new RuntimeException("Rule already exists");
-        rules.add(rule);
+        rules.add((PurchaseNode) rule);
     }
 
     public void removeRule(Purchase rule) {
-        for (Purchase r : rules) {
-            if (rule.equals(r)) {
-                rules.remove(r);
+        for (int i = 0; i < rules.size(); i++) {
+            if (rule.equals(rules.get(i))) {
+                rules.remove(i);
                 return;
             }
         }
@@ -79,17 +85,15 @@ public abstract class PurchasePolicy implements Purchase {
 
     @Override
     public boolean ruleExists(Purchase newRule) {
-        for (Purchase rule : rules) {
+        for (Purchase rule : rules)
             if (rule.ruleExists(newRule)) return true;
-        }
         return false;
     }
 
     @Override
     public boolean isValid() {
-        for (Purchase rule : rules) {
+        for (Purchase rule : rules)
             if (!rule.isValid()) return false;
-        }
         return true;
     }
 

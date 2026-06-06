@@ -1,23 +1,29 @@
 package domain.policy;
 
 import domain.dto.UserDTO;
+import jakarta.persistence.*;
 
+@Entity
+@Table(name = "min_age_rules")
+@DiscriminatorValue("MIN_AGE")
 public class MinAgeRule extends PurchaseRule {
+
+    @Column(name = "min_age", nullable = false)
     private int minAge;
+
+    protected MinAgeRule() {}
 
     public MinAgeRule(int minAge) {
         this.minAge = minAge;
     }
+
     public MinAgeRule(MinAgeRule rule) {
         this.minAge = rule.minAge;
     }
 
     @Override
     public boolean isSatisfied(UserDTO user, int quantity, int ticketsBoughtForEvent) {
-        //check in the ui
-        if (user == null) {
-            return true;
-        }
+        if (user == null) return true;
         return user.getAge() >= minAge;
     }
 
