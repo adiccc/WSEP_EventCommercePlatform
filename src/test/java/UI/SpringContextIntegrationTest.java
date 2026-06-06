@@ -12,7 +12,7 @@ import infrastructure.Auth;
 import infrastructure.PasswordEncoderUtil;
 import infrastructure.PaymentSystemProxy;
 import infrastructure.TicketSupplyProxy;
-import infrastructure.UserRepo;
+import infrastructure.inMemory.UserRepo;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

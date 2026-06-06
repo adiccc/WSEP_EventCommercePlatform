@@ -1,4 +1,4 @@
-package infrastructure;
+package infrastructure.inMemory;
 
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
@@ -8,10 +8,11 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-
+@Profile("memory")
 public class LotteryRepoImpl implements ILotteryRepo {
     // Thread-safe map for storing lotteries
     private final ConcurrentHashMap<Integer, Lottery> lotteries;

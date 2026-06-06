@@ -1,7 +1,6 @@
-package infrastructure;
+package infrastructure.inMemory;
 
 import domain.event.Event;
-import domain.event.EventQueue;
 import domain.event.IEventRepo;
 
 import java.util.*;
@@ -10,10 +9,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import Exception.OptimisticLockingFailureException;
 import domain.event.Order;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-
+@Profile("memory")
 public class EventRepoImpl implements IEventRepo {
     Map<Integer,Event> events; // key: eventId, value: event
     private final AtomicInteger eventIdGenerator = new AtomicInteger(1);

@@ -7,19 +7,20 @@ import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
-import domain.dto.LotteryDTO;
 import domain.dto.UserDTO;
-import domain.event.Event;
 import domain.lottery.Lottery;
 import domain.user.IUserRepo;
 import domain.user.Member;
-import infrastructure.*;
+import infrastructure.Auth;
+import infrastructure.Broadcaster;
+import infrastructure.PasswordEncoderUtil;
+import infrastructure.VaadinNotifier;
+import infrastructure.inMemory.*;
+import infrastructure.inMemory.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import Exception.OptimisticLockingFailureException;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +29,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import org.mockito.Mockito;
 
-import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;

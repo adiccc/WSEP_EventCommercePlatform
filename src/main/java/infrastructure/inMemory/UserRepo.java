@@ -1,18 +1,17 @@
-package infrastructure;
+package infrastructure.inMemory;
 
-import application.Response;
 import domain.user.IUserRepo;
 import domain.user.Member;
-import domain.user.User;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-
+@Profile("memory")
 public class UserRepo implements IUserRepo {
     private final ConcurrentHashMap<Integer, Member> usersPerId = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> emailById = new ConcurrentHashMap<>();
