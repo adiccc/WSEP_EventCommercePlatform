@@ -1,4 +1,4 @@
-package UI;
+package app;
 
 import com.vaadin.flow.component.page.AppShellConfigurator;
 import com.vaadin.flow.component.page.Push;
@@ -7,17 +7,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
-/**
- * Application entry point.
- *
- * scanBasePackages tells Spring to scan:
- *   - UI             → Vaadin views, presenters, layouts
- *   - application    → @Service classes (UserService, EventService, ...)
- *   - infrastructure → @Repository and @Component classes (UserRepo, Auth, PaymentSystemProxy, ...)
- *
- * Vaadin 24 auto-configures itself via spring-boot-starter — no @EnableVaadin needed.
- */
 @SpringBootApplication(scanBasePackages = {
+        "app",
         "UI",
         "application",
         "infrastructure",

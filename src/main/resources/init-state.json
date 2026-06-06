@@ -1,0 +1,31 @@
+{
+  "operations": [
+    {
+      "type":  "enter",
+      "store": "guestToken"
+    },
+    {
+      "type": "register",
+      "params": {
+        "guestToken":  "${guestToken}",
+        "email":       "admin@wsep.com",
+        "password":    "Admin@1234",
+        "firstName":   "Admin",
+        "lastName":    "User",
+        "phone":       "050-000-0001",
+        "address":     "Tel Aviv, Israel",
+        "birthDay":    "1",
+        "birthMonth":  "1",
+        "birthYear":   "1990"
+      }
+    },
+    {
+      "type": "login",
+      "params": {
+        "email":    "admin@wsep.com",
+        "password": "Admin@1234"
+      },
+      "store": "adminToken"
+    }
+  ]
+}
