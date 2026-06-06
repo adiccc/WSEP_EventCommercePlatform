@@ -5,12 +5,16 @@ import domain.dataType.TicketStatus;
 import static domain.dataType.TicketStatus.AVAILABLE;
 
 public abstract class Ticket {
-    private final int ticketId;
+    private Integer ticketId;
     private TicketStatus status;
 
-    public Ticket(int ticketId) {
-        this.ticketId = ticketId;
-        this.status = AVAILABLE;
+//    public Ticket(int ticketId) {
+//        this.ticketId = ticketId;
+//        this.status = AVAILABLE;
+//    }
+    public Ticket() {
+        ticketId=-1;
+        status=AVAILABLE;
     }
 
     public Ticket(int ticketId, TicketStatus status) {
@@ -18,6 +22,13 @@ public abstract class Ticket {
         this.status = status;
     }
 
+    public void setId(Integer ticketId) {
+        this.ticketId=ticketId;
+    }
+
+    public Integer getId() {
+        return ticketId;
+    }
     public int getTicketId() {
         return ticketId;
     }

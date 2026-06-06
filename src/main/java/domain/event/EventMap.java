@@ -28,7 +28,7 @@ public class EventMap {
         this.zones = new ArrayList<>();
         for (Zone z : eventMap.zones) {
             if (z instanceof SeatingZone seatingZone) {
-                this.zones.add(new SeatingZone(seatingZone, new AtomicInteger(seatingZone.getTicketIdGenerator().get())));
+                this.zones.add(new SeatingZone(seatingZone));
             } else if (z instanceof StandingZone standingZone) {
                 this.zones.add(new StandingZone(standingZone));
             }

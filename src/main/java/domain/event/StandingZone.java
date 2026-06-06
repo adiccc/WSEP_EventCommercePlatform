@@ -12,7 +12,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class StandingZone extends Zone {
     private final int capacity;
     private final Queue<StandingTicket> availableTickets = new LinkedList<>();
-    private AtomicInteger ticketIdGenerator;
     private final List<StandingTicket> occupiedTickets = new LinkedList<>();
     private int available;
 
@@ -20,16 +19,14 @@ public class StandingZone extends Zone {
     public StandingZone(String name, double price, int capacity, ElementPosition elementPosition, AtomicInteger ticketIdGenerator) {
         super(name,price,elementPosition);
         this.capacity = capacity;
-        this.ticketIdGenerator = ticketIdGenerator;
         for(int i=0;i<capacity;i++){
-            this.availableTickets.add(new StandingTicket(ticketIdGenerator.getAndIncrement()));
+            this.availableTickets.add(new StandingTicket());
         }
         available=capacity;
     }
     public StandingZone(StandingZone zone){
         super(zone.getName(),zone.getPrice(),zone.getElementPosition());
         this.capacity = zone.capacity;
-        this.ticketIdGenerator = new AtomicInteger(zone.ticketIdGenerator.get());
         for (StandingTicket st : zone.availableTickets) {
             this.availableTickets.add(new StandingTicket(st));
         }
@@ -39,14 +36,20 @@ public class StandingZone extends Zone {
         this.available = zone.available;
     }
 
-    public StandingZone(StandingZoneDTO standingZoneDTO, AtomicInteger generator) {
+
+    public StandingZone(StandingZoneDTO standingZoneDTO) {
         super(standingZoneDTO.getName(),standingZoneDTO.getPrice(),standingZoneDTO.getPosition());
         this.capacity = standingZoneDTO.getCapacty();
-        this.ticketIdGenerator = generator;
         for(int i=0;i<capacity;i++){
-            this.availableTickets.add(new StandingTicket(ticketIdGenerator.getAndIncrement()));
+            this.availableTickets.add(new StandingTicket());
         }
         available=capacity;
+    }
+    public List<Ticket> getTickets(){
+        ArrayList<Ticket> tickets = new ArrayList<>();
+        tickets.addAll(this.availableTickets);
+        tickets.addAll(this.occupiedTickets);
+        return tickets;
     }
     public int getCapacity() {
         return capacity;

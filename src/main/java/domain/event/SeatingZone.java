@@ -13,50 +13,48 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class SeatingZone extends Zone {
     private Map<String, SeatingTicket> ticketMap;
-    private AtomicInteger ticketIdGenerator;
     private int rows;
     private int cols;
 
-    public SeatingZone(String name, double price, int rows, int cols, ElementPosition elementPosition, AtomicInteger ticketIdGenerator) {
+    public SeatingZone(String name, double price, int rows, int cols, ElementPosition elementPosition) {
         super(name, price, elementPosition);
         this.ticketMap = new HashMap<>();
-        this.ticketIdGenerator = ticketIdGenerator;
         for(int i=0; i<rows; i++) {
             for(int j=0; j<cols; j++) {
                     String seatKey = i + "-" + j;
-                    ticketMap.put(seatKey, new SeatingTicket(ticketIdGenerator.getAndIncrement(), i, j));
+                    ticketMap.put(seatKey, new SeatingTicket( i, j));
             }
         }
         this.rows = rows;
         this.cols = cols;
     }
-    public SeatingZone(SeatingZone seatingZone,AtomicInteger ticketIdGenerator) {
+    public SeatingZone(SeatingZone seatingZone) {
         super(seatingZone.getName(), seatingZone.getPrice(), seatingZone.getElementPosition());
         this.ticketMap = new HashMap<>();
-        this.ticketIdGenerator = ticketIdGenerator;
         for(Map.Entry<String, SeatingTicket> entry : seatingZone.ticketMap.entrySet()) {
             this.ticketMap.put(entry.getKey(), new SeatingTicket(entry.getValue()));
         }
             this.rows = seatingZone.rows;
             this.cols = seatingZone.cols;
-        assert this.ticketIdGenerator != null;
-        this.ticketIdGenerator.set(seatingZone.ticketIdGenerator.get());
     }
-    public SeatingZone(SeatingZoneDTO seatingZoneDTO, AtomicInteger generator) {
+    public SeatingZone(SeatingZoneDTO seatingZoneDTO) {
         super(seatingZoneDTO.getName(), seatingZoneDTO.getPrice(), seatingZoneDTO.getPosition());
         int rows = seatingZoneDTO.getRows();
         int cols = seatingZoneDTO.getCols();
-        this.ticketIdGenerator = generator;
         this.ticketMap = new HashMap<>();
         for(int i=0; i<rows; i++) {
             for(int j=0; j<cols; j++) {
-                ticketMap.put(i + "-" + j, new SeatingTicket(ticketIdGenerator.getAndIncrement(), i, j));
+                ticketMap.put(i + "-" + j, new SeatingTicket(i, j));
             }
         }
         this.rows = rows;
         this.cols = cols;
     }
 
+
+    public List<Ticket> getTickets(){
+        return new ArrayList<>(ticketMap.values());
+    }
 
     public Collection<Integer> bookTickets(List<SeatingTicketDTO> seats) {
         List<Integer> bookedTicketIds = new ArrayList<>();
@@ -108,10 +106,6 @@ public class SeatingZone extends Zone {
         return ticketMap;
     }
 
-
-    public AtomicInteger getTicketIdGenerator() {
-        return ticketIdGenerator;
-    }
 
     public Collection<Integer> findSeatingTicketIds(List<SeatingTicketDTO> seats) {
         List<Integer> seatingTicketIds = new ArrayList<>();

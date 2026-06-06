@@ -99,10 +99,10 @@ public class EventCompanyManageService {
                 }
                 List<Zone> zones = new ArrayList<>();
                 for (StandingZoneDTO standingZoneDTO : standingZone) {
-                    zones.add(new StandingZone(standingZoneDTO,ticketIdGenerator));
+                    zones.add(new StandingZone(standingZoneDTO));
                 }
                 for (SeatingZoneDTO seatingZoneDTO : seatingZone) {
-                    zones.add(new SeatingZone(seatingZoneDTO,ticketIdGenerator));
+                    zones.add(new SeatingZone(seatingZoneDTO));
                 }
                 List<ElementPosition> allEntries = new ArrayList<>();
                 for (ElementPositionDTO elementPositionDTO : entries) {
@@ -306,13 +306,13 @@ public class EventCompanyManageService {
                 List<Zone> zones = map.getZones();
                 if (hasStanding) {
                     for (StandingZoneDTO standingZoneDTO : standingZone) {
-                        zones.add(new StandingZone(standingZoneDTO,ticketIdGenerator));
+                        zones.add(new StandingZone(standingZoneDTO));
                     }
                 }
 
                 if (hasSeating) {
                     for (SeatingZoneDTO seatingZoneDTO : seatingZone) {
-                        zones.add(new SeatingZone(seatingZoneDTO,ticketIdGenerator));
+                        zones.add(new SeatingZone(seatingZoneDTO));
                     }
                 }
 

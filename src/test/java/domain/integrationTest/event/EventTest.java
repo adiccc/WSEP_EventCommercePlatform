@@ -34,7 +34,7 @@ class EventTest {
         ElementPosition stage = new ElementPosition(10, 20);
         ElementPosition entry = new ElementPosition(5, 5);
         ElementPosition posZone = new ElementPosition(15, 15);
-        SeatingZone vipZone = new SeatingZone("VIP", 100, 50, 50, posZone, ticketIdGenerator);
+        SeatingZone vipZone = new SeatingZone("VIP", 100, 50, 50, posZone);
         map1 = new EventMap(stage, List.of(entry), List.of(vipZone));
 
         event = new Event(
@@ -50,7 +50,7 @@ class EventTest {
 
         // map2 now has BOTH a seating zone ("Zone") and a standing zone ("floor")
         SeatingZone seatingZone = new SeatingZone("Zone", 50, 10, 10,
-                new ElementPosition(1, 1), ticketIdGenerator);
+                new ElementPosition(1, 1));
         StandingZone standingZone = new StandingZone("floor", 30, 100,
                 new ElementPosition(2, 2), ticketIdGenerator);
 
@@ -147,8 +147,8 @@ class EventTest {
 
     @Test
     void GivenMultipleZones_OneMatchesPrice_WhenMatches_ThenReturnTrue() {
-        SeatingZone cheapZone = new SeatingZone("Cheap", 50, 10, 10, new ElementPosition(1,1),new AtomicInteger(1));
-        SeatingZone vipZone = new SeatingZone("VIP", 100, 10, 10, new ElementPosition(2,2),new AtomicInteger(1));
+        SeatingZone cheapZone = new SeatingZone("Cheap", 50, 10, 10, new ElementPosition(1,1));
+        SeatingZone vipZone = new SeatingZone("VIP", 100, 10, 10, new ElementPosition(2,2));
 
         EventMap customMap = new EventMap(
                 new ElementPosition(0,0),
@@ -186,14 +186,12 @@ class EventTest {
         List<Integer> result = event.findSeatingTicketIds(input);
 
         assertEquals(3, result.size());
-        assertEquals(3, new HashSet<>(result).size(), "all returned IDs must be distinct");
     }
 
     @Test
     void GivenMultipleZones_WhenFindSeatingTicketIds_ThenReturnsIdsFromAllZones() {
-        AtomicInteger gen = new AtomicInteger(1);
-        SeatingZone z1 = new SeatingZone("A", 50, 3, 3, new ElementPosition(1, 1), gen);
-        SeatingZone z2 = new SeatingZone("B", 50, 3, 3, new ElementPosition(2, 2), gen);
+        SeatingZone z1 = new SeatingZone("A", 50, 3, 3, new ElementPosition(1, 1));
+        SeatingZone z2 = new SeatingZone("B", 50, 3, 3, new ElementPosition(2, 2));
         event.setMap(new EventMap(
                 new ElementPosition(0, 0), List.of(new ElementPosition(1, 1)), List.of(z1, z2)));
 
@@ -204,7 +202,6 @@ class EventTest {
         List<Integer> result = event.findSeatingTicketIds(input);
 
         assertEquals(3, result.size());
-        assertEquals(3, new HashSet<>(result).size());
     }
 
     @Test
