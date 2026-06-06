@@ -34,7 +34,7 @@ public class RegisterHandler implements InitOperationHandler {
                 params.get("phone")
         );
         Response<Boolean> response = userService.registerUser(params.get("guestToken"), dto);
-        if (response.isError())
+        if (response.getValue() == null)
             throw new InitializationException("register failed: " + response.getMessage());
         return true;
     }

@@ -22,7 +22,7 @@ public class LoginHandler implements InitOperationHandler {
     @Override
     public Object execute(Map<String, String> params, InitContext context) {
         Response<String> response = userService.login(params.get("email"), params.get("password"));
-        if (response.isError())
+        if (response.getValue() == null)
             throw new InitializationException("login failed: " + response.getMessage());
         return response.getValue();
     }

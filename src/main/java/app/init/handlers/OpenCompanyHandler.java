@@ -30,7 +30,7 @@ public class OpenCompanyHandler implements InitOperationHandler {
                 params.get("phone"),
                 params.get("bankAccount")
         );
-        if (response.isError())
+        if (response.getValue() == null)
             throw new InitializationException("open-company failed: " + response.getMessage());
         return response.getValue().getCompanyId();
     }
