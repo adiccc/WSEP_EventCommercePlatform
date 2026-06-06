@@ -57,7 +57,7 @@ public class SuspensionRepoImpl implements ISuspensionRepo {
 
     @Override
     public synchronized void store(Suspension entity) {
-        Suspension currSuspension =suspensionsBySusID.get(entity.getSuspensionId());
+        Suspension currSuspension =entity.getSuspensionId()!=null?suspensionsBySusID.get(entity.getSuspensionId()):null;
         if(currSuspension == null){
             Long id=suspensionIdGenerator.getAndIncrement();
             entity.setId(id);
