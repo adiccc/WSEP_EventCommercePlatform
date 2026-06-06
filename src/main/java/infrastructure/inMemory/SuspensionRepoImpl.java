@@ -1,4 +1,4 @@
-package infrastructure;
+package infrastructure.inMemory;
 
 import domain.Suspension.ISuspensionRepo;
 import domain.Suspension.Suspension;
@@ -9,23 +9,26 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
 import Exception.OptimisticLockingFailureException;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-
+@Profile("memory & !suspension-db")
 public class SuspensionRepoImpl implements ISuspensionRepo {
-    ConcurrentHashMap<Integer,List<Integer>> suspensionsIdByUserID = new ConcurrentHashMap<>(); //<User id, List<Susoensions id>>
-    ConcurrentHashMap<Integer,Suspension> suspensionsBySusID = new ConcurrentHashMap<>();
-    AtomicInteger suspensionIdGenerator=new AtomicInteger(0);
+    ConcurrentHashMap<Integer,List<Long>> suspensionsIdByUserID = new ConcurrentHashMap<>(); //<User id, List<Susoensions id>>
+    ConcurrentHashMap<Long,Suspension> suspensionsBySusID = new ConcurrentHashMap<>();
+    AtomicLong suspensionIdGenerator=new AtomicLong(0);
 
     // find by suspension id
     @Override
-    public Suspension findById(Integer integer) {
-        if(suspensionsBySusID.containsKey(integer)){
-            return new Suspension(suspensionsBySusID.get(integer));
+    public Suspension findById(Long id) {
+        if(suspensionsBySusID.containsKey(id)){
+            return new Suspension(suspensionsBySusID.get(id));
         }
-        throw new NoSuchElementException("No suspension found with suspension id " + integer);
+        throw new NoSuchElementException("No suspension found with suspension id " + id);
     }
 
     // returns current active suspensions and suspensions that already passed due date
@@ -40,12 +43,12 @@ public class SuspensionRepoImpl implements ISuspensionRepo {
 
     //  delete by suspension id
     @Override
-    public void delete(Integer integer) {
-        Suspension s=suspensionsBySusID.remove(integer);
+    public void delete(Long id) {
+        Suspension s=suspensionsBySusID.remove(id);
         if(s!=null){
-            List<Integer> suspensionsIds = suspensionsIdByUserID.get(s.getUserId());
+            List<Long> suspensionsIds = suspensionsIdByUserID.get(s.getUserId());
             if(suspensionsIds!=null){
-                suspensionsIds.remove(integer);
+                suspensionsIds.remove(id);
                 suspensionsIdByUserID.put(s.getUserId(),suspensionsIds);
             }
         }
@@ -54,13 +57,13 @@ public class SuspensionRepoImpl implements ISuspensionRepo {
 
     @Override
     public synchronized void store(Suspension entity) {
-        Suspension currSuspension =suspensionsBySusID.get(entity.getSuspensionId());
+        Suspension currSuspension =entity.getSuspensionId()!=null?suspensionsBySusID.get(entity.getSuspensionId()):null;
         if(currSuspension == null){
-            int id=suspensionIdGenerator.getAndIncrement();
+            Long id=suspensionIdGenerator.getAndIncrement();
             entity.setId(id);
             Suspension suspension = new Suspension(entity);
             suspensionsBySusID.put(id,suspension);
-            List<Integer> userSuspensions = suspensionsIdByUserID.getOrDefault(entity.getUserId(),new ArrayList<>());
+            List<Long> userSuspensions = suspensionsIdByUserID.getOrDefault(entity.getUserId(),new ArrayList<>());
             userSuspensions.add(suspension.getSuspensionId());
             suspensionsIdByUserID.put(entity.getUserId(),userSuspensions);
             return;
@@ -82,12 +85,12 @@ public class SuspensionRepoImpl implements ISuspensionRepo {
 
 
     @Override
-    public boolean haveActiveSuspension(int userId) {
-        List<Integer> suspensionsIds = suspensionsIdByUserID.get(userId);
+    public boolean haveActiveSuspension(Integer userId) {
+        List<Long> suspensionsIds = suspensionsIdByUserID.get(userId);
         if(suspensionsIds==null){
             return false;
         }
-        for(Integer suspensionId : suspensionsIds){
+        for(Long suspensionId : suspensionsIds){
             if(suspensionsBySusID.get(suspensionId).isActive())
                 return true;
 
@@ -95,12 +98,12 @@ public class SuspensionRepoImpl implements ISuspensionRepo {
         return false;
     }
 
-    public Suspension findLastSuspensionByUserId(int userId) {
+    public Suspension findLastSuspensionByUserId(Integer userId) {
         if(!suspensionsIdByUserID.containsKey(userId)){
             throw new NoSuchElementException("No suspension found with user id " + userId);
         }
         Suspension suspension =suspensionsBySusID.get(suspensionsIdByUserID.get(userId).get(0));
-        for(Integer suspensionId : suspensionsIdByUserID.get(userId)){
+        for(Long suspensionId : suspensionsIdByUserID.get(userId)){
             LocalDateTime endTime=suspensionsBySusID.get(suspensionId).getEndDate();
             if(endTime==null || endTime.isAfter(LocalDateTime.now()))
                 return new Suspension(suspension);

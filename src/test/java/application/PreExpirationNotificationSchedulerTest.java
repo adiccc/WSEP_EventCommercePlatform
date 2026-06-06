@@ -5,7 +5,7 @@ import DTO.NotifyType;
 import com.vaadin.flow.shared.Registration;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
-import infrastructure.ActiveOrderRepoImpl;
+import infrastructure.inMemory.ActiveOrderRepoImpl;
 import infrastructure.Auth;
 import infrastructure.Broadcaster;
 import infrastructure.VaadinNotifier;

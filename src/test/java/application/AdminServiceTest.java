@@ -2,7 +2,6 @@ package application;
 
 import DTO.*;
 import Log.LoggerSetup;
-import com.vaadin.copilot.SpringIntegration;
 import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.IActiveOrderRepo;
@@ -10,7 +9,6 @@ import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
-import domain.dto.OrderDTO;
 import domain.dto.SuspensionDTO;
 import domain.dto.UserDTO;
 import domain.event.Event;
@@ -20,13 +18,16 @@ import domain.lottery.ILotteryRepo;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import domain.webQueue.WebQueue;
-import infrastructure.*;
+import infrastructure.Auth;
+import infrastructure.Broadcaster;
+import infrastructure.PasswordEncoderUtil;
+import infrastructure.VaadinNotifier;
+import infrastructure.inMemory.*;
+import infrastructure.inMemory.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import domain.event.Order;
-import domain.dto.EventMapDTO;
-import Exception.OptimisticLockingFailureException;
 
 import java.util.*;
 

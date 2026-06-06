@@ -4,6 +4,8 @@ import com.vaadin.flow.component.page.AppShellConfigurator;
 import com.vaadin.flow.component.page.Push;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 /**
  * Application entry point.
@@ -15,7 +17,18 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *
  * Vaadin 24 auto-configures itself via spring-boot-starter — no @EnableVaadin needed.
  */
-@SpringBootApplication(scanBasePackages = {"UI", "application", "infrastructure"})
+@SpringBootApplication(scanBasePackages = {
+        "UI",
+        "application",
+        "infrastructure",
+        "domain"
+})
+@EnableJpaRepositories(basePackages = {
+        "infrastructure.JPA"
+})
+@EntityScan(basePackages = {
+        "domain"
+})
 @Push
 public class App implements AppShellConfigurator {
 

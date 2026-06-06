@@ -4,14 +4,11 @@ import domain.company.Company;
 import domain.company.ContactInfo;
 import domain.company.Permissions;
 import domain.dataType.PermissionType;
-import domain.dto.HierarchyDTO;
 import domain.policy.*;
-import domain.user.ActivationStatus;
-import domain.user.Founder;
 import domain.user.Manager;
 import domain.user.Member;
-import infrastructure.CompanyRepoImpl;
-import infrastructure.UserRepo;
+import infrastructure.inMemory.CompanyRepoImpl;
+import infrastructure.inMemory.UserRepo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

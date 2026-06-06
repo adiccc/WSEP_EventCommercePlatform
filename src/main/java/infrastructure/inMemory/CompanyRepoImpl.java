@@ -1,16 +1,17 @@
-package infrastructure;
+package infrastructure.inMemory;
 
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dto.CompanyDTO;
 import Exception.OptimisticLockingFailureException;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 @Repository
-
+@Profile("memory")
 public class CompanyRepoImpl implements ICompanyRepo {
     private static final Logger logger = Logger.getLogger(CompanyRepoImpl.class.getName());
     private ConcurrentHashMap<Integer, Company> companies;
