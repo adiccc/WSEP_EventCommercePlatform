@@ -1,17 +1,30 @@
 package domain.policy;
 
+import jakarta.persistence.*;
 import java.time.LocalDate;
 
+@Entity
+@Table(name = "code_coupons")
+@DiscriminatorValue("CODE_COUPON")
 public class CodeCoupun extends DiscountElement {
+
+    @Column(name = "code", nullable = false)
     private String code;
+
+    @Column(name = "percentage", nullable = false)
     private double percentage;
+
+    @Column(name = "end_date", nullable = false)
     private LocalDate endDate;
+
+    protected CodeCoupun() {}
 
     public CodeCoupun(String code, double percentage, LocalDate endDate) {
         this.code = code;
         this.percentage = percentage;
         this.endDate = endDate;
     }
+
     public CodeCoupun(CodeCoupun codeCoupun) {
         this.code = codeCoupun.code;
         this.percentage = codeCoupun.percentage;
@@ -37,6 +50,7 @@ public class CodeCoupun extends DiscountElement {
         return percentage + "% discount with coupon code, valid until " + endDate;
     }
 
+    @Override
     public boolean discountExists(Discount newdiscount) {
         return equals(newdiscount);
     }
@@ -46,11 +60,10 @@ public class CodeCoupun extends DiscountElement {
         return new CodeCoupun(this);
     }
 
+    @Override
     public boolean equals(Object discount) {
-        if(discount instanceof CodeCoupun){
-            if(code.equals(((CodeCoupun)discount).code))
-                return true;
-        }
+        if (discount instanceof CodeCoupun)
+            return code.equals(((CodeCoupun) discount).code);
         return false;
     }
 

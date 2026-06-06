@@ -1,8 +1,19 @@
 package domain.policy;
 
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "max_quantity_discounts")
+@DiscriminatorValue("MAX_QUANTITY")
 public class MaxQuantityDiscount extends DiscountElement {
-    private final double percentage;
-    private final int maxQuantity;
+
+    @Column(name = "percentage", nullable = false)
+    private double percentage;
+
+    @Column(name = "max_quantity", nullable = false)
+    private int maxQuantity;
+
+    protected MaxQuantityDiscount() {}
 
     public MaxQuantityDiscount(double percentage, int maxQuantity) {
         if (percentage <= 0 || percentage > 100)

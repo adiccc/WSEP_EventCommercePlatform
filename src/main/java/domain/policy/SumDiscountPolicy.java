@@ -1,14 +1,18 @@
 package domain.policy;
 
+import jakarta.persistence.*;
 import java.util.List;
 
+@Entity
+@Table(name = "sum_discount_policies")
+@DiscriminatorValue("SUM_POLICY")
 public class SumDiscountPolicy extends DiscountPolicy {
 
     public SumDiscountPolicy() {
         super();
     }
 
-    private SumDiscountPolicy(List<Discount> discounts) {
+    private SumDiscountPolicy(List<DiscountNode> discounts) {
         super(discounts);
     }
 
