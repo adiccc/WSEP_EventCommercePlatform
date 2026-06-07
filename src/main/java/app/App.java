@@ -9,23 +9,23 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @SpringBootApplication(scanBasePackages = {
-        "app",
-        "UI",
-        "application",
-        "infrastructure",
-        "domain"
+                "app",
+                "UI",
+                "application",
+                "infrastructure",
+                "domain"
 })
 @EnableJpaRepositories(basePackages = {
-        "infrastructure.JPA"
+                "infrastructure.JPA"
 })
 @EntityScan(basePackages = {
-        "domain"
+                "domain"
 })
-@EnableVaadin({"UI"})
+@EnableVaadin({ "UI" })
 @Push
 public class App implements AppShellConfigurator {
 
-    public static void main(String[] args) {
-        SpringApplication.run(App.class, args);
-    }
+        public static void main(String[] args) {
+                SpringApplication.run(App.class, args);
+        }
 }
