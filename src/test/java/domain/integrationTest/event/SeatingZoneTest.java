@@ -94,19 +94,6 @@ class SeatingZoneTest {
                 "Original lock must not be affected by unknown-id release");
     }
 
-//    @Test
-//    void GivenMixOfKnownAndUnknownIds_WhenReleaseTickets_ThenOnlyKnownAreReleased() {
-//        List<Integer> lockedIds = new ArrayList<>(seatingZone.bookTickets(
-//                List.of(new SeatingTicketDTO(0, 0), new SeatingTicketDTO(0, 1))));
-//
-//        seatingZone.releaseTickets(List.of(lockedIds.get(0), 9999));
-//
-//        // first seat should be released
-//        assertDoesNotThrow(() -> seatingZone.bookTickets(List.of(new SeatingTicketDTO(0, 0))));
-//        // second seat should still be locked
-//        assertThrows(IllegalArgumentException.class,
-//                () -> seatingZone.bookTickets(List.of(new SeatingTicketDTO(0, 1))));
-//    }
 
     @Test
     void GivenEmptyTicketList_WhenReleaseTickets_ThenNoChange() {
