@@ -25,7 +25,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @Push
 public class App implements AppShellConfigurator {
 
-    public static void main(String[] args) {
-        SpringApplication.run(App.class, args);
-    }
+        public static void main(String[] args) {
+                SpringApplication.run(App.class, args);
+        }
 }

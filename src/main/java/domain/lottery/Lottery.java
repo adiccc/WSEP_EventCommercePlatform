@@ -1,35 +1,85 @@
 package domain.lottery;
 
 import domain.dto.LotteryDTO;
+import jakarta.persistence.*;
+
 import java.time.LocalDateTime;
 import java.util.*;
-
-
 import java.util.concurrent.ConcurrentHashMap;
 
+@Entity
+@Table(name = "lotteries")
 public class Lottery {
+    @Id
+    @Column(name = "event_id", nullable = false)
     private int id; // this value is the same as the eventId, because each event can have only one
     // lottery
+    @Column(nullable = false)
     private int capacity;
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(
+            name = "lottery_registered_users",
+            joinColumns = @JoinColumn(
+                    name = "event_id",
+                    referencedColumnName = "event_id"
+            ),
+            uniqueConstraints = {
+                    @UniqueConstraint(columnNames = {"event_id", "user_id"})
+            }
+    )
+    @Column(name = "user_id", nullable = false)
     private List<Integer> registered;
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(
+            name = "lottery_winners",
+            joinColumns = @JoinColumn(
+                    name = "event_id",
+                    referencedColumnName = "event_id"
+            ),
+            uniqueConstraints = {
+                    @UniqueConstraint(columnNames = {"event_id", "user_id"}),
+                    @UniqueConstraint(columnNames = {"event_id", "access_code"})
+            }
+    )
+    @MapKeyColumn(name = "user_id")
+    @Column(name = "access_code", nullable = false)
     private Map<Integer, String> winners; // userId -> code
+    @Column(name = "register_window", nullable = false)
     private LocalDateTime registerWindow; // the time window for users to register for the lottery
+    @Column(name = "expiration_time", nullable = false)
     private long expirationTime; // after this time all the users will be able to buy tickets for the event, and
     // the lottery will be closed
 
     // Field for optimistic locking
+    @Version
     private long version;
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(
+            name = "lottery_notified_winners",
+            joinColumns = @JoinColumn(
+                    name = "event_id",
+                    referencedColumnName = "event_id"
+            ),
+            uniqueConstraints = {
+                    @UniqueConstraint(columnNames = {"event_id", "user_id"})
+            }
+    )
+    @Column(name = "user_id", nullable = false)
     private Set<Integer> notifiedWinners;
+
+    protected Lottery() {
+        // for JPA
+    }
 
     public Lottery(int eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
         this.id = eventId;
         this.capacity = capacity;
         this.registered = new ArrayList<>();
-        this.winners = new ConcurrentHashMap<>();
+        this.winners = new HashMap<>();
         this.registerWindow = registerWindow;
         this.expirationTime = expirationTime;
         this.version = 0; // Initial version
-        this.notifiedWinners = ConcurrentHashMap.newKeySet();
+        this.notifiedWinners = new HashSet<>();
     }
 
     // Copy Constructor - essential for returning detached copies from the Repo
@@ -40,10 +90,17 @@ public class Lottery {
         this.expirationTime = other.expirationTime;
         this.version = other.version;
         // Deep copy of lists to ensure memory isolation
-        this.registered = new ArrayList<>(other.registered);
-        this.winners = new ConcurrentHashMap<>(other.winners);
-        this.notifiedWinners = ConcurrentHashMap.newKeySet();
-        this.notifiedWinners.addAll(other.notifiedWinners);
+        this.registered = other.registered == null
+                ? new ArrayList<>()
+                : new ArrayList<>(other.registered);
+
+        this.winners = other.winners == null
+                ? new HashMap<>()
+                : new HashMap<>(other.winners);
+
+        this.notifiedWinners = other.notifiedWinners == null
+                ? new HashSet<>()
+                : new HashSet<>(other.notifiedWinners);
     }
 
     public int getId() {

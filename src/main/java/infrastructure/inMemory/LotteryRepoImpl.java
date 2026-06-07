@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-@Profile("memory")
+@Profile("memory & !lottery-db")
 public class LotteryRepoImpl implements ILotteryRepo {
     // Thread-safe map for storing lotteries
     private final ConcurrentHashMap<Integer, Lottery> lotteries;
