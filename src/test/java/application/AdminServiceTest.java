@@ -27,7 +27,13 @@ import infrastructure.inMemory.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 import domain.event.Order;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.*;
 
@@ -90,7 +96,13 @@ class AdminServiceTest {
         notifier = new VaadinNotifier();
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
 
-        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem,suspensionRepo,notifier);
+        TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
+        when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem,suspensionRepo,notifier,transactionTemplate);
 
         IActiveOrderRepo activeOrderRepo =new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo = new LotteryRepoImpl();

@@ -16,6 +16,7 @@ import domain.webQueue.WebQueue;
 import Exception.OptimisticLockingFailureException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -38,11 +39,12 @@ public class AdminService {
     private final IUserRepo userRepo;
     private final ScheduledExecutorService scheduler;
     private final INotifier notifier;
+    private final TransactionTemplate transactionTemplate;
 
 
 
     @Autowired
-    public AdminService(IAuth auth, IUserRepo userRepo, ICompanyRepo companyRepo, IEventRepo eventRepo, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo, INotifier notifier) {
+    public AdminService(IAuth auth, IUserRepo userRepo, ICompanyRepo companyRepo, IEventRepo eventRepo, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo, INotifier notifier, TransactionTemplate transactionTemplate) {
         this.auth = auth;
         this.userRepo = userRepo;
         this.eventRepo = eventRepo;
@@ -51,11 +53,13 @@ public class AdminService {
         this.suspensionRepo = suspensionRepo;
         this.scheduler = Executors.newScheduledThreadPool(1);
         this.notifier = notifier;
+        this.transactionTemplate = transactionTemplate;
     }
 
     //permanent suspension
     public Response<Boolean> SuspendUser(String token, int userId) {
-        return RetryHelper.executeWithRetry(()->{
+        return RetryHelper.executeWithRetry(()->
+            transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "SuspendUser called");
             try{
                 if(!isVerifiedAdmin(token)){
@@ -85,12 +89,13 @@ public class AdminService {
                 logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
                 return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
             }
-        });
+        }));
     }
 
     //temp suspension , duration in days
     public Response<Boolean> SuspendUser(String token, int userId, int duration) {
-        return RetryHelper.executeWithRetry(()->{
+        return RetryHelper.executeWithRetry(()->
+            transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "SuspendUser called");
             try{
                 if(!isVerifiedAdmin(token)){
@@ -125,11 +130,12 @@ public class AdminService {
                 logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
                 return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<Boolean> UnsuspendUser(String token, int userId) {
-        return RetryHelper.executeWithRetry(()->{
+        return RetryHelper.executeWithRetry(()->
+            transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "UnsuspendUser called");
             try{
                 if(!isVerifiedAdmin(token)){
@@ -157,11 +163,12 @@ public class AdminService {
                 logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
                 return new Response<>(false,"UnsuspendUser failed due to serer error: "+e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<List<SuspensionDTO>> getAllUsersSuspensions(String token) {
-        return RetryHelper.executeWithRetry(()-> {
+        return RetryHelper.executeWithRetry(()->
+            transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "getAllUsersSuspensions called");
             if (!isVerifiedAdmin(token)) {
                 logger.log(Level.INFO, "getAllUsersSuspensions failed : user is not admin");
@@ -174,11 +181,12 @@ public class AdminService {
             }
             logger.log(Level.INFO, "getAllUsersSuspensions succeeded");
             return new Response<>(suspensionDTOList, "getAllUsersSuspensions succeeded");
-        });
+        }));
     }
 
     private void scheduleActivateAfterSuspension(int userId, int duration) {
-        scheduler.schedule( ()-> RetryHelper.executeWithRetry(()->{
+        scheduler.schedule( ()-> RetryHelper.executeWithRetry(()->
+            transactionTemplate.execute(status -> {
                 logger.log(Level.INFO, "ScheduleActivateAfterSuspension called");
                 try {
                     Member member = userRepo.findById(userId);
@@ -195,12 +203,13 @@ public class AdminService {
                     logger.log(Level.SEVERE, "SuspendUser faild due to serer error: ", e.getMessage());
                     return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
                 }
-            })
+            }))
         , duration, TimeUnit.DAYS);
     }
 
     public Response<Boolean> setMaxCapacity(String token, int capacity) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
             logger.info("setMaxCapacity attempt");
             try {
                 if (!isVerifiedAdmin(token)) {
@@ -216,11 +225,12 @@ public class AdminService {
                 logger.severe("setMaxCapacity failed due to server error: " + e.getMessage());
                 return Response.error(e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<Integer> getMaxCapacity(String token) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
             logger.info("getMaxCapacity attempt");
             try {
                 if (!isVerifiedAdmin(token)) {
@@ -234,11 +244,12 @@ public class AdminService {
                 logger.severe("getMaxCapacity failed due to server error: " + e.getMessage());
                 return Response.error(e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<Integer> getActiveCount(String token) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
             logger.info("getActiveCount attempt");
             try {
                 if (!isVerifiedAdmin(token)) {
@@ -252,7 +263,7 @@ public class AdminService {
                 logger.severe("getActiveCount failed due to server error: " + e.getMessage());
                 return Response.error(e.getMessage());
             }
-        });
+        }));
     }
 
     /**
@@ -268,7 +279,8 @@ public class AdminService {
      * company's founder
      */
     public Response<Boolean> removeUser(String adminToken, int userIdToRemove) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
             logger.info("removeUser attempt for userId: " + userIdToRemove);
             try {
                 if (!isVerifiedAdmin(adminToken)) {
@@ -359,11 +371,12 @@ public class AdminService {
                 logger.severe("removeUser failed for userId: " + userIdToRemove + ". Error: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<Integer> getWaitingCount(String token) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
             logger.info("getWaitingCount attempt");
             try {
                 if (!isVerifiedAdmin(token)) {
@@ -377,11 +390,12 @@ public class AdminService {
                 logger.severe("getWaitingCount failed due to server error: " + e.getMessage());
                 return Response.error(e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<Boolean> closeCompanyByAdmin(String token, int companyId) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
             logger.info("closeCompanyByAdmin attempt for companyId: " + companyId);
             try {
                 if (!isVerifiedAdmin(token)) {
@@ -447,11 +461,12 @@ public class AdminService {
                 logger.severe("closeCompanyByAdmin failed due to server error: " + e.getMessage());
                 return new Response<>(false, e.getMessage());
             }
-        });
+        }));
     }
     // just for admin to process refunds when closing company
     private Response<Boolean> processRefundAdmin(String token, Integer eventId, int orderId) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "processRefund called");
 
             int userId = getUserIdFromToken(token);
@@ -508,10 +523,11 @@ public class AdminService {
                 logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
                 return new Response<>(false, "Failed to process refund: " + e.getMessage());
             }
-        });
+        }));
     }
     public Response<List<AdminPurchaseHistoryDTO>> getGlobalOrders(String token, List<String> usersFilter, List<Integer> eventsFilter, List<Integer> companiesFilter) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
             logger.info("getGlobalOrders attempt for admin");
             try {
                 if (!isVerifiedAdmin(token)) {
@@ -608,12 +624,13 @@ public class AdminService {
             logger.log(Level.SEVERE, "Failed to retrieve history orders: " + e.getMessage());
             return new Response<>(null, "Failed to retrieve history orders: " + e.getMessage());
         }
-        });
+        }));
     }
 
 
     public Response<List<String>> getAllPurchasers(String token) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
             logger.info("getAllPurchasers attempt for admin");
                 if (!isVerifiedAdmin(token)) {
                     logger.warning("getAllPurchasers failed: unauthorized");
@@ -633,7 +650,7 @@ public class AdminService {
                 logger.severe("Failed to retrieve purchasers: " + e.getMessage());
                 return new Response<>(null, "Failed to retrieve purchasers: " + e.getMessage());
             }
-        });
+        }));
     }
        private int getUserIdFromToken(String token) {
         String email = auth.getUserEmail(token).getValue();
@@ -645,7 +662,8 @@ public class AdminService {
     }
     // Helper method to send a real-time notification or save it as delayed if the user is offline.
     private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
             try {
                 Member member = userRepo.findUserByEmail(userIdentifier);
 
@@ -675,7 +693,7 @@ public class AdminService {
 
                 return new Response<>(null, "Failed to send or save notification");
             }
-        });
+        }));
     }
 private void notifyTokenExpired(String token) {
     try {

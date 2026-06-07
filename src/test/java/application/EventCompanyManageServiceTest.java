@@ -45,6 +45,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import domain.policy.DiscountPolicyType;
 import domain.policy.PurchasePolicyType;
 import org.mockito.Mockito;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -152,7 +154,12 @@ class EventCompanyManageServiceTest {
        // userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "Sys", "Pass123!", 1, 1, 2000, "Address", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
-        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem,suspensionRepo, notifier);
+        TransactionTemplate transactionTemplate = Mockito.mock(TransactionTemplate.class);
+        Mockito.when(transactionTemplate.execute(Mockito.any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem,suspensionRepo, notifier,transactionTemplate);
 
     }
 

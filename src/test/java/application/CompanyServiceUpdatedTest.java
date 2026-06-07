@@ -28,6 +28,8 @@ import org.junit.jupiter.api.Test;
 
 import domain.dataType.PermissionType;
 import org.mockito.Mockito;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.util.EnumSet;
@@ -114,7 +116,12 @@ class CompanyServiceUpdatedTest {
         companyRepo.store(company);
         paymentSystem = Mockito.mock(PaymentSystemProxy.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo,notifier);
+        TransactionTemplate transactionTemplate = Mockito.mock(TransactionTemplate.class);
+        Mockito.when(transactionTemplate.execute(Mockito.any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo,notifier,transactionTemplate);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
 
