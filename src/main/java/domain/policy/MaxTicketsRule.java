@@ -1,9 +1,17 @@
 package domain.policy;
 
 import domain.dto.UserDTO;
+import jakarta.persistence.*;
 
+@Entity
+@Table(name = "max_tickets_rules")
+@DiscriminatorValue("MAX_TICKETS")
 public class MaxTicketsRule extends PurchaseRule {
+
+    @Column(name = "max_tickets", nullable = false)
     private int maxTickets;
+
+    protected MaxTicketsRule() {}
 
     public MaxTicketsRule(int maxTickets) {
         this.maxTickets = maxTickets;
@@ -12,6 +20,7 @@ public class MaxTicketsRule extends PurchaseRule {
     public MaxTicketsRule(MaxTicketsRule rule) {
         this.maxTickets = rule.maxTickets;
     }
+
     @Override
     public boolean isSatisfied(UserDTO user, int quantity, int ticketsBoughtForEvent) {
         return ticketsBoughtForEvent + quantity <= maxTickets;

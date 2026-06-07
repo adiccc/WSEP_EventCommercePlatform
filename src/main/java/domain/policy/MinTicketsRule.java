@@ -1,9 +1,17 @@
 package domain.policy;
 
 import domain.dto.UserDTO;
+import jakarta.persistence.*;
 
+@Entity
+@Table(name = "min_tickets_rules")
+@DiscriminatorValue("MIN_TICKETS")
 public class MinTicketsRule extends PurchaseRule {
+
+    @Column(name = "min_tickets", nullable = false)
     private int minTickets;
+
+    protected MinTicketsRule() {}
 
     public MinTicketsRule(int minTickets) {
         this.minTickets = minTickets;

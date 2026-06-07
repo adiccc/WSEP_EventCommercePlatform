@@ -1,18 +1,23 @@
 package domain.policy;
 
 import domain.dto.UserDTO;
+import jakarta.persistence.*;
 
 import java.util.List;
 
+@Entity
+@Table(name = "and_purchase_policies")
+@DiscriminatorValue("AND_POLICY")
 public class AndPurchasePolicy extends PurchasePolicy {
+
     public AndPurchasePolicy() { super(); }
-    private AndPurchasePolicy(List<Purchase> rules) { super(rules); }
+
+    private AndPurchasePolicy(List<PurchaseNode> rules) { super(rules); }
 
     @Override
     public boolean isSatisfied(UserDTO user, int quantity, int ticketsBoughtForEvent) {
-        for (Purchase rule : rules) {
+        for (Purchase rule : rules)
             if (!rule.isSatisfied(user, quantity, ticketsBoughtForEvent)) return false;
-        }
         return true;
     }
 
