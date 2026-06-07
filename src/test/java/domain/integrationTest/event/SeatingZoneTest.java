@@ -18,7 +18,19 @@ class SeatingZoneTest {
     @BeforeEach
     void setUp() {
         seatingZone = new SeatingZone("zone A", 50.0, 2, 3, new ElementPosition(0, 0));
+        assignTicketIds(seatingZone);
     }
+
+    private void assignTicketIds(SeatingZone seatingZone) {
+        int id = 1;
+
+        for (SeatingTicket ticket : seatingZone.getTicketMap().values()) {
+            if (ticket.getId() == null) {
+                ticket.setId(id++);
+            }
+        }
+    }
+
     @Test
     void GivenZoneWithAvailableSeats_WhenBookTickets_ThenSeatsBecomeLocked() {
         List<SeatingTicketDTO> ticketsToBook = List.of(
@@ -36,6 +48,9 @@ class SeatingZoneTest {
                 () -> seatingZone.bookTickets(List.of(new SeatingTicketDTO(0, 1))),
                 "Booked seat should be locked");
     }
+
+
+
     @Test
     void GivenZoneWhenBookingAllSeats_WhenBookTickets_ThenAllSeatsBecomeLocked() {
         List<SeatingTicketDTO> allSeats = List.of(
