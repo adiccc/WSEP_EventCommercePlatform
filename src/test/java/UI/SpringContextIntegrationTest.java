@@ -21,7 +21,7 @@ import org.springframework.context.ApplicationContext;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-@SpringBootTest(classes = App.class)
+@SpringBootTest(classes = app.App.class)
 public class SpringContextIntegrationTest {
 
     @Autowired

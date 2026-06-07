@@ -1,0 +1,105 @@
+{
+  "operations": [
+
+    { "type": "enter", "store": "guest" },
+
+    { "type": "register", "params": { "guestToken": "${guest}", "email": "systemadmin@demo.com", "firstName": "System",  "lastName": "Admin",     "password": "Admin123!",  "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "1 Admin St",   "phone": "050-000-0000" } },
+    { "type": "register", "params": { "guestToken": "${guest}", "email": "alice@demo.com",        "firstName": "Alice",   "lastName": "Cohen",     "password": "Alice123!",  "birthDay": "1", "birthMonth": "1", "birthYear": "1995", "address": "123 Main St",  "phone": "050-123-4567" } },
+    { "type": "register", "params": { "guestToken": "${guest}", "email": "bob@demo.com",          "firstName": "Bob",     "lastName": "Levi",      "password": "Bob1234!",   "birthDay": "1", "birthMonth": "1", "birthYear": "1995", "address": "456 Elm Ave",  "phone": "052-234-5678" } },
+    { "type": "register", "params": { "guestToken": "${guest}", "email": "charlie@demo.com",      "firstName": "Charlie", "lastName": "Mizrahi",   "password": "Charlie1!",  "birthDay": "1", "birthMonth": "1", "birthYear": "1995", "address": "789 Oak Rd",   "phone": "054-345-6789" } },
+    { "type": "register", "params": { "guestToken": "${guest}", "email": "dave@demo.com",         "firstName": "Dave",    "lastName": "Ben-David", "password": "Dave123!",   "birthDay": "1", "birthMonth": "1", "birthYear": "1995", "address": "10 Pine St",   "phone": "053-456-7890" } },
+    { "type": "register", "params": { "guestToken": "${guest}", "email": "eve@demo.com",          "firstName": "Eve",     "lastName": "Shapiro",   "password": "Eve1234!",   "birthDay": "1", "birthMonth": "1", "birthYear": "1995", "address": "20 Cedar Ave", "phone": "058-567-8901" } },
+
+    { "type": "login", "params": { "email": "systemadmin@demo.com", "password": "Admin123!" }, "store": "adminToken"   },
+    { "type": "login", "params": { "email": "alice@demo.com",       "password": "Alice123!" }, "store": "aliceToken"   },
+    { "type": "login", "params": { "email": "bob@demo.com",         "password": "Bob1234!"  }, "store": "bobToken"     },
+    { "type": "login", "params": { "email": "charlie@demo.com",     "password": "Charlie1!" }, "store": "charlieToken" },
+    { "type": "login", "params": { "email": "dave@demo.com",        "password": "Dave123!"  }, "store": "daveToken"    },
+    { "type": "login", "params": { "email": "eve@demo.com",         "password": "Eve1234!"  }, "store": "eveToken"     },
+
+    { "type": "get-user-id", "params": { "token": "${daveToken}" }, "store": "daveId" },
+    { "type": "get-user-id", "params": { "token": "${eveToken}"  }, "store": "eveId"  },
+
+    { "type": "open-company", "params": { "token": "${aliceToken}",   "companyId": "1",  "companyName": "SoundWave Events",   "email": "soundwave@events.com",  "phone": "050-111-0001", "bankAccount": "IL-1234-001" } },
+    { "type": "open-company", "params": { "token": "${aliceToken}",   "companyId": "2",  "companyName": "Stadium Live",       "email": "info@stadiumlive.com",  "phone": "050-111-0002", "bankAccount": "IL-1234-002" } },
+    { "type": "open-company", "params": { "token": "${aliceToken}",   "companyId": "3",  "companyName": "Festival Nation",    "email": "hello@festnation.com",  "phone": "050-111-0003", "bankAccount": "IL-1234-003" } },
+    { "type": "open-company", "params": { "token": "${aliceToken}",   "companyId": "4",  "companyName": "Comedy Club Pro",    "email": "comedy@clubpro.com",    "phone": "050-111-0004", "bankAccount": "IL-1234-004" } },
+    { "type": "open-company", "params": { "token": "${bobToken}",     "companyId": "5",  "companyName": "Arena Productions",  "email": "arena@prod.com",        "phone": "052-222-0001", "bankAccount": "IL-5678-001" } },
+    { "type": "open-company", "params": { "token": "${bobToken}",     "companyId": "6",  "companyName": "NightOwl Concerts",  "email": "night@owlconcerts.com", "phone": "052-222-0002", "bankAccount": "IL-5678-002" } },
+    { "type": "open-company", "params": { "token": "${bobToken}",     "companyId": "7",  "companyName": "Sport Events IL",    "email": "info@sportevents.il",   "phone": "052-222-0003", "bankAccount": "IL-5678-003" } },
+    { "type": "open-company", "params": { "token": "${charlieToken}", "companyId": "8",  "companyName": "Tech Conferences",   "email": "tech@conferences.il",   "phone": "054-333-0001", "bankAccount": "IL-9012-001" } },
+    { "type": "open-company", "params": { "token": "${charlieToken}", "companyId": "9",  "companyName": "Theater Arts Group", "email": "arts@theatergroup.com", "phone": "054-333-0002", "bankAccount": "IL-9012-002" } },
+    { "type": "open-company", "params": { "token": "${charlieToken}", "companyId": "10", "companyName": "Open Air Fest",      "email": "open@airfest.com",      "phone": "054-333-0003", "bankAccount": "IL-9012-003" } },
+
+    { "type": "appoint-owner",   "params": { "ownerToken": "${aliceToken}", "appointeeToken": "${daveToken}", "companyId": "1", "appointeeId": "${daveId}" } },
+    { "type": "appoint-manager", "params": { "ownerToken": "${aliceToken}", "appointeeToken": "${eveToken}",  "companyId": "1", "appointeeId": "${eveId}",  "permissions": "MANAGE_EVENTS_INVENTORY,VIEW_ORDERS_HISTORY,CREATE_EVENT" } },
+
+    { "type": "add-company-rule", "params": { "token": "${aliceToken}", "companyId": "1", "ruleType": "MIN_AGE", "value": "18" } },
+
+    { "type": "create-event",       "params": { "token": "${aliceToken}",   "companyId": "1",  "name": "Rock Under the Stars",    "date": "+1M",  "saleStart": "-1D",  "area": "CENTER",    "category": "LIVEMUSIC"  }, "store": "rockEventId"         },
+    { "type": "define-venue",       "params": { "token": "${aliceToken}",   "eventId": "${rockEventId}" } },
+    { "type": "add-event-discount", "params": { "token": "${aliceToken}",   "eventId": "${rockEventId}", "couponCode": "ROCK50", "percent": "50.0", "expiryDaysFromNow": "30" } },
+
+    { "type": "create-event", "params": { "token": "${aliceToken}",   "companyId": "1",  "name": "Electronic Night Vol.3",  "date": "+2M",  "saleStart": "-1D",  "area": "CENTER",    "category": "FESTIVAL"   }, "store": "electronicEventId"   },
+    { "type": "define-venue",  "params": { "token": "${aliceToken}",   "eventId": "${electronicEventId}" } },
+
+    { "type": "create-event",   "params": { "token": "${aliceToken}",   "companyId": "1",  "name": "LOTTERY",                 "date": "+1W",  "saleStart": "+3m",  "area": "CENTER",    "category": "FESTIVAL",  "hasLottery": "true" }, "store": "lotteryEventId" },
+    { "type": "define-venue",   "params": { "token": "${aliceToken}",   "eventId": "${lotteryEventId}" } },
+    { "type": "create-lottery", "params": { "token": "${aliceToken}",   "eventId": "${lotteryEventId}", "capacity": "1", "minutesFromNow": "2", "expirationHours": "24" } },
+
+    { "type": "create-event", "params": { "token": "${aliceToken}",   "companyId": "2",  "name": "Champions Finals",        "date": "+20D", "saleStart": "-55m", "area": "JERUSALEM", "category": "SPORTS"     }, "store": "championsEventId"    },
+    { "type": "define-venue",  "params": { "token": "${aliceToken}",   "eventId": "${championsEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${aliceToken}",   "companyId": "2",  "name": "All-Star Weekend",        "date": "+3M",  "saleStart": "-1D",  "area": "JERUSALEM", "category": "SPORTS"     }, "store": "allStarEventId"      },
+    { "type": "define-venue",  "params": { "token": "${aliceToken}",   "eventId": "${allStarEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${aliceToken}",   "companyId": "3",  "name": "Summer Groove Festival",  "date": "+2M",  "saleStart": "-1D",  "area": "NORTH",     "category": "FESTIVAL"   }, "store": "summerGrooveEventId" },
+    { "type": "define-venue",  "params": { "token": "${aliceToken}",   "eventId": "${summerGrooveEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${aliceToken}",   "companyId": "3",  "name": "Jazz in the Park",        "date": "+4M",  "saleStart": "+2D",  "area": "NORTH",     "category": "LIVEMUSIC"  }, "store": "jazzEventId"         },
+    { "type": "define-venue",  "params": { "token": "${aliceToken}",   "eventId": "${jazzEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${aliceToken}",   "companyId": "4",  "name": "Stand-Up Gala Night",     "date": "+30D", "saleStart": "-1D",  "area": "CENTER",    "category": "OTHER"      }, "store": "standUpEventId"      },
+    { "type": "define-venue",  "params": { "token": "${aliceToken}",   "eventId": "${standUpEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${aliceToken}",   "companyId": "4",  "name": "Improv Open Mic",         "date": "+45D", "saleStart": "-1D",  "area": "CENTER",    "category": "OTHER"      }, "store": "improvEventId"       },
+    { "type": "define-venue",  "params": { "token": "${aliceToken}",   "eventId": "${improvEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${bobToken}",     "companyId": "5",  "name": "Pop Mega Concert",        "date": "+1M",  "saleStart": "-1D",  "area": "CENTER",    "category": "LIVEMUSIC"  }, "store": "popEventId"          },
+    { "type": "define-venue",  "params": { "token": "${bobToken}",     "eventId": "${popEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${bobToken}",     "companyId": "5",  "name": "DJ Battle Arena",         "date": "+3M",  "saleStart": "+2D",  "area": "CENTER",    "category": "FESTIVAL"   }, "store": "djEventId"           },
+    { "type": "define-venue",  "params": { "token": "${bobToken}",     "eventId": "${djEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${bobToken}",     "companyId": "6",  "name": "Midnight Jazz Sessions",  "date": "+25D", "saleStart": "-1D",  "area": "NORTH",     "category": "LIVEMUSIC"  }, "store": "midnightJazzEventId" },
+    { "type": "define-venue",  "params": { "token": "${bobToken}",     "eventId": "${midnightJazzEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${bobToken}",     "companyId": "6",  "name": "Blues & Soul Night",      "date": "+2M",  "saleStart": "-1D",  "area": "NORTH",     "category": "LIVEMUSIC"  }, "store": "bluesEventId"        },
+    { "type": "define-venue",  "params": { "token": "${bobToken}",     "eventId": "${bluesEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${bobToken}",     "companyId": "7",  "name": "National Marathon 2026",  "date": "+2M",  "saleStart": "-1D",  "area": "SOUTH",     "category": "SPORTS"     }, "store": "marathonEventId"     },
+    { "type": "define-venue",  "params": { "token": "${bobToken}",     "eventId": "${marathonEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${bobToken}",     "companyId": "7",  "name": "Basketball Playoffs",     "date": "+40D", "saleStart": "-1D",  "area": "SOUTH",     "category": "SPORTS"     }, "store": "basketballEventId"   },
+    { "type": "define-venue",  "params": { "token": "${bobToken}",     "eventId": "${basketballEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${charlieToken}", "companyId": "8",  "name": "DevCon Israel 2026",      "date": "+3M",  "saleStart": "-1D",  "area": "CENTER",    "category": "CONFERENCE" }, "store": "devconEventId"       },
+    { "type": "define-venue",  "params": { "token": "${charlieToken}", "eventId": "${devconEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${charlieToken}", "companyId": "8",  "name": "AI & Data Summit",        "date": "+5M",  "saleStart": "+2D",  "area": "CENTER",    "category": "CONFERENCE" }, "store": "aiSummitEventId"     },
+    { "type": "define-venue",  "params": { "token": "${charlieToken}", "eventId": "${aiSummitEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${charlieToken}", "companyId": "9",  "name": "Hamlet - Hebrew Premiere","date": "+35D", "saleStart": "-1D",  "area": "JERUSALEM", "category": "THEATER"    }, "store": "hamletEventId"       },
+    { "type": "define-venue",  "params": { "token": "${charlieToken}", "eventId": "${hamletEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${charlieToken}", "companyId": "9",  "name": "The Lion King Musical",   "date": "+2M",  "saleStart": "+2D",  "area": "JERUSALEM", "category": "THEATER"    }, "store": "lionKingEventId"     },
+    { "type": "define-venue",  "params": { "token": "${charlieToken}", "eventId": "${lionKingEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${charlieToken}", "companyId": "10", "name": "Sunset Open Air",         "date": "+1M",  "saleStart": "-1D",  "area": "SOUTH",     "category": "FESTIVAL"   }, "store": "sunsetEventId"       },
+    { "type": "define-venue",  "params": { "token": "${charlieToken}", "eventId": "${sunsetEventId}" } },
+
+    { "type": "create-event", "params": { "token": "${charlieToken}", "companyId": "10", "name": "Food & Music Weekend",    "date": "+3M",  "saleStart": "-1D",  "area": "SOUTH",     "category": "FESTIVAL"   }, "store": "foodMusicEventId"    },
+    { "type": "define-venue",  "params": { "token": "${charlieToken}", "eventId": "${foodMusicEventId}" } }
+
+  ]
+}

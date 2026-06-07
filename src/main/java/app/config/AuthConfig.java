@@ -1,4 +1,4 @@
-package UI;
+package app.config;
 
 import application.IAuth;
 import application.TokenService;
