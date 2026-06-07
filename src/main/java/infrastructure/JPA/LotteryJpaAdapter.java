@@ -1,4 +1,4 @@
-package infrastructure;
+package infrastructure.JPA;
 
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
