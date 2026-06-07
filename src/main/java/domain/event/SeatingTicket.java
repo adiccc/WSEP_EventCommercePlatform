@@ -5,8 +5,8 @@ public class SeatingTicket extends Ticket {
     private final int col;
 
 
-    public SeatingTicket(int ticketId,int row, int col) {
-        super(ticketId);
+    public SeatingTicket(int row, int col) {
+        super();
         this.row = row;
         this.col = col;
     }

@@ -2,6 +2,7 @@ package infrastructure.inMemory;
 
 import domain.event.Event;
 import domain.event.IEventRepo;
+import domain.event.*;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Repository;
 public class EventRepoImpl implements IEventRepo {
     Map<Integer,Event> events; // key: eventId, value: event
     private final AtomicInteger eventIdGenerator = new AtomicInteger(1);
+    private final AtomicInteger ticketIdGenerator = new AtomicInteger(1);
 
 
     public EventRepoImpl() {
@@ -49,13 +51,28 @@ public class EventRepoImpl implements IEventRepo {
 
     @Override
     public synchronized void store(Event entity) {
-        Event currentEvent = events.get(entity.getId());
+        Event currentEvent = entity!=null ? events.get(entity.getId()) : null;
         if (currentEvent == null) {
             int id = eventIdGenerator.getAndIncrement();
             entity.setId(id);
+            if(entity.getEventMap()!=null) {
+                for (Zone z : entity.getEventMap().getZones()) {
+                    for (Ticket t : z.getTickets()) {
+                        t.setId(ticketIdGenerator.getAndIncrement());
+                    }
+                }
+            }
             Event newEntry = new Event(entity);
-            events.put(newEntry.getId(), newEntry);
+            events.put(id, newEntry);
             return;
+        }else if(entity.getEventMap()!=null) {
+            for(Zone z: entity.getEventMap().getZones()){
+                for(Ticket t : z.getTickets()){
+                    if (t.getId() == -1) {
+                        t.setId(ticketIdGenerator.getAndIncrement());
+                    }
+                }
+            }
         }
 
         if (currentEvent.getVersion() != entity.getVersion()) {

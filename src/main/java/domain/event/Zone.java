@@ -41,4 +41,5 @@ public abstract class Zone {
     public abstract TicketStatus getTicketStatus(int ticketId);
     public abstract boolean hasAvailableTickets();
     public abstract List<ActiveOrderSeatDTO> getActiveOrderSeats(List<Integer> ticketIds);
+    public abstract List<Ticket> getTickets();
 }
