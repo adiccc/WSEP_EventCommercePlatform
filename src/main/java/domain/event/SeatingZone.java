@@ -6,15 +6,28 @@ import domain.dataType.ElementPosition;
 import domain.dataType.TicketStatus;
 import domain.dto.ActiveOrderSeatDTO;
 import domain.dto.SeatingTicketDTO;
+import jakarta.persistence.*;
 
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-
+@Entity
+@DiscriminatorValue("SEATING")
 public class SeatingZone extends Zone {
-    private Map<String, SeatingTicket> ticketMap;
+    //for JPA, we need to store tickets in a list, but we will maintain a transient map for efficient access
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JoinColumn(name = "zone_id")
+    private List<SeatingTicket> tickets = new ArrayList<>();
+    @Transient
+    private Map<String, SeatingTicket> ticketMap = new HashMap<>();
+    @Column(nullable = false)
     private int rows;
+    @Column(nullable = false)
     private int cols;
+
+    protected SeatingZone() {
+        // for JPA
+    }
 
     public SeatingZone(String name, double price, int rows, int cols, ElementPosition elementPosition) {
         super(name, price, elementPosition);
@@ -22,7 +35,9 @@ public class SeatingZone extends Zone {
         for(int i=0; i<rows; i++) {
             for(int j=0; j<cols; j++) {
                     String seatKey = i + "-" + j;
-                    ticketMap.put(seatKey, new SeatingTicket( i, j));
+                    SeatingTicket ticket = new SeatingTicket(i, j);
+                    ticketMap.put(seatKey, ticket);
+                    tickets.add(ticket);
             }
         }
         this.rows = rows;
@@ -30,9 +45,14 @@ public class SeatingZone extends Zone {
     }
     public SeatingZone(SeatingZone seatingZone) {
         super(seatingZone.getName(), seatingZone.getPrice(), seatingZone.getElementPosition());
+        setId(seatingZone.getId());
         this.ticketMap = new HashMap<>();
+        this.tickets = new ArrayList<>();
+        seatingZone.ensureTicketMap();
         for(Map.Entry<String, SeatingTicket> entry : seatingZone.ticketMap.entrySet()) {
-            this.ticketMap.put(entry.getKey(), new SeatingTicket(entry.getValue()));
+            SeatingTicket copiedTicket = new SeatingTicket(entry.getValue());
+            this.ticketMap.put(entry.getKey(), copiedTicket);
+            this.tickets.add(copiedTicket);
         }
             this.rows = seatingZone.rows;
             this.cols = seatingZone.cols;
@@ -42,21 +62,47 @@ public class SeatingZone extends Zone {
         int rows = seatingZoneDTO.getRows();
         int cols = seatingZoneDTO.getCols();
         this.ticketMap = new HashMap<>();
+        this.tickets = new ArrayList<>();
         for(int i=0; i<rows; i++) {
             for(int j=0; j<cols; j++) {
-                ticketMap.put(i + "-" + j, new SeatingTicket(i, j));
+                SeatingTicket ticket = new SeatingTicket(i, j);
+                ticketMap.put(i + "-" + j, ticket);
+                tickets.add(ticket);
             }
         }
         this.rows = rows;
         this.cols = cols;
     }
 
+    @PostLoad
+    private void rebuildTicketMap() {
+        this.ticketMap = new HashMap<>();
+
+        if (this.tickets == null) {
+            this.tickets = new ArrayList<>();
+            return;
+        }
+
+        for (SeatingTicket ticket : tickets) {
+            String seatKey = ticket.getRow() + "-" + ticket.getCol();
+            ticketMap.put(seatKey, ticket);
+        }
+    }
+
+    private void ensureTicketMap() {
+        if (ticketMap == null || ticketMap.size() != tickets.size()) {
+            rebuildTicketMap();
+        }
+    }
+
 
     public List<Ticket> getTickets(){
+        ensureTicketMap();
         return new ArrayList<>(ticketMap.values());
     }
 
     public Collection<Integer> bookTickets(List<SeatingTicketDTO> seats) {
+        ensureTicketMap();
         List<Integer> bookedTicketIds = new ArrayList<>();
         for (SeatingTicketDTO seat : seats) {
             for (SeatingTicket next : ticketMap.values()) {
@@ -82,6 +128,7 @@ public class SeatingZone extends Zone {
     }
     @Override
     public boolean containsTicketId(int ticketId) {
+        ensureTicketMap();
         for (SeatingTicket ticket : ticketMap.values()) {
             if (ticket.getTicketId() == ticketId) {
                 return true;
@@ -93,6 +140,7 @@ public class SeatingZone extends Zone {
 
     @Override
     public void releaseTickets(List<Integer> ticketIds) {
+        ensureTicketMap();
         for (Integer ticketId : ticketIds) {
             for (SeatingTicket ticket : ticketMap.values()) {
                 if (ticket.getTicketId() == ticketId && ticket.getStatus() == TicketStatus.LOCKED) {
@@ -103,11 +151,13 @@ public class SeatingZone extends Zone {
     }
 
     public Map<String, SeatingTicket> getTicketMap() {
+        ensureTicketMap();
         return ticketMap;
     }
 
 
     public Collection<Integer> findSeatingTicketIds(List<SeatingTicketDTO> seats) {
+        ensureTicketMap();
         List<Integer> seatingTicketIds = new ArrayList<>();
         for (SeatingTicketDTO seat : seats) {
             for (SeatingTicket next : ticketMap.values()) {
@@ -124,6 +174,7 @@ public class SeatingZone extends Zone {
 
     @Override
     public void markTicketsAsSold(List<Integer> ticketIds) {
+        ensureTicketMap();
         for (Integer ticketId : ticketIds) {
             for (SeatingTicket ticket : ticketMap.values()) {
                 if (ticket.getTicketId() == ticketId) {
@@ -137,6 +188,7 @@ public class SeatingZone extends Zone {
 
     @Override
     public List<PurchasedTicketDTO> getPurchasedTicketDetails(List<Integer> ticketIds) {
+        ensureTicketMap();
         List<PurchasedTicketDTO> result = new ArrayList<>();
 
         for (Integer ticketId : ticketIds) {
@@ -160,6 +212,7 @@ public class SeatingZone extends Zone {
 
     @Override
     public TicketStatus getTicketStatus(int ticketId) {
+        ensureTicketMap();
         for (SeatingTicket ticket : ticketMap.values()) {
             if (ticket.getTicketId() == ticketId) {
                 return ticket.getStatus();
@@ -169,6 +222,7 @@ public class SeatingZone extends Zone {
         throw new IllegalArgumentException("Ticket does not exist in seating zone: " + ticketId);}
 
     public boolean hasAvailableTickets() {
+        ensureTicketMap();
         for (SeatingTicket ticket : ticketMap.values()) {
             if (ticket.getStatus() == TicketStatus.AVAILABLE) {
                 return true;
@@ -180,6 +234,7 @@ public class SeatingZone extends Zone {
 
     @Override
     public List<ActiveOrderSeatDTO> getActiveOrderSeats(List<Integer> ticketIds) {
+        ensureTicketMap();
         List<ActiveOrderSeatDTO> result = new ArrayList<>();
 
         for (Integer ticketId : ticketIds) {

@@ -5,33 +5,54 @@ import DTO.StandingZoneDTO;
 import domain.dataType.ElementPosition;
 import domain.dataType.TicketStatus;
 import domain.dto.ActiveOrderSeatDTO;
+import jakarta.persistence.*;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
-
+@Entity
+@DiscriminatorValue("STANDING")
 public class StandingZone extends Zone {
-    private final int capacity;
-    private final Queue<StandingTicket> availableTickets = new LinkedList<>();
-    private final List<StandingTicket> occupiedTickets = new LinkedList<>();
+    @Column(nullable = false)
+    private int capacity;
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JoinColumn(name = "zone_id")
+    private List<StandingTicket> tickets = new ArrayList<>();
+    @Transient
+    private Queue<StandingTicket> availableTickets = new LinkedList<>();
+    @Transient
+    private List<StandingTicket> occupiedTickets = new LinkedList<>();
+    @Column(nullable = false)
     private int available;
 
+    protected StandingZone() {
+        // for JPA
+        capacity = 0;
+    }
 
-    public StandingZone(String name, double price, int capacity, ElementPosition elementPosition, AtomicInteger ticketIdGenerator) {
+
+    public StandingZone(String name, double price, int capacity, ElementPosition elementPosition) {
         super(name,price,elementPosition);
         this.capacity = capacity;
         for(int i=0;i<capacity;i++){
-            this.availableTickets.add(new StandingTicket());
+            StandingTicket ticket = new StandingTicket();
+            this.availableTickets.add(ticket);
+            this.tickets.add(ticket);
         }
         available=capacity;
     }
     public StandingZone(StandingZone zone){
         super(zone.getName(),zone.getPrice(),zone.getElementPosition());
+        setId(zone.getId());
         this.capacity = zone.capacity;
+        zone.ensureTransientTicketCollections();
         for (StandingTicket st : zone.availableTickets) {
-            this.availableTickets.add(new StandingTicket(st));
+            StandingTicket copiedTicket = new StandingTicket(st);
+            this.availableTickets.add(copiedTicket);
+            this.tickets.add(copiedTicket);
         }
         for(StandingTicket st : zone.occupiedTickets) {
-            this.occupiedTickets.add(new StandingTicket(st));
+            StandingTicket copiedTicket = new StandingTicket(st);
+            this.occupiedTickets.add(copiedTicket);
+            this.tickets.add(copiedTicket);
         }
         this.available = zone.available;
     }
@@ -41,11 +62,46 @@ public class StandingZone extends Zone {
         super(standingZoneDTO.getName(),standingZoneDTO.getPrice(),standingZoneDTO.getPosition());
         this.capacity = standingZoneDTO.getCapacty();
         for(int i=0;i<capacity;i++){
-            this.availableTickets.add(new StandingTicket());
+            StandingTicket ticket = new StandingTicket();
+            this.availableTickets.add(ticket);
+            this.tickets.add(ticket);
         }
         available=capacity;
     }
+
+    @PostLoad
+    private void rebuildTransientTicketCollections() {
+        this.availableTickets = new LinkedList<>();
+        this.occupiedTickets = new LinkedList<>();
+
+        if (this.tickets == null) {
+            this.tickets = new ArrayList<>();
+            this.available = 0;
+            return;
+        }
+
+        for (StandingTicket ticket : tickets) {
+            if (ticket.getStatus() == TicketStatus.AVAILABLE) {
+                availableTickets.add(ticket);
+            } else {
+                occupiedTickets.add(ticket);
+            }
+        }
+
+        this.available = availableTickets.size();
+    }
+
+    private void ensureTransientTicketCollections() {
+        if (tickets == null
+                || availableTickets == null
+                || occupiedTickets == null
+                || availableTickets.size() + occupiedTickets.size() != tickets.size()) {
+            rebuildTransientTicketCollections();
+        }
+    }
+
     public List<Ticket> getTickets(){
+        ensureTransientTicketCollections();
         ArrayList<Ticket> tickets = new ArrayList<>();
         tickets.addAll(this.availableTickets);
         tickets.addAll(this.occupiedTickets);
@@ -56,10 +112,12 @@ public class StandingZone extends Zone {
     }
 
     public int getAvailable() {
+        ensureTransientTicketCollections();
         return available;
     }
 
     public List<Integer> bookTickets(int quantity) {
+        ensureTransientTicketCollections();
         if (quantity > available) {
             throw new IllegalArgumentException("Not enough tickets available in this zone.");
         }
@@ -83,6 +141,7 @@ public class StandingZone extends Zone {
     }
 
     public boolean TicketIsBooked(int ticketId) {
+        ensureTransientTicketCollections();
         for (StandingTicket ticket : occupiedTickets) {
             if (ticket.getTicketId() == ticketId&& ticket.getStatus() == TicketStatus.LOCKED) {
                 return true;
@@ -93,6 +152,7 @@ public class StandingZone extends Zone {
 
     @Override
     public boolean containsTicketId(int ticketId) {
+        ensureTransientTicketCollections();
         for (StandingTicket ticket : availableTickets) {
             if (ticket.getTicketId() == ticketId) {
                 return true;
@@ -110,6 +170,7 @@ public class StandingZone extends Zone {
 
     @Override
     public void releaseTickets(List<Integer> ticketIds) {
+        ensureTransientTicketCollections();
         List<StandingTicket> ticketsToRemove = new ArrayList<>();
 
         for (Integer ticketId : ticketIds) {
@@ -128,10 +189,12 @@ public class StandingZone extends Zone {
     }
 
     public List<StandingTicket> getOccupiedTickets() {
+        ensureTransientTicketCollections();
         return occupiedTickets;
     }
 
     public int countTickets(List<Integer> currentTickets) {
+        ensureTransientTicketCollections();
         int count = 0;
         for (Integer ticketId : currentTickets) {
             for (StandingTicket ticket : occupiedTickets) {
@@ -144,6 +207,7 @@ public class StandingZone extends Zone {
     }
 
     public List<Integer> pickStandingFromZone(List<Integer> newTickets, int numToPick) {
+        ensureTransientTicketCollections();
         List<Integer> pickedTickets = new ArrayList<>();
         for (Integer ticketId : newTickets) {
             if (pickedTickets.size() >= numToPick) break;
@@ -164,6 +228,7 @@ public class StandingZone extends Zone {
 
     @Override
     public void markTicketsAsSold(List<Integer> ticketIds) {
+        ensureTransientTicketCollections();
         for (Integer ticketId : ticketIds) {
             for (StandingTicket ticket : occupiedTickets) {
                 if (ticket.getTicketId() == ticketId) {
@@ -177,6 +242,7 @@ public class StandingZone extends Zone {
 
     @Override
     public List<PurchasedTicketDTO> getPurchasedTicketDetails(List<Integer> ticketIds) {
+        ensureTransientTicketCollections();
         List<PurchasedTicketDTO> result = new ArrayList<>();
 
         for (Integer ticketId : ticketIds) {
@@ -200,6 +266,7 @@ public class StandingZone extends Zone {
 
     @Override
     public TicketStatus getTicketStatus(int ticketId) {
+        ensureTransientTicketCollections();
         for (Ticket ticket : availableTickets) {
             if (ticket.getTicketId() == ticketId) {
                 return ticket.getStatus();
@@ -215,6 +282,7 @@ public class StandingZone extends Zone {
         throw new IllegalArgumentException("Ticket does not exist in standing zone: " + ticketId);}
 
     public boolean hasAvailableTickets() {
+        ensureTransientTicketCollections();
         return available > 0;
 
     }

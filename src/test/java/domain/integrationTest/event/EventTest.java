@@ -52,7 +52,7 @@ class EventTest {
         SeatingZone seatingZone = new SeatingZone("Zone", 50, 10, 10,
                 new ElementPosition(1, 1));
         StandingZone standingZone = new StandingZone("floor", 30, 100,
-                new ElementPosition(2, 2), ticketIdGenerator);
+                new ElementPosition(2, 2));
 
         map2 = new EventMap(
                 new ElementPosition(0, 0),

@@ -85,7 +85,7 @@ class EventTest {
     @Test
     void GivenStandingZoneWithAvailableTickets_WhenIsSoldOut_ThenReturnFalse() {
         StandingZone zone = new StandingZone(
-                "floor", 100.0, 5, new ElementPosition(0, 0), new AtomicInteger(0));
+                "floor", 100.0, 5, new ElementPosition(0, 0));
         EventMap map = new EventMap(
                 new ElementPosition(0, 0), List.of(), List.<Zone>of(zone));
 
@@ -102,7 +102,7 @@ class EventTest {
     @Test
     void GivenAllStandingTicketsSold_WhenIsSoldOut_ThenReturnTrue() {
         StandingZone zone = new StandingZone(
-                "floor", 100.0, 2, new ElementPosition(0, 0), new AtomicInteger(0));
+                "floor", 100.0, 2, new ElementPosition(0, 0));
         List<Integer> bookedTickets = zone.bookTickets(2);
         zone.markTicketsAsSold(bookedTickets);
 
@@ -122,7 +122,7 @@ class EventTest {
     @Test
     void GivenAllStandingTicketsLockedAndNoneAvailable_WhenIsSoldOut_ThenReturnTrue() {
         StandingZone zone = new StandingZone(
-                "floor", 100.0, 2, new ElementPosition(0, 0), new AtomicInteger(0));
+                "floor", 100.0, 2, new ElementPosition(0, 0));
         zone.bookTickets(2); // LOCKED state, no SOLD transition; available is now 0
 
         EventMap map = new EventMap(
