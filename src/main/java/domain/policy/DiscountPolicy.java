@@ -1,17 +1,23 @@
 package domain.policy;
 
 import DTO.DiscountDTO;
+import jakarta.persistence.*;
 import java.util.ArrayList;
 import java.util.List;
 
-public abstract class DiscountPolicy implements Discount {
-    protected List<Discount> discounts;
+@Entity
+@Table(name = "discount_policies")
+public abstract class DiscountPolicy extends DiscountNode {
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "parent_id")
+    protected List<DiscountNode> discounts;
 
     protected DiscountPolicy() {
         this.discounts = new ArrayList<>();
     }
 
-    protected DiscountPolicy(List<Discount> discounts) {
+    protected DiscountPolicy(List<DiscountNode> discounts) {
         this.discounts = new ArrayList<>(discounts);
     }
 
@@ -27,9 +33,9 @@ public abstract class DiscountPolicy implements Discount {
     @Override
     public Discount copy() { return copyPolicy(); }
 
-    protected List<Discount> copyDiscounts() {
-        List<Discount> copied = new ArrayList<>();
-        for (Discount d : discounts) copied.add(d.copy());
+    protected List<DiscountNode> copyDiscounts() {
+        List<DiscountNode> copied = new ArrayList<>();
+        for (DiscountNode d : discounts) copied.add((DiscountNode) d.copy());
         return copied;
     }
 
@@ -48,7 +54,7 @@ public abstract class DiscountPolicy implements Discount {
                     for (DiscountDTO d : dto.getDiscounts()) policy.addDiscount(dtoToDiscount(d));
                 return policy;
             }
-            default: {  // SUM_POLICY
+            default: {
                 SumDiscountPolicy policy = new SumDiscountPolicy();
                 if (dto.getDiscounts() != null)
                     for (DiscountDTO d : dto.getDiscounts()) policy.addDiscount(dtoToDiscount(d));
@@ -63,13 +69,13 @@ public abstract class DiscountPolicy implements Discount {
             throw new IllegalArgumentException("Invalid discount data");
         if (discountExists(discount))
             throw new RuntimeException("Discount already exists");
-        discounts.add(discount);
+        discounts.add((DiscountNode) discount);
     }
 
     public void removeDiscount(Discount discount) {
-        for (Discount dis : discounts) {
-            if (discount.equals(dis)) {
-                discounts.remove(dis);
+        for (int i = 0; i < discounts.size(); i++) {
+            if (discount.equals(discounts.get(i))) {
+                discounts.remove(i);
                 return;
             }
         }

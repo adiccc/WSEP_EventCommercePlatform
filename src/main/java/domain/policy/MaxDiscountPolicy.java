@@ -1,14 +1,18 @@
 package domain.policy;
 
+import jakarta.persistence.*;
 import java.util.List;
 
+@Entity
+@Table(name = "max_discount_policies")
+@DiscriminatorValue("MAX_POLICY")
 public class MaxDiscountPolicy extends DiscountPolicy {
 
     public MaxDiscountPolicy() {
         super();
     }
 
-    private MaxDiscountPolicy(List<Discount> discounts) {
+    private MaxDiscountPolicy(List<DiscountNode> discounts) {
         super(discounts);
     }
 

@@ -1,11 +1,23 @@
 package domain.policy;
 
+import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
+@Entity
+@Table(name = "date_range_discounts")
+@DiscriminatorValue("DATE_RANGE")
 public class DateRangeDiscount extends DiscountElement {
-    private final double percentage;
-    private final LocalDateTime startDate;
-    private final LocalDateTime endDate;
+
+    @Column(name = "percentage", nullable = false)
+    private double percentage;
+
+    @Column(name = "start_date", nullable = false)
+    private LocalDateTime startDate;
+
+    @Column(name = "end_date", nullable = false)
+    private LocalDateTime endDate;
+
+    protected DateRangeDiscount() {}
 
     public DateRangeDiscount(double percentage, LocalDateTime startDate, LocalDateTime endDate) {
         if (percentage <= 0 || percentage > 100)

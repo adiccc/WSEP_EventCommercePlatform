@@ -1,8 +1,19 @@
 package domain.policy;
 
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "min_quantity_discounts")
+@DiscriminatorValue("MIN_QUANTITY")
 public class MinQuantityDiscount extends DiscountElement {
-    private final double percentage;
-    private final int minQuantity;
+
+    @Column(name = "percentage", nullable = false)
+    private double percentage;
+
+    @Column(name = "min_quantity", nullable = false)
+    private int minQuantity;
+
+    protected MinQuantityDiscount() {}
 
     public MinQuantityDiscount(double percentage, int minQuantity) {
         if (percentage <= 0 || percentage > 100)
