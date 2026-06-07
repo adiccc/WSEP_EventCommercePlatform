@@ -32,6 +32,12 @@ import org.mockito.Mockito;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class LotteryServiceTest {
 
@@ -84,8 +90,15 @@ class LotteryServiceTest {
                 eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,
                                 suspensionRepo, notifier, userRepo);
 
+                TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
+
+                when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+                        TransactionCallback<?> callback = invocation.getArgument(0);
+                        return callback.doInTransaction(null);
+                });
+
                 lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo, suspensionRepo,
-                                notifier, userRepo);
+                                notifier, userRepo,transactionTemplate);
 
                 // user with permission
                 UserDTO user1DTO = new UserDTO(

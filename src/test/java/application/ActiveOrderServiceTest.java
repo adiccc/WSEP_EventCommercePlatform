@@ -42,6 +42,13 @@ import com.vaadin.flow.shared.Registration;
 import static org.junit.jupiter.api.Assertions.*;
 
 import org.mockito.Mockito;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 
 class ActiveOrderServiceTest {
 
@@ -143,8 +150,17 @@ class ActiveOrderServiceTest {
         companyEventService.DefineVenueAndSeatingMap(validToken, eventId, stage, entries, standingZones, seatingZones);
         companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId, stage, entries, standingZones, seatingZones);
 
-        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,suspensionRepo,notifier,userRepo);
-        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,suspensionRepo,notifier,userRepo);
+        TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
+
+        when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+
+        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,suspensionRepo,notifier,userRepo,transactionTemplate
+        );
+        lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,suspensionRepo,notifier,userRepo,transactionTemplate
+        );
         lotteryService.createLottery(validToken, eventId, 10,
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
