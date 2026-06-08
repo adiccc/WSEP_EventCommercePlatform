@@ -11,7 +11,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 @Repository
-@Profile("memory")
+@Profile("memory & !company-db")
 public class CompanyRepoImpl implements ICompanyRepo {
     private static final Logger logger = Logger.getLogger(CompanyRepoImpl.class.getName());
     private ConcurrentHashMap<Integer, Company> companies;

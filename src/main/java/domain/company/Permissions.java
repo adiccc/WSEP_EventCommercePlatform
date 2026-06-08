@@ -30,7 +30,7 @@ public class Permissions {
     @Column(name = "owner_id")
     private Set<Integer> ownerIds;
 
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     @JoinTable(
             name = "permissions_company_tree",
             joinColumns = @JoinColumn(name = "permissions_id"),
@@ -47,7 +47,7 @@ public class Permissions {
     @Column(name = "user_id")
     private List<Integer> pandingOwners;
 
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     @JoinTable(
             name = "permissions_pending_managers",
             joinColumns = @JoinColumn(name = "permissions_id"),
