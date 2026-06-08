@@ -20,6 +20,7 @@ import infrastructure.inMemory.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import java.util.function.BooleanSupplier;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -188,6 +189,28 @@ class LotteryServiceTest {
                 userService.registerUser(null, userDTO3);
                 validToken3 = userService.login("user12@test.com", "test1").getValue();
 
+        }
+
+        private void waitUntil(BooleanSupplier condition, long timeoutMillis) throws InterruptedException {
+                long deadline = System.currentTimeMillis() + timeoutMillis;
+
+                while (System.currentTimeMillis() < deadline) {
+                        if (condition.getAsBoolean()) {
+                                return;
+                        }
+                        Thread.sleep(50);
+                }
+
+                fail("Condition was not met within " + timeoutMillis + " ms");
+        }
+
+        private long countDelayedLotteryNotifications(Member member) {
+                return member.getDelayedNotifications().stream()
+                        .filter(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage() != null
+                                && n.getPayload().getMessage().contains("Your code is: "))
+                        .count();
         }
 
         @AfterEach
@@ -1142,5 +1165,118 @@ class LotteryServiceTest {
                 } finally {
                         executor.shutdown();
                 }
+        }
+
+        @Test
+        void GivenPendingLotteryWithPastRegisterWindow_WhenRescheduleOnStartup_ThenLotteryIsDrawn()
+                throws InterruptedException {
+                // Arrange
+                int userId = userService.getUserId(validToken2).getValue();
+
+                Lottery lottery = new Lottery(
+                        eventId,
+                        1,
+                        LocalDateTime.now().minusSeconds(1),
+                        24L
+                );
+
+                lottery.registerUserToLottery(userId);
+                lotteryRepo.store(lottery);
+
+                // Act
+                lotteryService.reschedulePendingLotteriesOnStartup();
+
+                // Assert
+                waitUntil(() -> !lotteryRepo.findById(eventId).getWinners().isEmpty(), 2000);
+
+                Lottery updatedLottery = lotteryRepo.findById(eventId);
+
+                assertEquals(1, updatedLottery.getWinners().size(),
+                        "Pending lottery should be drawn after startup reschedule");
+        }
+
+        @Test
+        void GivenDrawnLotteryWithUnnotifiedWinner_WhenRescheduleOnStartup_ThenMissingNotificationIsCompleted()
+                throws InterruptedException {
+                // Arrange
+                int userId = userService.getUserId(validToken2).getValue();
+                String userIdentifier = auth.getUserIdentifier(validToken2).getValue();
+
+                userService.logout(validToken2);
+
+                Lottery lottery = new Lottery(
+                        eventId,
+                        1,
+                        LocalDateTime.now().minusSeconds(1),
+                        24L
+                );
+
+                lottery.registerUserToLottery(userId);
+                lottery.drawWinners();
+                lotteryRepo.store(lottery);
+
+                assertTrue(lotteryRepo.findById(eventId).getNotifiedWinners().isEmpty());
+
+                // Act
+                lotteryService.reschedulePendingLotteriesOnStartup();
+
+                // Assert
+                waitUntil(() -> lotteryRepo.findById(eventId).getNotifiedWinners().contains(userId), 2000);
+
+                Member winner = userRepo.findUserByEmail(userIdentifier);
+
+                assertEquals(1, countDelayedLotteryNotifications(winner),
+                        "Unnotified winner should receive exactly one delayed notification");
+
+                Lottery updatedLottery = lotteryRepo.findById(eventId);
+
+                assertTrue(updatedLottery.getNotifiedWinners().contains(userId),
+                        "Winner should be marked as notified after startup recovery");
+        }
+
+        @Test
+        void GivenDrawnLotteryWithAllWinnersNotified_WhenRescheduleOnStartup_ThenNoDuplicateNotificationIsSent()
+                throws InterruptedException {
+                // Arrange
+                int userId = userService.getUserId(validToken2).getValue();
+                String userIdentifier = auth.getUserIdentifier(validToken2).getValue();
+
+                userService.logout(validToken2);
+
+                Lottery lottery = new Lottery(
+                        eventId,
+                        1,
+                        LocalDateTime.now().minusSeconds(1),
+                        24L
+                );
+
+                lottery.registerUserToLottery(userId);
+                lottery.drawWinners();
+                lottery.markWinnerNotified(userId);
+                lotteryRepo.store(lottery);
+
+                Member userBefore = userRepo.findUserByEmail(userIdentifier);
+                assertEquals(0, countDelayedLotteryNotifications(userBefore));
+
+                // Act
+                lotteryService.reschedulePendingLotteriesOnStartup();
+
+                Thread.sleep(500);
+
+                // Assert
+                Member userAfter = userRepo.findUserByEmail(userIdentifier);
+
+                assertEquals(0, countDelayedLotteryNotifications(userAfter),
+                        "Fully notified lottery should not trigger another notification");
+
+                Lottery updatedLottery = lotteryRepo.findById(eventId);
+
+                assertEquals(1, updatedLottery.getNotifiedWinners().size(),
+                        "Winner should remain marked as notified");
+        }
+
+        @Test
+        void WhenShutdownScheduler_ThenDoesNotThrow() {
+                assertDoesNotThrow(() -> lotteryService.shutdown());
         }
 }

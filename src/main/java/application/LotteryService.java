@@ -15,13 +15,14 @@ import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
 import domain.user.IUserRepo;
 import domain.user.Member;
+import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import jakarta.annotation.PostConstruct;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.Map;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
@@ -226,45 +227,64 @@ public class LotteryService {
 
     // Executes the actual lottery draw. This method is called automatically by the scheduler.
     public void drawLottery(int lotteryId) {
-        RetryHelper.executeWithRetry(() ->
+        Response<Map<Integer, String>> response = RetryHelper.executeWithRetry(() ->
                 transactionTemplate.execute(status -> {
-                    drawLotteryInternal(lotteryId);
-                    return new Response<Void>(null, "Lottery draw completed");
+                    Map<Integer, String> winners = drawLotteryAndReturnWinners(lotteryId);
+                    return new Response<>(winners, "Lottery draw completed");
                 })
         );
+
+        if (response == null || response.getValue() == null || response.getValue().isEmpty()) {
+            logger.warning("Lottery draw failed or returned no winners for lottery ID: " + lotteryId);
+            return;
+        }
+
+        notifyLotteryWinners(lotteryId, response.getValue());
     }
 
-    private void drawLotteryInternal(int lotteryId) {
+    private Map<Integer, String> drawLotteryAndReturnWinners(int lotteryId) {
         logger.log(Level.INFO, "Starting draw for lottery ID: " + lotteryId);
 
         try {
             Lottery lottery = lotteryRepo.findById(lotteryId);
 
-            Map<Integer, String> winners;
-
             if (lottery.getWinners().isEmpty()) {
-                winners = lottery.drawWinners();
+                Map<Integer, String> winners = new HashMap<>(lottery.drawWinners());
                 lotteryRepo.store(lottery);
 
                 logger.log(Level.INFO, "Successfully drawn winners for lottery ID: " + lotteryId);
-            } else {
-                winners = lottery.getWinnerCodes();
-
-                logger.log(Level.INFO,
-                        "Lottery ID " + lotteryId + " was already drawn. Retrying missing notifications.");
+                return winners;
             }
 
-            notifyLotteryWinners(lotteryId, winners);
+            logger.log(Level.INFO,
+                    "Lottery ID " + lotteryId + " was already drawn. Retrying missing notifications.");
+
+            return new HashMap<>(lottery.getWinnerCodes());
 
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Could not draw lottery, ID not found: " + lotteryId);
+            return Map.of();
 
         } catch (OptimisticLockingFailureException e) {
             throw e;
 
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error during lottery draw for ID: " + lotteryId, e);
+            return Map.of();
         }
+    }
+
+    private Response<Boolean> isWinnerAlreadyNotifiedWithRetry(int lotteryId, int winnerUserId) {
+        return RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+                    Lottery freshLottery = lotteryRepo.findById(lotteryId);
+
+                    return new Response<>(
+                            freshLottery.isWinnerNotified(winnerUserId),
+                            "Winner notified status checked"
+                    );
+                })
+        );
     }
 
     private void notifyLotteryWinners(int lotteryId, Map<Integer, String> winners) {
@@ -273,15 +293,17 @@ public class LotteryService {
             String code = entry.getValue();
 
             try {
-                Lottery freshLottery = lotteryRepo.findById(lotteryId);
+                Response<Boolean> alreadyNotifiedResponse =
+                        isWinnerAlreadyNotifiedWithRetry(lotteryId, winnerUserId);
 
-                if (freshLottery.isWinnerNotified(winnerUserId)) {
+                if (alreadyNotifiedResponse != null
+                        && Boolean.TRUE.equals(alreadyNotifiedResponse.getValue())) {
                     logger.info("Winner " + winnerUserId
                             + " was already notified for lottery " + lotteryId);
                     continue;
                 }
 
-                Event event = eventRepo.findById(lotteryId); //lotteryId is the same as eventId
+                Event event = eventRepo.findById(lotteryId); // lotteryId is the same as eventId
 
                 String userEmail = userRepo.getUserEmail(winnerUserId);
 
@@ -554,7 +576,44 @@ public class LotteryService {
         );
     }
 
-    //for tests
+    @PostConstruct
+    public void reschedulePendingLotteriesOnStartup() {
+        Response<List<Lottery>> response = RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+                    List<Lottery> result = new ArrayList<>();
+
+                    for (Lottery lottery : lotteryRepo.getAll()) {
+                        if (shouldScheduleLotteryOnStartup(lottery)) {
+                            result.add(new Lottery(lottery));
+                        }
+                    }
+
+                    return new Response<>(result, "Pending lotteries loaded successfully");
+                })
+        );
+
+        if (response == null || response.getValue() == null) {
+            logger.severe("Failed to load pending lotteries on startup");
+            return;
+        }
+
+        for (Lottery lottery : response.getValue()) {
+            scheduleLotteryDraw(lottery);
+        }
+
+        logger.info("Pending lotteries were rescheduled successfully on startup");
+    }
+
+    private boolean shouldScheduleLotteryOnStartup(Lottery lottery) {
+        if (lottery.getWinners().isEmpty()) {
+            return true;
+        }
+
+        return !lottery.getNotifiedWinners().containsAll(lottery.getWinners());
+    }
+
+
+    @PreDestroy
     public void shutdown() {
         scheduler.shutdownNow();
     }
