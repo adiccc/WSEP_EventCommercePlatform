@@ -1,8 +1,7 @@
 package domain.integrationTest.event;
 
 import domain.dataType.ElementPosition;
-import domain.event.StandingTicket;
-import domain.event.StandingZone;
+import domain.event.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +18,18 @@ class StandingZoneTest {
 
     @BeforeEach
     void setUp() {
-        standingZone = new StandingZone("zone A", 50.0,5, new ElementPosition(0, 0), new java.util.concurrent.atomic.AtomicInteger(1));
+        standingZone = new StandingZone("zone A", 50.0,5, new ElementPosition(0, 0));
+        assignTicketIds(standingZone);
+    }
+
+    private void assignTicketIds(StandingZone standingZone) {
+        int id = 1;
+
+        for (Ticket ticket : standingZone.getTickets()) {
+            if (ticket.getId() == null) {
+                ticket.setId(id++);
+            }
+        }
     }
 
     @Test

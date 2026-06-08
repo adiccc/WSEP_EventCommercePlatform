@@ -5,36 +5,74 @@ import domain.dataType.TicketStatus;
 import domain.dto.ActiveOrderSeatDTO;
 import domain.dto.ActiveOrderSelectionDTO;
 import domain.dto.SeatingTicketDTO;
+import jakarta.persistence.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
+@Entity
+@Table(name = "event_maps")
 public class EventMap {
-    private final List<Zone> zones;
-    private final ElementPosition stage;
-    private final List<ElementPosition> entries;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "event_map_id")
+    private Integer id;
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_map_id")
+    private List<Zone> zones = new ArrayList<>();
+    @Embedded
+    @AttributeOverrides({
+            @AttributeOverride(name = "x", column = @Column(name = "stage_x", nullable = false)),
+            @AttributeOverride(name = "y", column = @Column(name = "stage_y", nullable = false))
+    })
+    private ElementPosition stage;
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(
+            name = "event_map_entries",
+            joinColumns = @JoinColumn(name = "event_map_id")
+    )
+    @AttributeOverrides({
+            @AttributeOverride(name = "x", column = @Column(name = "entry_x", nullable = false)),
+            @AttributeOverride(name = "y", column = @Column(name = "entry_y", nullable = false))
+    })
+    private List<ElementPosition> entries = new ArrayList<>();
 
+    protected EventMap() {
+        // for JPA
+    }
 
     public EventMap(ElementPosition stage, List<ElementPosition> entries, List<Zone> zones) {
-        this.zones = zones;
-        this.stage = stage;
-        this.entries = entries;
+        this.zones = zones == null ? new ArrayList<>() : new ArrayList<>(zones);
+        this.stage = stage == null ? null : new ElementPosition(stage);
+        this.entries = entries == null ? new ArrayList<>() : new ArrayList<>(entries);
     }
 
     public EventMap(EventMap eventMap) {
+        this.id = eventMap.id;
         this.zones = new ArrayList<>();
-        for (Zone z : eventMap.zones) {
-            if (z instanceof SeatingZone seatingZone) {
-                this.zones.add(new SeatingZone(seatingZone));
-            } else if (z instanceof StandingZone standingZone) {
-                this.zones.add(new StandingZone(standingZone));
+        if (eventMap.zones != null) {
+            for (Zone z : eventMap.zones) {
+                if (z instanceof SeatingZone seatingZone) {
+                    this.zones.add(new SeatingZone(seatingZone));
+                } else if (z instanceof StandingZone standingZone) {
+                    this.zones.add(new StandingZone(standingZone));
+                }
             }
         }
-        this.stage = eventMap.stage;
-        this.entries = eventMap.entries;
+        this.stage = eventMap.stage == null ? null : new ElementPosition(eventMap.stage);
+
+        this.entries = new ArrayList<>();
+        if (eventMap.entries != null) {
+            for (ElementPosition entry : eventMap.entries) {
+                this.entries.add(new ElementPosition(entry));
+            }
+        }
+    }
+
+    public Integer getId() {
+        return id;
     }
 
     public List<Zone> getZones() {

@@ -68,7 +68,7 @@ public class EventRepoImpl implements IEventRepo {
         }else if(entity.getEventMap()!=null) {
             for(Zone z: entity.getEventMap().getZones()){
                 for(Ticket t : z.getTickets()){
-                    if (t.getId() == -1) {
+                    if (t.getId() == null) {
                         t.setId(ticketIdGenerator.getAndIncrement());
                     }
                 }

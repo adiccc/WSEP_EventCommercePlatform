@@ -4,10 +4,7 @@ import domain.dataType.CategoryEvent;
 import domain.dataType.ElementPosition;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
-import domain.event.Event;
-import domain.event.EventMap;
-import domain.event.StandingZone;
-import domain.event.Zone;
+import domain.event.*;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -21,6 +18,16 @@ class EventTest {
 
     private final int companyId = 900;
     private final int creatorId = 123;
+
+    private void assignTicketIds(StandingZone standingZone) {
+        int id = 1;
+
+        for (Ticket ticket : standingZone.getTickets()) {
+            if (ticket.getId() == null) {
+                ticket.setId(id++);
+            }
+        }
+    }
 
     @Test
     void GivenSaleStartedAndMapIsSet_WhenIsAvailableForSale_ThenReturnTrue() {
@@ -85,7 +92,7 @@ class EventTest {
     @Test
     void GivenStandingZoneWithAvailableTickets_WhenIsSoldOut_ThenReturnFalse() {
         StandingZone zone = new StandingZone(
-                "floor", 100.0, 5, new ElementPosition(0, 0), new AtomicInteger(0));
+                "floor", 100.0, 5, new ElementPosition(0, 0));
         EventMap map = new EventMap(
                 new ElementPosition(0, 0), List.of(), List.<Zone>of(zone));
 
@@ -102,7 +109,8 @@ class EventTest {
     @Test
     void GivenAllStandingTicketsSold_WhenIsSoldOut_ThenReturnTrue() {
         StandingZone zone = new StandingZone(
-                "floor", 100.0, 2, new ElementPosition(0, 0), new AtomicInteger(0));
+                "floor", 100.0, 2, new ElementPosition(0, 0));
+        assignTicketIds(zone);
         List<Integer> bookedTickets = zone.bookTickets(2);
         zone.markTicketsAsSold(bookedTickets);
 
@@ -122,7 +130,8 @@ class EventTest {
     @Test
     void GivenAllStandingTicketsLockedAndNoneAvailable_WhenIsSoldOut_ThenReturnTrue() {
         StandingZone zone = new StandingZone(
-                "floor", 100.0, 2, new ElementPosition(0, 0), new AtomicInteger(0));
+                "floor", 100.0, 2, new ElementPosition(0, 0));
+        assignTicketIds(zone);
         zone.bookTickets(2); // LOCKED state, no SOLD transition; available is now 0
 
         EventMap map = new EventMap(

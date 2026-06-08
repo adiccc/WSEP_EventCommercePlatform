@@ -4,11 +4,8 @@ import domain.dataType.CategoryEvent;
 import domain.dataType.ElementPosition;
 import domain.dataType.GeographicalArea;
 import domain.dto.SeatingTicketDTO;
-import domain.event.SeatingZone;
-import domain.event.Event;
+import domain.event.*;
 import domain.dataType.EventSearchFilter;
-import domain.event.EventMap;
-import domain.event.StandingZone;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +33,7 @@ class EventTest {
         ElementPosition posZone = new ElementPosition(15, 15);
         SeatingZone vipZone = new SeatingZone("VIP", 100, 50, 50, posZone);
         map1 = new EventMap(stage, List.of(entry), List.of(vipZone));
+        assignTicketIds(map1);
 
         event = new Event(
                 companyId,
@@ -52,17 +50,30 @@ class EventTest {
         SeatingZone seatingZone = new SeatingZone("Zone", 50, 10, 10,
                 new ElementPosition(1, 1));
         StandingZone standingZone = new StandingZone("floor", 30, 100,
-                new ElementPosition(2, 2), ticketIdGenerator);
+                new ElementPosition(2, 2));
 
         map2 = new EventMap(
                 new ElementPosition(0, 0),
                 List.of(new ElementPosition(1, 1)),
                 List.of(seatingZone, standingZone)
         );
+        assignTicketIds(map2);
 
         event.setMap(map2);
         event.setActive(true);
         bookedStandingIds = new ArrayList<>(standingZone.bookTickets(10));
+    }
+
+    private void assignTicketIds(EventMap eventMap) {
+        int id = 1;
+
+        for (Zone zone : eventMap.getZones()) {
+            for (Ticket ticket : zone.getTickets()) {
+                if (ticket.getId() == null) {
+                    ticket.setId(id++);
+                }
+            }
+        }
     }
 
 
@@ -192,9 +203,13 @@ class EventTest {
     void GivenMultipleZones_WhenFindSeatingTicketIds_ThenReturnsIdsFromAllZones() {
         SeatingZone z1 = new SeatingZone("A", 50, 3, 3, new ElementPosition(1, 1));
         SeatingZone z2 = new SeatingZone("B", 50, 3, 3, new ElementPosition(2, 2));
-        event.setMap(new EventMap(
-                new ElementPosition(0, 0), List.of(new ElementPosition(1, 1)), List.of(z1, z2)));
-
+        EventMap map = new EventMap(
+                new ElementPosition(0, 0),
+                List.of(new ElementPosition(1, 1)),
+                List.of(z1, z2)
+        );
+        assignTicketIds(map);
+        event.setMap(map);
         Map<String, List<SeatingTicketDTO>> input = Map.of(
                 "A", List.of(new SeatingTicketDTO(0, 0), new SeatingTicketDTO(1, 1)),
                 "B", List.of(new SeatingTicketDTO(2, 2)));

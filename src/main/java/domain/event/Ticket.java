@@ -1,11 +1,20 @@
 package domain.event;
 
 import domain.dataType.TicketStatus;
+import jakarta.persistence.*;
 
 import static domain.dataType.TicketStatus.AVAILABLE;
 
+@MappedSuperclass
 public abstract class Ticket {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "ticket_id", nullable = false)
     private Integer ticketId;
+    @Version
+    private long version;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private TicketStatus status;
 
 //    public Ticket(int ticketId) {
@@ -13,7 +22,6 @@ public abstract class Ticket {
 //        this.status = AVAILABLE;
 //    }
     public Ticket() {
-        ticketId=-1;
         status=AVAILABLE;
     }
 
@@ -55,6 +63,14 @@ public abstract class Ticket {
         if (this.status == TicketStatus.LOCKED) {
             this.status = newStatus;
         }
+    }
+
+    public long getVersion() {
+        return version;
+    }
+
+    protected void setVersion(long version) {
+        this.version = version;
     }
 
 }
