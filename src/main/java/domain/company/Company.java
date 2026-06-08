@@ -29,29 +29,24 @@ public class Company {
     @Embedded
     private ContactInfo contactInfo;
 
-    // Permissions is a complex object — stored as JSON text, converter added in Step 3
-    @Column(name = "company_permission", columnDefinition = "TEXT", nullable = false)
-    private String companyPermissionJson;
+    // Permissions is now a JPA @Entity — mapped with @OneToOne
+    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "permissions_id")
+    private Permissions companyPermission;
 
-    // PurchasePolicy is polymorphic — stored as JSON text, converter added in Step 3
-    @Column(name = "purchase_policy", columnDefinition = "TEXT", nullable = false)
-    private String purchasePolicyJson;
+    // PurchasePolicy is already a JPA @Entity hierarchy — mapped with @OneToOne
+    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "purchase_policy_id")
+    private PurchasePolicy purchasePolicy;
 
-    // DiscountPolicy is polymorphic — stored as JSON text, converter added in Step 3
-    @Column(name = "discount_policy", columnDefinition = "TEXT", nullable = false)
-    private String discountPolicyJson;
+    // DiscountPolicy is already a JPA @Entity hierarchy — mapped with @OneToOne
+    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "discount_policy_id")
+    private DiscountPolicy discountPolicy;
 
     @Version
     @Column(name = "version", nullable = false)
     private long version;
-
-    // Transient: reconstructed from JSON by the adapter after loading
-    @Transient
-    private Permissions companyPermission;
-    @Transient
-    private PurchasePolicy purchasePolicy;
-    @Transient
-    private DiscountPolicy discountPolicy;
 
     /** Required by JPA/Hibernate — do not use directly */
     public Company() {}
@@ -83,21 +78,6 @@ public class Company {
 
     public long getVersion() { return version; }
     public void setVersion(long version) { this.version = version; }
-
-    // ── JSON column accessors (used by JPA adapter in Step 5) ─────────────────
-    public String getCompanyPermissionJson() { return companyPermissionJson; }
-    public void setCompanyPermissionJson(String json) { this.companyPermissionJson = json; }
-
-    public String getPurchasePolicyJson() { return purchasePolicyJson; }
-    public void setPurchasePolicyJson(String json) { this.purchasePolicyJson = json; }
-
-    public String getDiscountPolicyJson() { return discountPolicyJson; }
-    public void setDiscountPolicyJson(String json) { this.discountPolicyJson = json; }
-
-    // ── Transient field setters (used by adapter after loading from DB) ────────
-    public void setCompanyPermission(Permissions companyPermission) { this.companyPermission = companyPermission; }
-    public void setPurchasePolicy(PurchasePolicy purchasePolicy) { this.purchasePolicy = purchasePolicy; }
-    public void setDiscountPolicy(DiscountPolicy discountPolicy) { this.discountPolicy = discountPolicy; }
 
     public void deactivate() { this.isActive = false; }
 
