@@ -1,10 +1,15 @@
 package domain.company;
 
+import jakarta.persistence.Embeddable;
+
+@Embeddable
 public class ContactInfo {
 
     private String email;
     private String phone;
     private String bankAccount;
+
+    public ContactInfo() {}
 
     public ContactInfo(String email, String phone, String bankAccount) {
         this.email = email;

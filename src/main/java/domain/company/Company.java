@@ -6,20 +6,55 @@ import domain.dataType.PermissionType;
 import domain.dto.UserDTO;
 import domain.policy.*;
 import domain.dto.HierarchyDTO;
+import jakarta.persistence.*;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+@Entity
+@Table(name = "companies")
 public class Company {
-    private final int companyId;
-    private final String companyName;
+
+    @Id
+    @Column(name = "company_id")
+    private int companyId;
+
+    @Column(name = "company_name", nullable = false)
+    private String companyName;
+
+    @Column(name = "is_active", nullable = false)
     private boolean isActive;
-    private final ContactInfo contactInfo;
-    private PurchasePolicy purchasePolicy;
-    private DiscountPolicy discountPolicy;
-    private final Permissions companyPermission;
+
+    @Embedded
+    private ContactInfo contactInfo;
+
+    // Permissions is a complex object — stored as JSON text, converter added in Step 3
+    @Column(name = "company_permission", columnDefinition = "TEXT", nullable = false)
+    private String companyPermissionJson;
+
+    // PurchasePolicy is polymorphic — stored as JSON text, converter added in Step 3
+    @Column(name = "purchase_policy", columnDefinition = "TEXT", nullable = false)
+    private String purchasePolicyJson;
+
+    // DiscountPolicy is polymorphic — stored as JSON text, converter added in Step 3
+    @Column(name = "discount_policy", columnDefinition = "TEXT", nullable = false)
+    private String discountPolicyJson;
+
+    @Version
+    @Column(name = "version", nullable = false)
     private long version;
+
+    // Transient: reconstructed from JSON by the adapter after loading
+    @Transient
+    private Permissions companyPermission;
+    @Transient
+    private PurchasePolicy purchasePolicy;
+    @Transient
+    private DiscountPolicy discountPolicy;
+
+    /** Required by JPA/Hibernate — do not use directly */
+    public Company() {}
 
     public Company(int companyId, String companyName, ContactInfo contactInfo,
                    PurchasePolicy defaultPurchase, DiscountPolicy defaultDiscount,
@@ -34,7 +69,7 @@ public class Company {
         this.version = 0;
     }
 
-    /** Deep-copy constructor — used by the repo for defensive copying */
+    /** Deep-copy constructor — used by the in-memory repo for defensive copying */
     public Company(Company company) {
         this.companyId = company.companyId;
         this.companyName = company.companyName;
@@ -48,6 +83,21 @@ public class Company {
 
     public long getVersion() { return version; }
     public void setVersion(long version) { this.version = version; }
+
+    // ── JSON column accessors (used by JPA adapter in Step 5) ─────────────────
+    public String getCompanyPermissionJson() { return companyPermissionJson; }
+    public void setCompanyPermissionJson(String json) { this.companyPermissionJson = json; }
+
+    public String getPurchasePolicyJson() { return purchasePolicyJson; }
+    public void setPurchasePolicyJson(String json) { this.purchasePolicyJson = json; }
+
+    public String getDiscountPolicyJson() { return discountPolicyJson; }
+    public void setDiscountPolicyJson(String json) { this.discountPolicyJson = json; }
+
+    // ── Transient field setters (used by adapter after loading from DB) ────────
+    public void setCompanyPermission(Permissions companyPermission) { this.companyPermission = companyPermission; }
+    public void setPurchasePolicy(PurchasePolicy purchasePolicy) { this.purchasePolicy = purchasePolicy; }
+    public void setDiscountPolicy(DiscountPolicy discountPolicy) { this.discountPolicy = discountPolicy; }
 
     public void deactivate() { this.isActive = false; }
 
