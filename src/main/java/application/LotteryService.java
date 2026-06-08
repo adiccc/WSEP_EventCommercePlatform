@@ -22,10 +22,7 @@ import jakarta.annotation.PostConstruct;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
@@ -237,46 +234,13 @@ public class LotteryService {
                 })
         );
 
-        if (response == null || response.getValue() == null) {
+        if (response == null || response.getValue() == null || response.getValue().isEmpty()) {
             logger.warning("Lottery draw failed or returned no winners for lottery ID: " + lotteryId);
             return;
         }
 
         notifyLotteryWinners(lotteryId, response.getValue());
     }
-
-//    private void drawLotteryInternal(int lotteryId) {
-//        logger.log(Level.INFO, "Starting draw for lottery ID: " + lotteryId);
-//
-//        try {
-//            Lottery lottery = lotteryRepo.findById(lotteryId);
-//
-//            Map<Integer, String> winners;
-//
-//            if (lottery.getWinners().isEmpty()) {
-//                winners = lottery.drawWinners();
-//                lotteryRepo.store(lottery);
-//
-//                logger.log(Level.INFO, "Successfully drawn winners for lottery ID: " + lotteryId);
-//            } else {
-//                winners = lottery.getWinnerCodes();
-//
-//                logger.log(Level.INFO,
-//                        "Lottery ID " + lotteryId + " was already drawn. Retrying missing notifications.");
-//            }
-//
-//            notifyLotteryWinners(lotteryId, winners);
-//
-//        } catch (NoSuchElementException e) {
-//            logger.log(Level.SEVERE, "Could not draw lottery, ID not found: " + lotteryId);
-//
-//        } catch (OptimisticLockingFailureException e) {
-//            throw e;
-//
-//        } catch (Exception e) {
-//            logger.log(Level.SEVERE, "Error during lottery draw for ID: " + lotteryId, e);
-//        }
-//    }
 
     private Map<Integer, String> drawLotteryAndReturnWinners(int lotteryId) {
         logger.log(Level.INFO, "Starting draw for lottery ID: " + lotteryId);
@@ -285,7 +249,7 @@ public class LotteryService {
             Lottery lottery = lotteryRepo.findById(lotteryId);
 
             if (lottery.getWinners().isEmpty()) {
-                Map<Integer, String> winners = lottery.drawWinners();
+                Map<Integer, String> winners = new HashMap<>(lottery.drawWinners());
                 lotteryRepo.store(lottery);
 
                 logger.log(Level.INFO, "Successfully drawn winners for lottery ID: " + lotteryId);
@@ -295,7 +259,7 @@ public class LotteryService {
             logger.log(Level.INFO,
                     "Lottery ID " + lotteryId + " was already drawn. Retrying missing notifications.");
 
-            return lottery.getWinnerCodes();
+            return new HashMap<>(lottery.getWinnerCodes());
 
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Could not draw lottery, ID not found: " + lotteryId);
@@ -310,21 +274,36 @@ public class LotteryService {
         }
     }
 
+    private Response<Boolean> isWinnerAlreadyNotifiedWithRetry(int lotteryId, int winnerUserId) {
+        return RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+                    Lottery freshLottery = lotteryRepo.findById(lotteryId);
+
+                    return new Response<>(
+                            freshLottery.isWinnerNotified(winnerUserId),
+                            "Winner notified status checked"
+                    );
+                })
+        );
+    }
+
     private void notifyLotteryWinners(int lotteryId, Map<Integer, String> winners) {
         for (Map.Entry<Integer, String> entry : winners.entrySet()) {
             Integer winnerUserId = entry.getKey();
             String code = entry.getValue();
 
             try {
-                Lottery freshLottery = lotteryRepo.findById(lotteryId);
+                Response<Boolean> alreadyNotifiedResponse =
+                        isWinnerAlreadyNotifiedWithRetry(lotteryId, winnerUserId);
 
-                if (freshLottery.isWinnerNotified(winnerUserId)) {
+                if (alreadyNotifiedResponse != null
+                        && Boolean.TRUE.equals(alreadyNotifiedResponse.getValue())) {
                     logger.info("Winner " + winnerUserId
                             + " was already notified for lottery " + lotteryId);
                     continue;
                 }
 
-                Event event = eventRepo.findById(lotteryId); //lotteryId is the same as eventId
+                Event event = eventRepo.findById(lotteryId); // lotteryId is the same as eventId
 
                 String userEmail = userRepo.getUserEmail(winnerUserId);
 
