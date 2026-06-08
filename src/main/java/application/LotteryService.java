@@ -15,11 +15,15 @@ import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
 import domain.user.IUserRepo;
 import domain.user.Member;
+import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import jakarta.annotation.PostConstruct;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.Executors;
@@ -226,44 +230,83 @@ public class LotteryService {
 
     // Executes the actual lottery draw. This method is called automatically by the scheduler.
     public void drawLottery(int lotteryId) {
-        RetryHelper.executeWithRetry(() ->
+        Response<Map<Integer, String>> response = RetryHelper.executeWithRetry(() ->
                 transactionTemplate.execute(status -> {
-                    drawLotteryInternal(lotteryId);
-                    return new Response<Void>(null, "Lottery draw completed");
+                    Map<Integer, String> winners = drawLotteryAndReturnWinners(lotteryId);
+                    return new Response<>(winners, "Lottery draw completed");
                 })
         );
+
+        if (response == null || response.getValue() == null) {
+            logger.warning("Lottery draw failed or returned no winners for lottery ID: " + lotteryId);
+            return;
+        }
+
+        notifyLotteryWinners(lotteryId, response.getValue());
     }
 
-    private void drawLotteryInternal(int lotteryId) {
+//    private void drawLotteryInternal(int lotteryId) {
+//        logger.log(Level.INFO, "Starting draw for lottery ID: " + lotteryId);
+//
+//        try {
+//            Lottery lottery = lotteryRepo.findById(lotteryId);
+//
+//            Map<Integer, String> winners;
+//
+//            if (lottery.getWinners().isEmpty()) {
+//                winners = lottery.drawWinners();
+//                lotteryRepo.store(lottery);
+//
+//                logger.log(Level.INFO, "Successfully drawn winners for lottery ID: " + lotteryId);
+//            } else {
+//                winners = lottery.getWinnerCodes();
+//
+//                logger.log(Level.INFO,
+//                        "Lottery ID " + lotteryId + " was already drawn. Retrying missing notifications.");
+//            }
+//
+//            notifyLotteryWinners(lotteryId, winners);
+//
+//        } catch (NoSuchElementException e) {
+//            logger.log(Level.SEVERE, "Could not draw lottery, ID not found: " + lotteryId);
+//
+//        } catch (OptimisticLockingFailureException e) {
+//            throw e;
+//
+//        } catch (Exception e) {
+//            logger.log(Level.SEVERE, "Error during lottery draw for ID: " + lotteryId, e);
+//        }
+//    }
+
+    private Map<Integer, String> drawLotteryAndReturnWinners(int lotteryId) {
         logger.log(Level.INFO, "Starting draw for lottery ID: " + lotteryId);
 
         try {
             Lottery lottery = lotteryRepo.findById(lotteryId);
 
-            Map<Integer, String> winners;
-
             if (lottery.getWinners().isEmpty()) {
-                winners = lottery.drawWinners();
+                Map<Integer, String> winners = lottery.drawWinners();
                 lotteryRepo.store(lottery);
 
                 logger.log(Level.INFO, "Successfully drawn winners for lottery ID: " + lotteryId);
-            } else {
-                winners = lottery.getWinnerCodes();
-
-                logger.log(Level.INFO,
-                        "Lottery ID " + lotteryId + " was already drawn. Retrying missing notifications.");
+                return winners;
             }
 
-            notifyLotteryWinners(lotteryId, winners);
+            logger.log(Level.INFO,
+                    "Lottery ID " + lotteryId + " was already drawn. Retrying missing notifications.");
+
+            return lottery.getWinnerCodes();
 
         } catch (NoSuchElementException e) {
             logger.log(Level.SEVERE, "Could not draw lottery, ID not found: " + lotteryId);
+            return Map.of();
 
         } catch (OptimisticLockingFailureException e) {
             throw e;
 
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error during lottery draw for ID: " + lotteryId, e);
+            return Map.of();
         }
     }
 
@@ -554,7 +597,44 @@ public class LotteryService {
         );
     }
 
-    //for tests
+    @PostConstruct
+    public void reschedulePendingLotteriesOnStartup() {
+        Response<List<Lottery>> response = RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+                    List<Lottery> result = new ArrayList<>();
+
+                    for (Lottery lottery : lotteryRepo.getAll()) {
+                        if (shouldScheduleLotteryOnStartup(lottery)) {
+                            result.add(new Lottery(lottery));
+                        }
+                    }
+
+                    return new Response<>(result, "Pending lotteries loaded successfully");
+                })
+        );
+
+        if (response == null || response.getValue() == null) {
+            logger.severe("Failed to load pending lotteries on startup");
+            return;
+        }
+
+        for (Lottery lottery : response.getValue()) {
+            scheduleLotteryDraw(lottery);
+        }
+
+        logger.info("Pending lotteries were rescheduled successfully on startup");
+    }
+
+    private boolean shouldScheduleLotteryOnStartup(Lottery lottery) {
+        if (lottery.getWinners().isEmpty()) {
+            return true;
+        }
+
+        return !lottery.getNotifiedWinners().containsAll(lottery.getWinners());
+    }
+
+
+    @PreDestroy
     public void shutdown() {
         scheduler.shutdownNow();
     }
