@@ -3,14 +3,19 @@ package domain.user;
 import DTO.NotifyDTO;
 import domain.activeOrder.ActiveOrder;
 import domain.dto.UserDTO;
-
+import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 
+@Entity
+@Table(name = "members")
 public class Member extends User{
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "user_id")
     protected Integer userId;
     protected String password; //encrypted password
     protected String firstName;
@@ -18,9 +23,17 @@ public class Member extends User{
     protected String phoneNumber;
     protected LocalDate dateOfBirth;
     protected String address;
+    @Enumerated(EnumType.STRING)
     protected ActivationStatus activationStatus;
+    @Version
     private long version;
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JoinColumn(name = "member_id")
     private List<NotifyDTO> delayedNotifications = new ArrayList<>();
+
+    protected Member() {
+        super();
+    }
 
     public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address,ActivationStatus activationStatus) {
         super(email);
@@ -44,7 +57,7 @@ public class Member extends User{
         this.address = address;
         this.version = 0;
         this.activationStatus=ActivationStatus.ACTIVE;
-        this.delayedNotifications = delayedNotifications;
+        this.delayedNotifications =delayedNotifications != null ? delayedNotifications : new ArrayList<>();
     }
     public Member(Member member) {
         super(member);
