@@ -1279,4 +1279,244 @@ class LotteryServiceTest {
         void WhenShutdownScheduler_ThenDoesNotThrow() {
                 assertDoesNotThrow(() -> lotteryService.shutdown());
         }
+
+        @Test
+        void GivenFewerRegistrationsThanCapacityAndUsersOffline_WhenDrawLotteryIsTriggered_WithMockNotifier_ThenAllRegisteredWinAndNotificationsSavedAsDelayed() {
+                // Arrange: Create mock notifier for this test
+                INotifier notifierMock = Mockito.mock(INotifier.class);
+
+                /*
+                 * All users are considered offline:
+                 * notifyUser returns false, so winner notifications should be saved as delayed.
+                 */
+                Mockito.when(notifierMock.notifyUser(
+                        Mockito.anyString(),
+                        Mockito.any(NotifyDTO.class)
+                )).thenReturn(false);
+
+                TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
+
+                when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+                        TransactionCallback<?> callback = invocation.getArgument(0);
+                        return callback.doInTransaction(null);
+                });
+
+                LotteryService lotteryServiceWithMockNotifier =
+                        new LotteryService(
+                                lotteryRepo,
+                                eventRepo,
+                                auth,
+                                companyRepo,
+                                suspensionRepo,
+                                notifierMock,
+                                userRepo,
+                                transactionTemplate
+                        );
+
+                try {
+                        // Arrange: Create lottery with capacity 10
+                        LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+                        lotteryServiceWithMockNotifier.createLottery(validToken, eventId, 10, lotteryDate_X, 24L);
+
+                        Lottery lottery = lotteryRepo.getAll().get(0);
+
+                        lotteryServiceWithMockNotifier.registerUserToLottery(validToken, eventId);
+                        lotteryServiceWithMockNotifier.registerUserToLottery(notPermission, eventId);
+                        lotteryServiceWithMockNotifier.registerUserToLottery(validToken2, eventId);
+
+                        // Extract identifiers before logout, because tokens may become invalid after logout
+                        String id1 = auth.getUserIdentifier(validToken).getValue();
+                        String id2 = auth.getUserIdentifier(notPermission).getValue();
+                        String id3 = auth.getUserIdentifier(validToken2).getValue();
+
+                        // Keep the same business scenario: users registered and then logged out before the draw
+                        userService.logout(validToken);
+                        userService.logout(notPermission);
+                        userService.logout(validToken2);
+
+                        // Act: Manually trigger the draw
+                        lotteryServiceWithMockNotifier.drawLottery(lottery.getId());
+
+                        // Assert: Verify DB state
+                        Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
+
+                        assertEquals(3, updatedLottery.getWinners().size(),
+                                "All 3 registered users should win");
+
+                        assertEquals(3, updatedLottery.getNotifiedWinners().size(),
+                                "All 3 winners should be marked as notified after delayed notifications are saved");
+
+                        Member user1 = userRepo.findUserByEmail(id1);
+                        Member user2 = userRepo.findUserByEmail(id2);
+                        Member user3 = userRepo.findUserByEmail(id3);
+
+                        // Assert: each offline winner has delayed lottery notification
+                        assertTrue(user1.getDelayedNotifications().stream()
+                                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                                && n.getPayload() != null
+                                                && n.getPayload().getMessage().contains("Your code is: ")),
+                                "User 1 should have a delayed lottery winner notification");
+
+                        assertTrue(user2.getDelayedNotifications().stream()
+                                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                                && n.getPayload() != null
+                                                && n.getPayload().getMessage().contains("Your code is: ")),
+                                "User 2 should have a delayed lottery winner notification");
+
+                        assertTrue(user3.getDelayedNotifications().stream()
+                                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                                && n.getPayload() != null
+                                                && n.getPayload().getMessage().contains("Your code is: ")),
+                                "User 3 should have a delayed lottery winner notification");
+
+                        // Assert: service tried to send real-time notifications through the mock notifier
+                        Mockito.verify(notifierMock, Mockito.atLeastOnce()).notifyUser(
+                                Mockito.eq(id1),
+                                Mockito.any(NotifyDTO.class)
+                        );
+
+                        Mockito.verify(notifierMock, Mockito.atLeastOnce()).notifyUser(
+                                Mockito.eq(id2),
+                                Mockito.any(NotifyDTO.class)
+                        );
+
+                        Mockito.verify(notifierMock, Mockito.atLeastOnce()).notifyUser(
+                                Mockito.eq(id3),
+                                Mockito.any(NotifyDTO.class)
+                        );
+
+                } finally {
+                        lotteryServiceWithMockNotifier.shutdown();
+                }
+        }
+
+        @Test
+        void GivenFewerRegistrationsThanCapacity_WhenDrawLotteryIsTriggered_WithMockNotifier_ThenAllRegisteredWinAndNotificationsSentRealtime() {
+                // Arrange: Create mock notifier for this test
+                INotifier notifierMock = Mockito.mock(INotifier.class);
+
+                /*
+                 * All users are considered online:
+                 * notifyUser returns true, so winner notifications should be delivered in real time
+                 * and should NOT be saved as delayed.
+                 */
+                Mockito.when(notifierMock.notifyUser(
+                        Mockito.anyString(),
+                        Mockito.any(NotifyDTO.class)
+                )).thenReturn(true);
+
+                TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
+
+                when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+                        TransactionCallback<?> callback = invocation.getArgument(0);
+                        return callback.doInTransaction(null);
+                });
+
+                LotteryService lotteryServiceWithMockNotifier =
+                        new LotteryService(
+                                lotteryRepo,
+                                eventRepo,
+                                auth,
+                                companyRepo,
+                                suspensionRepo,
+                                notifierMock,
+                                userRepo,
+                                transactionTemplate
+                        );
+
+                try {
+                        // Arrange: Create lottery with capacity 10
+                        LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+                        lotteryServiceWithMockNotifier.createLottery(validToken, eventId, 10, lotteryDate_X, 24L);
+
+                        Lottery lottery = lotteryRepo.getAll().get(0);
+
+                        lotteryServiceWithMockNotifier.registerUserToLottery(validToken, eventId);
+                        lotteryServiceWithMockNotifier.registerUserToLottery(notPermission, eventId);
+                        lotteryServiceWithMockNotifier.registerUserToLottery(validToken2, eventId);
+
+                        // Extract identifiers
+                        String id1 = auth.getUserIdentifier(validToken).getValue();
+                        String id2 = auth.getUserIdentifier(notPermission).getValue();
+                        String id3 = auth.getUserIdentifier(validToken2).getValue();
+
+                        // Act: Manually trigger the draw
+                        lotteryServiceWithMockNotifier.drawLottery(lottery.getId());
+
+                        // Assert: Verify DB state
+                        Lottery updatedLottery = lotteryRepo.findById(lottery.getId());
+
+                        assertEquals(3, updatedLottery.getWinners().size(),
+                                "All 3 registered users should win");
+
+                        assertEquals(3, updatedLottery.getNotifiedWinners().size(),
+                                "All 3 winners should be marked as notified");
+
+                        // Assert: verify realtime notifications were sent through notifierMock
+                        org.mockito.ArgumentCaptor<NotifyDTO> user1Captor =
+                                org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);
+
+                        Mockito.verify(notifierMock, Mockito.atLeastOnce()).notifyUser(
+                                Mockito.eq(id1),
+                                user1Captor.capture()
+                        );
+
+                        assertTrue(user1Captor.getAllValues().stream()
+                                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                                && n.getPayload() != null
+                                                && n.getPayload().getMessage().contains("Your code is: ")),
+                                "User 1 should receive lottery winner notification in real time");
+
+                        org.mockito.ArgumentCaptor<NotifyDTO> user2Captor =
+                                org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);
+
+                        Mockito.verify(notifierMock, Mockito.atLeastOnce()).notifyUser(
+                                Mockito.eq(id2),
+                                user2Captor.capture()
+                        );
+
+                        assertTrue(user2Captor.getAllValues().stream()
+                                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                                && n.getPayload() != null
+                                                && n.getPayload().getMessage().contains("Your code is: ")),
+                                "User 2 should receive lottery winner notification in real time");
+
+                        org.mockito.ArgumentCaptor<NotifyDTO> user3Captor =
+                                org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);
+
+                        Mockito.verify(notifierMock, Mockito.atLeastOnce()).notifyUser(
+                                Mockito.eq(id3),
+                                user3Captor.capture()
+                        );
+
+                        assertTrue(user3Captor.getAllValues().stream()
+                                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                                && n.getPayload() != null
+                                                && n.getPayload().getMessage().contains("Your code is: ")),
+                                "User 3 should receive lottery winner notification in real time");
+
+                        // Assert: online users should not have delayed notifications
+                        Member user1 = userRepo.findUserByEmail(id1);
+                        Member user2 = userRepo.findUserByEmail(id2);
+                        Member user3 = userRepo.findUserByEmail(id3);
+
+                        assertFalse(user1.getDelayedNotifications().stream()
+                                        .anyMatch(n -> n.getPayload() != null
+                                                && n.getPayload().getMessage().contains("Your code is: ")),
+                                "Online user 1 should not have the lottery winner notification saved as delayed");
+
+                        assertFalse(user2.getDelayedNotifications().stream()
+                                        .anyMatch(n -> n.getPayload() != null
+                                                && n.getPayload().getMessage().contains("Your code is: ")),
+                                "Online user 2 should not have the lottery winner notification saved as delayed");
+
+                        assertFalse(user3.getDelayedNotifications().stream()
+                                        .anyMatch(n -> n.getPayload() != null
+                                                && n.getPayload().getMessage().contains("Your code is: ")),
+                                "Online user 3 should not have the lottery winner notification saved as delayed");
+
+                } finally {
+                        lotteryServiceWithMockNotifier.shutdown();
+                }
+        }
 }
