@@ -2023,4 +2023,186 @@ class AdminServiceTest {
         assertEquals(2, response.getValue().size(), "Should return all system orders when no filters are provided");
         assertEquals("Retrieved history orders successfully for filter", response.getMessage());
     }
+
+    @Test
+    void GivenValidInputsAndBuyerOffline_WhenCloseCompanyByAdmin_WithMockNotifier_ThenCompanyAndEventsClosedAndRefundNotificationSavedAsDelayed() {
+        // Arrange: Create an order and mock payment success
+        int orderId = createCompletedOrderThroughPurchaseFlow(nonAdminToken, eventId, 1);
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+
+        Event event = eventRepo.findById(eventId);
+        String buyerIdentifier = event.findOrderById(orderId).getUserIdentifier();
+        String ownerIdentifier = auth.getUserEmail(adminToken).getValue();
+
+        // Create a mock notifier only for this test
+        INotifier notifierMock = Mockito.mock(INotifier.class);
+
+        // Create AdminService that uses the mock notifier
+        AdminService adminServiceWithMockNotifier =
+                new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem, suspensionRepo, notifierMock);
+
+
+
+        //Everyone who receives a notification is considered online,
+        //except the buyer, who is offline.
+
+        Mockito.when(notifierMock.notifyUser(
+                Mockito.anyString(),
+                Mockito.any(NotifyDTO.class)
+        )).thenReturn(true);
+
+        Mockito.when(notifierMock.notifyUser(
+                Mockito.eq(buyerIdentifier),
+                Mockito.any(NotifyDTO.class)
+        )).thenReturn(false);
+
+        // Buyer is offline/logged out while the admin closes the company.
+        userService.logout(nonAdminToken);
+
+        // Act: Admin requests to close the company
+        Response<Boolean> response =
+                adminServiceWithMockNotifier.closeCompanyByAdmin(adminToken, companyId);
+
+        // Assert: database state and response
+        assertTrue(response.getValue());
+        assertEquals("Company closed successfully", response.getMessage());
+        assertFalse(companyRepo.findById(companyId).isActive());
+        assertFalse(eventRepo.findById(eventId).isActive());
+
+        assertEquals(OrderStatus.REFUNDED,
+                eventRepo.findById(eventId).findOrderById(orderId).getStatus());
+
+        // Assert: buyer refund notification was saved as delayed
+        Member buyer = userRepo.findUserByEmail(buyerIdentifier);
+        List<NotifyDTO> delayedNotifications = buyer.getDelayedNotifications();
+
+        assertTrue(delayedNotifications.stream()
+                        .anyMatch(n ->
+                                n.getType() == NotifyType.GENERAL_POPUP
+                                        && n.getPayload() != null
+                                        && n.getPayload().getMessage().contains("Refund processed")
+                                        && n.getPayload().getMessage().contains("because of closing the company")
+                        ),
+                "Buyer should have a delayed refund processed notification");
+
+        // Assert: notifier tried to send the buyer notification in real time
+        org.mockito.ArgumentCaptor<NotifyDTO> buyerNotificationCaptor =
+                org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);
+
+        Mockito.verify(notifierMock, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq(buyerIdentifier),
+                buyerNotificationCaptor.capture()
+        );
+
+        assertTrue(buyerNotificationCaptor.getAllValues().stream()
+                        .anyMatch(n ->
+                                n.getType() == NotifyType.GENERAL_POPUP
+                                        && n.getPayload() != null
+                                        && n.getPayload().getMessage().contains("Refund processed")
+                        ),
+                "Notifier should try to send refund processed notification to buyer");
+
+        // Assert: owner notification was sent through the mock notifier in real time
+        org.mockito.ArgumentCaptor<NotifyDTO> ownerNotificationCaptor =
+                org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);
+
+        Mockito.verify(notifierMock, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq(ownerIdentifier),
+                ownerNotificationCaptor.capture()
+        );
+
+        assertTrue(ownerNotificationCaptor.getAllValues().stream()
+                        .anyMatch(n ->
+                                n.getType() == NotifyType.GENERAL_POPUP
+                                        && n.getPayload() != null
+                                        && n.getPayload().getMessage().contains("Company")
+                        ),
+                "Owner should receive a real-time company closure notification");
+    }
+
+    @Test
+    void GivenValidInputsAndBuyerOnline_WhenCloseCompanyByAdmin_WithMockNotifier_ThenCompanyAndEventsClosedAndRefundNotificationSentRealtime() {
+        // Arrange: Create an order and mock payment success
+        int orderId = createCompletedOrderThroughPurchaseFlow(nonAdminToken, eventId, 1);
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+
+        // Arrange: Extract identifiers
+        Event event = eventRepo.findById(eventId);
+        String buyerIdentifier = event.findOrderById(orderId).getUserIdentifier();
+        String ownerIdentifier = auth.getUserEmail(adminToken).getValue();
+
+        // Create a mock notifier only for this test
+        INotifier notifierMock = Mockito.mock(INotifier.class);
+
+        // Create AdminService that uses the mock notifier
+        AdminService adminServiceWithMockNotifier =
+                new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem, suspensionRepo, notifierMock);
+
+        /*
+         * Buyer and owner are considered online:
+         * notifyUser returns true, meaning the notification was delivered in real time.
+         */
+        Mockito.when(notifierMock.notifyUser(
+                Mockito.anyString(),
+                Mockito.any(NotifyDTO.class)
+        )).thenReturn(true);
+
+        // Act: Admin requests to close the company
+        Response<Boolean> response =
+                adminServiceWithMockNotifier.closeCompanyByAdmin(adminToken, companyId);
+
+        // Assert: database state and response
+        assertTrue(response.getValue());
+        assertEquals("Company closed successfully", response.getMessage());
+        assertFalse(companyRepo.findById(companyId).isActive());
+        assertFalse(eventRepo.findById(eventId).isActive());
+
+        assertEquals(OrderStatus.REFUNDED,
+                eventRepo.findById(eventId).findOrderById(orderId).getStatus());
+
+        // Assert: buyer refund notification was sent through notifier in real time
+        org.mockito.ArgumentCaptor<NotifyDTO> buyerNotificationCaptor =
+                org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);
+
+        Mockito.verify(notifierMock, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq(buyerIdentifier),
+                buyerNotificationCaptor.capture()
+        );
+
+        assertTrue(buyerNotificationCaptor.getAllValues().stream()
+                        .anyMatch(n ->
+                                n.getType() == NotifyType.GENERAL_POPUP
+                                        && n.getPayload() != null
+                                        && n.getPayload().getMessage().contains("Refund processed")
+                        ),
+                "Buyer should receive refund processed notification in real time");
+
+        // Assert: online buyer should not have refund notification saved as delayed
+        Member buyer = userRepo.findUserByEmail(buyerIdentifier);
+
+        assertFalse(buyer.getDelayedNotifications().stream()
+                        .anyMatch(n ->
+                                n.getType() == NotifyType.GENERAL_POPUP
+                                        && n.getPayload() != null
+                                        && n.getPayload().getMessage().contains("Refund processed")
+                        ),
+                "Online buyer should not have the refund processed notification saved as delayed");
+
+        // Assert: owner notification was also sent through notifier in real time
+        org.mockito.ArgumentCaptor<NotifyDTO> ownerNotificationCaptor =
+                org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);
+
+        Mockito.verify(notifierMock, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq(ownerIdentifier),
+                ownerNotificationCaptor.capture()
+        );
+
+        assertTrue(ownerNotificationCaptor.getAllValues().stream()
+                        .anyMatch(n ->
+                                n.getType() == NotifyType.GENERAL_POPUP
+                                        && n.getPayload() != null
+                                        && n.getPayload().getMessage().contains("Company")
+                        ),
+                "Owner should receive company closure notification in real time");
+    }
 }
