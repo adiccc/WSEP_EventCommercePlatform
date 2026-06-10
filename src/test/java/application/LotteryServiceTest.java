@@ -94,9 +94,9 @@ class LotteryServiceTest {
 
                 userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier,transactionTemplate);
                 CompanyService companyService = new CompanyService(auth, companyRepo, userRepo, suspensionRepo,
-                                notifier);
+                                notifier,transactionTemplate);
                 eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,
-                                suspensionRepo, notifier, userRepo);
+                                suspensionRepo, notifier, userRepo,transactionTemplate);
 
 
 

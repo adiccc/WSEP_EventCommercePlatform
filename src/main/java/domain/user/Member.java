@@ -72,8 +72,8 @@ public class Member extends User{
         this.address=member.address;
         this.version=member.version;
         this.activationStatus=member.activationStatus;
-        this.delayedNotifications = member.getDelayedNotifications();
-
+        this.delayedNotifications = member.getDelayedNotifications() != null ?
+                new ArrayList<>(member.getDelayedNotifications()) : new ArrayList<>();
     }
     public long getVersion() {
         return version;

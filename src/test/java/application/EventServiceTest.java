@@ -79,7 +79,7 @@ class EventServiceTest {
             TransactionCallback<?> callback = invocation.getArgument(0);
             return callback.doInTransaction(null);
         });
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate);
         service = new EventService(auth, eventRepo,notifier);
 
         userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier,transactionTemplate);
@@ -87,7 +87,7 @@ class EventServiceTest {
         userService.registerUser(validToken,userDTO);
         validToken=userService.login("user1@test.com","mytest").getValue();
         GUEST_TOKEN = userService.continueAsGuest().getValue();
-        CompanyService companyService=new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier);
+        CompanyService companyService=new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier,transactionTemplate);
         Response<Company> c1=companyService.createProductionCompany(validToken,company1,"test-company","testC@company.com","054-5556677","leumi");
 
         // Active event (company1)

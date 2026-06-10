@@ -117,15 +117,15 @@ class EventCompanyManageServiceTest {
         eventService=new EventService(auth,eventRepo,notifier);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth),userRepo, 100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth),userRepo, transactionTemplate,100);
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete order repo from company service construture
-        companyService=new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier);
+        companyService=new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier,transactionTemplate);
         eventCompanyManageService = new EventCompanyManageService(
                 companyRepo,
                 eventRepo,
                 auth,
-                paymentSystem,suspensionRepo,notifier,userRepo
+                paymentSystem,suspensionRepo,notifier,userRepo, transactionTemplate
         );
 
         validToken1=null; // user with all permissions
@@ -165,7 +165,7 @@ class EventCompanyManageServiceTest {
        // userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "Sys", "Pass123!", 1, 1, 2000, "Address", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
-        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem,suspensionRepo, notifier);
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem,suspensionRepo, notifier,transactionTemplate);
 
     }
 

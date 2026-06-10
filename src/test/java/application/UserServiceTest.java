@@ -74,10 +74,10 @@ class UserServiceTest {
         companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem, suspensionRepo,notifier);
+        adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem, suspensionRepo,notifier,transactionTemplate);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
-        companyService = new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier);
+        companyService = new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier,transactionTemplate);
     }
 
     private UserDTO createValidDTO() {

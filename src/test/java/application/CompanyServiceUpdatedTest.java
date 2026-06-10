@@ -94,7 +94,7 @@ class CompanyServiceUpdatedTest {
             return callback.doInTransaction(null);
         });
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier,transactionTemplate);
-        service = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier);
+        service = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier, transactionTemplate);
 
         UserDTO ownerDTO = new UserDTO("owner@test.com", "Owner", "Test", "Password123!", 1, 1, 2000, "City", "050-123-4567");
         userService.registerUser(null, ownerDTO);
@@ -126,7 +126,7 @@ class CompanyServiceUpdatedTest {
         companyRepo.store(company);
         paymentSystem = Mockito.mock(PaymentSystemProxy.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo,notifier);
+        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo,notifier, transactionTemplate);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
 

@@ -102,14 +102,14 @@ class AdminServiceTest {
         notifier = new VaadinNotifier();
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier,transactionTemplate);
 
-        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem,suspensionRepo,notifier);
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem,suspensionRepo,notifier,transactionTemplate);
 
         IActiveOrderRepo activeOrderRepo =new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo = new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth),userRepo,100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth),userRepo,transactionTemplate,100);
 
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo);
-        companyService = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate);
+        companyService = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier,transactionTemplate);
 
         UserDTO adminDTO = new UserDTO(ADMIN_EMAIL, "Admin", "User", PASSWORD, 1, 1, 1990, "City", "050-000-0000");
         UserDTO userDTO = new UserDTO(USER_EMAIL, "Regular", "User", PASSWORD, 1, 1, 1990, "City", "050-111-1111");
@@ -2051,7 +2051,7 @@ class AdminServiceTest {
 
         // Create AdminService that uses the mock notifier
         AdminService adminServiceWithMockNotifier =
-                new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem, suspensionRepo, notifierMock);
+                new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem, suspensionRepo, notifierMock,transactionTemplate);
 
 
 
@@ -2148,7 +2148,7 @@ class AdminServiceTest {
 
         // Create AdminService that uses the mock notifier
         AdminService adminServiceWithMockNotifier =
-                new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem, suspensionRepo, notifierMock);
+                new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem, suspensionRepo, notifierMock,transactionTemplate);
 
         /*
          * Buyer and owner are considered online:

@@ -118,12 +118,12 @@ class ActiveOrderServiceTest {
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
 
-        companyService = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier);
+        companyService = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier,transactionTemplate);
         companyService.createProductionCompany(validToken, companyId,
                 "test-company", "testC@company.com", "054-5556677", "leumi");
 
-        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo);
-        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo);
+        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate);
+        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate);
 
         Response<Integer> r = companyEventService.createEvent(
                 validToken,
@@ -182,6 +182,7 @@ class ActiveOrderServiceTest {
                 notifier,
                 preExpirationScheduler,
                 userRepo,
+                transactionTemplate,
                 capacity
         );
     }
@@ -4437,6 +4438,7 @@ class ActiveOrderServiceTest {
                 notifierMock,
                 schedulerWithMockNotifier,
                 userRepo,
+                transactionTemplate,
                 capacity
         );
 

@@ -15,6 +15,7 @@ import domain.user.IUserRepo;
 import domain.user.Member;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -39,11 +40,12 @@ public class EventCompanyManageService {
     private final INotifier notifier;
     private final IUserRepo userRepo;
     AtomicInteger ticketIdGenerator = new AtomicInteger(1);
+    private final TransactionTemplate transactionTemplate;
 
 
 
     @Autowired
-    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo,INotifier notifier, IUserRepo userRepo) {
+    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo,INotifier notifier, IUserRepo userRepo,TransactionTemplate transactionTemplate) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;
         this.auth = auth;
@@ -52,6 +54,7 @@ public class EventCompanyManageService {
         this.suspensionRepo = suspensionRepo;
         this.notifier = notifier;
         this.userRepo = userRepo;
+        this.transactionTemplate = transactionTemplate;
     }
 
     public Response<Boolean> DefineVenueAndSeatingMap(String token, Integer eventId, ElementPositionDTO stage,
@@ -1044,37 +1047,44 @@ public class EventCompanyManageService {
     }
      // Helper method to send a real-time notification or save it as delayed if the user is offline.
     private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
-        return RetryHelper.executeWithRetry(() -> {
-            try {
-                Member member = userRepo.findUserByEmail(userIdentifier);
+        boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
 
-                if (member == null) {
-                    logger.warning("User not found for identifier: " + userIdentifier);
-                    return new Response<>(null, "User not found");
-                }
+        if (isDelivered) {
+            return new Response<>(null, "Notification sent successfully");
+        }
 
-                boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
+        logger.info("User is offline. Saving delayed notification for: " + userIdentifier);
+        return saveDelayedNotificationWithRetry(userIdentifier, notifyDTO);
+    }
+    private Response<Void> saveDelayedNotificationWithRetry(String userIdentifier, NotifyDTO notifyDTO) {
+        return RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+                    try {
+                        Member member = userRepo.findUserByEmail(userIdentifier);
 
-                if (!isDelivered) {
-                    DelayedNotification delayedNotification = new DelayedNotification(notifyDTO.getType(),notifyDTO.getPayload());
-                    member.addDelayedNotification(delayedNotification);
-                    userRepo.store(member);
+                        if (member == null) {
+                            logger.warning("User not found for identifier: " + userIdentifier);
+                            return new Response<>(null, "User not found");
+                        }
+                            DelayedNotification delayedNotification = new DelayedNotification(notifyDTO.getType(),notifyDTO.getPayload());
+                            member.addDelayedNotification(delayedNotification);
+                            userRepo.store(member);
 
-                    logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
-                    return new Response<>(null, "Notification saved as delayed");
-                }
+                            logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
+                            return new Response<>(null, "Notification saved as delayed");
 
-                return new Response<>(null, "Notification sent successfully");
+                    } catch (OptimisticLockingFailureException e) {
+                        status.setRollbackOnly();
+                        throw e;
 
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
+                    } catch (Exception e) {
+                        status.setRollbackOnly();
+                        logger.warning("Failed to send or save notification for "
+                                + userIdentifier + ": " + e.getMessage());
 
-            } catch (Exception e) {
-                logger.warning("Failed to send or save notification for "
-                        + userIdentifier + ": " + e.getMessage());
-
-                return new Response<>(null, "Failed to send or save notification");
-            }
-        });
+                        return new Response<>(null, "Failed to send or save notification");
+                    }
+                })
+        );
     }
 }

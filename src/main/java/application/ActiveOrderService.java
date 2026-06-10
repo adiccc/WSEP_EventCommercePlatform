@@ -25,6 +25,7 @@ import infrastructure.VaadinNotifier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 
@@ -55,7 +56,7 @@ public class ActiveOrderService {
     private final PreExpirationNotificationScheduler preExpirationScheduler;
     private final int capacity;
     private final ScheduledExecutorService cleanupScheduler;
-
+    private final TransactionTemplate transactionTemplate;
     @Autowired
     public ActiveOrderService(
             IAuth auth,
@@ -69,6 +70,7 @@ public class ActiveOrderService {
             INotifier notifier,
             PreExpirationNotificationScheduler preExpirationScheduler,
             IUserRepo userRepo,
+            TransactionTemplate transactionTemplate,
             @Value("${active-order.capacity:20}") int capacity) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
@@ -97,6 +99,7 @@ public class ActiveOrderService {
                     }
                 },
                 30, 30, TimeUnit.SECONDS);
+        this.transactionTemplate = transactionTemplate;
     }
 
     public int getCapacity() {
@@ -1287,38 +1290,45 @@ public class ActiveOrderService {
      // Helper method to send a real-time notification or save it as delayed if the
     // user is offline.
     private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
-        return RetryHelper.executeWithRetry(() -> {
-            try {
-                Member member = userRepo.findUserByEmail(userIdentifier);
+        boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
 
-                if (member == null) {
-                    logger.warning("User not found for identifier: " + userIdentifier);
-                    return new Response<>(null, "User not found");
-                }
+        if (isDelivered) {
+            return new Response<>(null, "Notification sent successfully");
+        }
+        logger.info("User is offline. Saving delayed notification for: " + userIdentifier);
+        return saveDelayedNotificationWithRetry(userIdentifier, notifyDTO);
+    }
+    private Response<Void> saveDelayedNotificationWithRetry(String userIdentifier, NotifyDTO notifyDTO) {
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
+                try {
+                    Member member = userRepo.findUserByEmail(userIdentifier);
 
-                boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
+                    if (member == null) {
+                        logger.warning("User not found for identifier: " + userIdentifier);
+                        return new Response<>(null, "User not found");
+                    }
 
-                if (!isDelivered) {
                     DelayedNotification delayedNotification = new DelayedNotification(notifyDTO.getType(), notifyDTO.getPayload());
                     member.addDelayedNotification(delayedNotification);
                     userRepo.store(member);
 
                     logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
                     return new Response<>(null, "Notification saved as delayed");
+
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.warning("Failed to send or save notification for "
+                            + userIdentifier + ": " + e.getMessage());
+
+                    return new Response<>(null, "Failed to send or save notification");
                 }
-
-                return new Response<>(null, "Notification sent successfully");
-
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-
-            } catch (Exception e) {
-                logger.warning("Failed to send or save notification for "
-                        + userIdentifier + ": " + e.getMessage());
-
-                return new Response<>(null, "Failed to send or save notification");
-            }
-        });
+            })
+        );
     }
     private void notifyTokenExpired(String token) {
         try {
