@@ -778,8 +778,7 @@ public class ActiveOrderService {
                             NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId()
                                     + " in event " + event.getId() + " because ticket issuance failed", event.getId(),
                                     null);
-                            notifier.notifyUser(auth.getUserIdentifier(token).getValue(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
-                        } catch (Exception e) {
+                            sendOrSaveNotification(auth.getUserIdentifier(token).getValue(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));                        } catch (Exception e) {
                             logger.log(Level.WARNING,
                                     "Failed to notify user about successful refund: " + e.getMessage());
                         }
