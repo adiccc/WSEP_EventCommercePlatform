@@ -98,62 +98,62 @@ public class UserService {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.info("Registration attempt started for email: " + dto.getEmail());
-                if (activeIdentifier != null && !activeIdentifier.isBlank()) {
-                    boolean active = auth.isLoggedIn(activeIdentifier).getValue();
-                    if (active) { //in member state
-                        logger.warning("Registration failed: Active logged-in user attempted to register (Token: " + activeIdentifier + ")");
-                        return Response.error("Can't register to the system at member state, must be a guest.");
-                    }
+            if (activeIdentifier != null && !activeIdentifier.isBlank()) {
+                boolean active = auth.isLoggedIn(activeIdentifier).getValue();
+                if (active) { //in member state
+                    logger.warning("Registration failed: Active logged-in user attempted to register (Token: " + activeIdentifier + ")");
+                    return Response.error("Can't register to the system at member state, must be a guest.");
                 }
-                String email = dto.getEmail();
-                final LocalDate birthDate;
-                try {
-                    birthDate = LocalDate.of(dto.getYear(), dto.getMonth(), dto.getDay());
-                } catch (DateTimeException e) {
-                    logger.warning("Registration failed for " + email + ": Invalid date format");
-                    return Response.error("Invalid format date");
-                }
-                if (birthDate.isAfter(LocalDate.now())) {
-                    logger.warning("Registration failed for " + email + ": Future birth date provided");
-                    return Response.error("birth date cannot be after current date");
-                }
-                String mailRegex = "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$";
-                Pattern emailPattern = Pattern.compile(mailRegex);
-                Matcher emailMatcher = emailPattern.matcher(email);
-                if (!emailMatcher.matches()) {
-                    logger.warning("Registration failed: Invalid email format (" + email + ")");
-                    return Response.error("Invalid email format");
-                }
-                if (dto.getFirstName() == null || dto.getFirstName().isBlank()) {
-                    logger.warning("Registration failed for " + email + ": First name is empty");
-                    return Response.error("First name cannot be empty");
-                }
-                if (dto.getLastName() == null || dto.getLastName().isBlank()) {
-                    logger.warning("Registration failed for " + email + ": Last name is empty");
-                    return Response.error("Last name cannot be empty");
-                }
-                if (dto.getPassword() == null || dto.getPassword().isBlank()) {
-                    logger.warning("Registration failed for " + email + ": Password is empty");
-                    return Response.error("Password cannot be empty");
-                }
-                if (dto.getAddress() == null || dto.getAddress().isBlank()) {
-                    logger.warning("Registration failed for " + email + ": Address is empty");
-                    return Response.error("Address cannot be null");
-                }
-                String phoneRegex = "^[0-9]{3}-[0-9]{3}-[0-9]{4}$";
-                Pattern phonePattern = Pattern.compile(phoneRegex);
-                Matcher phoneMatcher = phonePattern.matcher(dto.getPhone());
-                if (!phoneMatcher.matches()) {
-                    logger.warning("Registration failed for " + email + ": Invalid phone format");
-                    return Response.error("Invalid phone format");
-                }
+            }
+            String email = dto.getEmail();
+            final LocalDate birthDate;
+            try {
+                birthDate = LocalDate.of(dto.getYear(), dto.getMonth(), dto.getDay());
+            } catch (DateTimeException e) {
+                logger.warning("Registration failed for " + email + ": Invalid date format");
+                return Response.error("Invalid format date");
+            }
+            if (birthDate.isAfter(LocalDate.now())) {
+                logger.warning("Registration failed for " + email + ": Future birth date provided");
+                return Response.error("birth date cannot be after current date");
+            }
+            String mailRegex = "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$";
+            Pattern emailPattern = Pattern.compile(mailRegex);
+            Matcher emailMatcher = emailPattern.matcher(email);
+            if (!emailMatcher.matches()) {
+                logger.warning("Registration failed: Invalid email format (" + email + ")");
+                return Response.error("Invalid email format");
+            }
+            if (dto.getFirstName() == null || dto.getFirstName().isBlank()) {
+                logger.warning("Registration failed for " + email + ": First name is empty");
+                return Response.error("First name cannot be empty");
+            }
+            if (dto.getLastName() == null || dto.getLastName().isBlank()) {
+                logger.warning("Registration failed for " + email + ": Last name is empty");
+                return Response.error("Last name cannot be empty");
+            }
+            if (dto.getPassword() == null || dto.getPassword().isBlank()) {
+                logger.warning("Registration failed for " + email + ": Password is empty");
+                return Response.error("Password cannot be empty");
+            }
+            if (dto.getAddress() == null || dto.getAddress().isBlank()) {
+                logger.warning("Registration failed for " + email + ": Address is empty");
+                return Response.error("Address cannot be null");
+            }
+            String phoneRegex = "^[0-9]{3}-[0-9]{3}-[0-9]{4}$";
+            Pattern phonePattern = Pattern.compile(phoneRegex);
+            Matcher phoneMatcher = phonePattern.matcher(dto.getPhone());
+            if (!phoneMatcher.matches()) {
+                logger.warning("Registration failed for " + email + ": Invalid phone format");
+                return Response.error("Invalid phone format");
+            }
             String encryptedPassword = passwordEncoder.encodePassword(dto.getPassword());
             return transactionTemplate.execute(status -> {
-                    try {
-                        if (email != null && userRepo.existsUser(email)) {
-                            logger.warning("Registration failed: User with email " + email + " already exists");
-                            return Response.error("User " + email + " already exists");
-                        }
+                try {
+                    if (email != null && userRepo.existsUser(email)) {
+                        logger.warning("Registration failed: User with email " + email + " already exists");
+                        return Response.error("User " + email + " already exists");
+                    }
                     Member member = new Member(
                             email,
                             encryptedPassword,
