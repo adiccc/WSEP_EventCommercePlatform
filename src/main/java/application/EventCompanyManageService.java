@@ -10,8 +10,7 @@ import domain.policy.DiscountPolicyType;
 import domain.policy.PurchasePolicyType;
 import domain.event.*;
 import Exception.OptimisticLockingFailureException;
-import domain.user.IUserRepo;
-import domain.user.Member;
+import domain.user.*;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -1057,7 +1056,8 @@ public class EventCompanyManageService {
                 boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
 
                 if (!isDelivered) {
-                    member.addDelayedNotification(notifyDTO);
+                    DelayedNotification delayedNotification = new DelayedNotification(notifyDTO.getType(),notifyDTO.getPayload());
+                    member.addDelayedNotification(delayedNotification);
                     userRepo.store(member);
 
                     logger.info("Delayed notification saved successfully for: " + member.getIdentifier());

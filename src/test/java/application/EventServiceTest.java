@@ -22,6 +22,8 @@ import infrastructure.inMemory.UserRepo;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.mockito.Mockito;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -30,6 +32,9 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class EventServiceTest {
     private final int company1 = 1;
@@ -54,6 +59,8 @@ class EventServiceTest {
     private List<StandingZoneDTO> standingZones;
     private List<SeatingZoneDTO> seatingZones;
     private String GUEST_TOKEN;
+    private TransactionTemplate transactionTemplate;
+
     @BeforeEach
     void setUp() {
         LoggerSetup.setup();
@@ -66,10 +73,16 @@ class EventServiceTest {
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         suspensionRepo=new SuspensionRepoImpl();
         notifier = new VaadinNotifier();
+        transactionTemplate = mock(TransactionTemplate.class);
+
+        when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
         eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo);
         service = new EventService(auth, eventRepo,notifier);
 
-        userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier);
+        userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier,transactionTemplate);
         UserDTO userDTO = new UserDTO("user1@test.com","test1","t","mytest",1,1,2016,"user test address","054-555-6677");
         userService.registerUser(validToken,userDTO);
         validToken=userService.login("user1@test.com","mytest").getValue();
@@ -664,7 +677,7 @@ class EventServiceTest {
     @Test
     void GivenRealExpiredToken_WhenSearchEvents_ThenTokenExpiredNotificationSent() throws InterruptedException {
         // Arrange: Create a local UserService since it's not a class field
-        UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier);
+        UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier,transactionTemplate);
 
         String email = "expired_search@test.com";
         userService.registerUser(null, new UserDTO(

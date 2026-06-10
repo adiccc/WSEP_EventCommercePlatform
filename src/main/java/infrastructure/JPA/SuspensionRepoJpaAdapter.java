@@ -3,9 +3,11 @@ package infrastructure.JPA;
 import domain.Suspension.ISuspensionRepo;
 import domain.Suspension.Suspension;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @Repository
 @Profile("suspension-db")
@@ -19,7 +21,8 @@ public class SuspensionRepoJpaAdapter implements ISuspensionRepo {
 
     @Override
     public Suspension findById(Long suspensionId) {
-        return suspensionJpaRepository.findById(suspensionId).orElse(null);
+        return suspensionJpaRepository.findById(suspensionId)
+                .orElseThrow(() -> new NoSuchElementException("No suspension found with suspension id " + suspensionId));
     }
 
     @Override
@@ -29,7 +32,12 @@ public class SuspensionRepoJpaAdapter implements ISuspensionRepo {
 
     @Override
     public void store(Suspension suspension) {
-        suspensionJpaRepository.save(suspension);
+        try {
+            suspensionJpaRepository.save(suspension);
+        } catch (org.springframework.orm.ObjectOptimisticLockingFailureException e) {
+            throw new OptimisticLockingFailureException(
+                    "Suspension " + suspension.getSuspensionId() + " was modified concurrently");
+        }
     }
 
     @Override
@@ -46,8 +54,11 @@ public class SuspensionRepoJpaAdapter implements ISuspensionRepo {
 
     @Override
     public Suspension findLastSuspensionByUserId(Integer userId) {
-        return suspensionJpaRepository.findByUserIdOrderByStartTimeDesc(userId)
-                .stream()
+        List<Suspension> userSuspensions = suspensionJpaRepository.findByUserIdOrderByStartTimeDesc(userId);
+        if (userSuspensions.isEmpty()) {
+            throw new NoSuchElementException("No suspension found with user id " + userId);
+        }
+        return userSuspensions.stream()
                 .findFirst()
                 .orElse(null);
     }

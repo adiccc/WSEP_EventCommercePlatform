@@ -9,10 +9,12 @@ import domain.user.*;
 import Exception.OptimisticLockingFailureException;
 import domain.webQueue.WebQueue;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.web.OffsetScrollPositionHandlerMethodArgumentResolver;
 import org.springframework.stereotype.Service;
-
+import org.springframework.transaction.support.TransactionTemplate;
 import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -26,15 +28,17 @@ public class UserService {
     private final IPasswordEncoder passwordEncoder;
     private final IUserRepo userRepo;
     private final INotifier notifier;
+    private final TransactionTemplate transactionTemplate;
 
     @Autowired
     public UserService(TokenService tokenService, IAuth auth, IUserRepo userRepo,
-                       IPasswordEncoder passwordEncoder, INotifier notifier) {
+                       IPasswordEncoder passwordEncoder, INotifier notifier, TransactionTemplate transactionTemplate) {
         this.tokenService = tokenService;
         this.auth = auth;
         this.userRepo = userRepo;
         this.passwordEncoder = passwordEncoder;
         this.notifier = notifier;
+        this.transactionTemplate = transactionTemplate;
     }
 
     // first call when a user opens the application
@@ -94,7 +98,6 @@ public class UserService {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.info("Registration attempt started for email: " + dto.getEmail());
-            try {
                 if (activeIdentifier != null && !activeIdentifier.isBlank()) {
                     boolean active = auth.isLoggedIn(activeIdentifier).getValue();
                     if (active) { //in member state
@@ -103,11 +106,7 @@ public class UserService {
                     }
                 }
                 String email = dto.getEmail();
-                if (email != null && userRepo.existsUser(email)) {
-                    logger.warning("Registration failed: User with email " + email + " already exists");
-                    return Response.error("User " + email + " already exists");
-                }
-                LocalDate birthDate = null;
+                final LocalDate birthDate;
                 try {
                     birthDate = LocalDate.of(dto.getYear(), dto.getMonth(), dto.getDay());
                 } catch (DateTimeException e) {
@@ -148,25 +147,34 @@ public class UserService {
                     logger.warning("Registration failed for " + email + ": Invalid phone format");
                     return Response.error("Invalid phone format");
                 }
-                String encryptedPassword = passwordEncoder.encodePassword(dto.getPassword());
-                Member member = new Member(
-                        email,
-                        encryptedPassword,
-                        dto.getFirstName(),
-                        dto.getLastName(),
-                        dto.getPhone(),
-                        birthDate,
-                        dto.getAddress(),
-                        ActivationStatus.ACTIVE);
-                userRepo.store(member);
-                logger.info("Registration successful for email: " + email);
-                return Response.ok(true);
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Registration failed due to unexpected server error for email " + dto.getEmail() + ". Error: " + e.getMessage());
-                return Response.error(e.getMessage());
-            }
+            String encryptedPassword = passwordEncoder.encodePassword(dto.getPassword());
+            return transactionTemplate.execute(status -> {
+                    try {
+                        if (email != null && userRepo.existsUser(email)) {
+                            logger.warning("Registration failed: User with email " + email + " already exists");
+                            return Response.error("User " + email + " already exists");
+                        }
+                    Member member = new Member(
+                            email,
+                            encryptedPassword,
+                            dto.getFirstName(),
+                            dto.getLastName(),
+                            dto.getPhone(),
+                            birthDate,
+                            dto.getAddress(),
+                            ActivationStatus.ACTIVE);
+                    userRepo.store(member);
+                    logger.info("Registration successful for email: " + email);
+                    return Response.ok(true);
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Registration failed due to unexpected server error for email " + dto.getEmail() + ". Error: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                }
+            });
         });
     }
 
@@ -291,17 +299,27 @@ public class UserService {
                 logger.warning("Failed to deliver notifications: Email is empty or null");
                 return new Response<>(null, "Invalid email address");
             }
-            try {
-                Member member = userRepo.findUserByEmail(userEmail);
-                List<NotifyDTO> allDelayedNotification = member.getDelayedNotifications();
-                logger.info("deliverDelayedNotifications successful for email: " + userEmail);
-                return new Response<>(allDelayedNotification, "Successfully processed delayed notifications");
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("deliverDelayedNotifications failed: " + e.getMessage());
-                return new Response<>(null, "Server error during deliverDelayedNotifications: " + e.getMessage());
-            }
+            return transactionTemplate.execute(status -> {
+                try {
+                    Member member = userRepo.findUserByEmail(userEmail);
+                    if (member == null) {
+                        return new Response<>(null, "User not found");
+                    }
+                    List<NotifyDTO> allDelayedNotification = new ArrayList<>();
+                    for(DelayedNotification notification : member.getDelayedNotifications()){
+                        allDelayedNotification.add(new NotifyDTO(notification));
+                    }
+                    logger.info("deliverDelayedNotifications successful for email: " + userEmail);
+                    return new Response<>(allDelayedNotification, "Successfully processed delayed notifications");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    logger.severe("deliverDelayedNotifications failed: " + e.getMessage());
+                    status.setRollbackOnly();
+                    return new Response<>(null, "Server error during deliverDelayedNotifications: " + e.getMessage());
+                }
+            });
         });
     }
 
@@ -312,21 +330,25 @@ public class UserService {
                 logger.warning("Failed to clean delayed notifications: Email is empty or null");
                 return new Response<>(false, "Invalid email address");
             }
-            try {
-                Member member = userRepo.findUserByEmail(userEmail);
-                if (member != null) {
-                    member.clearDelayedNotifications();
-                    userRepo.store(member);
-                    logger.info("deliverDelayedNotifications successful for email: " + userEmail);
-                    return new Response<>(true, "Successfully cleaned delayed notifications");
+            return transactionTemplate.execute(status -> {
+                try {
+                    Member member = userRepo.findUserByEmail(userEmail);
+                    if (member != null) {
+                        member.clearDelayedNotifications();
+                        userRepo.store(member);
+                        logger.info("deliverDelayedNotifications successful for email: " + userEmail);
+                        return new Response<>(true, "Successfully cleaned delayed notifications");
+                    }
+                    return new Response<>(false, "User not found");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("cleanDelayedNotifications failed: " + e.getMessage());
+                    return new Response<>(false, "Server error during cleanDelayedNotifications: " + e.getMessage());
                 }
-                return new Response<>(false, "User not found");
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("cleanDelayedNotifications failed: " + e.getMessage());
-                return new Response<>(false, "Server error during cleanDelayedNotifications: " + e.getMessage());
-            }
+            });
         });
     }
 

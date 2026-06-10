@@ -18,6 +18,7 @@ import domain.event.Order;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
+import domain.user.DelayedNotification;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import infrastructure.VaadinNotifier;
@@ -1298,7 +1299,8 @@ public class ActiveOrderService {
                 boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
 
                 if (!isDelivered) {
-                    member.addDelayedNotification(notifyDTO);
+                    DelayedNotification delayedNotification = new DelayedNotification(notifyDTO.getType(), notifyDTO.getPayload());
+                    member.addDelayedNotification(delayedNotification);
                     userRepo.store(member);
 
                     logger.info("Delayed notification saved successfully for: " + member.getIdentifier());

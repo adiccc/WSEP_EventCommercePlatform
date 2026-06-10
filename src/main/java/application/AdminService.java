@@ -8,6 +8,7 @@ import domain.company.Permissions;
 import domain.dto.SuspensionDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
+import domain.user.DelayedNotification;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import domain.event.Order;
@@ -657,7 +658,8 @@ public class AdminService {
                 boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
 
                 if (!isDelivered) {
-                    member.addDelayedNotification(notifyDTO);
+                    DelayedNotification delayedNotification = new DelayedNotification(notifyDTO.getType(),notifyDTO.getPayload());
+                    member.addDelayedNotification(delayedNotification);
                     userRepo.store(member);
 
                     logger.info("Delayed notification saved successfully for: " + member.getIdentifier());

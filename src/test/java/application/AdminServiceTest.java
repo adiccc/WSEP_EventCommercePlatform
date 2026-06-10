@@ -15,6 +15,7 @@ import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.OrderStatus;
 import domain.lottery.ILotteryRepo;
+import domain.user.DelayedNotification;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import domain.webQueue.WebQueue;
@@ -28,6 +29,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import domain.event.Order;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.*;
 
@@ -37,6 +40,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class AdminServiceTest {
 
@@ -63,6 +69,7 @@ class AdminServiceTest {
     private INotifier notifier;
     private IAuth auth;
     private TokenService tokenService;
+    private TransactionTemplate transactionTemplate;
 
     private static final String ADMIN_EMAIL = "admin@bgu.ac.il";
     private static final String USER_EMAIL = "user@bgu.ac.il";
@@ -84,11 +91,16 @@ class AdminServiceTest {
         suspensionRepo = new SuspensionRepoImpl();
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
+        transactionTemplate = mock(TransactionTemplate.class);
 
+        when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         auth = new Auth(tokenService, Set.of(ADMIN_EMAIL));
         notifier = new VaadinNotifier();
-        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
+        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier,transactionTemplate);
 
         adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem,suspensionRepo,notifier);
 
@@ -355,7 +367,7 @@ class AdminServiceTest {
 
             // Assert: buyer refund notification was saved as delayed
             Member buyer = userRepo.findUserByEmail(buyerIdentifier);
-            List<NotifyDTO> delayedNotifications = buyer.getDelayedNotifications();
+            List<DelayedNotification> delayedNotifications = buyer.getDelayedNotifications();
 
             assertTrue(delayedNotifications.stream()
                             .anyMatch(n ->
@@ -583,7 +595,7 @@ class AdminServiceTest {
 
             // Assert: buyer refund-failure notification was saved as delayed
             Member buyer = userRepo.findUserByEmail(buyerIdentifier);
-            List<NotifyDTO> delayedNotifications = buyer.getDelayedNotifications();
+            List<DelayedNotification> delayedNotifications = buyer.getDelayedNotifications();
 
             assertTrue(delayedNotifications.stream()
                             .anyMatch(n ->
@@ -2074,7 +2086,7 @@ class AdminServiceTest {
 
         // Assert: buyer refund notification was saved as delayed
         Member buyer = userRepo.findUserByEmail(buyerIdentifier);
-        List<NotifyDTO> delayedNotifications = buyer.getDelayedNotifications();
+        List<DelayedNotification> delayedNotifications = buyer.getDelayedNotifications();
 
         assertTrue(delayedNotifications.stream()
                         .anyMatch(n ->

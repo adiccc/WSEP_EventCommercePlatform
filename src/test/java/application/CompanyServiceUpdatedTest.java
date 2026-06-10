@@ -28,6 +28,8 @@ import org.junit.jupiter.api.Test;
 
 import domain.dataType.PermissionType;
 import org.mockito.Mockito;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.util.EnumSet;
@@ -39,6 +41,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class CompanyServiceUpdatedTest {
 
@@ -68,6 +73,7 @@ class CompanyServiceUpdatedTest {
     private IEventRepo eventRepo;
     private INotifier notifier;
     private TokenService tokenService;
+    private TransactionTemplate transactionTemplate;
 
 
     @BeforeEach
@@ -81,7 +87,13 @@ class CompanyServiceUpdatedTest {
         auth = new Auth(tokenService, Set.of(adminEmail));
         companyRepo = new CompanyRepoImpl();
         notifier = new VaadinNotifier();
-        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
+        transactionTemplate = mock(TransactionTemplate.class);
+
+        when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier,transactionTemplate);
         service = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier);
 
         UserDTO ownerDTO = new UserDTO("owner@test.com", "Owner", "Test", "Password123!", 1, 1, 2000, "City", "050-123-4567");
@@ -544,6 +556,7 @@ class CompanyServiceUpdatedTest {
                 EnumSet.of(PermissionType.DELETE_EVENT),
                 updated.getCompanyPermission().getCompanyTree().get(MANAGER_ID).getAllPermissions());
     }
+    @Test
     void GivenInvalidEmail_WhenCreateProductionCompany_ThenReturnError() {
         Response<Company> response = service.createProductionCompany(
                 OWNER_TOKEN, 96, "BadEmailCo", "not-an-email", "050-000-0004", "bank-w");

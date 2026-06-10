@@ -1,6 +1,5 @@
 package domain.user;
 
-import DTO.NotifyDTO;
 import domain.activeOrder.ActiveOrder;
 import domain.dto.UserDTO;
 import jakarta.persistence.*;
@@ -23,13 +22,16 @@ public class Member extends User{
     protected String phoneNumber;
     protected LocalDate dateOfBirth;
     protected String address;
+
     @Enumerated(EnumType.STRING)
     protected ActivationStatus activationStatus;
+
     @Version
     private long version;
+
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JoinColumn(name = "member_id")
-    private List<NotifyDTO> delayedNotifications = new ArrayList<>();
+    private List<DelayedNotification> delayedNotifications = new ArrayList<>();
 
     protected Member() {
         super();
@@ -47,7 +49,7 @@ public class Member extends User{
         this.activationStatus=activationStatus;
         this.delayedNotifications = new ArrayList<>();
     }
-    public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address, List<NotifyDTO> delayedNotifications) {
+    public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address, List<DelayedNotification> delayedNotifications) {
         super(email);
         this.password = password;
         this.firstName = firstName;
@@ -57,7 +59,7 @@ public class Member extends User{
         this.address = address;
         this.version = 0;
         this.activationStatus=ActivationStatus.ACTIVE;
-        this.delayedNotifications =delayedNotifications != null ? delayedNotifications : new ArrayList<>();
+        this.delayedNotifications =  delayedNotifications!=null ? delayedNotifications : new ArrayList<>();
     }
     public Member(Member member) {
         super(member);
@@ -115,11 +117,11 @@ public class Member extends User{
                 this.dateOfBirth.getDayOfMonth(), this.dateOfBirth.getMonthValue(), this.dateOfBirth.getYear(),
                 this.address, this.phoneNumber);
     }
-    public void addDelayedNotification(NotifyDTO notification) {
+    public void addDelayedNotification(DelayedNotification notification) {
         this.delayedNotifications.add(notification);
     }
 
-    public List<NotifyDTO> getDelayedNotifications() {
+    public List<DelayedNotification> getDelayedNotifications() {
         return this.delayedNotifications;
     }
 
