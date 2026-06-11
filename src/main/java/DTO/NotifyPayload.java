@@ -1,13 +1,15 @@
 package DTO;
-
+import jakarta.persistence.Embeddable;
 import io.swagger.v3.oas.models.security.SecurityScheme;
-
+@Embeddable
 public class NotifyPayload {
     private String message;
     private Integer eventId;
     private Integer companyId;
-    //TODO:: ADD MORE FIELDS IF NEEDED
 
+    public NotifyPayload() {
+        // for JPA
+    }
     public NotifyPayload(String message, Integer eventId, Integer companyId) {
         this.message = message;
         this.eventId = eventId;

@@ -13,6 +13,7 @@ import domain.dto.LotteryDTO;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
+import domain.user.DelayedNotification;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import jakarta.annotation.PreDestroy;
@@ -522,6 +523,15 @@ public class LotteryService {
 
     // Helper method to send a real-time notification or save it as delayed if the user is offline.
     private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
+        boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
+        if (isDelivered) {
+            return new Response<>(null, "Notification sent successfully");
+        }
+        logger.info("User is offline. Proceeding to save delayed notification for: " + userIdentifier);
+        return saveDelayedNotificationWithRetry(userIdentifier, notifyDTO);
+    }
+
+    private Response<Void> saveDelayedNotificationWithRetry(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() ->
                     transactionTemplate.execute(status -> {
                         try {
@@ -530,12 +540,6 @@ public class LotteryService {
                             if (member == null) {
                                 logger.warning("User not found for identifier: " + userIdentifier);
                                 return new Response<>(null, "User not found");
-                            }
-
-                            boolean isDelivered = notifier.notifyUser(member.getIdentifier(), notifyDTO);
-
-                            if (isDelivered) {
-                                return new Response<>(null, "Notification sent successfully");
                             }
 
                             boolean alreadySaved = member.getDelayedNotifications().stream()
@@ -554,8 +558,8 @@ public class LotteryService {
 
                                 return new Response<>(null, "Notification already saved as delayed");
                             }
-
-                            member.addDelayedNotification(notifyDTO);
+                            DelayedNotification delayedNotification = new DelayedNotification(notifyDTO.getType(),notifyDTO.getPayload());
+                            member.addDelayedNotification(delayedNotification);
                             userRepo.store(member);
 
                             logger.info("Delayed notification saved successfully for: "
@@ -564,9 +568,11 @@ public class LotteryService {
                             return new Response<>(null, "Notification saved as delayed");
 
                         } catch (OptimisticLockingFailureException e) {
+                            status.setRollbackOnly();
                             throw e;
 
                         } catch (Exception e) {
+                            status.setRollbackOnly();
                             logger.warning("Failed to send or save notification for "
                                     + userIdentifier + ": " + e.getMessage());
 

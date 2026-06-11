@@ -1,12 +1,15 @@
 package domain.user;
 
+import jakarta.persistence.*;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-
+@MappedSuperclass
 public class User {
-
+    @Column(name = "identifier", unique = true, nullable = false)
     private String identifier;
+    @Transient
     private State state;
 
     public User(String identifier) {

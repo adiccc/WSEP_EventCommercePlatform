@@ -5,6 +5,7 @@ import Log.LoggerSetup;
 
 import java.util.*;
 
+import domain.user.DelayedNotification;
 import infrastructure.Auth;
 import infrastructure.Broadcaster;
 import infrastructure.PasswordEncoderUtil;
@@ -72,6 +73,7 @@ class ActiveOrderServiceTest {
 
     private UserService userService;
     private CompanyRepoImpl companyRepo;
+    private TransactionTemplate transactionTemplate;
 
     private final int companyId = 1;
     private final int capacity = 20;
@@ -81,11 +83,17 @@ class ActiveOrderServiceTest {
         LoggerSetup.setup();
         tokenService = new TokenService();
         userRepo = new UserRepo();
+        transactionTemplate = mock(TransactionTemplate.class);
+
+        when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         ISuspensionRepo suspensionRepo = new SuspensionRepoImpl();
         auth = new Auth(tokenService);
         notifier = Mockito.spy(new VaadinNotifier());
-        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
+        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier,transactionTemplate);
 
         userService.registerUser(
                 "",
@@ -110,12 +118,12 @@ class ActiveOrderServiceTest {
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
 
-        companyService = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier);
+        companyService = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier,transactionTemplate);
         companyService.createProductionCompany(validToken, companyId,
                 "test-company", "testC@company.com", "054-5556677", "leumi");
 
-        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo);
-        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo);
+        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate);
+        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate);
 
         Response<Integer> r = companyEventService.createEvent(
                 validToken,
@@ -151,13 +159,6 @@ class ActiveOrderServiceTest {
         companyEventService.DefineVenueAndSeatingMap(validToken, eventId, stage, entries, standingZones, seatingZones);
         companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId, stage, entries, standingZones, seatingZones);
 
-        TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
-
-        when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
-            TransactionCallback<?> callback = invocation.getArgument(0);
-            return callback.doInTransaction(null);
-        });
-
         lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,suspensionRepo,notifier,userRepo,transactionTemplate
         );
         lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo,suspensionRepo,notifier,userRepo,transactionTemplate
@@ -181,6 +182,7 @@ class ActiveOrderServiceTest {
                 notifier,
                 preExpirationScheduler,
                 userRepo,
+                transactionTemplate,
                 capacity
         );
     }
@@ -3319,7 +3321,7 @@ class ActiveOrderServiceTest {
 
     private long countSoldOutNotifications(Member member) {
         long count = 0;
-        for (NotifyDTO n : member.getDelayedNotifications()) {
+        for (DelayedNotification n : member.getDelayedNotifications()) {
             if (n.getPayload().getMessage().contains("is sold out")) {
                 count++;
             }
@@ -3328,9 +3330,9 @@ class ActiveOrderServiceTest {
     }
 
     private NotifyDTO firstSoldOutNotification(Member member) {
-        for (NotifyDTO n : member.getDelayedNotifications()) {
+        for (DelayedNotification n : member.getDelayedNotifications()) {
             if (n.getPayload().getMessage().contains("is sold out")) {
-                return n;
+                return new NotifyDTO(n);
             }
         }
         return null;
@@ -4436,6 +4438,7 @@ class ActiveOrderServiceTest {
                 notifierMock,
                 schedulerWithMockNotifier,
                 userRepo,
+                transactionTemplate,
                 capacity
         );
 

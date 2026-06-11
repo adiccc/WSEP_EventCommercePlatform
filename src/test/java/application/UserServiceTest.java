@@ -24,12 +24,17 @@ import infrastructure.inMemory.UserRepo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.*;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class UserServiceTest {
 
@@ -45,6 +50,7 @@ class UserServiceTest {
     private IEventRepo eventRepo;
     private String ADMIN_TOKEN;
     private INotifier notifier;
+    private TransactionTemplate transactionTemplate;
 
     @BeforeEach
     void setUp() {
@@ -58,14 +64,20 @@ class UserServiceTest {
         String adminEmail = "admin@admin.com";
         auth = new Auth(realTokenService, Set.of(adminEmail));
         notifier = new VaadinNotifier();
-        userService = new UserService(realTokenService, auth, userRepo, passwordEncoder,notifier);
+        transactionTemplate = mock(TransactionTemplate.class);
+
+        when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+        userService = new UserService(realTokenService, auth, userRepo, passwordEncoder,notifier,transactionTemplate);
         companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem, suspensionRepo,notifier);
+        adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem, suspensionRepo,notifier,transactionTemplate);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
-        companyService = new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier);
+        companyService = new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier,transactionTemplate);
     }
 
     private UserDTO createValidDTO() {
@@ -650,7 +662,7 @@ class UserServiceTest {
 
         assertEquals(2, userRepo.findUserByEmail(email).getDelayedNotifications().size());
 
-        Response<List<DTO.NotifyDTO>> getResponse = userService.getDelayedNotifications(email);
+        Response<List<NotifyDTO>> getResponse = userService.getDelayedNotifications(email);
 
         // Assert 1
         assertNotNull(getResponse.getValue());
@@ -684,7 +696,7 @@ class UserServiceTest {
         Response<String> loginResponse = userService.login(email, "Password123!");
         assertNotNull(loginResponse.getValue(), "Login should succeed");
 
-        Response<List<DTO.NotifyDTO>> getResponse = userService.getDelayedNotifications(email);
+        Response<List<NotifyDTO>> getResponse = userService.getDelayedNotifications(email);
         assertEquals(1, getResponse.getValue().size());
 
         Response<Boolean> cleanResponse = userService.cleanDelayedNotifications(email);

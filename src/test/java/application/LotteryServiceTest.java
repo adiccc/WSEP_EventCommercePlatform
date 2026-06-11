@@ -67,15 +67,22 @@ class LotteryServiceTest {
         private EventCompanyManageService eventCompanyManageService;
         private INotifier notifier;
         private UserService userService;
+        private TransactionTemplate transactionTemplate;
 
         @BeforeEach
         void setUp() {
                 LoggerSetup.setup();
                 userRepo = new UserRepo();
+                transactionTemplate = mock(TransactionTemplate.class);
+
+                when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+                        TransactionCallback<?> callback = invocation.getArgument(0);
+                        return callback.doInTransaction(null);
+                });
                 passwordEncoder = new PasswordEncoderUtil();
                 tokenService = new TokenService();
                 auth = new Auth(tokenService);
-                userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier);
+                userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier,transactionTemplate);
                 suspensionRepo = new SuspensionRepoImpl();
 
                 companyRepo = new CompanyRepoImpl();
@@ -85,18 +92,13 @@ class LotteryServiceTest {
                 IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
                 notifier = new VaadinNotifier();
 
-                userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier);
+                userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier,transactionTemplate);
                 CompanyService companyService = new CompanyService(auth, companyRepo, userRepo, suspensionRepo,
-                                notifier);
+                                notifier,transactionTemplate);
                 eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,
-                                suspensionRepo, notifier, userRepo);
+                                suspensionRepo, notifier, userRepo,transactionTemplate);
 
-                TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
 
-                when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
-                        TransactionCallback<?> callback = invocation.getArgument(0);
-                        return callback.doInTransaction(null);
-                });
 
                 lotteryService = new LotteryService(lotteryRepo, eventRepo, auth, companyRepo, suspensionRepo,
                                 notifier, userRepo,transactionTemplate);
@@ -788,7 +790,7 @@ class LotteryServiceTest {
 
                 int usersCount = 10;
 
-                UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier);
+                UserService userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier,transactionTemplate);
                 List<String> tokens = new ArrayList<>();
 
                 for (int i = 0; i < usersCount; i++) {
