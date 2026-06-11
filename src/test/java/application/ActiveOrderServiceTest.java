@@ -5,6 +5,7 @@ import Log.LoggerSetup;
 
 import java.util.*;
 
+import domain.user.NotificationStatus;
 import domain.user.UserNotification;
 import infrastructure.Auth;
 import infrastructure.Broadcaster;
@@ -1658,7 +1659,7 @@ class ActiveOrderServiceTest {
             assertEquals(concurrentEventId, confirmation.getPayload().getEventId().intValue());
 
             Member buyer = userRepo.findUserByEmail(buyerEmail);
-            assertEquals(0, buyer.getDelayedNotifications().size(),
+            assertEquals(0, buyer.getPendingNotifications().size(),
                     "Online buyer should not have the confirmation saved as delayed");
 
             Mockito.verify(notifier).notifyTab(
@@ -1849,9 +1850,14 @@ class ActiveOrderServiceTest {
             assertEquals(concurrentEventId, notification.getPayload().getEventId().intValue());
 
             Member buyer = userRepo.findUserByEmail(userEmail);
-            assertTrue(buyer.getDelayedNotifications().isEmpty(),
-                    "Online user should not have the notification saved as delayed");
+            assertFalse(buyer.getPendingNotifications().stream()
+                            .anyMatch(n -> n.getStatus() == NotificationStatus.PENDING),
+                    "Online user should not have any PENDING notifications");
 
+            assertTrue(buyer.getPendingNotifications().stream()
+                            .anyMatch(n -> n.getStatus() == NotificationStatus.DELIVERED
+                                    && n.getPayload().getMessage().contains("Refund processed")),
+                    "Online user should have the refund processed notification marked as DELIVERED");
             Mockito.verify(notifier).notifyUser(
                     Mockito.eq(userEmail),
                     Mockito.any(NotifyDTO.class)
@@ -1943,8 +1949,14 @@ class ActiveOrderServiceTest {
             assertEquals(concurrentEventId, notification.getPayload().getEventId().intValue());
 
             Member buyer = userRepo.findUserByEmail(userEmail);
-            assertTrue(buyer.getDelayedNotifications().isEmpty(),
-                    "Online user should not have the notification saved as delayed");
+            assertFalse(buyer.getPendingNotifications().stream()
+                            .anyMatch(n -> n.getStatus() == NotificationStatus.PENDING),
+                    "Online user should not have any PENDING notifications");
+
+            assertTrue(buyer.getPendingNotifications().stream()
+                            .anyMatch(n -> n.getStatus() == NotificationStatus.DELIVERED
+                                    && n.getPayload().getMessage().contains("Refund processed")),
+                    "Online user should have the refund notification marked as DELIVERED");
 
             Mockito.verify(notifier).notifyUser(
                     Mockito.eq(userEmail),
@@ -2041,8 +2053,14 @@ class ActiveOrderServiceTest {
             assertEquals(concurrentEventId, notification.getPayload().getEventId().intValue());
 
             Member buyer = userRepo.findUserByEmail(userEmail);
-            assertTrue(buyer.getDelayedNotifications().isEmpty(),
-                    "Online user should not have the notification saved as delayed");
+            assertFalse(buyer.getPendingNotifications().stream()
+                            .anyMatch(n -> n.getStatus() == NotificationStatus.PENDING),
+                    "Online user should not have any PENDING notifications");
+
+            assertTrue(buyer.getPendingNotifications().stream()
+                            .anyMatch(n -> n.getStatus() == NotificationStatus.DELIVERED
+                                    && n.getPayload().getMessage().contains("please contact support")),
+                    "Online user should have the refund-required notification marked as DELIVERED");
 
             Mockito.verify(notifier).notifyUser(
                     Mockito.eq(userEmail),
@@ -3320,7 +3338,7 @@ class ActiveOrderServiceTest {
 
     private long countSoldOutNotifications(Member member) {
         long count = 0;
-        for (UserNotification n : member.getDelayedNotifications()) {
+        for (UserNotification n : member.getPendingNotifications()) {
             if (n.getPayload().getMessage().contains("is sold out")) {
                 count++;
             }
@@ -3329,7 +3347,7 @@ class ActiveOrderServiceTest {
     }
 
     private NotifyDTO firstSoldOutNotification(Member member) {
-        for (UserNotification n : member.getDelayedNotifications()) {
+        for (UserNotification n : member.getPendingNotifications()) {
             if (n.getPayload().getMessage().contains("is sold out")) {
                 return new NotifyDTO(n);
             }
@@ -3564,7 +3582,7 @@ class ActiveOrderServiceTest {
 
         Member founder = userRepo.findUserByEmail("testuser1@gmail.com");
         assertFalse(
-                founder.getDelayedNotifications().stream()
+                founder.getPendingNotifications().stream()
                         .anyMatch(n -> n.getPayload().getMessage().toLowerCase().contains("sold out")),
                 "No sold-out notification should be sent when tickets are released back"
         );
@@ -3628,9 +3646,14 @@ class ActiveOrderServiceTest {
             assertEquals(soldOutEventId, received.get().getPayload().getEventId().intValue());
 
             Member founder = userRepo.findUserByEmail(founderEmail);
-            assertEquals(0, founder.getDelayedNotifications().size(),
-                    "Real-time delivery must not fall back to the delayed-notifications list");
+            assertFalse(founder.getPendingNotifications().stream()
+                            .anyMatch(n -> n.getStatus() == NotificationStatus.PENDING),
+                    "Real-time delivery must not leave any PENDING notifications");
 
+            assertTrue(founder.getPendingNotifications().stream()
+                            .anyMatch(n -> n.getStatus() == NotificationStatus.DELIVERED
+                                    && n.getPayload().getEventId() == soldOutEventId),
+                    "The delivered notification should exist in the DB with DELIVERED status");
             // Founder is also the buyer, so notifyUser fires for both the confirmation and the sold-out notification.
             Mockito.verify(notifier, Mockito.atLeastOnce()).notifyUser(
                     Mockito.eq(founderEmail),
@@ -3716,9 +3739,14 @@ class ActiveOrderServiceTest {
             assertEquals(soldOutEventId, notification.getPayload().getEventId().intValue());
 
             Member manager1 = userRepo.findUserByEmail(manager1Email);
-            assertEquals(0, manager1.getDelayedNotifications().size(),
-                    "Online manager should not have the notification saved as delayed");
+            assertFalse(manager1.getPendingNotifications().stream()
+                            .anyMatch(n -> n.getStatus() == NotificationStatus.PENDING),
+                    "Online manager should not have any PENDING notifications");
 
+            assertTrue(manager1.getPendingNotifications().stream()
+                            .anyMatch(n -> n.getStatus() == NotificationStatus.DELIVERED
+                                    && n.getPayload().getMessage().contains("sold out")),
+                    "Online manager should have the sold-out notification marked as DELIVERED");
             Mockito.verify(notifier).notifyUser(
                     Mockito.eq(manager1Email),
                     Mockito.any(NotifyDTO.class)
@@ -3820,13 +3848,17 @@ class ActiveOrderServiceTest {
             assertEquals(soldOutEventId, notification.getPayload().getEventId().intValue());
 
             Member manager1 = userRepo.findUserByEmail(manager1Email);
-            assertEquals(0, manager1.getDelayedNotifications().size(),
-                    "Online manager should not have the notification saved as delayed");
+            assertTrue(manager1.getPendingNotifications().stream()
+                            .anyMatch(n -> n.getStatus() == NotificationStatus.DELIVERED
+                                    && n.getPayload().getMessage().contains("sold out")),
+                    "Online manager should have the sold-out notification marked as DELIVERED");
 
             // Manager 2 (offline) -> delayed delivery
             Member manager2 = userRepo.findUserByEmail(manager2Email);
-            assertEquals(1, manager2.getDelayedNotifications().size(),
-                    "Offline manager should receive exactly one delayed notification");
+            assertEquals(1, manager2.getPendingNotifications().stream()
+                            .filter(n -> n.getStatus() == NotificationStatus.PENDING)
+                            .count(),
+                    "Offline manager should receive exactly one PENDING notification");
 
             Mockito.verify(notifier).notifyUser(
                     Mockito.eq(manager1Email),
@@ -4516,6 +4548,7 @@ class ActiveOrderServiceTest {
                         .anyMatch(notification ->
                                 notification.getType() == NotifyType.GENERAL_POPUP
                                         && notification.getPayload() != null
+                                        && notification.getPayload().getMessage() != null
                                         && notification.getPayload().getMessage().contains("Refund processed")
                                         && notification.getPayload().getEventId() != null
                                         && notification.getPayload().getEventId().intValue() == concurrentEventId
@@ -4523,7 +4556,13 @@ class ActiveOrderServiceTest {
                 "Online user should receive the refund notification in real time");
 
         Member buyer = userRepo.findUserByEmail(userEmail);
-        assertTrue(buyer.getDelayedNotifications().isEmpty(),
-                "Online user should not have the notification saved as delayed");
+        boolean hasPending = buyer.getPendingNotifications().stream()
+                .anyMatch(n -> n.getStatus() == NotificationStatus.PENDING);
+        assertFalse(hasPending, "Online user should not have any PENDING refund notifications");
+
+        boolean hasDelivered = buyer.getPendingNotifications().stream()
+                .anyMatch(n -> n.getStatus() == NotificationStatus.DELIVERED
+                        && n.getPayload().getMessage().contains("Refund processed"));
+        assertTrue(hasDelivered, "Online user should have the refund processed notification marked as DELIVERED");
     }
 }

@@ -15,6 +15,7 @@ import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.OrderStatus;
 import domain.lottery.ILotteryRepo;
+import domain.user.NotificationStatus;
 import domain.user.UserNotification;
 import domain.user.IUserRepo;
 import domain.user.Member;
@@ -309,13 +310,14 @@ class AdminServiceTest {
 
             Member buyer = userRepo.findUserByEmail(buyerIdentifier);
 
-            assertFalse(buyer.getPendingNotifications().stream()
+            assertTrue(buyer.getPendingNotifications().stream()
                             .anyMatch(n ->
                                     n.getType() == NotifyType.GENERAL_POPUP
                                             && n.getPayload() != null
                                             && n.getPayload().getMessage().contains("Refund processed")
+                                            && n.getStatus() == NotificationStatus.DELIVERED
                             ),
-                    "Online buyer should not have the refund processed notification saved as delayed");
+                    "Online buyer should have the refund processed notification saved and marked as DELIVERED");
 
             // Assert: owner notification was also delivered in real time
             assertTrue(ownerLatch.await(2000, TimeUnit.MILLISECONDS), "Owner notification timeout");
@@ -535,14 +537,14 @@ class AdminServiceTest {
 
             Member buyer = userRepo.findUserByEmail(buyerIdentifier);
 
-            assertFalse(buyer.getPendingNotifications().stream()
+            assertTrue(buyer.getPendingNotifications().stream()
                             .anyMatch(n ->
                                     n.getType() == NotifyType.GENERAL_POPUP
                                             && n.getPayload() != null
                                             && n.getPayload().getMessage().contains("Refund failed")
+                                            && n.getStatus() == NotificationStatus.DELIVERED
                             ),
-                    "Online buyer should not have the refund failure notification saved as delayed");
-
+                    "Online buyer should have the refund processed notification saved and marked as DELIVERED");
             // Assert: owner notification was also delivered in real time
             assertTrue(ownerLatch.await(2000, TimeUnit.MILLISECONDS), "Owner notification timeout");
             assertNotNull(ownerNotification.get());
@@ -2191,14 +2193,14 @@ class AdminServiceTest {
         // Assert: online buyer should not have refund notification saved as delayed
         Member buyer = userRepo.findUserByEmail(buyerIdentifier);
 
-        assertFalse(buyer.getPendingNotifications().stream()
+        assertTrue(buyer.getPendingNotifications().stream()
                         .anyMatch(n ->
                                 n.getType() == NotifyType.GENERAL_POPUP
                                         && n.getPayload() != null
                                         && n.getPayload().getMessage().contains("Refund processed")
+                                        && n.getStatus() == NotificationStatus.DELIVERED
                         ),
-                "Online buyer should not have the refund processed notification saved as delayed");
-
+                "Online buyer should have the refund processed notification saved and marked as DELIVERED");
         // Assert: owner notification was also sent through notifier in real time
         org.mockito.ArgumentCaptor<NotifyDTO> ownerNotificationCaptor =
                 org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);

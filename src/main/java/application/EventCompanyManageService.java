@@ -1048,25 +1048,27 @@ public class EventCompanyManageService {
     // Helper method to send a real-time notification or save it as pending if the
     // user is offline.
     private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
+        Member member = userRepo.findUserByEmail(userIdentifier);
+        boolean isGuest = (member == null);
+        if (isGuest) {
+            boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
+            if (isDelivered) {
+                return new Response<>(null, "Notification sent successfully to guest");
+            } else {
+                logger.warning("Guest is offline. Notification dropped for: " + userIdentifier);
+                return new Response<>(null, "Guest offline, notification dropped");
+            }
+        }
         Response<Long> savedNotificationIdRes = saveDelayedNotificationAsPending(userIdentifier, notifyDTO);
         Long savedNotificationId = (savedNotificationIdRes != null) ? savedNotificationIdRes.getValue() : null;
         boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
 
         if (isDelivered) {
-            if(savedNotificationId != null) { //succeed as pending
-                markNotificationAsDelivered(userIdentifier, savedNotificationId); //if we succeed sending in real time we need to mark as delivered
-                return new Response<>(null, "Notification sent successfully as DELIVERED");
+            markNotificationAsDelivered(userIdentifier, savedNotificationId); //if we succeed sending in real time we need to mark as delivered
+            return new Response<>(null, "Notification sent successfully as DELIVERED");
             }
-            return new Response<>(null, "Notification sent successfully to guest"); //guest in real-time-succeed
-        }
-        if(savedNotificationId != null) {
             logger.info("Member is offline. Notification remains PENDING for: " + userIdentifier);
             return new Response<>(null, "Notification saved as PENDING");
-        }
-        else{
-            logger.warning("Guest is offline. Notification dropped for: " + userIdentifier);
-            return new Response<>(null, "Guest offline, notification dropped");
-        }
     }
     //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
     private Response<Long> saveDelayedNotificationAsPending(String userIdentifier, NotifyDTO notifyDTO) {
@@ -1108,7 +1110,11 @@ public class EventCompanyManageService {
                         Member member = userRepo.findUserByEmail(userIdentifier);
                         if (member != null) {
                             for (UserNotification dn : member.getPendingNotifications()) {
-                                if (dn.getNotificationId() != null && dn.getNotificationId().equals(notificationId)) {
+                                boolean isMatch = (notificationId != null) ?
+                                        notificationId.equals(dn.getNotificationId()) :
+                                        (dn.getStatus() == NotificationStatus.PENDING);
+
+                                if (isMatch) {
                                     dn.setStatus(NotificationStatus.DELIVERED);
                                     break;
                                 }
