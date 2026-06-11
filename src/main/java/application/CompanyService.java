@@ -14,7 +14,6 @@ import domain.dto.HierarchyDTO;
 import domain.dto.RolesPermissionsTreeDTO;
 import domain.policy.*;
 import domain.user.*;
-import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -1076,8 +1075,8 @@ public class CompanyService {
                             return new Response<>(null, "User not found");
                         }
 
-                            DelayedNotification delayedNotification = new DelayedNotification(notifyDTO.getType(),notifyDTO.getPayload());
-                            member.addDelayedNotification(delayedNotification);
+                            UserNotification userNotification = new UserNotification(notifyDTO.getType(),notifyDTO.getPayload());
+                            member.addDelayedNotification(userNotification);
                             userRepo.store(member);
 
                             logger.info("Delayed notification saved successfully for: " + member.getIdentifier());

@@ -13,7 +13,7 @@ import domain.dto.LotteryDTO;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
-import domain.user.DelayedNotification;
+import domain.user.UserNotification;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import jakarta.annotation.PreDestroy;
@@ -558,8 +558,8 @@ public class LotteryService {
 
                                 return new Response<>(null, "Notification already saved as delayed");
                             }
-                            DelayedNotification delayedNotification = new DelayedNotification(notifyDTO.getType(),notifyDTO.getPayload());
-                            member.addDelayedNotification(delayedNotification);
+                            UserNotification userNotification = new UserNotification(notifyDTO.getType(),notifyDTO.getPayload());
+                            member.addDelayedNotification(userNotification);
                             userRepo.store(member);
 
                             logger.info("Delayed notification saved successfully for: "

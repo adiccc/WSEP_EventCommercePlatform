@@ -2325,7 +2325,7 @@ class CompanyServiceUpdatedTest {
 
         // Assert: Verify the notification was saved as delayed in the repository
         Member offlineAppointee = userRepo.findById(OTHER_USER_ID);
-        assertTrue(offlineAppointee.getDelayedNotifications().stream()
+        assertTrue(offlineAppointee.getPendingNotifications().stream()
                         .anyMatch(n -> n.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST
                                 && n.getPayload() != null
                                 && n.getPayload().getMessage().contains("invited to be a owner")),
@@ -2345,7 +2345,7 @@ class CompanyServiceUpdatedTest {
 
         // Assert: Verify the notification was saved as delayed in the repository
         Member offlineManager = userRepo.findById(MANAGER_ID);
-        assertTrue(offlineManager.getDelayedNotifications().stream()
+        assertTrue(offlineManager.getPendingNotifications().stream()
                         .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                 && n.getPayload() != null
                                 && n.getPayload().getMessage().contains("permissions have been updated")),
@@ -2368,7 +2368,7 @@ class CompanyServiceUpdatedTest {
 
         // Assert: Verify the kickout notification was saved as delayed in the repository
         Member offlineManager = userRepo.findById(MANAGER_ID);
-        assertTrue(offlineManager.getDelayedNotifications().stream()
+        assertTrue(offlineManager.getPendingNotifications().stream()
                         .anyMatch(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION
                                 && n.getPayload() != null
                                 && n.getPayload().getMessage().contains("role has been removed")),

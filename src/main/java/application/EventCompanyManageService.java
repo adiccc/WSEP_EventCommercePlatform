@@ -1066,8 +1066,8 @@ public class EventCompanyManageService {
                             logger.warning("User not found for identifier: " + userIdentifier);
                             return new Response<>(null, "User not found");
                         }
-                            DelayedNotification delayedNotification = new DelayedNotification(notifyDTO.getType(),notifyDTO.getPayload());
-                            member.addDelayedNotification(delayedNotification);
+                            UserNotification userNotification = new UserNotification(notifyDTO.getType(),notifyDTO.getPayload());
+                            member.addDelayedNotification(userNotification);
                             userRepo.store(member);
 
                             logger.info("Delayed notification saved successfully for: " + member.getIdentifier());

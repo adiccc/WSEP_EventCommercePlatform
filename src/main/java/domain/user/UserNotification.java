@@ -5,8 +5,8 @@ import DTO.NotifyType;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "delayed_notifications")
-public class DelayedNotification {
+@Table(name = "user_notifications")
+public class UserNotification {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "notification_id")
@@ -17,13 +17,17 @@ public class DelayedNotification {
     @Embedded
     private NotifyPayload payload;
 
-    protected DelayedNotification() {
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private NotificationStatus status;
+    protected UserNotification() {
         //for JPA
     }
 
-    public DelayedNotification(NotifyType type, NotifyPayload payload) {
+    public UserNotification(NotifyType type, NotifyPayload payload) {
         this.type = type;
         this.payload = payload;
+        this.status = NotificationStatus.PENDING;
     }
 
     public NotifyType getType() {
@@ -33,5 +37,8 @@ public class DelayedNotification {
     public NotifyPayload getPayload() {
         return payload;
     }
+    public NotificationStatus getStatus() { return status; }
+    public void setStatus(NotificationStatus status) { this.status = status; }
+    public Long getNotificationId() { return notificationId; }
 }
 

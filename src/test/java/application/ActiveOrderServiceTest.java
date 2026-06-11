@@ -5,7 +5,7 @@ import Log.LoggerSetup;
 
 import java.util.*;
 
-import domain.user.DelayedNotification;
+import domain.user.UserNotification;
 import infrastructure.Auth;
 import infrastructure.Broadcaster;
 import infrastructure.PasswordEncoderUtil;
@@ -27,7 +27,6 @@ import domain.event.OrderStatus;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import domain.webQueue.WebQueue;
-import infrastructure.inMemory.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
@@ -3321,7 +3320,7 @@ class ActiveOrderServiceTest {
 
     private long countSoldOutNotifications(Member member) {
         long count = 0;
-        for (DelayedNotification n : member.getDelayedNotifications()) {
+        for (UserNotification n : member.getDelayedNotifications()) {
             if (n.getPayload().getMessage().contains("is sold out")) {
                 count++;
             }
@@ -3330,7 +3329,7 @@ class ActiveOrderServiceTest {
     }
 
     private NotifyDTO firstSoldOutNotification(Member member) {
-        for (DelayedNotification n : member.getDelayedNotifications()) {
+        for (UserNotification n : member.getDelayedNotifications()) {
             if (n.getPayload().getMessage().contains("is sold out")) {
                 return new NotifyDTO(n);
             }

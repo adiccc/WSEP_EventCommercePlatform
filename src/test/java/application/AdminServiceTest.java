@@ -15,7 +15,7 @@ import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.OrderStatus;
 import domain.lottery.ILotteryRepo;
-import domain.user.DelayedNotification;
+import domain.user.UserNotification;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import domain.webQueue.WebQueue;
@@ -23,7 +23,6 @@ import infrastructure.Auth;
 import infrastructure.Broadcaster;
 import infrastructure.PasswordEncoderUtil;
 import infrastructure.VaadinNotifier;
-import infrastructure.inMemory.*;
 import infrastructure.inMemory.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -310,7 +309,7 @@ class AdminServiceTest {
 
             Member buyer = userRepo.findUserByEmail(buyerIdentifier);
 
-            assertFalse(buyer.getDelayedNotifications().stream()
+            assertFalse(buyer.getPendingNotifications().stream()
                             .anyMatch(n ->
                                     n.getType() == NotifyType.GENERAL_POPUP
                                             && n.getPayload() != null
@@ -367,9 +366,9 @@ class AdminServiceTest {
 
             // Assert: buyer refund notification was saved as delayed
             Member buyer = userRepo.findUserByEmail(buyerIdentifier);
-            List<DelayedNotification> delayedNotifications = buyer.getDelayedNotifications();
+            List<UserNotification> userNotifications = buyer.getPendingNotifications();
 
-            assertTrue(delayedNotifications.stream()
+            assertTrue(userNotifications.stream()
                             .anyMatch(n ->
                                     n.getType() == NotifyType.GENERAL_POPUP
                                             && n.getPayload() != null
@@ -536,7 +535,7 @@ class AdminServiceTest {
 
             Member buyer = userRepo.findUserByEmail(buyerIdentifier);
 
-            assertFalse(buyer.getDelayedNotifications().stream()
+            assertFalse(buyer.getPendingNotifications().stream()
                             .anyMatch(n ->
                                     n.getType() == NotifyType.GENERAL_POPUP
                                             && n.getPayload() != null
@@ -595,9 +594,9 @@ class AdminServiceTest {
 
             // Assert: buyer refund-failure notification was saved as delayed
             Member buyer = userRepo.findUserByEmail(buyerIdentifier);
-            List<DelayedNotification> delayedNotifications = buyer.getDelayedNotifications();
+            List<UserNotification> userNotifications = buyer.getPendingNotifications();
 
-            assertTrue(delayedNotifications.stream()
+            assertTrue(userNotifications.stream()
                             .anyMatch(n ->
                                     n.getType() == NotifyType.GENERAL_POPUP
                                             && n.getPayload() != null
@@ -2086,9 +2085,9 @@ class AdminServiceTest {
 
         // Assert: buyer refund notification was saved as delayed
         Member buyer = userRepo.findUserByEmail(buyerIdentifier);
-        List<DelayedNotification> delayedNotifications = buyer.getDelayedNotifications();
+        List<UserNotification> userNotifications = buyer.getPendingNotifications();
 
-        assertTrue(delayedNotifications.stream()
+        assertTrue(userNotifications.stream()
                         .anyMatch(n ->
                                 n.getType() == NotifyType.GENERAL_POPUP
                                         && n.getPayload() != null
@@ -2192,7 +2191,7 @@ class AdminServiceTest {
         // Assert: online buyer should not have refund notification saved as delayed
         Member buyer = userRepo.findUserByEmail(buyerIdentifier);
 
-        assertFalse(buyer.getDelayedNotifications().stream()
+        assertFalse(buyer.getPendingNotifications().stream()
                         .anyMatch(n ->
                                 n.getType() == NotifyType.GENERAL_POPUP
                                         && n.getPayload() != null
