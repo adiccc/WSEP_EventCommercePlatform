@@ -1052,19 +1052,31 @@ public class CompanyService {
         }
         return roleRes.getValue();
     }
-
-         // Helper method to send a real-time notification or save it as delayed if the user is offline.
+    // Helper method to send a real-time notification or save it as pending if the
+    // user is offline.
     private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
+        Response<Long> savedNotificationIdRes = saveDelayedNotificationAsPending(userIdentifier, notifyDTO);
+        Long savedNotificationId = (savedNotificationIdRes != null) ? savedNotificationIdRes.getValue() : null;
         boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
 
         if (isDelivered) {
-            return new Response<>(null, "Notification sent successfully");
+            if(savedNotificationId != null) { //succeed as pending
+                markNotificationAsDelivered(userIdentifier, savedNotificationId); //if we succeed sending in real time we need to mark as delivered
+                return new Response<>(null, "Notification sent successfully as DELIVERED");
+            }
+            return new Response<>(null, "Notification sent successfully to guest"); //guest in real-time-succeed
         }
-
-        logger.info("User is offline. Saving delayed notification for: " + userIdentifier);
-        return saveDelayedNotificationWithRetry(userIdentifier, notifyDTO);
+        if(savedNotificationId != null) {
+            logger.info("Member is offline. Notification remains PENDING for: " + userIdentifier);
+            return new Response<>(null, "Notification saved as PENDING");
+        }
+        else{
+            logger.warning("Guest is offline. Notification dropped for: " + userIdentifier);
+            return new Response<>(null, "Guest offline, notification dropped");
+        }
     }
-    private Response<Void> saveDelayedNotificationWithRetry(String userIdentifier, NotifyDTO notifyDTO) {
+    //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
+    private Response<Long> saveDelayedNotificationAsPending(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() ->
                 transactionTemplate.execute(status -> {
                     try{
@@ -1076,24 +1088,52 @@ public class CompanyService {
                         }
 
                             UserNotification userNotification = new UserNotification(notifyDTO.getType(),notifyDTO.getPayload());
-                            member.addDelayedNotification(userNotification);
+                            member.addPendingNotification(userNotification);
                             userRepo.store(member);
 
-                            logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
-                            return new Response<>(null, "Notification saved as delayed");
-
+                            logger.info("Pending notification saved successfully for: " + member.getIdentifier());
+                            return new Response<>(userNotification.getNotificationId(), "Notification saved as pending");
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
                         throw e;
 
                     } catch (Exception e) {
                         status.setRollbackOnly();
-                        logger.warning("Failed to send or save notification for "
+                        logger.warning("Failed to save pending notification for "
                                 + userIdentifier + ": " + e.getMessage());
 
-                        return new Response<>(null, "Failed to send or save notification");
+                        return new Response<>(null, "Failed to save pending notification");
                     }
                 })
         );
     }
+    //marking notification as delivered because we succeed in real-time
+    private Response<Boolean> markNotificationAsDelivered(String userIdentifier, Long notificationId) {
+        return RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+                    try {
+                        Member member = userRepo.findUserByEmail(userIdentifier);
+                        if (member != null) {
+                            for (UserNotification dn : member.getPendingNotifications()) {
+                                if (dn.getNotificationId() != null && dn.getNotificationId().equals(notificationId)) {
+                                    dn.setStatus(NotificationStatus.DELIVERED);
+                                    break;
+                                }
+                            }
+                            userRepo.store(member);
+                        }
+                        return new Response<>(true, "Notification marked as DELIVERED");
+
+                    } catch (OptimisticLockingFailureException e) {
+                        status.setRollbackOnly();
+                        throw e;
+                    } catch (Exception e) {
+                        status.setRollbackOnly();
+                        logger.warning("Failed to mark notification as delivered: " + e.getMessage());
+                        return new Response<>(false, "Failed to mark notification as delivered");
+                    }
+                })
+        );
+    }
+
 }
