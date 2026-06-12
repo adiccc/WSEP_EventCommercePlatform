@@ -7,9 +7,9 @@ import jakarta.persistence.Table;
 @Entity
 @Table(name = "seating_tickets")
 public class SeatingTicket extends Ticket {
-    @Column(nullable = false)
+    @Column(name = "row_number", nullable = false)
     private int row;
-    @Column(nullable = false)
+    @Column(name = "col_number", nullable = false)
     private int col;
 
     protected SeatingTicket() {

@@ -19,21 +19,18 @@ public abstract class Zone {
     @Column(name = "zone_id")
     private Integer id;
     @Column(nullable = false)
-    private final String name;
+    private String name;
     @Column(nullable = false)
-    private final double price;
+    private double price;
     @Embedded
     @AttributeOverrides({
             @AttributeOverride(name = "x", column = @Column(name = "position_x", nullable = false)),
             @AttributeOverride(name = "y", column = @Column(name = "position_y", nullable = false))
     })
-    private final ElementPosition elementPosition;
+    private ElementPosition elementPosition;
 
     protected Zone() {
         // for JPA
-        this.name = null;
-        this.price = 0;
-        this.elementPosition = null;
     }
 
     public Zone(String name, double price, ElementPosition elementPosition) {
