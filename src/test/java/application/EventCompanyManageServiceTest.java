@@ -18,13 +18,13 @@ import domain.event.IEventRepo;
 import domain.event.OrderStatus;
 import domain.event.Order;
 import domain.lottery.ILotteryRepo;
+import domain.user.UserNotification;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import infrastructure.Auth;
 import infrastructure.Broadcaster;
 import infrastructure.PasswordEncoderUtil;
 import infrastructure.VaadinNotifier;
-import infrastructure.inMemory.*;
 import infrastructure.inMemory.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,8 +45,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import domain.policy.DiscountPolicyType;
 import domain.policy.PurchasePolicyType;
 import org.mockito.Mockito;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class EventCompanyManageServiceTest {
 
@@ -84,7 +89,7 @@ class EventCompanyManageServiceTest {
     private String ADMIN_TOKEN;
     private AdminService adminService;
     private INotifier notifier;
-
+    private TransactionTemplate transactionTemplate;
 
     @BeforeEach
     void setUp() {
@@ -100,19 +105,26 @@ class EventCompanyManageServiceTest {
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
         notifier = new VaadinNotifier();
-        userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier);
-        eventService=new EventService(auth,eventRepo,notifier);
+        transactionTemplate = mock(TransactionTemplate.class);
+
+        when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
+        });
+
+        userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier,transactionTemplate);
+        eventService=new EventService(auth,eventRepo,notifier, transactionTemplate);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth),userRepo, 100);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth),userRepo, transactionTemplate,100);
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete order repo from company service construture
-        companyService=new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier);
+        companyService=new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier,transactionTemplate);
         eventCompanyManageService = new EventCompanyManageService(
                 companyRepo,
                 eventRepo,
                 auth,
-                paymentSystem,suspensionRepo,notifier,userRepo
+                paymentSystem,suspensionRepo,notifier,userRepo, transactionTemplate
         );
 
         validToken1=null; // user with all permissions
@@ -152,7 +164,7 @@ class EventCompanyManageServiceTest {
        // userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "Sys", "Pass123!", 1, 1, 2000, "Address", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
-        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem,suspensionRepo, notifier);
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem,suspensionRepo, notifier,transactionTemplate);
 
     }
 
@@ -404,7 +416,7 @@ class EventCompanyManageServiceTest {
 
         EventDetailsDTO updatedEvent = eventService.ViewEventDetails(validToken1,companyId,eventId).getValue();
         assertEquals(requestedDate.toString(), updatedEvent.getDate());
-        List<NotifyDTO> notifications = userRepo.findUserByEmail(purchaserEmail).getDelayedNotifications();
+        List<UserNotification> notifications = userRepo.findUserByEmail(purchaserEmail).getPendingNotifications();
         assertEquals(1, notifications.size(), "Purchaser should receive exactly one notification about the date change");
         assertTrue(notifications.get(0).getPayload().getMessage().contains("has been updated to"),
                 "Notification should mention the updated date");
@@ -964,7 +976,7 @@ class EventCompanyManageServiceTest {
         order.markRefundRequired();
         event.getOrders().add(order);
         eventRepo.store(event);
-        userRepo.findUserByEmail(buyerEmail).clearDelayedNotifications();
+        userRepo.findUserByEmail(buyerEmail).clearPendingNotifications();
         Response<Boolean> response = eventCompanyManageService.processRefund(
                 validToken1,
                 eventId,
@@ -977,7 +989,7 @@ class EventCompanyManageServiceTest {
         assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
 
         Mockito.verify(paymentSystem).refund("pay123", 100.0);
-        List<DTO.NotifyDTO> notifications = userRepo.findUserByEmail(buyerEmail).getDelayedNotifications();
+        List<UserNotification> notifications = userRepo.findUserByEmail(buyerEmail).getPendingNotifications();
         assertEquals(1, notifications.size(), "Buyer should receive 1 success notification");
         assertTrue(notifications.get(0).getPayload().getMessage().toLowerCase().contains("successfully")
                 || notifications.get(0).getPayload().getMessage().contains("Refund process for"));
@@ -1051,7 +1063,7 @@ class EventCompanyManageServiceTest {
         assertEquals(OrderStatus.REFUND_REQUIRED, order.getStatus());
 
         Mockito.verify(paymentSystem).refund("pay123", 100.0);
-        List<DTO.NotifyDTO> notifications = userRepo.findUserByEmail(buyerEmail).getDelayedNotifications();
+        List<UserNotification> notifications = userRepo.findUserByEmail(buyerEmail).getPendingNotifications();
         assertEquals(1, notifications.size(), "Buyer should receive 1 failure notification");
         assertTrue(notifications.get(0).getPayload().getMessage().toLowerCase().contains("failed"));
     }
@@ -1176,7 +1188,7 @@ class EventCompanyManageServiceTest {
         Order createdOrder = eventRepo.findById(eventId).findOrderById(orderId);
         double expectedRefundAmount = createdOrder.getTotalSum();
         String buyerEmail = "user1@test.com";
-        userRepo.findUserByEmail(buyerEmail).clearDelayedNotifications();
+        userRepo.findUserByEmail(buyerEmail).clearPendingNotifications();
         // When
         Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, eventId);
 
@@ -1191,7 +1203,7 @@ class EventCompanyManageServiceTest {
         assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
 
         Mockito.verify(paymentSystem).refund("payment-" + orderId, expectedRefundAmount);
-        List<DTO.NotifyDTO> notifications = userRepo.findUserByEmail(buyerEmail).getDelayedNotifications();
+        List<UserNotification> notifications = userRepo.findUserByEmail(buyerEmail).getPendingNotifications();
         assertEquals(2, notifications.size(), "Buyer should receive 2 notifications: Cancellation and Refund");
         assertTrue(notifications.get(0).getPayload().getMessage().toLowerCase().contains("cancelled"));
         assertTrue(notifications.get(1).getPayload().getMessage().toLowerCase().contains("refund process"));
@@ -1545,8 +1557,8 @@ class EventCompanyManageServiceTest {
         // Assert
         assertTrue(response.getValue());
 
-        assertEquals(1, userRepo.findUserByEmail(email1).getDelayedNotifications().size(), "First buyer must be notified");
-        assertEquals(1, userRepo.findUserByEmail(email2).getDelayedNotifications().size(), "Second buyer must be notified");
+        assertEquals(1, userRepo.findUserByEmail(email1).getPendingNotifications().size(), "First buyer must be notified");
+        assertEquals(1, userRepo.findUserByEmail(email2).getPendingNotifications().size(), "Second buyer must be notified");
     }
     @Test
     void GivenSamePurchaserWithMultipleOrders_WhenUpdateEventDate_ThenOnlyOneNotificationIsSent() {
@@ -1571,7 +1583,7 @@ class EventCompanyManageServiceTest {
 
         // Assert
         assertTrue(response.getValue());
-        List<NotifyDTO> notifications = userRepo.findUserByEmail(email).getDelayedNotifications();
+        List<UserNotification> notifications = userRepo.findUserByEmail(email).getPendingNotifications();
         assertEquals(1, notifications.size(),
                 "A buyer with multiple separate orders should still receive only ONE notification about the date change (distinct test)");
     }
@@ -2306,7 +2318,7 @@ class EventCompanyManageServiceTest {
 
         // Assert: Verify the notification was saved as delayed for the offline buyer
         Member buyer = userRepo.findUserByEmail(email);
-        assertTrue(buyer.getDelayedNotifications().stream()
+        assertTrue(buyer.getPendingNotifications().stream()
                         .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                 && n.getPayload() != null
                                 && n.getPayload().getMessage().contains("has been updated to")),
@@ -2336,13 +2348,13 @@ class EventCompanyManageServiceTest {
         // Assert: Verify both Cancellation and Refund notifications are saved as delayed
         Member buyer = userRepo.findUserByEmail(email);
 
-        assertTrue(buyer.getDelayedNotifications().stream()
+        assertTrue(buyer.getPendingNotifications().stream()
                         .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                 && n.getPayload() != null
                                 && n.getPayload().getMessage().toLowerCase().contains("cancelled")),
                 "Offline buyer should have a delayed notification for event cancellation");
 
-        assertTrue(buyer.getDelayedNotifications().stream()
+        assertTrue(buyer.getPendingNotifications().stream()
                         .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                 && n.getPayload() != null
                                 && n.getPayload().getMessage().toLowerCase().contains("refund")),
@@ -2377,7 +2389,7 @@ class EventCompanyManageServiceTest {
 
         // Assert: Verify the refund notification was saved as delayed
         Member buyer = userRepo.findUserByEmail(email);
-        assertTrue(buyer.getDelayedNotifications().stream()
+        assertTrue(buyer.getPendingNotifications().stream()
                         .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                 && n.getPayload() != null
                                 && n.getPayload().getMessage().toLowerCase().contains("refund process")),

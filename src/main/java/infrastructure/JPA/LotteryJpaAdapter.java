@@ -3,6 +3,7 @@ package infrastructure.JPA;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -31,7 +32,12 @@ public class LotteryJpaAdapter implements ILotteryRepo {
 
     @Override
     public void store(Lottery lottery) {
-        lotteryJpaRepository.save(lottery);
+        try {
+            lotteryJpaRepository.save(lottery);
+        } catch (org.springframework.orm.ObjectOptimisticLockingFailureException e) {
+            throw new OptimisticLockingFailureException(
+                    "Event " + lottery.getId() + " was modified concurrently");
+        }
     }
 
     @Override
@@ -41,6 +47,11 @@ public class LotteryJpaAdapter implements ILotteryRepo {
 
     @Override
     public void delete(Lottery lottery) {
-        lotteryJpaRepository.delete(lottery);
+        try {
+            lotteryJpaRepository.delete(lottery);
+        } catch (org.springframework.orm.ObjectOptimisticLockingFailureException e) {
+            throw new OptimisticLockingFailureException(
+                    "Lottery " + lottery.getId() + " was modified concurrently during deletion");
+        }
     }
 }

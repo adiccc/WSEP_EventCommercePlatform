@@ -28,6 +28,8 @@ import org.junit.jupiter.api.Test;
 
 import domain.dataType.PermissionType;
 import org.mockito.Mockito;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.util.EnumSet;
@@ -39,6 +41,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class CompanyServiceUpdatedTest {
 
@@ -68,6 +73,7 @@ class CompanyServiceUpdatedTest {
     private IEventRepo eventRepo;
     private INotifier notifier;
     private TokenService tokenService;
+    private TransactionTemplate transactionTemplate;
 
 
     @BeforeEach
@@ -81,8 +87,14 @@ class CompanyServiceUpdatedTest {
         auth = new Auth(tokenService, Set.of(adminEmail));
         companyRepo = new CompanyRepoImpl();
         notifier = new VaadinNotifier();
-        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
-        service = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier);
+        transactionTemplate = mock(TransactionTemplate.class);
+
+        when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
+        });
+        userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier,transactionTemplate);
+        service = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier, transactionTemplate);
 
         UserDTO ownerDTO = new UserDTO("owner@test.com", "Owner", "Test", "Password123!", 1, 1, 2000, "City", "050-123-4567");
         userService.registerUser(null, ownerDTO);
@@ -114,7 +126,7 @@ class CompanyServiceUpdatedTest {
         companyRepo.store(company);
         paymentSystem = Mockito.mock(PaymentSystemProxy.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo,notifier);
+        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo,notifier, transactionTemplate);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
 
@@ -544,6 +556,7 @@ class CompanyServiceUpdatedTest {
                 EnumSet.of(PermissionType.DELETE_EVENT),
                 updated.getCompanyPermission().getCompanyTree().get(MANAGER_ID).getAllPermissions());
     }
+    @Test
     void GivenInvalidEmail_WhenCreateProductionCompany_ThenReturnError() {
         Response<Company> response = service.createProductionCompany(
                 OWNER_TOKEN, 96, "BadEmailCo", "not-an-email", "050-000-0004", "bank-w");
@@ -2312,7 +2325,7 @@ class CompanyServiceUpdatedTest {
 
         // Assert: Verify the notification was saved as delayed in the repository
         Member offlineAppointee = userRepo.findById(OTHER_USER_ID);
-        assertTrue(offlineAppointee.getDelayedNotifications().stream()
+        assertTrue(offlineAppointee.getPendingNotifications().stream()
                         .anyMatch(n -> n.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST
                                 && n.getPayload() != null
                                 && n.getPayload().getMessage().contains("invited to be a owner")),
@@ -2332,7 +2345,7 @@ class CompanyServiceUpdatedTest {
 
         // Assert: Verify the notification was saved as delayed in the repository
         Member offlineManager = userRepo.findById(MANAGER_ID);
-        assertTrue(offlineManager.getDelayedNotifications().stream()
+        assertTrue(offlineManager.getPendingNotifications().stream()
                         .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                 && n.getPayload() != null
                                 && n.getPayload().getMessage().contains("permissions have been updated")),
@@ -2355,7 +2368,7 @@ class CompanyServiceUpdatedTest {
 
         // Assert: Verify the kickout notification was saved as delayed in the repository
         Member offlineManager = userRepo.findById(MANAGER_ID);
-        assertTrue(offlineManager.getDelayedNotifications().stream()
+        assertTrue(offlineManager.getPendingNotifications().stream()
                         .anyMatch(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION
                                 && n.getPayload() != null
                                 && n.getPayload().getMessage().contains("role has been removed")),

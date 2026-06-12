@@ -1,6 +1,8 @@
 package application;
 
 import Exception.OptimisticLockingFailureException;
+import org.springframework.dao.TransientDataAccessException;
+
 import java.util.concurrent.Callable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -28,7 +30,18 @@ public class RetryHelper {
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                 }
-            } catch (Exception e) {
+            } catch (TransientDataAccessException e) {
+
+                logger.log(Level.WARNING, "Transient database error detected, retrying... (" + attempt + "/" + MAX_RETRIES + ")");
+                if (attempt == MAX_RETRIES) {
+                    return new Response<>(null, "Database temporarily unavailable. Please try again later.");
+                }
+                try {
+                    Thread.sleep((long) (Math.random() * 50));
+            }catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+                }catch (Exception e) {
                 // For any other exception, do not retry
                 logger.log(Level.SEVERE, "Unexpected error: " + e.getMessage());
                 return new Response<>(null, "System Error: " + e.getMessage());

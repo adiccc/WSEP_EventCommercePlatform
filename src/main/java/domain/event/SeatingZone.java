@@ -20,9 +20,9 @@ public class SeatingZone extends Zone {
     private List<SeatingTicket> tickets = new ArrayList<>();
     @Transient
     private Map<String, SeatingTicket> ticketMap = new HashMap<>();
-    @Column(nullable = false)
+    @Column(name = "rows")
     private int rows;
-    @Column(nullable = false)
+    @Column(name = "cols")
     private int cols;
 
     protected SeatingZone() {

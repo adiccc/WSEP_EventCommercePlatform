@@ -15,6 +15,7 @@ import infrastructure.TicketSupplyProxy;
 import infrastructure.inMemory.UserRepo;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 
@@ -22,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @SpringBootTest(classes = app.App.class)
+@EntityScan(basePackages = {"domain", "DTO"})
 public class SpringContextIntegrationTest {
 
     @Autowired

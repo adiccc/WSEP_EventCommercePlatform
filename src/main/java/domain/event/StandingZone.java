@@ -11,7 +11,7 @@ import java.util.*;
 @Entity
 @DiscriminatorValue("STANDING")
 public class StandingZone extends Zone {
-    @Column(nullable = false)
+    @Column(name = "capacity")
     private int capacity;
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JoinColumn(name = "zone_id")
@@ -20,7 +20,7 @@ public class StandingZone extends Zone {
     private Queue<StandingTicket> availableTickets = new LinkedList<>();
     @Transient
     private List<StandingTicket> occupiedTickets = new LinkedList<>();
-    @Column(nullable = false)
+    @Column(name = "available")
     private int available;
 
     protected StandingZone() {

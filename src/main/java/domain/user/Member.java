@@ -1,16 +1,19 @@
 package domain.user;
 
 import DTO.NotifyDTO;
-import domain.activeOrder.ActiveOrder;
 import domain.dto.UserDTO;
-
+import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 
+@Entity
+@Table(name = "members")
 public class Member extends User{
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "user_id")
     protected Integer userId;
     protected String password; //encrypted password
     protected String firstName;
@@ -18,9 +21,20 @@ public class Member extends User{
     protected String phoneNumber;
     protected LocalDate dateOfBirth;
     protected String address;
+
+    @Enumerated(EnumType.STRING)
     protected ActivationStatus activationStatus;
+
+    @Version
     private long version;
-    private List<NotifyDTO> delayedNotifications = new ArrayList<>();
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JoinColumn(name = "member_id")
+    private List<UserNotification> userNotifications = new ArrayList<>();
+
+    protected Member() {
+        super();
+    }
 
     public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address,ActivationStatus activationStatus) {
         super(email);
@@ -32,9 +46,9 @@ public class Member extends User{
         this.address = address;
         this.version = 0;
         this.activationStatus=activationStatus;
-        this.delayedNotifications = new ArrayList<>();
+        this.userNotifications = new ArrayList<>();
     }
-    public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address, List<NotifyDTO> delayedNotifications) {
+    public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address, List<UserNotification> userNotifications) {
         super(email);
         this.password = password;
         this.firstName = firstName;
@@ -44,7 +58,7 @@ public class Member extends User{
         this.address = address;
         this.version = 0;
         this.activationStatus=ActivationStatus.ACTIVE;
-        this.delayedNotifications = delayedNotifications;
+        this.userNotifications =  userNotifications !=null ? userNotifications : new ArrayList<>();
     }
     public Member(Member member) {
         super(member);
@@ -57,8 +71,8 @@ public class Member extends User{
         this.address=member.address;
         this.version=member.version;
         this.activationStatus=member.activationStatus;
-        this.delayedNotifications = member.getDelayedNotifications();
-
+        this.userNotifications = member.getPendingNotifications() != null ?
+                new ArrayList<>(member.getPendingNotifications()) : new ArrayList<>();
     }
     public long getVersion() {
         return version;
@@ -102,15 +116,27 @@ public class Member extends User{
                 this.dateOfBirth.getDayOfMonth(), this.dateOfBirth.getMonthValue(), this.dateOfBirth.getYear(),
                 this.address, this.phoneNumber);
     }
-    public void addDelayedNotification(NotifyDTO notification) {
-        this.delayedNotifications.add(notification);
+    public void addPendingNotification(UserNotification notification) {
+        this.userNotifications.add(notification);
     }
 
-    public List<NotifyDTO> getDelayedNotifications() {
-        return this.delayedNotifications;
+    public List<UserNotification> getPendingNotifications() {
+        return this.userNotifications;
     }
 
-    public void clearDelayedNotifications() {
-        this.delayedNotifications.clear();
+    public void clearPendingNotifications() {
+        this.userNotifications.clear();
+    }
+
+    public List<NotifyDTO> fetchAndMarkPendingNotifications() {
+        List<NotifyDTO> pendingNotifications = new ArrayList<>();
+
+        for (UserNotification notification : this.userNotifications) {
+            if (notification.getStatus() == NotificationStatus.PENDING) {
+                pendingNotifications.add(new NotifyDTO(notification.getType(), notification.getPayload()));
+                notification.setStatus(NotificationStatus.DELIVERED);
+            }
+        }
+        return pendingNotifications;
     }
 }
