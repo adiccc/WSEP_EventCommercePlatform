@@ -28,7 +28,7 @@ public class RealPaymentSystem implements IPaymentSystem {
             MultiValueMap<String, String> map = new LinkedMultiValueMap<>();
             map.add("action_type", "pay");
             map.add("amount", String.valueOf(total));
-            map.add("currency", "USD");
+            map.add("currency", "NIS");
             map.add("card_number", paymentDetails.getCardNumber());
             map.add("month", paymentDetails.getMonth());
             map.add("year", paymentDetails.getYear());

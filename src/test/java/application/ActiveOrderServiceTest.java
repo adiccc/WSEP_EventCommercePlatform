@@ -1427,7 +1427,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
         Response<Integer> result = service.checkoutAndPayment(validToken, orderId, paymentDetails);
 
         assertNotNull(result.getValue(), "checkout failed: " + result.getMessage());
@@ -1620,7 +1620,7 @@ class ActiveOrderServiceTest {
                     .thenReturn(supplyResult);
 
             PaymentDetailsDTO paymentDetails =
-                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
             Response<CheckoutPriceDTO> checkoutPriceResponse =
                     service.prepareCheckout(validToken, activeOrderId);
@@ -1694,7 +1694,7 @@ class ActiveOrderServiceTest {
                 .when(notifier).notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class));
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<CheckoutPriceDTO> checkoutPriceResponse =
                 service.prepareCheckout(validToken, activeOrderId);
@@ -1737,7 +1737,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(null);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<CheckoutPriceDTO> checkoutPriceResponse =
                 service.prepareCheckout(validToken, activeOrderId);
@@ -1807,7 +1807,7 @@ class ActiveOrderServiceTest {
                     .thenReturn(true);
 
             PaymentDetailsDTO paymentDetails =
-                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
             Response<CheckoutPriceDTO> checkoutPriceResponse =
                     service.prepareCheckout(validToken, activeOrderId);
@@ -1909,7 +1909,7 @@ class ActiveOrderServiceTest {
                     .thenReturn(true);
 
             PaymentDetailsDTO paymentDetails =
-                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
             Response<CheckoutPriceDTO> checkoutPriceResponse =
                     service.prepareCheckout(validToken, activeOrderId);
@@ -2013,7 +2013,7 @@ class ActiveOrderServiceTest {
                     .thenReturn(false);
 
             PaymentDetailsDTO paymentDetails =
-                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
             Response<CheckoutPriceDTO> checkoutPriceResponse =
                     service.prepareCheckout(validToken, activeOrderId);
@@ -2095,7 +2095,7 @@ class ActiveOrderServiceTest {
         forceExpireOrder(activeOrderId);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2145,7 +2145,7 @@ class ActiveOrderServiceTest {
         int activeOrderId = activeOrderRepo.findOrderByUserId(userEmail).getId();
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2171,7 +2171,7 @@ class ActiveOrderServiceTest {
         String invalidToken = "not-a-real-token";
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(invalidToken, 999, paymentDetails);
@@ -2231,7 +2231,7 @@ class ActiveOrderServiceTest {
                 start.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
                 return service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
             }));
@@ -2360,7 +2360,7 @@ class ActiveOrderServiceTest {
                 start.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
                 return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
             }));
@@ -2478,7 +2478,7 @@ class ActiveOrderServiceTest {
                 start.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
                 return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
             }));
@@ -2603,7 +2603,7 @@ class ActiveOrderServiceTest {
                 start.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
                 return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
             }));
@@ -2723,7 +2723,7 @@ class ActiveOrderServiceTest {
             futures.add(executor.submit(() -> {
                 start.await();
                 return service.checkoutAndPayment(token, orderId,
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null));
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null));
             }));
         }
 
@@ -2810,7 +2810,7 @@ class ActiveOrderServiceTest {
             futures.add(executor.submit(() -> {
                 start.await();
                 return service.checkoutAndPayment(token, orderId,
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null));
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null));
             }));
         }
 
@@ -2851,7 +2851,7 @@ class ActiveOrderServiceTest {
         String tokenB = userService.login(emailB, "pass").getValue();
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(tokenB, orderId, paymentDetails);
@@ -2881,7 +2881,7 @@ class ActiveOrderServiceTest {
         eventRepo.store(event);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2941,7 +2941,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(true);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2994,7 +2994,7 @@ class ActiveOrderServiceTest {
                 .thenThrow(new RuntimeException("payment service unavailable"));
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3042,7 +3042,7 @@ class ActiveOrderServiceTest {
                 .thenReturn("   ");
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3065,7 +3065,7 @@ class ActiveOrderServiceTest {
     @Test
     void GivenNonExistingActiveOrder_WhenCheckoutAndPayment_ThenNotFoundAndNoExternalServicesCalled() {
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, 999999, paymentDetails);
@@ -3240,7 +3240,7 @@ class ActiveOrderServiceTest {
                 checkoutStart.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111111111", 1, null);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111111111", "Yarin Sheme",1, null);
                 return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
             }));
         }
@@ -3386,7 +3386,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3437,7 +3437,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3511,7 +3511,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1,null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1,null);
         userService.cleanDelayedNotifications("testuser1@gmail.com");
         userService.cleanDelayedNotifications("owner2@gmail.com");
         userService.cleanDelayedNotifications("manager1@gmail.com");
@@ -3570,7 +3570,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3631,7 +3631,7 @@ class ActiveOrderServiceTest {
                     .thenReturn(supplyResult);
 
             PaymentDetailsDTO paymentDetails =
-                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
             Response<Integer> checkoutResponse =
                     service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3705,7 +3705,7 @@ class ActiveOrderServiceTest {
         Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
                 .thenReturn(supplyResult);
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         // Drop appointment-time notifications so the delayed list reflects only the sold-out event
         userService.cleanDelayedNotifications(manager1Email);
@@ -3811,7 +3811,7 @@ class ActiveOrderServiceTest {
         Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
                 .thenReturn(supplyResult);
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         // Drop appointment-time notifications so the delayed-list sizes reflect only the sold-out event
         userService.cleanDelayedNotifications(manager1Email);
@@ -3909,7 +3909,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3957,7 +3957,7 @@ class ActiveOrderServiceTest {
         Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
                 .thenReturn(supplyResult);
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         // Purchase 1 — buy both seats only; standing zone untouched, event NOT sold out
         service.enterEventPurchase(validToken, companyId, boundaryEventId,null);
@@ -4079,7 +4079,7 @@ class ActiveOrderServiceTest {
         Mockito.when(supplyResult.isSuccess()).thenReturn(true);
         Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
                 .thenReturn(supplyResult);
-        PaymentDetailsDTO paymentDetails = new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+        PaymentDetailsDTO paymentDetails = new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         userService.cleanDelayedNotifications("testuser1@gmail.com");
         userService.cleanDelayedNotifications("owner2@gmail.com");
@@ -4178,7 +4178,7 @@ class ActiveOrderServiceTest {
         });
 
         // Act
-        PaymentDetailsDTO payment = new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+        PaymentDetailsDTO payment = new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
         Response<Integer> checkoutResp = service.checkoutAndPayment(firstFillerToken, firstFillerOrderId, payment);
 
         assertNotNull(checkoutResp.getValue(), "Checkout failed, promoteNextInQueue will not be triggered. Server says: " + checkoutResp.getMessage());
@@ -4503,7 +4503,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(true);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<CheckoutPriceDTO> checkoutPriceResponse =
                 serviceWithMockNotifier.prepareCheckout(validToken, activeOrderId);
