@@ -32,7 +32,6 @@ public class Event {
     @JoinColumn(name = "event_map_id")
     private EventMap eventMap;
     @Transient
-    //TODO: after adding annotation to event queue
     private EventQueue eventQueue;
     @Column(nullable = false)
     private LocalDateTime date;

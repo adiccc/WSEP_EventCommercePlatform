@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-@Profile("memory")
+@Profile("memory & !event-db")
 public class EventRepoImpl implements IEventRepo {
     Map<Integer,Event> events; // key: eventId, value: event
     private final AtomicInteger eventIdGenerator = new AtomicInteger(1);
@@ -122,6 +122,8 @@ public class EventRepoImpl implements IEventRepo {
        }
        return purchasers.stream().toList();
     }
+
+    @Override
     public List<String> getAllEventPurchasers(Integer eventId){
         Event event = events.get(eventId);
         if (event == null) {
