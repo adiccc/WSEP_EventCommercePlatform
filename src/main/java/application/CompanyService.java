@@ -109,7 +109,6 @@ public class CompanyService {
         });
     }
 
-    @Transactional(readOnly = true)
     public Response<CompanyDetailsDTO> getProductionCompany(String sessionToken, int companyId) {
         return RetryHelper.executeWithRetry(()-> {
             logger.info("getProductionCompany called for companyId: " + companyId);
@@ -150,7 +149,6 @@ public class CompanyService {
      *
      * Only an owner of the company may call this.
      */
-    @Transactional(readOnly = true)
     public Response<RolesPermissionsTreeDTO> viewRolesAndPermissionsTree(String token, int companyId) {
         return RetryHelper.executeWithRetry(() ->
         {
@@ -205,7 +203,6 @@ public class CompanyService {
      * Returns the calling user's role within the given company:
      * "FOUNDER", "OWNER", "MANAGER", or "MEMBER".
      */
-    @Transactional(readOnly = true)
     public Response<String> getUserRoleInCompany(String token, int companyId) {
         return RetryHelper.executeWithRetry(() -> {
             try {
@@ -229,7 +226,6 @@ public class CompanyService {
      * Returns the set of PermissionTypes granted to the calling user as a manager in the company.
      * Returns an empty set if the user is not a manager.
      */
-    @Transactional(readOnly = true)
     public Response<Set<PermissionType>> getMyPermissions(String token, int companyId) {
         return RetryHelper.executeWithRetry(() -> {
             try {
@@ -568,7 +564,6 @@ public class CompanyService {
         });
     }
 
-    @Transactional(readOnly = true)
     public Response<List<CompanyDTO>> getAvailableCompanies(String token) {
         return RetryHelper.executeWithRetry(() ->
         {
@@ -954,7 +949,6 @@ public class CompanyService {
      * Returns companies where the calling user holds a role (FOUNDER, OWNER, or MANAGER).
      * Delegates filtering to the repository.
      */
-    @Transactional(readOnly = true)
     public Response<List<CompanyDTO>> getMyCompanies(String token) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("getMyCompanies called");
