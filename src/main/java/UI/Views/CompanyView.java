@@ -6,6 +6,7 @@ import application.CompanyService;
 import application.EventCompanyManageService;
 import application.EventService;
 import application.IAuth;
+import com.vaadin.flow.component.timepicker.TimePicker;
 import domain.dto.OrderDTO;
 import domain.dto.SalesReportDTO;
 import com.vaadin.flow.component.button.Button;
@@ -39,6 +40,8 @@ import domain.policy.DiscountPolicyType;
 
 import java.time.LocalDate;
 
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Set;
 
@@ -65,8 +68,10 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
     private final ComboBox<CategoryEvent>    categoryBox = new ComboBox<>("Category");
     private final NumberField minPriceField = new NumberField("Min price (₪)");
     private final NumberField maxPriceField = new NumberField("Max price (₪)");
-    private final DateTimePicker startDateField = new DateTimePicker("Start Date");
-    private final DateTimePicker endDateField = new DateTimePicker("End Date");
+    private final DatePicker startDateField = new DatePicker("Start Date");
+    private final TimePicker startTimeField = new TimePicker("Start Time");
+    private final DatePicker endDateField = new DatePicker("End Date");
+    private final TimePicker endTimeField = new TimePicker("End Time");
 
     // Event grid
     private final Grid<EventDTO> eventGrid = new Grid<>(EventDTO.class, false);
@@ -328,12 +333,28 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
 
         maxPriceField.setMin(0);
         maxPriceField.setWidth("10rem");
-        startDateField.setWidth("14rem");
-        endDateField.setWidth("14rem");
+        startDateField.setWidth("10rem");
+        startTimeField.setWidth("8rem");
+
+        endDateField.setWidth("10rem");
+        endTimeField.setWidth("8rem");
+
+        startDateField.addValueChangeListener(e -> {
+            if (e.getValue() != null && startTimeField.getValue() == null) {
+                startTimeField.setValue(LocalTime.of(0, 0));
+            }
+        });
+
+        endDateField.addValueChangeListener(e -> {
+            if (e.getValue() != null && endTimeField.getValue() == null) {
+                endTimeField.setValue(LocalTime.of(0, 0));
+            }
+        });
 
         Button applyBtn = new Button("Search", e -> {
             String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
-            String t = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);            loadEvents(t, buildFilter());
+            String t = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
+            loadEvents(t, buildFilter());
         });
         applyBtn.getElement().setAttribute("theme", "primary");
 
@@ -343,13 +364,23 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
             categoryBox.clear();
             minPriceField.clear();
             maxPriceField.clear();
+            startDateField.clear();
+            startTimeField.clear();
+            endDateField.clear();
+            endTimeField.clear();
             String tabId = UI.getCurrent().getElement().getProperty("currentTabId");
-            String t = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);            loadEvents(t, new EventSearchFilter());
+            String t = (String) VaadinSession.getCurrent().getAttribute("token_" + tabId);
+            loadEvents(t, new EventSearchFilter());
         });
 
         HorizontalLayout row1 = new HorizontalLayout(keywordField, areaBox, categoryBox);
 
-        HorizontalLayout row2 = new HorizontalLayout(startDateField, endDateField);
+        HorizontalLayout row2 = new HorizontalLayout(
+                startDateField,
+                startTimeField,
+                endDateField,
+                endTimeField
+        );
 
         HorizontalLayout row3 = new HorizontalLayout(minPriceField, maxPriceField, applyBtn, clearBtn);        row1.setDefaultVerticalComponentAlignment(Alignment.BASELINE);
 
@@ -374,9 +405,20 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
         filter.setCategory(categoryBox.getValue());
         filter.setMinPrice(minPriceField.getValue());
         filter.setMaxPrice(maxPriceField.getValue());
-        filter.setStartDate(startDateField.getValue());
-        filter.setEndDate(endDateField.getValue());
+        filter.setStartDate(toDateTime(startDateField.getValue(), startTimeField.getValue()));
+        filter.setEndDate(toDateTime(endDateField.getValue(), endTimeField.getValue()));
         return filter;
+    }
+
+    private LocalDateTime toDateTime(LocalDate date, LocalTime time) {
+        if (date == null) {
+            return null;
+        }
+
+        return LocalDateTime.of(
+                date,
+                time == null ? LocalTime.of(0, 0) : time
+        );
     }
 
     // ── Events grid ───────────────────────────────────────────────────────────

@@ -78,7 +78,7 @@ class LotteryServiceTest {
 
                 when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
                         TransactionCallback<?> callback = invocation.getArgument(0);
-                        return callback.doInTransaction(null);
+                        return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
                 });
                 passwordEncoder = new PasswordEncoderUtil();
                 tokenService = new TokenService();

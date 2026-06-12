@@ -109,11 +109,11 @@ class EventCompanyManageServiceTest {
 
         when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
             TransactionCallback<?> callback = invocation.getArgument(0);
-            return callback.doInTransaction(null);
+            return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
         });
 
         userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier,transactionTemplate);
-        eventService=new EventService(auth,eventRepo,notifier);
+        eventService=new EventService(auth,eventRepo,notifier, transactionTemplate);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
         activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth),userRepo, transactionTemplate,100);
