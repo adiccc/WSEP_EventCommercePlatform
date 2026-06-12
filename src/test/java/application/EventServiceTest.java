@@ -77,7 +77,7 @@ class EventServiceTest {
 
         when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
             TransactionCallback<?> callback = invocation.getArgument(0);
-            return callback.doInTransaction(null);
+            return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
         });
         eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate);
         service = new EventService(auth, eventRepo,notifier, transactionTemplate);
