@@ -1,11 +1,10 @@
 package domain.user;
 
-import domain.activeOrder.ActiveOrder;
+import DTO.NotifyDTO;
 import domain.dto.UserDTO;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 
@@ -31,7 +30,7 @@ public class Member extends User{
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JoinColumn(name = "member_id")
-    private List<DelayedNotification> delayedNotifications = new ArrayList<>();
+    private List<UserNotification> userNotifications = new ArrayList<>();
 
     protected Member() {
         super();
@@ -47,9 +46,9 @@ public class Member extends User{
         this.address = address;
         this.version = 0;
         this.activationStatus=activationStatus;
-        this.delayedNotifications = new ArrayList<>();
+        this.userNotifications = new ArrayList<>();
     }
-    public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address, List<DelayedNotification> delayedNotifications) {
+    public Member(String email, String password, String firstName, String lastName, String phoneNumber, LocalDate dateOfBirth, String address, List<UserNotification> userNotifications) {
         super(email);
         this.password = password;
         this.firstName = firstName;
@@ -59,7 +58,7 @@ public class Member extends User{
         this.address = address;
         this.version = 0;
         this.activationStatus=ActivationStatus.ACTIVE;
-        this.delayedNotifications =  delayedNotifications!=null ? delayedNotifications : new ArrayList<>();
+        this.userNotifications =  userNotifications !=null ? userNotifications : new ArrayList<>();
     }
     public Member(Member member) {
         super(member);
@@ -72,8 +71,8 @@ public class Member extends User{
         this.address=member.address;
         this.version=member.version;
         this.activationStatus=member.activationStatus;
-        this.delayedNotifications = member.getDelayedNotifications() != null ?
-                new ArrayList<>(member.getDelayedNotifications()) : new ArrayList<>();
+        this.userNotifications = member.getPendingNotifications() != null ?
+                new ArrayList<>(member.getPendingNotifications()) : new ArrayList<>();
     }
     public long getVersion() {
         return version;
@@ -117,15 +116,27 @@ public class Member extends User{
                 this.dateOfBirth.getDayOfMonth(), this.dateOfBirth.getMonthValue(), this.dateOfBirth.getYear(),
                 this.address, this.phoneNumber);
     }
-    public void addDelayedNotification(DelayedNotification notification) {
-        this.delayedNotifications.add(notification);
+    public void addPendingNotification(UserNotification notification) {
+        this.userNotifications.add(notification);
     }
 
-    public List<DelayedNotification> getDelayedNotifications() {
-        return this.delayedNotifications;
+    public List<UserNotification> getPendingNotifications() {
+        return this.userNotifications;
     }
 
-    public void clearDelayedNotifications() {
-        this.delayedNotifications.clear();
+    public void clearPendingNotifications() {
+        this.userNotifications.clear();
+    }
+
+    public List<NotifyDTO> fetchAndMarkPendingNotifications() {
+        List<NotifyDTO> pendingNotifications = new ArrayList<>();
+
+        for (UserNotification notification : this.userNotifications) {
+            if (notification.getStatus() == NotificationStatus.PENDING) {
+                pendingNotifications.add(new NotifyDTO(notification.getType(), notification.getPayload()));
+                notification.setStatus(NotificationStatus.DELIVERED);
+            }
+        }
+        return pendingNotifications;
     }
 }

@@ -11,6 +11,7 @@ import domain.dto.UserDTO;
 import domain.lottery.Lottery;
 import domain.user.IUserRepo;
 import domain.user.Member;
+import domain.user.NotificationStatus;
 import infrastructure.Auth;
 import infrastructure.Broadcaster;
 import infrastructure.PasswordEncoderUtil;
@@ -207,7 +208,7 @@ class LotteryServiceTest {
         }
 
         private long countDelayedLotteryNotifications(Member member) {
-                return member.getDelayedNotifications().stream()
+                return member.getPendingNotifications().stream()
                         .filter(n -> n.getType() == NotifyType.GENERAL_POPUP
                                 && n.getPayload() != null
                                 && n.getPayload().getMessage() != null
@@ -375,20 +376,23 @@ class LotteryServiceTest {
                         Member user2 = userRepo.findUserByEmail(id2);
                         Member user3 = userRepo.findUserByEmail(id3);
 
-                        assertFalse(user1.getDelayedNotifications().stream()
+                        assertTrue(user1.getPendingNotifications().stream()
                                         .anyMatch(n -> n.getPayload() != null
-                                                        && n.getPayload().getMessage().contains("Your code is: ")),
-                                        "Online user 1 should not have the lottery winner notification saved as delayed");
+                                                && n.getPayload().getMessage().contains("Your code is: ")
+                                                && n.getStatus() == NotificationStatus.DELIVERED),
+                                "Online user 1 should have the lottery winner notification saved and marked as DELIVERED");
 
-                        assertFalse(user2.getDelayedNotifications().stream()
+                        assertTrue(user2.getPendingNotifications().stream()
                                         .anyMatch(n -> n.getPayload() != null
-                                                        && n.getPayload().getMessage().contains("Your code is: ")),
-                                        "Online user 2 should not have the lottery winner notification saved as delayed");
+                                                && n.getPayload().getMessage().contains("Your code is: ")
+                                                && n.getStatus() == NotificationStatus.DELIVERED),
+                                "Online user 2 should have the lottery winner notification saved and marked as DELIVERED");
 
-                        assertFalse(user3.getDelayedNotifications().stream()
+                        assertTrue(user3.getPendingNotifications().stream()
                                         .anyMatch(n -> n.getPayload() != null
-                                                        && n.getPayload().getMessage().contains("Your code is: ")),
-                                        "Online user 3 should not have the lottery winner notification saved as delayed");
+                                                && n.getPayload().getMessage().contains("Your code is: ")
+                                                && n.getStatus() == NotificationStatus.DELIVERED),
+                                "Online user 3 should have the lottery winner notification saved and marked as DELIVERED");
                 } finally {
                         // Cleanup
                         reg1.remove();
@@ -434,19 +438,19 @@ class LotteryServiceTest {
                 Member user2 = userRepo.findUserByEmail(id2);
                 Member user3 = userRepo.findUserByEmail(id3);
 
-                assertTrue(user1.getDelayedNotifications().stream()
+                assertTrue(user1.getPendingNotifications().stream()
                                 .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                                 && n.getPayload() != null
                                                 && n.getPayload().getMessage().contains("Your code is: ")),
                                 "User 1 should have a delayed lottery winner notification");
 
-                assertTrue(user2.getDelayedNotifications().stream()
+                assertTrue(user2.getPendingNotifications().stream()
                                 .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                                 && n.getPayload() != null
                                                 && n.getPayload().getMessage().contains("Your code is: ")),
                                 "User 2 should have a delayed lottery winner notification");
 
-                assertTrue(user3.getDelayedNotifications().stream()
+                assertTrue(user3.getPendingNotifications().stream()
                                 .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                                 && n.getPayload() != null
                                                 && n.getPayload().getMessage().contains("Your code is: ")),
@@ -510,13 +514,14 @@ class LotteryServiceTest {
                                                 .contains("Your code is: "),
                                                 "Online winner notification should contain lottery code");
 
-                                assertFalse(onlineUser.getDelayedNotifications().stream()
+                                assertTrue(onlineUser.getPendingNotifications().stream()
                                                 .anyMatch(n -> n.getPayload() != null
-                                                                && n.getPayload().getMessage()
-                                                                                .contains("Your code is: ")),
-                                                "Online winner should not have the code saved as delayed");
+                                                        && n.getPayload().getMessage()
+                                                        .contains("Your code is: ")
+                                                        && n.getStatus() == NotificationStatus.DELIVERED),
+                                        "Online winner should have the code saved and marked as DELIVERED");
 
-                                assertFalse(offlineUser.getDelayedNotifications().stream()
+                                assertFalse(offlineUser.getPendingNotifications().stream()
                                                 .anyMatch(n -> n.getPayload() != null
                                                                 && n.getPayload().getMessage()
                                                                                 .contains("Your code is: ")),
@@ -526,17 +531,17 @@ class LotteryServiceTest {
                         if (offlineUserWon) {
                                 Thread.sleep(1000);
 
-                                assertTrue(offlineUser.getDelayedNotifications().stream()
+                                assertTrue(offlineUser.getPendingNotifications().stream()
                                                 .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                                                 && n.getPayload() != null
                                                                 && n.getPayload().getMessage()
-                                                                                .contains("Your code is: ")),
-                                                "Offline winner should have a delayed lottery code notification");
-
+                                                                                .contains("Your code is: ")
+                                        && n.getStatus() == NotificationStatus.PENDING),
+                                "Offline winner should have a PENDING lottery code notification");
                                 assertNull(onlineNotification.get(),
                                                 "Online non-winner should not receive a lottery code notification");
 
-                                assertFalse(onlineUser.getDelayedNotifications().stream()
+                                assertFalse(onlineUser.getPendingNotifications().stream()
                                                 .anyMatch(n -> n.getPayload() != null
                                                                 && n.getPayload().getMessage()
                                                                                 .contains("Your code is: ")),
@@ -628,17 +633,26 @@ class LotteryServiceTest {
                                         userRepo.findUserByEmail(id4));
 
                         for (Member user : users) {
-                                assertFalse(user.getDelayedNotifications().stream()
-                                                .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                boolean isWinner = updatedLottery.getWinners().contains(user.getUserId());
+
+                                if (isWinner) {
+                                        assertTrue(user.getPendingNotifications().stream()
+                                                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                                                 && n.getPayload() != null
                                                                 && n.getPayload().getMessage() != null
-                                                                && n.getPayload().getMessage()
-                                                                                .contains("Your code is: ")
-                                                                && n.getPayload().getMessage()
-                                                                                .contains("event " + eventRepo.findById(
-                                                                                                lottery.getId())
-                                                                                                .getName())),
-                                                "Online users should not have lottery winner notifications saved as delayed");
+                                                                && n.getPayload().getMessage().contains("Your code is: ")
+                                                                && n.getPayload().getMessage().contains("event " + eventRepo.findById(lottery.getId()).getName())
+                                                                && n.getStatus() == NotificationStatus.DELIVERED),
+                                                "Online winner should have the notification saved and marked as DELIVERED");
+                                } else {
+                                        assertFalse(user.getPendingNotifications().stream()
+                                                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                                                && n.getPayload() != null
+                                                                && n.getPayload().getMessage() != null
+                                                                && n.getPayload().getMessage().contains("Your code is: ")
+                                                                && n.getPayload().getMessage().contains("event " + eventRepo.findById(lottery.getId()).getName())),
+                                                "Non-winner should not have any lottery winner notification");
+                                }
                         }
                 } finally {
                         reg1.remove();
@@ -923,11 +937,12 @@ class LotteryServiceTest {
                 // Assert
                 Member winner = userRepo.findUserByEmail(userIdentifier);
 
-                assertTrue(winner.getDelayedNotifications().stream()
+                assertTrue(winner.getPendingNotifications().stream()
                                 .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                                 && n.getPayload() != null
-                                                && n.getPayload().getMessage().contains("Your code is: ")),
-                                "Missing winner notification should be saved as delayed");
+                                                && n.getPayload().getMessage().contains("Your code is: ")
+                                        && n.getStatus() == NotificationStatus.PENDING),
+                                "Missing winner notification should be saved as PENDING");
 
                 Lottery updatedLottery = lotteryRepo.findById(eventId);
 
@@ -952,10 +967,11 @@ class LotteryServiceTest {
 
                 Member winnerAfterFirstDraw = userRepo.findUserByEmail(userIdentifier);
 
-                long notificationsAfterFirstDraw = winnerAfterFirstDraw.getDelayedNotifications().stream()
+                long notificationsAfterFirstDraw = winnerAfterFirstDraw.getPendingNotifications().stream()
                                 .filter(n -> n.getType() == NotifyType.GENERAL_POPUP
                                                 && n.getPayload() != null
-                                                && n.getPayload().getMessage().contains("Your code is: "))
+                                                && n.getPayload().getMessage().contains("Your code is: ")
+                                                && n.getStatus() == NotificationStatus.PENDING)
                                 .count();
 
                 assertEquals(1, notificationsAfterFirstDraw,
@@ -967,10 +983,11 @@ class LotteryServiceTest {
                 // Assert
                 Member winnerAfterSecondDraw = userRepo.findUserByEmail(userIdentifier);
 
-                long notificationsAfterSecondDraw = winnerAfterSecondDraw.getDelayedNotifications().stream()
+                long notificationsAfterSecondDraw = winnerAfterSecondDraw.getPendingNotifications().stream()
                                 .filter(n -> n.getType() == NotifyType.GENERAL_POPUP
                                                 && n.getPayload() != null
-                                                && n.getPayload().getMessage().contains("Your code is: "))
+                                                && n.getPayload().getMessage().contains("Your code is: ")
+                                                && n.getStatus() == NotificationStatus.PENDING)
                                 .count();
 
                 assertEquals(1, notificationsAfterSecondDraw,
@@ -1054,22 +1071,23 @@ class LotteryServiceTest {
                         Member user1 = userRepo.findUserByEmail(id1);
                         Member user2 = userRepo.findUserByEmail(id2);
 
-                        assertFalse(user1.getDelayedNotifications().stream()
+                        assertTrue(user1.getPendingNotifications().stream()
                                         .anyMatch(n -> n.getPayload() != null
                                                         && n.getPayload().getMessage() != null
                                                         && n.getPayload().getMessage().contains("Your code is: ")
                                                         && n.getPayload().getMessage().contains("event " + eventRepo
-                                                                        .findById(lottery.getId()).getName())),
-                                        "Online user 1 should not have lottery winner notification saved as delayed");
+                                                                        .findById(lottery.getId()).getName())
+                                                        && n.getStatus() == NotificationStatus.DELIVERED),
+                                "Online user 1 should have lottery winner notification saved and marked as DELIVERED");
 
-                        assertFalse(user2.getDelayedNotifications().stream()
+                        assertTrue(user2.getPendingNotifications().stream()
                                         .anyMatch(n -> n.getPayload() != null
                                                         && n.getPayload().getMessage() != null
                                                         && n.getPayload().getMessage().contains("Your code is: ")
                                                         && n.getPayload().getMessage().contains("event " + eventRepo
-                                                                        .findById(lottery.getId()).getName())),
-                                        "Online user 2 should not have lottery winner notification saved as delayed");
-
+                                                                        .findById(lottery.getId()).getName())
+                                                && n.getStatus() == NotificationStatus.DELIVERED),
+                                "Online user 2 should have lottery winner notification saved and marked as DELIVERED");
                 } finally {
                         executor.shutdown();
                         reg1.remove();
@@ -1124,7 +1142,7 @@ class LotteryServiceTest {
                         for (Integer winnerId : updatedLottery.getWinners()) {
                                 Member winner = userRepo.findById(winnerId);
 
-                                long delayedLotteryNotifications = winner.getDelayedNotifications().stream()
+                                long delayedLotteryNotifications = winner.getPendingNotifications().stream()
                                                 .filter(n -> n.getType() == NotifyType.GENERAL_POPUP
                                                                 && n.getPayload() != null
                                                                 && n.getPayload().getMessage() != null
@@ -1132,25 +1150,26 @@ class LotteryServiceTest {
                                                                                 .contains("Your code is: ")
                                                                 && n.getPayload().getMessage().contains("event "
                                                                                 + eventRepo.findById(lottery.getId())
-                                                                                                .getName()))
+                                                                                                .getName())
+                                                                && n.getStatus() == NotificationStatus.PENDING)
                                                 .count();
 
                                 assertEquals(1, delayedLotteryNotifications,
-                                                "Each offline winner should have exactly one delayed lottery notification");
-                        }
+                                        "Each offline winner should have exactly one PENDING lottery notification");                        }
 
                         Member user1 = userRepo.findUserByEmail(id1);
                         Member user2 = userRepo.findUserByEmail(id2);
 
-                        long totalDelayedLotteryNotifications = user1.getDelayedNotifications().stream()
+                        long totalDelayedLotteryNotifications = user1.getPendingNotifications().stream()
                                         .filter(n -> n.getPayload() != null
                                                         && n.getPayload().getMessage() != null
                                                         && n.getPayload().getMessage().contains("Your code is: ")
                                                         && n.getPayload().getMessage().contains("event " + eventRepo
-                                                                        .findById(lottery.getId()).getName()))
+                                                                        .findById(lottery.getId()).getName())
+                                                        && n.getStatus() == NotificationStatus.PENDING)
                                         .count()
                                         +
-                                        user2.getDelayedNotifications().stream()
+                                        user2.getPendingNotifications().stream()
                                                         .filter(n -> n.getPayload() != null
                                                                         && n.getPayload().getMessage() != null
                                                                         && n.getPayload().getMessage()
@@ -1158,12 +1177,12 @@ class LotteryServiceTest {
                                                                         && n.getPayload().getMessage().contains(
                                                                                         "event " + eventRepo.findById(
                                                                                                         lottery.getId())
-                                                                                                        .getName()))
+                                                                                                        .getName())
+                                                                        && n.getStatus() == NotificationStatus.PENDING)
                                                         .count();
 
                         assertEquals(2, totalDelayedLotteryNotifications,
-                                        "There should be exactly one delayed lottery notification per winner");
-
+                                "There should be exactly one PENDING lottery notification per winner");
                 } finally {
                         executor.shutdown();
                 }
@@ -1227,9 +1246,15 @@ class LotteryServiceTest {
 
                 Member winner = userRepo.findUserByEmail(userIdentifier);
 
-                assertEquals(1, countDelayedLotteryNotifications(winner),
-                        "Unnotified winner should receive exactly one delayed notification");
+                long pendingCount = winner.getPendingNotifications().stream()
+                        .filter(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().contains("Your code is: ")
+                                && n.getStatus() == NotificationStatus.PENDING)
+                        .count();
 
+                assertEquals(1, pendingCount,
+                        "Offline winner should receive exactly one PENDING notification");
                 Lottery updatedLottery = lotteryRepo.findById(eventId);
 
                 assertTrue(updatedLottery.getNotifiedWinners().contains(userId),
@@ -1281,7 +1306,7 @@ class LotteryServiceTest {
         void WhenShutdownScheduler_ThenDoesNotThrow() {
                 assertDoesNotThrow(() -> lotteryService.shutdown());
         }
-
+        //TODO::CHECK THIS TEST
         @Test
         void GivenFewerRegistrationsThanCapacityAndUsersOffline_WhenDrawLotteryIsTriggered_WithMockNotifier_ThenAllRegisteredWinAndNotificationsSavedAsDelayed() {
                 // Arrange: Create mock notifier for this test
@@ -1353,19 +1378,19 @@ class LotteryServiceTest {
                         Member user3 = userRepo.findUserByEmail(id3);
 
                         // Assert: each offline winner has delayed lottery notification
-                        assertTrue(user1.getDelayedNotifications().stream()
+                        assertTrue(user1.getPendingNotifications().stream()
                                         .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                                 && n.getPayload() != null
                                                 && n.getPayload().getMessage().contains("Your code is: ")),
                                 "User 1 should have a delayed lottery winner notification");
 
-                        assertTrue(user2.getDelayedNotifications().stream()
+                        assertTrue(user2.getPendingNotifications().stream()
                                         .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                                 && n.getPayload() != null
                                                 && n.getPayload().getMessage().contains("Your code is: ")),
                                 "User 2 should have a delayed lottery winner notification");
 
-                        assertTrue(user3.getDelayedNotifications().stream()
+                        assertTrue(user3.getPendingNotifications().stream()
                                         .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
                                                 && n.getPayload() != null
                                                 && n.getPayload().getMessage().contains("Your code is: ")),
@@ -1502,21 +1527,23 @@ class LotteryServiceTest {
                         Member user2 = userRepo.findUserByEmail(id2);
                         Member user3 = userRepo.findUserByEmail(id3);
 
-                        assertFalse(user1.getDelayedNotifications().stream()
+                        assertTrue(user1.getPendingNotifications().stream()
                                         .anyMatch(n -> n.getPayload() != null
-                                                && n.getPayload().getMessage().contains("Your code is: ")),
+                                                && n.getPayload().getMessage().contains("Your code is: ")
+                                                && n.getStatus() == NotificationStatus.DELIVERED),
                                 "Online user 1 should not have the lottery winner notification saved as delayed");
 
-                        assertFalse(user2.getDelayedNotifications().stream()
+                        assertTrue(user2.getPendingNotifications().stream()
                                         .anyMatch(n -> n.getPayload() != null
-                                                && n.getPayload().getMessage().contains("Your code is: ")),
-                                "Online user 2 should not have the lottery winner notification saved as delayed");
+                                                && n.getPayload().getMessage().contains("Your code is: ")
+                                                && n.getStatus() == NotificationStatus.DELIVERED),
+                                "Online user 2 should have the lottery winner notification saved and marked as DELIVERED");
 
-                        assertFalse(user3.getDelayedNotifications().stream()
+                        assertTrue(user3.getPendingNotifications().stream()
                                         .anyMatch(n -> n.getPayload() != null
-                                                && n.getPayload().getMessage().contains("Your code is: ")),
-                                "Online user 3 should not have the lottery winner notification saved as delayed");
-
+                                                && n.getPayload().getMessage().contains("Your code is: ")
+                                                && n.getStatus() == NotificationStatus.DELIVERED),
+                                "Online user 3 should have the lottery winner notification saved and marked as DELIVERED");
                 } finally {
                         lotteryServiceWithMockNotifier.shutdown();
                 }

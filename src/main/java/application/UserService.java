@@ -9,7 +9,6 @@ import domain.user.*;
 import Exception.OptimisticLockingFailureException;
 import domain.webQueue.WebQueue;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.web.OffsetScrollPositionHandlerMethodArgumentResolver;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import java.time.DateTimeException;
@@ -305,12 +304,12 @@ public class UserService {
                     if (member == null) {
                         return new Response<>(null, "User not found");
                     }
-                    List<NotifyDTO> allDelayedNotification = new ArrayList<>();
-                    for(DelayedNotification notification : member.getDelayedNotifications()){
-                        allDelayedNotification.add(new NotifyDTO(notification));
+                    List<NotifyDTO> allPendingNotifications = member.fetchAndMarkPendingNotifications();
+                    if (!allPendingNotifications.isEmpty()) {
+                        userRepo.store(member);
                     }
                     logger.info("deliverDelayedNotifications successful for email: " + userEmail);
-                    return new Response<>(allDelayedNotification, "Successfully processed delayed notifications");
+                    return new Response<>(allPendingNotifications, "Successfully processed delayed notifications");
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
@@ -334,7 +333,7 @@ public class UserService {
                 try {
                     Member member = userRepo.findUserByEmail(userEmail);
                     if (member != null) {
-                        member.clearDelayedNotifications();
+                        member.clearPendingNotifications();
                         userRepo.store(member);
                         logger.info("deliverDelayedNotifications successful for email: " + userEmail);
                         return new Response<>(true, "Successfully cleaned delayed notifications");

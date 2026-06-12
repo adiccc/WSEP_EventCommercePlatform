@@ -1,8 +1,6 @@
 package DTO;
-import domain.user.DelayedNotification;
+import domain.user.UserNotification;
 
-import java.time.LocalDateTime;
-import java.util.UUID;
 public class NotifyDTO {
     private NotifyType type;
     private NotifyPayload payload;
@@ -12,7 +10,7 @@ public class NotifyDTO {
         this.payload = payload;
     }
 
-    public NotifyDTO(DelayedNotification notification) {
+    public NotifyDTO(UserNotification notification) {
         this.type = notification.getType();
         this.payload = notification.getPayload();
     }

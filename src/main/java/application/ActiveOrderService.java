@@ -6,11 +6,9 @@ import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.activeOrder.STAGE;
-import java.time.Duration;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dto.*;
-import domain.dto.ActiveOrderSeatDTO;
 import domain.dto.ActiveOrderSelectionDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
@@ -18,12 +16,14 @@ import domain.event.Order;
 import domain.lottery.ILotteryRepo;
 import domain.lottery.Lottery;
 import Exception.OptimisticLockingFailureException;
-import domain.user.DelayedNotification;
+import domain.user.NotificationStatus;
+import domain.user.UserNotification;
 import domain.user.IUserRepo;
 import domain.user.Member;
-import infrastructure.VaadinNotifier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -789,7 +789,7 @@ public class ActiveOrderService {
                                     "Refund for order " + order.getOrderId() + " in event " + event.getId()
                                             + " because ticket issuance failed has been failed, please contact support",
                                     event.getId(), null);
-                            notifier.notifyUser(auth.getUserIdentifier(token).getValue(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
+                            sendOrSaveNotification(auth.getUserIdentifier(token).getValue(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
                         } catch (Exception e) {
                             logger.log(Level.WARNING, "Failed to notify user about required refund: " + e.getMessage());
                         }
@@ -1286,18 +1286,46 @@ public class ActiveOrderService {
         }
         return -1; //for guest or invalid
     }
-     // Helper method to send a real-time notification or save it as delayed if the
+     // Helper method to send a real-time notification or save it as pending if the
     // user is offline.
     private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
-        boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
-
-        if (isDelivered) {
-            return new Response<>(null, "Notification sent successfully");
+        Member member = userRepo.findUserByEmail(userIdentifier);
+        boolean isGuest = (member == null);
+        if (isGuest) {
+            boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
+            if (isDelivered) {
+                return new Response<>(null, "Notification sent successfully to guest");
+            } else {
+                logger.warning("Guest is offline. Notification dropped for: " + userIdentifier);
+                return new Response<>(null, "Guest offline, notification dropped");
+            }
         }
-        logger.info("User is offline. Saving delayed notification for: " + userIdentifier);
-        return saveDelayedNotificationWithRetry(userIdentifier, notifyDTO);
+        Long savedNotificationId = null;
+        boolean dbSaveFailed = false;
+        try{
+            Response<Long> savedNotificationIdRes = saveDelayedNotificationAsPending(userIdentifier, notifyDTO);
+            savedNotificationId = (savedNotificationIdRes != null) ? savedNotificationIdRes.getValue() : null;
+            if(savedNotificationId != null && savedNotificationId == -1L){
+                dbSaveFailed = true;
+            }
+        } catch (Exception e){
+            logger.severe("Database connection/commit failed outside lambda: " + e.getMessage());
+            dbSaveFailed = true;
+        }
+        boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
+        if (dbSaveFailed && !isDelivered) {
+            logger.severe("CRITICAL: DB transaction failed. Notification lost for: " + userIdentifier);
+            return new Response<>(null, "Failed to handle notification due to DB error");
+        }
+        if (isDelivered) {
+            markNotificationAsDelivered(userIdentifier, savedNotificationId); //if we succeed sending in real time we need to mark as delivered
+            return new Response<>(null, "Notification sent successfully as DELIVERED");
+        }
+        logger.info("Member is offline. Notification remains PENDING for: " + userIdentifier);
+        return new Response<>(null, "Notification saved as PENDING");
     }
-    private Response<Void> saveDelayedNotificationWithRetry(String userIdentifier, NotifyDTO notifyDTO) {
+    //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
+    private Response<Long> saveDelayedNotificationAsPending(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() ->
             transactionTemplate.execute(status -> {
                 try {
@@ -1308,25 +1336,58 @@ public class ActiveOrderService {
                         return new Response<>(null, "User not found");
                     }
 
-                    DelayedNotification delayedNotification = new DelayedNotification(notifyDTO.getType(), notifyDTO.getPayload());
-                    member.addDelayedNotification(delayedNotification);
+                    UserNotification userNotification = new UserNotification(notifyDTO.getType(), notifyDTO.getPayload());
+                    member.addPendingNotification(userNotification);
                     userRepo.store(member);
 
-                    logger.info("Delayed notification saved successfully for: " + member.getIdentifier());
-                    return new Response<>(null, "Notification saved as delayed");
+                    logger.info("Pending notification saved successfully for: " + member.getIdentifier());
+                    return new Response<>(userNotification.getNotificationId(), "Notification saved as pending");
 
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
-
+                }catch (TransientDataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                        throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
-                    logger.warning("Failed to send or save notification for "
-                            + userIdentifier + ": " + e.getMessage());
-
-                    return new Response<>(null, "Failed to send or save notification");
+                    logger.severe("Fatal error during notification save: " + e.getMessage());
+                    return new Response<>(-1L, "Fatal error");
                 }
             })
+        );
+    }
+    //marking notification as delivered because we succeed in real-time
+    private Response<Boolean> markNotificationAsDelivered(String userIdentifier, Long notificationId) {
+        return RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+                    try {
+                        Member member = userRepo.findUserByEmail(userIdentifier);
+                        if (member != null) {
+                            for (UserNotification dn : member.getPendingNotifications()) {
+                                boolean isMatch = (notificationId != null) ?
+                                        notificationId.equals(dn.getNotificationId()) :
+                                        (dn.getStatus() == NotificationStatus.PENDING);
+
+                                if (isMatch) {
+                                    dn.setStatus(NotificationStatus.DELIVERED);
+                                    break;
+                                }
+                            }
+                            userRepo.store(member);
+                        }
+                        return new Response<>(true, "Notification marked as DELIVERED");
+
+                    } catch (OptimisticLockingFailureException e) {
+                        status.setRollbackOnly();
+                        throw e;
+                    } catch (Exception e) {
+                        status.setRollbackOnly();
+                        logger.warning("Failed to mark notification as delivered: " + e.getMessage());
+                        return new Response<>(false, "Failed to mark notification as delivered");
+                    }
+                })
         );
     }
     private void notifyTokenExpired(String token) {

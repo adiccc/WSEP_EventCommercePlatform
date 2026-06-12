@@ -660,20 +660,20 @@ class UserServiceTest {
         companyService.requestAppointManager(ownerToken, compId, targetUserId, EnumSet.of(PermissionType.CREATE_EVENT));
         companyService.requestAppointOwner(ownerToken, compId, targetUserId);
 
-        assertEquals(2, userRepo.findUserByEmail(email).getDelayedNotifications().size());
+        assertEquals(2, userRepo.findUserByEmail(email).getPendingNotifications().size());
 
         Response<List<NotifyDTO>> getResponse = userService.getDelayedNotifications(email);
 
         // Assert 1
         assertNotNull(getResponse.getValue());
         assertEquals(2, getResponse.getValue().size(), "UI should receive 2 notifications");
-        assertFalse(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
+        assertFalse(userRepo.findUserByEmail(email).getPendingNotifications().isEmpty());
 
         Response<Boolean> cleanResponse = userService.cleanDelayedNotifications(email);
 
         // Assert 2
         assertTrue(cleanResponse.getValue());
-        assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty(), "DB should be empty after clean");
+        assertTrue(userRepo.findUserByEmail(email).getPendingNotifications().isEmpty(), "DB should be empty after clean");
     }
 
     @Test
@@ -702,7 +702,7 @@ class UserServiceTest {
         Response<Boolean> cleanResponse = userService.cleanDelayedNotifications(email);
         assertTrue(cleanResponse.getValue());
 
-        assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
+        assertTrue(userRepo.findUserByEmail(email).getPendingNotifications().isEmpty());
     }
 
     @Test
@@ -740,7 +740,7 @@ class UserServiceTest {
         boolean success2 = res2.getValue() != null && res2.getValue();
 
         assertTrue(success1 || success2, "At least one thread should successfully process the cleaning");
-        assertTrue(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
+        assertTrue(userRepo.findUserByEmail(email).getPendingNotifications().isEmpty());
     }
 
     @Test
@@ -779,7 +779,7 @@ class UserServiceTest {
         assertNotNull(cleanRes, "Service should return a structured response, not throw an unhandled exception");
         Member memberAfterChaos = userRepo.findUserByEmail(email);
         assertNotNull(memberAfterChaos);
-        assertNotNull(memberAfterChaos.getDelayedNotifications());
+        assertNotNull(memberAfterChaos.getPendingNotifications());
     }
 
     @Test
@@ -797,7 +797,7 @@ class UserServiceTest {
         companyService.createProductionCompany(ownerToken, compId, "Trigger Co 3", "trig3@co.com", "050-111-1111", "bank");
 
         companyService.requestAppointOwner(ownerToken, compId, targetUserId);
-        assertFalse(userRepo.findUserByEmail(email).getDelayedNotifications().isEmpty());
+        assertFalse(userRepo.findUserByEmail(email).getPendingNotifications().isEmpty());
 
         // Act
         Response<Boolean> adminRes = adminService.removeUser(ADMIN_TOKEN, targetUserId);
