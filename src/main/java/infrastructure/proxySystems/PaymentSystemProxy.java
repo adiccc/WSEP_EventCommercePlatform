@@ -22,4 +22,8 @@ public class PaymentSystemProxy implements IPaymentSystem {
     public boolean refund(String paymentConfirmationId, double amount) {
         return true;
     }
+    @Override
+    public boolean handshake() {
+        return true;
+    }
 }
