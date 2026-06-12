@@ -5,7 +5,6 @@ import application.EventService;
 import application.Response;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.combobox.ComboBox;
-import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.notification.Notification;
@@ -23,8 +22,11 @@ import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
 import com.vaadin.flow.component.UI;
 import domain.dto.EventDTO;
-
+import com.vaadin.flow.component.datepicker.DatePicker;
+import com.vaadin.flow.component.timepicker.TimePicker;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 @Route(value = "search", layout = MainLayout.class)
@@ -38,8 +40,10 @@ public class SearchEventsView extends VerticalLayout {
     private final TextField nameField = new TextField("Keyword");
     private final ComboBox<CategoryEvent> categoryBox = new ComboBox<>("Category");
     private final ComboBox<GeographicalArea> locationBox = new ComboBox<>("Location");
-    private final DateTimePicker startDate = new DateTimePicker("Start Date");
-    private final DateTimePicker endDate = new DateTimePicker("End Date");
+    private final DatePicker startDate = new DatePicker("Start Date");
+    private final TimePicker startTime = new TimePicker("Start Time");
+    private final DatePicker endDate = new DatePicker("End Date");
+    private final TimePicker endTime = new TimePicker("End Time");
     private final NumberField minPrice = new NumberField("Min Price");
     private final NumberField maxPrice = new NumberField("Max Price");
 
@@ -62,11 +66,12 @@ public class SearchEventsView extends VerticalLayout {
             nameField.clear();
             categoryBox.clear();
             locationBox.clear();
-            startDate.clear();
-            endDate.clear();
             minPrice.clear();
             maxPrice.clear();
-
+            startDate.clear();
+            startTime.clear();
+            endDate.clear();
+            endTime.clear();
             search(new EventSearchFilter());
         });
 
@@ -76,7 +81,7 @@ public class SearchEventsView extends VerticalLayout {
         HorizontalLayout row2 = new HorizontalLayout(categoryBox, locationBox);
         row2.setDefaultVerticalComponentAlignment(Alignment.END);
 
-        HorizontalLayout row3 = new HorizontalLayout(startDate, endDate);
+        HorizontalLayout row3 = new HorizontalLayout(startDate, startTime, endDate, endTime);
         row3.setDefaultVerticalComponentAlignment(Alignment.END);
 
         HorizontalLayout row4 = new HorizontalLayout(minPrice, maxPrice, searchButton, clearButton);
@@ -107,14 +112,29 @@ public class SearchEventsView extends VerticalLayout {
         locationBox.setClearButtonVisible(true);
         locationBox.setWidth("12rem");
 
-        startDate.setWidth("14rem");
-        endDate.setWidth("14rem");
-
         minPrice.setMin(0);
         minPrice.setWidth("10rem");
 
         maxPrice.setMin(0);
         maxPrice.setWidth("10rem");
+
+        startDate.setWidth("10rem");
+        startTime.setWidth("8rem");
+
+        endDate.setWidth("10rem");
+        endTime.setWidth("8rem");
+
+        startDate.addValueChangeListener(e -> {
+            if (e.getValue() != null && startTime.getValue() == null) {
+                startTime.setValue(LocalTime.of(0, 0));
+            }
+        });
+
+        endDate.addValueChangeListener(e -> {
+            if (e.getValue() != null && endTime.getValue() == null) {
+                endTime.setValue(LocalTime.of(0, 0));
+            }
+        });
     }
 
     private void configureGrid() {
@@ -174,12 +194,23 @@ public class SearchEventsView extends VerticalLayout {
 
         filter.setCategory(categoryBox.getValue());
         filter.setLocation(locationBox.getValue());
-        filter.setStartDate(startDate.getValue());
-        filter.setEndDate(endDate.getValue());
+        filter.setStartDate(toDateTime(startDate.getValue(), startTime.getValue()));
+        filter.setEndDate(toDateTime(endDate.getValue(), endTime.getValue()));
         filter.setMinPrice(minPrice.getValue());
         filter.setMaxPrice(maxPrice.getValue());
 
         return filter;
+    }
+
+    private LocalDateTime toDateTime(LocalDate date, LocalTime time) {
+        if (date == null) {
+            return null;
+        }
+
+        return LocalDateTime.of(
+                date,
+                time == null ? LocalTime.of(0, 0) : time
+        );
     }
 
     private void search(EventSearchFilter filter) {

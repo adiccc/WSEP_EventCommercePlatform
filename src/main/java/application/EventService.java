@@ -171,7 +171,7 @@ public class EventService {
             });
         });
     }
-    
+
     private void notifyTokenExpired(String token) {
         try {
             NotifyPayload payload = new NotifyPayload("Your session has expired");
