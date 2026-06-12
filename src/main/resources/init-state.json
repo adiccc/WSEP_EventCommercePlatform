@@ -99,7 +99,39 @@
     { "type": "define-venue",  "params": { "token": "${charlieToken}", "eventId": "${sunsetEventId}" } },
 
     { "type": "create-event", "params": { "token": "${charlieToken}", "companyId": "10", "name": "Food & Music Weekend",    "date": "+3M",  "saleStart": "-1D",  "area": "SOUTH",     "category": "FESTIVAL"   }, "store": "foodMusicEventId"    },
-    { "type": "define-venue",  "params": { "token": "${charlieToken}", "eventId": "${foodMusicEventId}" } }
+    { "type": "define-venue",  "params": { "token": "${charlieToken}", "eventId": "${foodMusicEventId}" } },
+
+    { "type": "register", "params": { "guestToken": "${guest}", "email": "frank@demo.com", "firstName": "Frank", "lastName": "Mor",     "password": "Frank123!", "birthDay": "1", "birthMonth": "1", "birthYear": "1995", "address": "5 Birch St",  "phone": "057-678-9012" } },
+    { "type": "register", "params": { "guestToken": "${guest}", "email": "grace@demo.com", "firstName": "Grace", "lastName": "Avraham", "password": "Grace123!", "birthDay": "1", "birthMonth": "1", "birthYear": "1995", "address": "8 Maple Ave", "phone": "059-789-0123" } },
+
+    { "type": "login", "params": { "email": "frank@demo.com", "password": "Frank123!" }, "store": "frankToken" },
+    { "type": "login", "params": { "email": "grace@demo.com", "password": "Grace123!" }, "store": "graceToken" },
+
+    { "type": "get-user-id", "params": { "token": "${frankToken}" }, "store": "frankId" },
+    { "type": "get-user-id", "params": { "token": "${graceToken}" }, "store": "graceId" },
+
+    { "type": "appoint-owner", "params": { "ownerToken": "${bobToken}",     "appointeeToken": "${frankToken}", "companyId": "5", "appointeeId": "${frankId}" } },
+    { "type": "appoint-owner", "params": { "ownerToken": "${charlieToken}", "appointeeToken": "${daveToken}",  "companyId": "8", "appointeeId": "${daveId}"  } },
+
+    { "type": "appoint-manager", "params": { "ownerToken": "${bobToken}",     "appointeeToken": "${graceToken}", "companyId": "6", "appointeeId": "${graceId}", "permissions": "MANAGE_POLICIES,VIEW_ORDERS_HISTORY" } },
+    { "type": "appoint-manager", "params": { "ownerToken": "${charlieToken}", "appointeeToken": "${eveToken}",   "companyId": "9", "appointeeId": "${eveId}",   "permissions": "CREATE_EVENT,MANAGE_EVENTS_INVENTORY" } },
+    { "type": "appoint-manager", "params": { "ownerToken": "${aliceToken}",   "appointeeToken": "${frankToken}", "companyId": "3", "appointeeId": "${frankId}", "permissions": "MANAGE_POLICIES,VIEW_ORDERS_HISTORY,CREATE_EVENT" } },
+
+    { "type": "add-company-rule", "params": { "token": "${aliceToken}",   "companyId": "2", "ruleType": "MAX_TICKETS", "value": "10" } },
+    { "type": "add-company-rule", "params": { "token": "${aliceToken}",   "companyId": "3", "ruleType": "MIN_TICKETS", "value": "2"  } },
+    { "type": "add-company-rule", "params": { "token": "${aliceToken}",   "companyId": "4", "ruleType": "MIN_AGE",     "value": "21" } },
+    { "type": "add-company-rule", "params": { "token": "${bobToken}",     "companyId": "5", "ruleType": "MAX_TICKETS", "value": "6"  } },
+    { "type": "add-company-rule", "params": { "token": "${bobToken}",     "companyId": "7", "ruleType": "MIN_AGE",     "value": "16" } },
+    { "type": "add-company-rule", "params": { "token": "${charlieToken}", "companyId": "8", "ruleType": "MIN_TICKETS", "value": "1"  } },
+
+    { "type": "add-event-discount", "params": { "token": "${aliceToken}",   "eventId": "${championsEventId}",  "couponCode": "FINALS20", "percent": "20.0", "expiryDaysFromNow": "14" } },
+    { "type": "add-event-discount", "params": { "token": "${aliceToken}",   "eventId": "${summerGrooveEventId}","couponCode": "SUMMER15", "percent": "15.0", "expiryDaysFromNow": "60" } },
+    { "type": "add-event-discount", "params": { "token": "${bobToken}",     "eventId": "${popEventId}",        "couponCode": "POP10",    "percent": "10.0", "expiryDaysFromNow": "30" } },
+    { "type": "add-event-discount", "params": { "token": "${charlieToken}", "eventId": "${devconEventId}",     "couponCode": "DEV25",    "percent": "25.0", "expiryDaysFromNow": "45" } },
+
+    { "type": "create-event",   "params": { "token": "${bobToken}", "companyId": "5", "name": "VIP DJ Lottery Night", "date": "+1M", "saleStart": "+2m", "area": "CENTER", "category": "FESTIVAL", "hasLottery": "true" }, "store": "vipLotteryEventId" },
+    { "type": "define-venue",   "params": { "token": "${bobToken}", "eventId": "${vipLotteryEventId}" } },
+    { "type": "create-lottery", "params": { "token": "${bobToken}", "eventId": "${vipLotteryEventId}", "capacity": "2", "minutesFromNow": "3", "expirationHours": "48" } }
 
   ]
 }
