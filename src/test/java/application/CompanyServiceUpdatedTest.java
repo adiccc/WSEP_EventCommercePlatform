@@ -91,7 +91,7 @@ class CompanyServiceUpdatedTest {
 
         when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
             TransactionCallback<?> callback = invocation.getArgument(0);
-            return callback.doInTransaction(null);
+            return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
         });
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier,transactionTemplate);
         service = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier, transactionTemplate);

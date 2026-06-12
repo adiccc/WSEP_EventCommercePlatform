@@ -95,7 +95,7 @@ class AdminServiceTest {
 
         when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
             TransactionCallback<?> callback = invocation.getArgument(0);
-            return callback.doInTransaction(null);
+            return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
         });
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         auth = new Auth(tokenService, Set.of(ADMIN_EMAIL));
