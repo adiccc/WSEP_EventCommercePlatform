@@ -6,16 +6,63 @@ import domain.user.Founder;
 import domain.user.Manager;
 import domain.user.Owner;
 import domain.user.State;
-import io.swagger.v3.oas.models.security.SecurityScheme;
+import jakarta.persistence.*;
 
 import java.util.*;
 
+@Entity
+@Table(name = "permissions")
 public class Permissions {
-    private int founderId;//founder of the comapany
-    private Set<Integer> ownerIds; // who are the owners of the company
-    private HashMap<Integer, Hierarchy> companyTree; //the hash map with each manger and who assigned him and it's assignees
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "permissions_id")
+    private Long id;
+
+    @Column(name = "founder_id", nullable = false)
+    private int founderId;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "permissions_owners",
+            joinColumns = @JoinColumn(name = "permissions_id")
+    )
+    @Column(name = "owner_id")
+    private Set<Integer> ownerIds;
+
+    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinTable(
+            name = "permissions_company_tree",
+            joinColumns = @JoinColumn(name = "permissions_id"),
+            inverseJoinColumns = @JoinColumn(name = "hierarchy_id")
+    )
+    @MapKeyColumn(name = "manager_id")
+    private Map<Integer, Hierarchy> companyTree;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "permissions_pending_owners",
+            joinColumns = @JoinColumn(name = "permissions_id")
+    )
+    @Column(name = "user_id")
     private List<Integer> pandingOwners;
-    private HashMap<Integer, Hierarchy> pendingManagers; // pending manager appointments awaiting response
+
+    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinTable(
+            name = "permissions_pending_managers",
+            joinColumns = @JoinColumn(name = "permissions_id"),
+            inverseJoinColumns = @JoinColumn(name = "hierarchy_id")
+    )
+    @MapKeyColumn(name = "manager_id")
+    private Map<Integer, Hierarchy> pendingManagers;
+
+    /** Required by JPA — do not use directly */
+    public Permissions() {
+        this.ownerIds = new HashSet<>();
+        this.companyTree = new HashMap<>();
+        this.pandingOwners = new ArrayList<>();
+        this.pendingManagers = new HashMap<>();
+    }
 
     public Permissions(int founderId) {
         this.founderId = founderId;
@@ -229,4 +276,5 @@ public class Permissions {
        return this.companyTree.keySet();
     }
 
+    public Long getId() { return id; }
 }
