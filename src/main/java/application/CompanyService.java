@@ -15,6 +15,8 @@ import domain.dto.RolesPermissionsTreeDTO;
 import domain.policy.*;
 import domain.user.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -1066,11 +1068,23 @@ public class CompanyService {
                 return new Response<>(null, "Guest offline, notification dropped");
             }
         }
-
-        Response<Long> savedNotificationIdRes = saveDelayedNotificationAsPending(userIdentifier, notifyDTO);
-        Long savedNotificationId = (savedNotificationIdRes != null) ? savedNotificationIdRes.getValue() : null;
+        Long savedNotificationId = null;
+        boolean dbSaveFailed = false;
+        try{
+            Response<Long> savedNotificationIdRes = saveDelayedNotificationAsPending(userIdentifier, notifyDTO);
+            savedNotificationId = (savedNotificationIdRes != null) ? savedNotificationIdRes.getValue() : null;
+            if(savedNotificationId != null && savedNotificationId == -1L){
+                dbSaveFailed = true;
+            }
+        } catch (Exception e){
+            logger.severe("Database connection/commit failed outside lambda: " + e.getMessage());
+            dbSaveFailed = true;
+        }
         boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
-
+        if (dbSaveFailed && !isDelivered) {
+            logger.severe("CRITICAL: DB transaction failed. Notification lost for: " + userIdentifier);
+            return new Response<>(null, "Failed to handle notification due to DB error");
+        }
         if (isDelivered) {
                 markNotificationAsDelivered(userIdentifier, savedNotificationId); //if we succeed sending in real time we need to mark as delivered
                 return new Response<>(null, "Notification sent successfully as DELIVERED");
@@ -1099,13 +1113,14 @@ public class CompanyService {
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
                         throw e;
-
+                    }catch (TransientDataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                        throw e;
                     } catch (Exception e) {
                         status.setRollbackOnly();
-                        logger.warning("Failed to save pending notification for "
-                                + userIdentifier + ": " + e.getMessage());
-
-                        return new Response<>(null, "Failed to save pending notification");
+                        logger.severe("Fatal error during notification save: " + e.getMessage());
+                        return new Response<>(-1L, "Fatal error");
                     }
                 })
         );

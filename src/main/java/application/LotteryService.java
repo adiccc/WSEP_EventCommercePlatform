@@ -19,6 +19,8 @@ import domain.user.IUserRepo;
 import domain.user.Member;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
 
@@ -536,15 +538,29 @@ public class LotteryService {
             }
         }
 
-        Response<Long> savedNotificationIdRes = saveDelayedNotificationAsPending(userIdentifier, notifyDTO);
-        Long savedNotificationId = (savedNotificationIdRes != null) ? savedNotificationIdRes.getValue() : null;
-        boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
-        if (isDelivered) {
-                markNotificationAsDelivered(userIdentifier, savedNotificationId);
-                return new Response<>(null, "Notification sent successfully as DELIVERED");
+        Long savedNotificationId = null;
+        boolean dbSaveFailed = false;
+        try{
+            Response<Long> savedNotificationIdRes = saveDelayedNotificationAsPending(userIdentifier, notifyDTO);
+            savedNotificationId = (savedNotificationIdRes != null) ? savedNotificationIdRes.getValue() : null;
+            if(savedNotificationId != null && savedNotificationId == -1L){
+                dbSaveFailed = true;
             }
-            logger.info("Member is offline. Notification remains PENDING for: " + userIdentifier);
-            return new Response<>(null, "Notification saved as PENDING");
+        } catch (Exception e){
+            logger.severe("Database connection/commit failed outside lambda: " + e.getMessage());
+            dbSaveFailed = true;
+        }
+        boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
+        if (dbSaveFailed && !isDelivered) {
+            logger.severe("CRITICAL: DB transaction failed. Notification lost for: " + userIdentifier);
+            return new Response<>(null, "Failed to handle notification due to DB error");
+        }
+        if (isDelivered) {
+            markNotificationAsDelivered(userIdentifier, savedNotificationId);
+            return new Response<>(null, "Notification sent successfully as DELIVERED");
+        }
+        logger.info("Member is offline. Notification remains PENDING for: " + userIdentifier);
+        return new Response<>(null, "Notification saved as PENDING");
     }
     //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
     private Response<Long> saveDelayedNotificationAsPending(String userIdentifier, NotifyDTO notifyDTO) {
@@ -581,13 +597,14 @@ public class LotteryService {
                         } catch (OptimisticLockingFailureException e) {
                             status.setRollbackOnly();
                             throw e;
-
+                        }catch (TransientDataAccessException e) {
+                            status.setRollbackOnly();
+                            logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                            throw e;
                         } catch (Exception e) {
                             status.setRollbackOnly();
-                            logger.warning("Failed to send or save notification for "
-                                    + userIdentifier + ": " + e.getMessage());
-
-                            return new Response<>(null, "Failed to send or save notification");
+                            logger.severe("Fatal error during notification save: " + e.getMessage());
+                            return new Response<>(-1L, "Fatal error");
                         }
                     })
         );
