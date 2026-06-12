@@ -8,6 +8,7 @@ import application.EventService;
 import application.LotteryService;
 import application.TokenService;
 import application.UserService;
+import domain.user.IUserRepo;
 import infrastructure.Auth;
 import infrastructure.PasswordEncoderUtil;
 import infrastructure.proxySystems.PaymentSystemProxy;
@@ -66,7 +67,7 @@ public class SpringContextIntegrationTest {
     private PasswordEncoderUtil passwordEncoderUtil;
 
     @Autowired
-    private UserRepo userRepo;
+    private IUserRepo userRepo;
 
     @Test
     void contextLoads() {
