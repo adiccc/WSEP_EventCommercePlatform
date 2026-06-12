@@ -113,7 +113,7 @@ class EventCompanyManageServiceTest {
         });
 
         userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier,transactionTemplate);
-        eventService=new EventService(auth,eventRepo,notifier);
+        eventService=new EventService(auth,eventRepo,notifier, transactionTemplate);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
         activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth),userRepo, transactionTemplate,100);

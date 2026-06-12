@@ -80,7 +80,7 @@ class EventServiceTest {
             return callback.doInTransaction(null);
         });
         eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate);
-        service = new EventService(auth, eventRepo,notifier);
+        service = new EventService(auth, eventRepo,notifier, transactionTemplate);
 
         userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier,transactionTemplate);
         UserDTO userDTO = new UserDTO("user1@test.com","test1","t","mytest",1,1,2016,"user test address","054-555-6677");
@@ -305,7 +305,7 @@ class EventServiceTest {
     @Test
     void GivenNoCompanyData_WhenSearchEvents_ThenNoResultsReturned() {
         EventRepoImpl emptyRepo = new EventRepoImpl();
-        EventService emptyService = new EventService(auth, emptyRepo,notifier);
+        EventService emptyService = new EventService(auth, emptyRepo,notifier, transactionTemplate);
 
         EventSearchFilter filter = new EventSearchFilter();
         filter.setKeyword("anything");
