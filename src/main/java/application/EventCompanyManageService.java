@@ -679,8 +679,8 @@ public class EventCompanyManageService {
             }
             int userId = getUserIdFromToken(token);
             boolean isMember = userId != -1;
-            boolean isUserPermitted = isMember && (company.getCompanyPermission().checkPermission(userId, PermissionType.GENERATE_SALES_REPORTS)); 
-            //The requerment is just for the Owner 
+            boolean isUserPermitted = isMember && (company.getCompanyPermission().checkPermission(userId, PermissionType.GENERATE_SALES_REPORTS));
+            //The requerment is just for the Owner
             if (!isUserPermitted) {
                 logger.log(Level.SEVERE, "User is not permitted to generate sales report");
                 return new Response<>(null, "User is not permitted generate sales report");

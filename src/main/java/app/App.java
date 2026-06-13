@@ -23,7 +23,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "domain"
 })
 @EnableVaadin({"UI"})
-@Push(PushMode.AUTOMATIC)
+@Push
 public class App implements AppShellConfigurator {
 
         public static void main(String[] args) {

@@ -1344,37 +1344,39 @@ public class ActiveOrderService {
     //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
     private Response<Long> saveDelayedNotificationAsPending(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() ->
-            transactionTemplate.execute(status -> {
-                try {
-                    Member member = userRepo.findUserByEmail(userIdentifier);
+                transactionTemplate.execute(status -> {
+                    try {
+                        Member member = userRepo.findUserByEmail(userIdentifier);
 
-                    if (member == null) {
-                        logger.warning("User not found for identifier: " + userIdentifier);
-                        return new Response<>(null, "User not found");
-                    }
+                        if (member == null) {
+                            logger.warning("User not found for identifier: " + userIdentifier);
+                            return new Response<>(null, "User not found");
+                        }
+                        UserNotification userNotification = new UserNotification(notifyDTO.getType(),notifyDTO.getPayload());
+                        member.addPendingNotification(userNotification);
+                        userRepo.store(member);
+                        member=userRepo.findUserByEmail(userIdentifier);
+                        Long msgId=member.getMessageId(userNotification);
 
-                    UserNotification userNotification = new UserNotification(notifyDTO.getType(), notifyDTO.getPayload());
-                    member.addPendingNotification(userNotification);
-                    userRepo.store(member);
+                        logger.info("Pending notification saved successfully for: " + member.getIdentifier());
+                        return new Response<>(msgId, "Notification saved as pending");
 
-                    logger.info("Pending notification saved successfully for: " + member.getIdentifier());
-                    return new Response<>(userNotification.getNotificationId(), "Notification saved as pending");
-
-                } catch (OptimisticLockingFailureException e) {
-                    status.setRollbackOnly();
-                    throw e;
-                }catch (TransientDataAccessException e) {
+                    } catch (OptimisticLockingFailureException e) {
+                        status.setRollbackOnly();
+                        throw e;
+                    }catch (TransientDataAccessException e) {
                         status.setRollbackOnly();
                         logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                         throw e;
-                } catch (Exception e) {
-                    status.setRollbackOnly();
-                    logger.severe("Fatal error during notification save: " + e.getMessage());
-                    return new Response<>(-1L, "Fatal error");
-                }
-            })
+                    } catch (Exception e) {
+                        status.setRollbackOnly();
+                        logger.severe("Fatal error during notification save: " + e.getMessage());
+                        return new Response<>(-1L, "Fatal error");
+                    }
+                })
         );
     }
+
     //marking notification as delivered because we succeed in real-time
     private Response<Boolean> markNotificationAsDelivered(String userIdentifier, Long notificationId) {
         return RetryHelper.executeWithRetry(() ->
