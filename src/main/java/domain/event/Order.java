@@ -9,7 +9,7 @@ import java.util.List;
 public class Order {
     private OrderStatus status;
     private int orderId;
-    private String userIdentifier; //for member will be an email, and for guest will be the token when purchased
+    private String userIdentifier; //for member will be an email, and for guest will be the generated string when purchased
     private Integer eventId;
     private String eventName;
     private String eventDate;
