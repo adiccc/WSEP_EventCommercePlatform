@@ -543,6 +543,18 @@ public class LotteryService {
                     logger.warning("User not found for identifier: " + userIdentifier);
                     return new Response<>(null, "User not found");
                 }
+                for (UserNotification existing : member.getPendingNotifications()) {
+                    if (existing.getStatus() == NotificationStatus.PENDING
+                            && existing.getType() == notifyDTO.getType()
+                            && existing.getPayload() != null
+                            && notifyDTO.getPayload() != null
+                            && existing.getPayload().getMessage() != null
+                            && existing.getPayload().getMessage().equals(notifyDTO.getPayload().getMessage())) {
+
+                        logger.info("Pending notification already exists for: " + member.getIdentifier());
+                        return new Response<>(existing.getNotificationId(), "Notification already saved as pending");
+                    }
+                }
                 UserNotification userNotification = new UserNotification(notifyDTO.getType(), notifyDTO.getPayload());
                 member.addPendingNotification(userNotification);
                 userRepo.store(member);
