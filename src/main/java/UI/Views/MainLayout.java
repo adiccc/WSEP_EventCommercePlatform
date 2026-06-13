@@ -195,12 +195,14 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         if (userIdentifier != null && !userIdentifier.isBlank()) {
             userBroadcasterRegistration = Broadcaster.registerUser(userIdentifier, notification -> {
                 ui.access(() -> handleNotification(notification));
+                ui.push();
             });
         }
 
         if (token != null && !token.isBlank()) {
             tabBroadcasterRegistration = Broadcaster.registerTab(token, notification -> {
                 ui.access(() -> handleNotification(notification));
+                ui.push();
             });
         }
 
