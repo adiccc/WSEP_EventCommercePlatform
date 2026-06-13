@@ -157,29 +157,36 @@ class LotteryTest {
     }
 
     @Test
-    void GivenWinnersDrawnButNotNotified_WhenUpdateLottery_ThenWinnersAreCleared() {
+    void GivenWinnersAlreadyDrawn_WhenUpdateLottery_ThenThrowsException() {
         lottery.registerUserToLottery(101);
         lottery.registerUserToLottery(102);
         lottery.drawWinners();
-        assertFalse(lottery.getWinners().isEmpty(), "Precondition: winners should be drawn");
 
-        LotteryDTO dto = new LotteryDTO(201, 5, LocalDateTime.now().plusDays(5), 48L);
-        lottery.updateLottery(dto, saleStartDate);
+        assertFalse(lottery.getWinners().isEmpty(),
+                "Precondition: winners should be drawn");
 
-        assertTrue(lottery.getWinners().isEmpty(), "Winners should be cleared after update");
-        assertEquals(5, lottery.getCapacity());
+        LotteryDTO dto = new LotteryDTO(
+                201,
+                5,
+                LocalDateTime.now().plusDays(5),
+                48L
+        );
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> lottery.updateLottery(dto, saleStartDate)
+        );
+
+        assertEquals(
+                "Cannot update lottery after winners have been drawn",
+                exception.getMessage()
+        );
+
+        assertFalse(lottery.getWinners().isEmpty(),
+                "Winners should not be cleared after failed update");
+
+        assertNotEquals(5, lottery.getCapacity(),
+                "Capacity should not be updated after winners were drawn");
     }
 
-    @Test
-    void GivenWinnersAlreadyNotified_WhenUpdateLottery_ThenThrows() {
-        lottery.registerUserToLottery(101);
-        int winnerId = lottery.drawWinners().keySet().iterator().next();
-        lottery.markWinnerNotified(winnerId);
-
-        LotteryDTO dto = new LotteryDTO(201, 5, LocalDateTime.now().plusDays(5), 48L);
-
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> lottery.updateLottery(dto, saleStartDate));
-        assertEquals("Cannot update lottery after winners have been notified", ex.getMessage());
-    }
 }
