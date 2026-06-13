@@ -40,5 +40,8 @@ public class UserNotification {
     public NotificationStatus getStatus() { return status; }
     public void setStatus(NotificationStatus status) { this.status = status; }
     public Long getNotificationId() { return notificationId; }
+    public void setNotificationId(Long notificationId) {
+        this.notificationId = notificationId;
+    }
 }
 

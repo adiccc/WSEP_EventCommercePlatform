@@ -6,7 +6,10 @@ import domain.user.Member;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
 import Exception.OptimisticLockingFailureException;
+import domain.user.UserNotification;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
@@ -16,9 +19,17 @@ public class UserRepo implements IUserRepo {
     private final ConcurrentHashMap<Integer, Member> usersPerId = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> emailById = new ConcurrentHashMap<>();
     private final AtomicInteger userIdGenerator = new AtomicInteger(1);
+    private final AtomicLong notificationIdGenerator = new AtomicLong(1);
 
     @Override
     public synchronized void store(Member mem) {
+        if (mem.getPendingNotifications() != null) {
+            for (UserNotification notification : mem.getPendingNotifications()) {
+                if (notification.getNotificationId() == null) {
+                    notification.setNotificationId(notificationIdGenerator.getAndIncrement());
+                }
+            }
+        }
         if (mem.getUserId() == null) {
             if (emailById.containsKey(mem.getIdentifier())) {
                 throw new RuntimeException("User already exists");
