@@ -33,6 +33,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.concurrent.TimeUnit;
 import org.springframework.transaction.support.TransactionTemplate;
+
+import static DTO.NotifyType.GENERAL_POPUP;
+
 @Service
 
 public class LotteryService {
@@ -47,6 +50,7 @@ public class LotteryService {
     private final IUserRepo userRepo;
     private final TransactionTemplate transactionTemplate;
 
+
     @Autowired
     public LotteryService(ILotteryRepo lotteryRepo,IEventRepo eventRepo, IAuth auth, ICompanyRepo companyRepo, ISuspensionRepo suspensionRepo, INotifier notifier, IUserRepo userRepo,TransactionTemplate transactionTemplate) {
         this.lotteryRepo = lotteryRepo;
@@ -60,6 +64,12 @@ public class LotteryService {
         this.userRepo = userRepo;
         this.transactionTemplate = transactionTemplate;
     }
+    //needed because each user has its own code and message
+    private record NotificationDeliveryTask(
+            String userIdentifier,
+            Long notificationId,
+            NotifyDTO notifyDTO
+    ) {}
 
     public Response<Boolean> createLottery(String token, int eventId, int capacity, LocalDateTime registerWindow, long expirationTime) {
         return RetryHelper.executeWithRetry(() ->
@@ -163,15 +173,15 @@ public class LotteryService {
                         }
                         if (lotteryDTO == null && event.hasLottery()) {
                             Lottery lottery = lotteryRepo.findById(eventId);
-                            if (lottery.getNotifiedWinners().size() == 0) {
+                            if (lottery.getWinners().isEmpty()) {
                                 lotteryRepo.delete(lottery);
                                 event.setHasLottery(false);
                                 eventRepo.store(event);
                                 logger.log(Level.INFO, "Lottery cancelled, event sales method set to regular purchase");
                                 return new Response<>(true, "Sales method updated to regular purchase");
                             } else {
-                                logger.log(Level.WARNING, "Lottery can't be cancelled, users were notified");
-                                return new Response<>(false, "Lottery can't be cancelled, users where notified");
+                                logger.log(Level.WARNING, "Lottery can't be cancelled, winners were already drawn");
+                                return new Response<>(false, "Lottery can't be cancelled, winners were already drawn");
                             }
                         }
                         if (lotteryDTO == null) {
@@ -231,156 +241,155 @@ public class LotteryService {
 
     // Executes the actual lottery draw. This method is called automatically by the scheduler.
     public void drawLottery(int lotteryId) {
-        Response<Map<Integer, String>> response = RetryHelper.executeWithRetry(() ->
-                transactionTemplate.execute(status -> {
-                    Map<Integer, String> winners = drawLotteryAndReturnWinners(lotteryId);
-                    return new Response<>(winners, "Lottery draw completed");
-                })
-        );
+        Response<List<NotificationDeliveryTask>> res = RetryHelper.executeWithRetry(() -> {
+            Response<List<NotificationDeliveryTask>> transactionRes =
+                    transactionTemplate.execute(status -> {
+                        try {
+                            return drawLotteryAndSavePendingNotifications(lotteryId);
 
-        if (response == null || response.getValue() == null || response.getValue().isEmpty()) {
-            logger.warning("Lottery draw failed or returned no winners for lottery ID: " + lotteryId);
+                        } catch (OptimisticLockingFailureException e) {
+                            status.setRollbackOnly();
+                            throw e;
+
+                        } catch (TransientDataAccessException e) {
+                            status.setRollbackOnly();
+                            logger.warning("Transient DB error while drawing lottery "
+                                    + lotteryId + ": " + e.getMessage());
+                            throw e;
+
+                        } catch (Exception e) {
+                            status.setRollbackOnly();
+                            logger.log(Level.SEVERE,
+                                    "Failed drawing lottery " + lotteryId + ": " + e.getMessage(),
+                                    e);
+                            return new Response<>(null, "Failed drawing lottery");
+                        }
+                    });
+
+            if (transactionRes == null || transactionRes.getValue() == null) {
+                return new Response<>(null,
+                        transactionRes == null ? "Lottery draw failed" : transactionRes.getMessage());
+            }
+
+            return transactionRes;
+        });
+
+        if (res == null || res.getValue() == null) {
+            logger.warning("Lottery draw failed for lottery ID: " + lotteryId);
             return;
         }
 
-        notifyLotteryWinners(lotteryId, response.getValue());
+        deliverLotteryNotifications(res.getValue());
     }
 
-    private Map<Integer, String> drawLotteryAndReturnWinners(int lotteryId) {
-        logger.log(Level.INFO, "Starting draw for lottery ID: " + lotteryId);
+    private Response<List<NotificationDeliveryTask>> drawLotteryAndSavePendingNotifications(int lotteryId) {
+        logger.log(Level.INFO, "drawLotteryAndSavePendingNotifications called");
 
-        try {
-            Lottery lottery = lotteryRepo.findById(lotteryId);
+        Lottery lottery = lotteryRepo.findById(lotteryId);
 
-            if (lottery.getWinners().isEmpty()) {
-                Map<Integer, String> winners = new HashMap<>(lottery.drawWinners());
-                lotteryRepo.store(lottery);
-
-                logger.log(Level.INFO, "Successfully drawn winners for lottery ID: " + lotteryId);
-                return winners;
-            }
-
-            logger.log(Level.INFO,
-                    "Lottery ID " + lotteryId + " was already drawn. Retrying missing notifications.");
-
-            return new HashMap<>(lottery.getWinnerCodes());
-
-        } catch (NoSuchElementException e) {
-            logger.log(Level.SEVERE, "Could not draw lottery, ID not found: " + lotteryId);
-            return Map.of();
-
-        } catch (OptimisticLockingFailureException e) {
-            throw e;
-
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Error during lottery draw for ID: " + lotteryId, e);
-            return Map.of();
+        if (!lottery.getWinners().isEmpty()) {
+            logger.info("Lottery " + lotteryId + " was already drawn. Skipping.");
+            return new Response<>(new ArrayList<>(), "Lottery already drawn");
         }
-    }
 
-    private Response<Boolean> isWinnerAlreadyNotifiedWithRetry(int lotteryId, int winnerUserId) {
-        return RetryHelper.executeWithRetry(() ->
-                transactionTemplate.execute(status -> {
-                    Lottery freshLottery = lotteryRepo.findById(lotteryId);
+        Event event = eventRepo.findById(lotteryId);
 
-                    return new Response<>(
-                            freshLottery.isWinnerNotified(winnerUserId),
-                            "Winner notified status checked"
-                    );
-                })
-        );
-    }
+        Map<Integer, String> winners = new HashMap<>(lottery.drawWinners());
+        lotteryRepo.store(lottery);
 
-    private void notifyLotteryWinners(int lotteryId, Map<Integer, String> winners) {
+        logger.info("Lottery winners drawn successfully for lottery " + lotteryId);
+
+        List<NotificationDeliveryTask> tasks = new ArrayList<>();
+
         for (Map.Entry<Integer, String> entry : winners.entrySet()) {
             Integer winnerUserId = entry.getKey();
             String code = entry.getValue();
 
-            try {
-                Response<Boolean> alreadyNotifiedResponse =
-                        isWinnerAlreadyNotifiedWithRetry(lotteryId, winnerUserId);
+            logger.info("Handling winner userId: " + winnerUserId);
+            Member member = userRepo.findById(winnerUserId);
+            logger.info("Winner member found? " + (member != null));
 
-                if (alreadyNotifiedResponse != null
-                        && Boolean.TRUE.equals(alreadyNotifiedResponse.getValue())) {
-                    logger.info("Winner " + winnerUserId
-                            + " was already notified for lottery " + lotteryId);
+            if (member == null) {
+                throw new IllegalStateException("Winner member not found for user id: " + winnerUserId);
+            }
+            String userEmail = member.getIdentifier();
+
+            NotifyDTO notifyDTO = buildWinnerNotification(event, code);
+
+            Response<Long> msgIdRes = saveDelayedNotificationAsPending(userEmail, notifyDTO);
+            logger.info("msgIdRes is: " + msgIdRes);
+            logger.info("msgIdRes value is: " + (msgIdRes == null ? "null response" : msgIdRes.getValue()));
+            logger.info("msgIdRes message is: " + (msgIdRes == null ? "null response" : msgIdRes.getMessage()));
+
+            logger.info("Pending notification save result: "
+                    + (msgIdRes == null ? "null response" : msgIdRes.getValue()));
+
+            if (msgIdRes == null || msgIdRes.getValue() == null || msgIdRes.getValue() == -1L) {
+                throw new IllegalStateException("Failed saving pending notification for: " + userEmail);
+            }
+
+            tasks.add(new NotificationDeliveryTask(
+                    userEmail,
+                    msgIdRes.getValue(),
+                    notifyDTO
+            ));
+
+        }
+
+        return new Response<>(tasks, "Lottery drawn and pending notifications saved");
+    }
+
+    private NotifyDTO buildWinnerNotification(Event event, String code) {
+        NotifyPayload payload = new NotifyPayload(
+                "Congratulations! You have won the lottery for event "
+                        + event.getName()
+                        + ". Your code is: "
+                        + code,
+                event.getId(),
+                null
+        );
+
+        return new NotifyDTO(GENERAL_POPUP, payload);
+    }
+
+
+    private void deliverLotteryNotifications(List<NotificationDeliveryTask> tasks) {
+        for (NotificationDeliveryTask task : tasks) {
+            try {
+                boolean isDelivered = notifier.notifyUser(
+                        task.userIdentifier(),
+                        task.notifyDTO()
+                );
+
+                logger.log(Level.INFO,
+                        "Lottery notification sent to: " + task.userIdentifier());
+
+                if (!isDelivered) {
+                    logger.log(Level.INFO,
+                            "Lottery notification could not be sent live to: "
+                                    + task.userIdentifier()
+                                    + ", the message is pending and will be sent after login");
                     continue;
                 }
 
-                Event event = eventRepo.findById(lotteryId); // lotteryId is the same as eventId
+                markNotificationAsDelivered(task.userIdentifier(), task.notificationId());
 
-                String userEmail = userRepo.getUserEmail(winnerUserId);
-
-                NotifyDTO notification = new NotifyDTO(
-                        NotifyType.GENERAL_POPUP,
-                        new NotifyPayload(
-                                "Congratulations! You have won the lottery for event "
-                                        + event.getName() + ". Your code is: " + code
-                        )
-                );
-
-                Response<Void> notificationResponse =
-                        sendOrSaveNotification(userEmail, notification);
-
-                if (isNotificationHandledSuccessfully(notificationResponse)) {
-                    Response<Void> markResponse =
-                            markWinnerNotifiedWithRetry(lotteryId, winnerUserId);
-
-                    if (isWinnerMarkedSuccessfully(markResponse)) {
-                        logger.info("Winner " + winnerUserId
-                                + " marked as notified for lottery " + lotteryId);
-                    } else {
-                        logger.warning("Notification was sent/saved, but failed to mark winner "
-                                + winnerUserId + " as notified. Result: " + markResponse.getMessage());
-                    }
-                }
-
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
+                logger.log(Level.INFO,
+                        "Lottery notification to: "
+                                + task.userIdentifier()
+                                + " marked as DELIVERED");
 
             } catch (Exception e) {
-                logger.warning("Failed to notify lottery winner "
-                        + winnerUserId + ": " + e.getMessage());
+                logger.log(Level.WARNING,
+                        "Failed to send live lottery notification to "
+                                + task.userIdentifier()
+                                + ". Notification remains PENDING.",
+                        e);
             }
         }
     }
 
-    private Response<Void> markWinnerNotifiedWithRetry(int lotteryId, int winnerUserId) {
-        return RetryHelper.executeWithRetry(() ->
-                transactionTemplate.execute(status -> {
-                    Lottery freshLottery = lotteryRepo.findById(lotteryId);
 
-                    if (freshLottery.isWinnerNotified(winnerUserId)) {
-                        return new Response<>(null, "Winner already marked as notified");
-                    }
-
-                    freshLottery.markWinnerNotified(winnerUserId);
-                    lotteryRepo.store(freshLottery);
-
-                    return new Response<>(null, "Winner marked as notified");
-                })
-        );
-    }
-
-    private boolean isWinnerMarkedSuccessfully(Response<Void> response) {
-        if (response == null || response.getMessage() == null) {
-            return false;
-        }
-
-        return response.getMessage().equals("Winner marked as notified")
-                || response.getMessage().equals("Winner already marked as notified");
-    }
-
-    private boolean isNotificationHandledSuccessfully(Response<Void> response) {
-        if (response == null || response.getMessage() == null) {
-            return false;
-        }
-
-        return response.getMessage().equals("Notification sent successfully as DELIVERED")
-                || response.getMessage().equals("Notification sent successfully to guest")
-                || response.getMessage().equals("Notification saved as PENDING")
-                || response.getMessage().equals("Notification already saved as pending");
-    }
 
     public Response<Boolean> registerUserToLottery(String token, int eventId) {
         return RetryHelper.executeWithRetry(() ->
@@ -523,45 +532,6 @@ public class LotteryService {
         }
         return roleRes.getValue();
     }
-    // Helper method to send a real-time notification or save it as pending if the
-    // user is offline.
-    private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
-        Member member = userRepo.findUserByEmail(userIdentifier);
-        boolean isGuest = (member == null);
-        if (isGuest) {
-            boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
-            if (isDelivered) {
-                return new Response<>(null, "Notification sent successfully to guest");
-            } else {
-                logger.warning("Guest is offline. Notification dropped for: " + userIdentifier);
-                return new Response<>(null, "Guest offline, notification dropped");
-            }
-        }
-
-        Long savedNotificationId = null;
-        boolean dbSaveFailed = false;
-        try{
-            Response<Long> savedNotificationIdRes = saveDelayedNotificationAsPending(userIdentifier, notifyDTO);
-            savedNotificationId = (savedNotificationIdRes != null) ? savedNotificationIdRes.getValue() : null;
-            if(savedNotificationId != null && savedNotificationId == -1L){
-                dbSaveFailed = true;
-            }
-        } catch (Exception e){
-            logger.severe("Database connection/commit failed outside lambda: " + e.getMessage());
-            dbSaveFailed = true;
-        }
-        boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
-        if (dbSaveFailed && !isDelivered) {
-            logger.severe("CRITICAL: DB transaction failed. Notification lost for: " + userIdentifier);
-            return new Response<>(null, "Failed to handle notification due to DB error");
-        }
-        if (isDelivered) {
-            markNotificationAsDelivered(userIdentifier, savedNotificationId);
-            return new Response<>(null, "Notification sent successfully as DELIVERED");
-        }
-        logger.info("Member is offline. Notification remains PENDING for: " + userIdentifier);
-        return new Response<>(null, "Notification saved as PENDING");
-    }
     //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
     private Response<Long> saveDelayedNotificationAsPending(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() ->
@@ -610,23 +580,13 @@ public class LotteryService {
         );
     }
 
-    //marking notification as delivered because we succeed in real-time
     private Response<Boolean> markNotificationAsDelivered(String userIdentifier, Long notificationId) {
         return RetryHelper.executeWithRetry(() ->
                 transactionTemplate.execute(status -> {
                     try {
                         Member member = userRepo.findUserByEmail(userIdentifier);
                         if (member != null) {
-                            for (UserNotification dn : member.getPendingNotifications()) {
-                                boolean isMatch = (notificationId != null) ?
-                                        notificationId.equals(dn.getNotificationId()) :
-                                        (dn.getStatus() == NotificationStatus.PENDING);
-
-                                if (isMatch) {
-                                    dn.setStatus(NotificationStatus.DELIVERED);
-                                    break;
-                                }
-                            }
+                            member.setMessageStatus(notificationId,NotificationStatus.DELIVERED);
                             userRepo.store(member);
                         }
                         return new Response<>(true, "Notification marked as DELIVERED");
@@ -642,6 +602,8 @@ public class LotteryService {
                 })
         );
     }
+
+
 
     @PostConstruct
     public void reschedulePendingLotteriesOnStartup() {
@@ -671,12 +633,18 @@ public class LotteryService {
         logger.info("Pending lotteries were rescheduled successfully on startup");
     }
 
+    // draw winners + create pending notifications is in the same transaction, so we can be sure that if the lottery was drawn, the notifications are saved and will be sent when the user logs in (in case of failure in real-time notification)
     private boolean shouldScheduleLotteryOnStartup(Lottery lottery) {
-        if (lottery.getWinners().isEmpty()) {
-            return true;
+        if (!lottery.getWinners().isEmpty()) {
+            return false;
         }
 
-        return !lottery.getNotifiedWinners().containsAll(lottery.getWinners());
+        if (lottery.getRegistered().isEmpty()
+                && LocalDateTime.now().isAfter(lottery.getRegisterWindow())) {
+            return false;
+        }
+
+        return true;
     }
 
 

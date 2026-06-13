@@ -147,7 +147,7 @@ public class Lottery {
 
     public void updateLottery(LotteryDTO dto, LocalDateTime eventSaleStartDate) {
         if (!winners.isEmpty())
-            throw new IllegalStateException("Cannot update lottery after winners have been notified");
+            throw new IllegalStateException("Cannot update lottery after winners have been drawn");
         if (dto.getCapacity() <= 0 || dto.getRegisterWindow() == null || dto.getExpirationTime() <= 0)
             throw new IllegalArgumentException("Please complete all lottery details: capacity, register window, and expiration time");
         if (dto.getRegisterWindow().isBefore(LocalDateTime.now()))
