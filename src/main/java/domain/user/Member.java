@@ -139,4 +139,14 @@ public class Member extends User{
         }
         return pendingNotifications;
     }
+    public NotifyDTO fetchNotification(Long id) {
+        NotifyDTO notification =null;
+
+        for (UserNotification noti : this.userNotifications) {
+            if (noti.getNotificationId()==id) {
+                notification=new NotifyDTO(noti.getType(), noti.getPayload());
+            }
+        }
+        return notification;
+    }
 }

@@ -20,13 +20,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.*;
-
-import java.util.List;
-import java.util.NoSuchElementException;
 
 import static DTO.NotifyType.GENERAL_POPUP;
 import static domain.dataType.PermissionType.*;
@@ -202,57 +198,97 @@ public class EventCompanyManageService {
     }
     public Response<Boolean> UpdateEventDate(String token, Integer eventId, LocalDateTime date) {
         return RetryHelper.executeWithRetry(() ->
-        {
-            logger.log(Level.INFO, "UpdateEventDate called");
-            String role = getValidatedRole(token);
-            if (role == null) {
-                logger.log(Level.SEVERE, "Invalid token");
-                return new Response<>(false, "Invalid token");
-            }
-            // check valid token
-            int userId = getUserIdFromToken(token);
-            if (userId == -1) {
-                logger.severe("Only members can update event's dates");
-                return new Response<>(false, "Only members can update event's dates");
-            }
-            if (suspensionRepo.haveActiveSuspension(userId)) {
-                logger.severe("User does not have write access caused by suspension");
-                return new Response<>(null, "user does not have write access caused by suspension.");
-            }
-            try {
-                Event event = eventRepo.findById(eventId);
-                Company company = companyRepo.findById(event.getCompanyId());
-                if (!company.checkPermission(userId, CREATE_EVENT)) {
-                    logger.severe("User does not have permission to update event date");
-                    return new Response<>(false, "User id mismatch to the creator of the event");
-                }
-                if (date.isBefore(event.getDate())) {
-                    logger.severe("Event date can only be after the original date");
-                    return new Response<>(false, "Event date can only be after the original date");
-                }
-                if (event.getDate().isBefore(LocalDateTime.now())) {
-                    logger.severe("Event date must be in the future");
-                    return new Response<>(false, "Event date must be in the future");
-                }
+                {
+                    Response<Map<String,Long>> res=transactionTemplate.execute(status -> {
+                        try {
+                            logger.log(Level.INFO, "UpdateEventDate called");
+                            String role = getValidatedRole(token);
+                            if (role == null) {
+                                logger.log(Level.SEVERE, "Invalid token");
+                                return new Response<>(null, "Invalid token");
+                            }
+                            // check valid token
+                            int userId = getUserIdFromToken(token);
+                            if (userId == -1) {
+                                logger.severe("Only members can update event's dates");
+                                return new Response<>(null, "Only members can update event's dates");
+                            }
+                            if (suspensionRepo.haveActiveSuspension(userId)) {
+                                logger.severe("User does not have write access caused by suspension");
+                                return new Response<>(null, "user does not have write access caused by suspension.");
+                            }
+                            Event event = eventRepo.findById(eventId);
+                            Company company = companyRepo.findById(event.getCompanyId());
+                            if (!company.checkPermission(userId, CREATE_EVENT)) {
+                                logger.severe("User does not have permission to update event date");
+                                return new Response<>(null, "User id mismatch to the creator of the event");
+                            }
+                            if (date.isBefore(event.getDate())) {
+                                logger.severe("Event date can only be after the original date");
+                                return new Response<>(null, "Event date can only be after the original date");
+                            }
+                            if (event.getDate().isBefore(LocalDateTime.now())) {
+                                logger.severe("Event date must be in the future");
+                                return new Response<>(null, "Event date must be in the future");
+                            }
 
-                event.setDate(date);
-                eventRepo.store(event);
-                logger.log(Level.INFO, "Event updated successfully");
-                    List<String> purchasers = eventRepo.getAllEventPurchasers(eventId);
+                            event.setDate(date);
+                            eventRepo.store(event);
+                            logger.log(Level.INFO, "Event updated successfully");
+                            List<String> purchasers = eventRepo.getAllEventPurchasers(eventId);
+                            NotifyPayload payload = new NotifyPayload("The Date of event " + event.getName() + " has been updated to " + event.getDate().toString(), eventId, null);
+                            NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
+                            Map<String,Long> identifierToMsgId=new HashMap<>();
+                            // save pending message for each yuser during the main transaction
+                            for (String purchaser : purchasers) {
+                                // check if it is a user
+                                Member member = userRepo.findUserByEmail(purchaser);
+                                boolean isGuest = (member == null);
+                                if (!isGuest) {
+                                    Response<Long> msgIdRes=saveDelayedNotificationAsPending(purchaser, notifyDTO);
+                                    if(msgIdRes!=null && msgIdRes.getValue()!=null)
+                                        identifierToMsgId.put(purchaser,msgIdRes.getValue());
+                                }
+                            }
+                            logger.log(Level.INFO, "Event updated successfully");
+                            return new Response<>(identifierToMsgId, "Event updated successfully");
+
+                        } catch (OptimisticLockingFailureException e) {
+                            throw e;
+
+                        } catch (Exception e) {
+                            status.setRollbackOnly();
+                            logger.log(Level.SEVERE, "failed updating event date: " + e.getMessage());
+                            return new Response<>(null, "failed to update event date: " + e.getMessage());
+                        }
+                    });
+                    Map<String,Long> memberToMsgId=res.getValue();
+                    // transaction failed
+                    if(memberToMsgId==null)
+                        return new Response<>(false, res.getMessage());
+
+                    //transaction succeed - send pending message for all purchasers
+                    // keep in mind that if the res was not null then the logic action succeed there for there is an event with this eventId
+                    Event event = eventRepo.findById(eventId);
                     NotifyPayload payload = new NotifyPayload("The Date of event " + event.getName() + " has been updated to " + event.getDate().toString(), eventId, null);
                     NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
-                    for (String purchaser : purchasers) {
-                        sendOrSaveNotification(purchaser, notifyDTO);
-                    }
-                    return new Response<>(true, "Event updated successfully");
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
-                return new Response<>(false, "failed to create event : " + e.getMessage());
-            }
-        });
+                    for(String purchaser: memberToMsgId.keySet()){
+                        boolean isDelivered = notifier.notifyUser(purchaser, notifyDTO);
+                        if (!isDelivered) {
+                            logger.severe("Warning notification failed sending to : " + purchaser);
+                            return new Response<>(null, "Failed to send event update notification");
+                        }
+                        // in case the user is a guest than he will not be included in the map keys
+                        if (isDelivered && memberToMsgId.get(purchaser)!=null) {
+                            markNotificationAsDelivered(purchaser, memberToMsgId.get(purchaser)); //if we succeed sending in real time we need to mark as delivered
+                            return new Response<>(null, "Notification sent successfully as DELIVERED");
+                        }
 
+                    }
+                    logger.log(Level.INFO, "Event updated successfully");
+                    return new Response<>(true, "Event updated successfully");
+                }
+        );
     }
 
     // adding new zones to an existing map of an event
@@ -1085,6 +1121,7 @@ public class EventCompanyManageService {
             logger.info("Member is offline. Notification remains PENDING for: " + userIdentifier);
             return new Response<>(null, "Notification saved as PENDING");
     }
+
     //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
     private Response<Long> saveDelayedNotificationAsPending(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() ->
@@ -1118,6 +1155,7 @@ public class EventCompanyManageService {
                 })
         );
     }
+
     //marking notification as delivered because we succeed in real-time
     private Response<Boolean> markNotificationAsDelivered(String userIdentifier, Long notificationId) {
         return RetryHelper.executeWithRetry(() ->
