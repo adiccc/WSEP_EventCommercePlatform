@@ -4565,4 +4565,280 @@ class ActiveOrderServiceTest {
                         && n.getPayload().getMessage().contains("Refund processed"));
         assertTrue(hasDelivered, "Online user should have the refund processed notification marked as DELIVERED");
     }
+
+    @Test
+    void GivenInvalidToken_WhenValidateLotteryCode_ThenInvalidTokenReturned() {
+        Response<Boolean> response =
+                service.validateLotteryCode("invalid-token", companyId, eventId, "ANY");
+
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenWrongCompany_WhenValidateLotteryCode_ThenCompanyMismatchReturned() {
+        Event event = eventRepo.findById(eventId);
+        event.setSaleStartDateForTest(LocalDateTime.now().minusHours(1));
+        eventRepo.store(event);
+
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, 999, eventId, "ANY");
+
+        assertNull(response.getValue());
+        assertEquals("The selected event does not belong to the company", response.getMessage());
+    }
+
+    @Test
+    void GivenInactiveEvent_WhenValidateLotteryCode_ThenInactiveEventReturned() {
+        Event event = eventRepo.findById(concurrentEventId);
+        event.setActive(false);
+        eventRepo.store(event);
+
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, companyId, concurrentEventId, "ANY");
+
+        assertNull(response.getValue());
+        assertEquals("The selected event is not active", response.getMessage());
+    }
+
+    @Test
+    void GivenSaleNotStarted_WhenValidateLotteryCode_ThenSaleNotStartedReturned() {
+        // eventId is created in setUp with saleStartDate in the future
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, companyId, eventId, "ANY");
+
+        assertNull(response.getValue());
+        assertEquals("The sale for this event has not started yet", response.getMessage());
+    }
+
+    @Test
+    void GivenEventWithoutLottery_WhenValidateLotteryCode_ThenTrueReturned() {
+        // concurrentEventId has no lottery and sale already started
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, companyId, concurrentEventId, null);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue());
+        assertEquals("Lottery code is not required", response.getMessage());
+    }
+
+    @Test
+    void GivenExpiredLotteryPeriod_WhenValidateLotteryCode_ThenTrueReturned() {
+        int expiredLotteryEventId = companyEventService.createEvent(
+                validToken,
+                companyId,
+                LocalDateTime.now().plusDays(5),
+                "Expired Lottery Validation Event",
+                LocalDateTime.now().plusDays(1),
+                true,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS
+        ).getValue();
+
+        lotteryService.createLottery(
+                validToken,
+                expiredLotteryEventId,
+                10,
+                LocalDateTime.now().plusHours(1),
+                1
+        );
+
+        Event event = eventRepo.findById(expiredLotteryEventId);
+        event.setSaleStartDateForTest(LocalDateTime.now().minusHours(3));
+        eventRepo.store(event);
+
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, companyId, expiredLotteryEventId, null);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue());
+        assertEquals("Lottery period has ended. Everyone can purchase tickets", response.getMessage());
+    }
+
+    @Test
+    void GivenMissingLotteryCodeDuringExclusivePeriod_WhenValidateLotteryCode_ThenFalseReturned() {
+        Event event = eventRepo.findById(eventId);
+        event.setSaleStartDateForTest(LocalDateTime.now().minusHours(1));
+        eventRepo.store(event);
+
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, companyId, eventId, "   ");
+
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue());
+        assertEquals("Please enter your lottery code", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingEvent_WhenValidateLotteryCode_ThenEventOrLotteryNotFoundReturned() {
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, companyId, -999, "ANY");
+
+        assertNull(response.getValue());
+        assertEquals("Event or lottery not found", response.getMessage());
+    }
+
+    @Test
+    void GivenValidCheckoutOrder_WhenGetCheckoutRemainingSeconds_ThenTimerReturned() {
+        int activeOrderId = createCheckoutOrder(validToken, concurrentEventId, 3);
+
+        Response<Long> response =
+                service.getCheckoutRemainingSeconds(validToken, activeOrderId);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue() > 0);
+        assertTrue(response.getValue() <= 600);
+        assertEquals("Checkout timer retrieved successfully", response.getMessage());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenGetCheckoutRemainingSeconds_ThenInvalidTokenReturned() {
+        Response<Long> response =
+                service.getCheckoutRemainingSeconds("invalid-token", 1);
+
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingActiveOrder_WhenGetCheckoutRemainingSeconds_ThenActiveOrderNotFoundReturned() {
+        Response<Long> response =
+                service.getCheckoutRemainingSeconds(validToken, -999);
+
+        assertNull(response.getValue());
+        assertEquals("Active order not found", response.getMessage());
+    }
+
+    @Test
+    void GivenOrderBelongsToAnotherUser_WhenGetCheckoutRemainingSeconds_ThenOwnershipErrorReturned() {
+        int activeOrderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+
+        String otherToken = registerAndLoginTestUser("timer_other_user@mail.com");
+
+        Response<Long> response =
+                service.getCheckoutRemainingSeconds(otherToken, activeOrderId);
+
+        assertNull(response.getValue());
+        assertEquals("Active order does not belong to user", response.getMessage());
+    }
+
+    @Test
+    void GivenExpiredActiveOrder_WhenGetCheckoutRemainingSeconds_ThenZeroReturnedAndOrderCleaned() {
+        int activeOrderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+
+        forceExpireOrder(activeOrderId);
+
+        Response<Long> response =
+                service.getCheckoutRemainingSeconds(validToken, activeOrderId);
+
+        assertNotNull(response.getValue());
+        assertEquals(0L, response.getValue());
+        assertEquals("Active order expired", response.getMessage());
+
+        assertThrows(NoSuchElementException.class,
+                () -> activeOrderRepo.findById(activeOrderId),
+                "Expired active order should be cleaned from repo");
+    }
+
+    private String registerAndLoginTestUser(String email) {
+        userService.registerUser("", new UserDTO(
+                email,
+                "first",
+                "last",
+                "pass",
+                1,
+                1,
+                2000,
+                "Israel",
+                "050-111-2222"
+        ));
+
+        return userService.login(email, "pass").getValue();
+    }
+
+    private int createCheckoutOrder(String token, int eventId, int standingTickets) {
+        Response<EnterPurchaseDTO> enterResponse =
+                service.enterEventPurchase(token, companyId, eventId, null);
+
+        assertNotNull(enterResponse.getValue(), "enter purchase failed: " + enterResponse.getMessage());
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(
+                        token,
+                        eventId,
+                        new HashMap<>(),
+                        Map.of("floor", standingTickets)
+                );
+
+        assertNotNull(selectResponse.getValue(), "select tickets failed: " + selectResponse.getMessage());
+        assertEquals("Tickets selected successfully", selectResponse.getMessage());
+
+        return selectResponse.getValue();
+    }
+
+    // ---------- cancelEventQueueEntry coverage ----------
+
+    @Test
+    void GivenInvalidToken_WhenCancelEventQueueEntry_ThenInvalidTokenReturned() {
+        Response<Boolean> response =
+                service.cancelEventQueueEntry("invalid-token", concurrentEventId);
+
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingEvent_WhenCancelEventQueueEntry_ThenEventNotFoundReturned() {
+        Response<Boolean> response =
+                service.cancelEventQueueEntry(validToken, -999);
+
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue());
+        assertEquals("Event not found", response.getMessage());
+    }
+
+    @Test
+    void GivenUserNotInEventQueue_WhenCancelEventQueueEntry_ThenFalseReturned() {
+        Response<Boolean> response =
+                service.cancelEventQueueEntry(validToken, concurrentEventId);
+
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue());
+        assertEquals("User was not waiting in event queue", response.getMessage());
+    }
+
+    @Test
+    void GivenUserWaitingInEventQueue_WhenCancelEventQueueEntry_ThenUserRemoved() {
+        List<String> fillerTokens = new ArrayList<>();
+
+        for (int i = 0; i < capacity; i++) {
+            String token = registerAndLoginTestUser("queue_filler_" + i + "@mail.com");
+            fillerTokens.add(token);
+
+            Response<EnterPurchaseDTO> response =
+                    service.enterEventPurchase(token, companyId, concurrentEventId, null);
+
+            assertNotNull(response.getValue(), "filler should enter purchase");
+            assertFalse(response.getValue().isWaitingInQueue());
+        }
+
+        String waitingToken = registerAndLoginTestUser("waiting_to_cancel@mail.com");
+
+        Response<EnterPurchaseDTO> enterResponse =
+                service.enterEventPurchase(waitingToken, companyId, concurrentEventId, null);
+
+        assertNotNull(enterResponse.getValue());
+        assertTrue(enterResponse.getValue().isWaitingInQueue());
+        assertTrue(eventRepo.findById(concurrentEventId).getEventQueue().contains(waitingToken));
+
+        Response<Boolean> cancelResponse =
+                service.cancelEventQueueEntry(waitingToken, concurrentEventId);
+
+        assertNotNull(cancelResponse.getValue());
+        assertTrue(cancelResponse.getValue());
+        assertEquals("Removed from event queue", cancelResponse.getMessage());
+
+        assertFalse(eventRepo.findById(concurrentEventId).getEventQueue().contains(waitingToken));
+    }
 }
