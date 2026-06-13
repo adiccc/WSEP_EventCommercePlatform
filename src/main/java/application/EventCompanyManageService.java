@@ -58,30 +58,30 @@ public class EventCompanyManageService {
     public Response<Boolean> DefineVenueAndSeatingMap(String token, Integer eventId, ElementPositionDTO stage,
             List<ElementPositionDTO> entries, List<StandingZoneDTO> standingZone, List<SeatingZoneDTO> seatingZone) {
         return RetryHelper.executeWithRetry(() ->
-        {
-            logger.log(Level.INFO, "DefineVenueAndSeatingMap called");
-            String role = getValidatedRole(token);
-            if (role == null) {
-                logger.log(Level.SEVERE, "Invalid or expired token");
-                return new Response<>(false, "Invalid or expired token");
-            }
-            // check valid token
-            int userId = getUserIdFromToken(token);
-            if (userId == -1) {
-                logger.severe("Invalid token");
-                return new Response<>(false, "Only members can define venue");
-            }
-            if (suspensionRepo.haveActiveSuspension(userId)) {
-                logger.severe("User does not have write access caused by suspension");
-                return new Response<>(null, "user does not have write access caused by suspension.");
-            }
+        { return transactionTemplate.execute(status -> {
             try {
+                logger.log(Level.INFO, "DefineVenueAndSeatingMap called");
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid or expired token");
+                    return new Response<>(false, "Invalid or expired token");
+                }
+                // check valid token
+                int userId = getUserIdFromToken(token);
+                if (userId == -1) {
+                    logger.severe("Invalid token");
+                    return new Response<>(false, "Only members can define venue");
+                }
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 Event event = eventRepo.findById(eventId);
                 int companyId = event.getCompanyId();
                 int eventCreator = event.getCreatorId();
                 Company c = this.companyRepo.findById(companyId);
 
-                if(!c.isActive()){
+                if (!c.isActive()) {
                     logger.severe("Company is closed, cannot define venue and seating map for events of this company");
                     return new Response<>(false, "Company is closed, cannot define venue and seating map for events of this company");
                 }
@@ -117,7 +117,6 @@ public class EventCompanyManageService {
                 // success
                 logger.log(Level.INFO, "map created and linked to event " + eventId);
                 return new Response<>(true, "map saved successfully");
-
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
@@ -127,6 +126,7 @@ public class EventCompanyManageService {
                 logger.log(Level.SEVERE, "failed creating a map : " + e.getMessage());
                 return new Response<>(false, "failed to create map : " + e.getMessage());
             }
+        });
         });
 
     }
@@ -272,18 +272,19 @@ public class EventCompanyManageService {
                     Event event = eventRepo.findById(eventId);
                     NotifyPayload payload = new NotifyPayload("The Date of event " + event.getName() + " has been updated to " + event.getDate().toString(), eventId, null);
                     NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
-                    for(String purchaser: memberToMsgId.keySet()){
+                    List<String> purchasers = eventRepo.getAllEventPurchasers(eventId);
+                    for(String purchaser: purchasers){
                         boolean isDelivered = notifier.notifyUser(purchaser, notifyDTO);
+                        logger.log(Level.INFO,"Event date update notification sent to:" + purchaser);
                         if (!isDelivered) {
-                            logger.severe("Warning notification failed sending to : " + purchaser);
-                            return new Response<>(null, "Failed to send event update notification");
+                            logger.log(Level.INFO,"Event date update notification could not send in live to : " + purchaser+" ,the message is pending and will be sent after the user will log in");
+                            continue;
                         }
                         // in case the user is a guest than he will not be included in the map keys
                         if (isDelivered && memberToMsgId.get(purchaser)!=null) {
                             markNotificationAsDelivered(purchaser, memberToMsgId.get(purchaser)); //if we succeed sending in real time we need to mark as delivered
-                            return new Response<>(null, "Notification sent successfully as DELIVERED");
+                            logger.log(Level.INFO,"Event date update notification to:" + purchaser+" marked as Delivered");
                         }
-
                     }
                     logger.log(Level.INFO, "Event updated successfully");
                     return new Response<>(true, "Event updated successfully");
