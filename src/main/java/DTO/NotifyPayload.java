@@ -1,6 +1,9 @@
 package DTO;
 import jakarta.persistence.Embeddable;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+
+import java.util.Objects;
+
 @Embeddable
 public class NotifyPayload {
     private String message;
@@ -32,6 +35,23 @@ public class NotifyPayload {
 
     public Integer getCompanyId() {
         return companyId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (!(o instanceof NotifyPayload)) {
+            return false;
+        }
+
+        NotifyPayload that = (NotifyPayload) o;
+
+        return Objects.equals(message, that.message)
+                && Objects.equals(eventId, that.eventId)
+                && Objects.equals(companyId, that.companyId);
     }
 
 }

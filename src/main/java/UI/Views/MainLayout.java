@@ -47,6 +47,8 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         this.activeOrderService = activeOrderService;
         this.companyService = companyService;
 
+        UI.getCurrent().getPushConfiguration().setPushMode(com.vaadin.flow.shared.communication.PushMode.AUTOMATIC);
+
         registerToBroadcaster();
         createHeader();
         createDrawer();
