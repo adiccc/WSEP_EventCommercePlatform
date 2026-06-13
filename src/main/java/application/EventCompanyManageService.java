@@ -247,7 +247,7 @@ public class EventCompanyManageService {
                             NotifyPayload payload = new NotifyPayload("The Date of event " + event.getName() + " has been updated to " + event.getDate().toString(), eventId, null);
                             NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
                             Map<String,Long> identifierToMsgId=new HashMap<>();
-                            // save pending message for each yuser during the main transaction
+                            // save pending message for each user during the main transaction
                             for (String purchaser : purchasers) {
                                 // check if it is a user
                                 Member member = userRepo.findUserByEmail(purchaser);
@@ -288,6 +288,7 @@ public class EventCompanyManageService {
                             logger.log(Level.INFO,"Event date update notification could not send in live to : " + purchaser+" ,the message is pending and will be sent after the user will log in");
                             continue;
                         }
+
                         // in case the user is a guest than he will not be included in the map keys
                         if (isDelivered && memberToMsgId.get(purchaser)!=null) {
                             markNotificationAsDelivered(purchaser, memberToMsgId.get(purchaser)); //if we succeed sending in real time we need to mark as delivered
@@ -515,7 +516,7 @@ public class EventCompanyManageService {
                     throw e;
                 } catch(Exception e){
                     logger.log(Level.SEVERE, "failed delete event : " + e.getMessage());
-                    return new Response<>(null, "failed to detele event : " + e.getMessage());
+                    return new Response<>(null, "failed to delete event : " + e.getMessage());
                 }
             });
 
@@ -543,8 +544,8 @@ public class EventCompanyManageService {
                     logger.log(Level.INFO,"Event cancelled notification to:" + purchaser+" marked as Delivered");
                 }
             }
-            logger.log(Level.INFO, "Event updated successfully");
-            return new Response<>(true, "Event updated successfully");
+            logger.log(Level.INFO, "Event delete successfully");
+            return new Response<>(true, "Event delete successfully");
         });
     }
 
@@ -751,12 +752,8 @@ public class EventCompanyManageService {
                         logger.log(Level.SEVERE, "Order cannot be refunded");
                         return new Response<>(null, "Order cannot be refunded");
                     }
-
-                    // mark order as 'REFUND REQUIRED'
-                    order.markRefundRequired();
-                    eventRepo.store(event);
-                    logger.log(Level.INFO,"Order "+orderId+" marked successfully as REFUND REQUIRED");
-                    return new Response<>(order,"Order marked successfully as REFUND REQUIRED");
+                    logger.log(Level.INFO,"Order "+orderId+" conditions are valid, the refund init");
+                    return new Response<>(order,"Order conditions are valid, the refund init");
                 }catch(Exception e) {
                     status.setRollbackOnly();
                     logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
@@ -771,18 +768,25 @@ public class EventCompanyManageService {
 
             // use external system to refund
             Order orderToRefund=orderResponse.getValue();
-            boolean refundApproved = paymentSystem.refund(
-                    orderToRefund.getPaymentConfirmationId(),
-                    orderToRefund.getTotalSum()
-            );
+            boolean refundApproved=false;
+            try{
+                refundApproved=paymentSystem.refund(
+                        orderToRefund.getPaymentConfirmationId(),
+                        orderToRefund.getTotalSum()
+                );
+            }catch(Exception e){
+                logger.log(Level.WARNING,"Failed to process refund");
+            }
+            final boolean finalRefundApproved = refundApproved;
 
             //update system state according the refund status
             return transactionTemplate.execute(status -> {
                 try {
                     Event event = eventRepo.findById(eventId);
                     Order order = event.findOrderById(orderId);
-                    if (refundApproved) {
+                    if (finalRefundApproved) {
                         order.markRefunded();
+                        eventRepo.store(event);
                         logger.log(Level.INFO, "Refund completed successfully");
 
                         String userIdentifier = order.getUserIdentifier();
@@ -1250,9 +1254,11 @@ public class EventCompanyManageService {
                             UserNotification userNotification = new UserNotification(notifyDTO.getType(),notifyDTO.getPayload());
                             member.addPendingNotification(userNotification);
                             userRepo.store(member);
+                            member=userRepo.findUserByEmail(userIdentifier);
+                            Long msgId=member.getMessageId(userNotification);
 
                             logger.info("Pending notification saved successfully for: " + member.getIdentifier());
-                            return new Response<>(userNotification.getNotificationId(), "Notification saved as pending");
+                            return new Response<>(msgId, "Notification saved as pending");
 
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();

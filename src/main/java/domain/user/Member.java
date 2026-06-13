@@ -148,4 +148,14 @@ public class Member extends User{
             }
         }
     }
+
+    public Long getMessageId(UserNotification userNotification ){
+        for(UserNotification un:this.userNotifications){
+            if(un.getType().equals(userNotification.getType())
+            && un.getPayload().equals(userNotification.getPayload())
+                    && un.getStatus().equals(userNotification.getStatus()))
+                return un.getNotificationId();
+        }
+        return null;
+    }
 }
