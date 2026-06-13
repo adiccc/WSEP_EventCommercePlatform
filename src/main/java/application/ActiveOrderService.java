@@ -149,9 +149,7 @@ public class ActiveOrderService {
                 String eventPurchasePolicy =
                         e.getPurchasePolicy().describe();
 
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(token).getValue()
-                        : token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 try {
                     ActiveOrderDTO existingOrderDTO =
@@ -511,9 +509,7 @@ public class ActiveOrderService {
             c.quantityExceedsPolicy(userResponse.getValue(), totalTickets,totalUserTickets);
             ActiveOrder newActiveOrder;
             try {
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(identifier).getValue()
-                        : identifier;
+                String userIdentifier = auth.getUserIdentifier(identifier).getValue();
 
                     ActiveOrderDTO activeOrderDTO = activeOrderRepo
                             .findActiveOrderByUserAndEvent(userIdentifier, eventId)
@@ -584,11 +580,9 @@ public class ActiveOrderService {
                     return new Response<>(null, "Invalid token");
                 }
 
-                String userIdentifier = token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 if (role.equals("MEMBER")) {
-                    userIdentifier = auth.getUserEmail(token).getValue();
-
                     if (userIdentifier == null) {
                         logger.log(Level.SEVERE, "not a valid user email");
                         return new Response<>(null, "not a valid user email");
@@ -678,13 +672,11 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
-                String userIdentifier = token; // for Guest
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
                 if (role.equals("MEMBER")) { // if it's a member should be email
-                    userIdentifier = auth.getUserEmail(token).getValue();
                     if (userIdentifier == null) {
                         logger.log(Level.SEVERE, "not a valid user email");
                         return new Response<>(null, "not a valid user email");
-
                     }
                     if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(token))) {
                         logger.severe("User does not have write access caused by suspension");
@@ -810,7 +802,7 @@ public class ActiveOrderService {
                             NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId()
                                     + " in event " + event.getId() + " because ticket issuance failed", event.getId(),
                                     null);
-                            sendOrSaveNotification(auth.getUserIdentifier(token).getValue(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));                        } catch (Exception e) {
+                            sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));                        } catch (Exception e) {
                             logger.log(Level.WARNING,
                                     "Failed to notify user about successful refund: " + e.getMessage());
                         }
@@ -821,7 +813,7 @@ public class ActiveOrderService {
                                     "Refund for order " + order.getOrderId() + " in event " + event.getId()
                                             + " because ticket issuance failed has been failed, please contact support",
                                     event.getId(), null);
-                            sendOrSaveNotification(auth.getUserIdentifier(token).getValue(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
+                            sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
                         } catch (Exception e) {
                             logger.log(Level.WARNING, "Failed to notify user about required refund: " + e.getMessage());
                         }
@@ -1012,9 +1004,7 @@ public class ActiveOrderService {
                 }
                 // Match the ownership key the order was stored under in enterEventPurchase:
                 // member -> email, guest -> raw token.
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(token).getValue()
-                        : token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(userIdentifier);
                 ActiveOrder order = activeOrderRepo.findById(dto.getId());
@@ -1069,9 +1059,7 @@ public class ActiveOrderService {
                 }
                 // Match the ownership key the order was stored under in enterEventPurchase:
                 // member -> email, guest -> raw token.
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(token).getValue()
-                        : token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 // the case that a user tries to remove and add the same tickets
                 if (seatingToRemove != null && seatingToAdd != null) {
@@ -1259,10 +1247,7 @@ public class ActiveOrderService {
         boolean skipped = RetryHelper.executeWithRetry(() -> {
             try {
                 String role = getValidatedRole(token);
-                String userIdentifier = token;
-                if (role.equals("MEMBER")) {
-                    userIdentifier = auth.getUserEmail(token).getValue();
-                }
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
                 activeOrderRepo.alreadyHasActiveOrder(userIdentifier, eventId);
                 int orderId = idGenerator.getAndIncrement();
                 ActiveOrder nextOrder = new ActiveOrder(orderId, userIdentifier, eventId, new ArrayList<>());
@@ -1454,9 +1439,7 @@ public class ActiveOrderService {
                     return new Response<>(null, "Invalid token");
                 }
 
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(token).getValue()
-                        : token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 ActiveOrder order = activeOrderRepo.findById(activeOrderId);
 
@@ -1506,9 +1489,7 @@ public class ActiveOrderService {
                     return new Response<>(null, "user does not have write access caused by suspension.");
                 }
 
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(token).getValue()
-                        : token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 ActiveOrderDTO activeOrderDTO =
                         activeOrderRepo.findOrderByUserId(userIdentifier);
@@ -1549,9 +1530,7 @@ public class ActiveOrderService {
                     return new Response<>(null, "Invalid token");
                 }
 
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(token).getValue()
-                        : token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 if (userIdentifier == null || userIdentifier.isBlank()) {
                     return new Response<>(null, "Invalid user identifier");
