@@ -725,7 +725,7 @@ class AdminServiceTest {
         );
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 activeOrderService.checkoutAndPayment(buyerToken, activeOrderId, paymentDetails);

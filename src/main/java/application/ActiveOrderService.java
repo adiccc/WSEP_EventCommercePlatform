@@ -37,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 @Service
 
@@ -754,13 +755,36 @@ public class ActiveOrderService {
                 shouldDeleteActiveOrder = true;
 
                 boolean issuanceFailed = false;
-
+                List<String> successfullyIssuedCodes = new ArrayList<>(); //for any case of rollback
                 try {
-                    TicketSupplyResultDTO issueResult = ticketSupply.issue(
-                            new TicketSupplyRequestDTO(activeOrder.getTickets()));
+                    List<PurchasedTicketDTO> purchasedDetails = event.getPurchasedTicketDetails(activeOrder.getTickets());
+                    Map<String, List<PurchasedTicketDTO>> ticketsByZone = purchasedDetails.stream()
+                            .collect(Collectors.groupingBy(PurchasedTicketDTO::getZoneName));
+
+                    for (Map.Entry<String, List<PurchasedTicketDTO>> entry : ticketsByZone.entrySet()) {
+                        String zoneName = entry.getKey();
+                        List<PurchasedTicketDTO> zoneTickets = entry.getValue();
+
+                        boolean isSeating = zoneTickets.get(0).getTicketType().equalsIgnoreCase("SEATING");
+
+                        TicketSupplyRequestDTO supplyRequest = new TicketSupplyRequestDTO(
+                                userIdentifier, // customer_id
+                                String.valueOf(event.getId()),
+                                zoneName,
+                                isSeating,
+                                zoneTickets
+                        );
+
+                    TicketSupplyResultDTO issueResult = ticketSupply.issue(supplyRequest);
 
                     if (issueResult == null || !issueResult.isSuccess()) {
                         issuanceFailed = true;
+                        break;
+                    } else {
+                        if (issueResult.getIssuedCodes() != null) {
+                            successfullyIssuedCodes.addAll(issueResult.getIssuedCodes());
+                        }
+                    }
                     }
 
                 } catch (Exception e) {
@@ -769,6 +793,14 @@ public class ActiveOrderService {
                 }
 
                 if (issuanceFailed) {
+                    logger.log(Level.WARNING, "Issuance failed. Initiating rollback for " + successfullyIssuedCodes.size() + " tickets.");
+                    for (String issuedCode : successfullyIssuedCodes) { //cancelTicketAtTheTicketSystem
+                        try {
+                            ticketSupply.cancelTicket(issuedCode);
+                        } catch (Exception cancelEx) {
+                            logger.warning("Failed to cancel ticket " + issuedCode + " during rollback: " + cancelEx.getMessage());
+                        }
+                    }
                     boolean refundApproved = paymentSystem.refund(paymentConfirmationId, total);
 
                     if (refundApproved) {

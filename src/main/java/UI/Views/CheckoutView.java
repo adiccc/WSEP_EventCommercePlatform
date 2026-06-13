@@ -52,6 +52,7 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
     private final PasswordField cardNumber = new PasswordField("Card number");
     private final TextField expirationDate = new TextField("Expiration date");
     private final PasswordField cvv = new PasswordField("CVV");
+    private final TextField cardHolderName = new TextField("Card holder name");
     private final TextField cardHolderId = new TextField("Card holder ID");
     private final IntegerField numberOfPayments = new IntegerField("Number of payments");
     private Button payButton;
@@ -115,16 +116,19 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
 
         expirationDate.setAutocomplete(Autocomplete.OFF);
         cardHolderId.setAutocomplete(Autocomplete.OFF);
+        cardHolderName.setAutocomplete(Autocomplete.OFF);
 
         cardNumber.setPlaceholder("Card number");
         expirationDate.setPlaceholder("MM/YY");
         cvv.setPlaceholder("CVV");
         cardHolderId.setPlaceholder("ID number");
+        cardHolderName.setPlaceholder("Name on card");
 
         cardNumber.setValueChangeMode(ValueChangeMode.EAGER);
         expirationDate.setValueChangeMode(ValueChangeMode.EAGER);
         cvv.setValueChangeMode(ValueChangeMode.EAGER);
         cardHolderId.setValueChangeMode(ValueChangeMode.EAGER);
+        cardHolderName.setValueChangeMode(ValueChangeMode.EAGER);
         numberOfPayments.setValueChangeMode(ValueChangeMode.EAGER);
 
         numberOfPayments.setMin(1);
@@ -135,6 +139,7 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         expirationDate.setWidthFull();
         cvv.setWidthFull();
         cardHolderId.setWidthFull();
+        cardHolderName.setWidthFull();
         numberOfPayments.setWidthFull();
         couponCode.setWidthFull();
 
@@ -142,6 +147,7 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         expirationDate.addValueChangeListener(e -> updatePayButtonState());
         cvv.addValueChangeListener(e -> updatePayButtonState());
         cardHolderId.addValueChangeListener(e -> updatePayButtonState());
+        cardHolderName.addValueChangeListener(e -> updatePayButtonState());
         numberOfPayments.addValueChangeListener(e -> updatePayButtonState());
     }
 
@@ -228,10 +234,10 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         Div paymentCard = createCard();
         H3 paymentTitle = new H3("Payment Details");
 
-        HorizontalLayout paymentRow1 = new HorizontalLayout(cardNumber, expirationDate);
+        HorizontalLayout paymentRow1 = new HorizontalLayout(cardNumber, expirationDate, cvv);
         paymentRow1.setWidthFull();
 
-        HorizontalLayout paymentRow2 = new HorizontalLayout(cvv, cardHolderId, numberOfPayments);
+        HorizontalLayout paymentRow2 = new HorizontalLayout(cardHolderName, cardHolderId, numberOfPayments);
         paymentRow2.setWidthFull();
 
         paymentCard.add(paymentTitle, paymentRow1, paymentRow2);
@@ -333,6 +339,7 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
                 !cardNumber.isEmpty()
                         && !expirationDate.isEmpty()
                         && !cvv.isEmpty()
+                        && !cardHolderName.isEmpty()
                         && !cardHolderId.isEmpty()
                         && numberOfPayments.getValue() != null
                         && numberOfPayments.getValue() > 0;
@@ -346,6 +353,7 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
                 expirationDate.getValue(),
                 cvv.getValue(),
                 cardHolderId.getValue(),
+                cardHolderName.getValue(),
                 numberOfPayments.getValue(),
                 appliedCouponCode
         );
