@@ -1132,16 +1132,7 @@ public class CompanyService {
                     try {
                         Member member = userRepo.findUserByEmail(userIdentifier);
                         if (member != null) {
-                            for (UserNotification dn : member.getPendingNotifications()) {
-                                boolean isMatch = (notificationId != null) ?
-                                        notificationId.equals(dn.getNotificationId()) :
-                                        (dn.getStatus() == NotificationStatus.PENDING);
-
-                                if (isMatch) {
-                                    dn.setStatus(NotificationStatus.DELIVERED);
-                                    break;
-                                }
-                            }
+                            member.setMessageStatus(notificationId,NotificationStatus.DELIVERED);
                             userRepo.store(member);
                         }
                         return new Response<>(true, "Notification marked as DELIVERED");
