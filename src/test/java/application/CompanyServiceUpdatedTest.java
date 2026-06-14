@@ -12,17 +12,18 @@ import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
 
 import domain.event.IEventRepo;
+import domain.lottery.AccessCodeGenerator;
 import domain.policy.*;
 import domain.user.IUserRepo;
 import domain.dto.CompanyDTO;
 import domain.user.Manager;
 import domain.user.Member;
 import infrastructure.*;
-import infrastructure.inMemory.*;
 import infrastructure.inMemory.CompanyRepoImpl;
 import infrastructure.inMemory.EventRepoImpl;
 import infrastructure.inMemory.SuspensionRepoImpl;
 import infrastructure.inMemory.UserRepo;
+import infrastructure.proxySystems.PaymentSystemProxy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -78,6 +79,10 @@ class CompanyServiceUpdatedTest {
 
     @BeforeEach
     void setUp() {
+        AccessCodeGenerator.configure(
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                6
+        );
         LoggerSetup.setup();
         suspensionRepo=new SuspensionRepoImpl();
         userRepo = new UserRepo();

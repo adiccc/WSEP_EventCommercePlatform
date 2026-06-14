@@ -8,10 +8,11 @@ import application.EventService;
 import application.LotteryService;
 import application.TokenService;
 import application.UserService;
+import domain.user.IUserRepo;
 import infrastructure.Auth;
 import infrastructure.PasswordEncoderUtil;
-import infrastructure.PaymentSystemProxy;
-import infrastructure.TicketSupplyProxy;
+import infrastructure.proxySystems.PaymentSystemProxy;
+import infrastructure.proxySystems.TicketSupplyProxy;
 import infrastructure.inMemory.UserRepo;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,7 +67,7 @@ public class SpringContextIntegrationTest {
     private PasswordEncoderUtil passwordEncoderUtil;
 
     @Autowired
-    private UserRepo userRepo;
+    private IUserRepo userRepo;
 
     @Test
     void contextLoads() {

@@ -29,6 +29,7 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 import DTO.NotifyDTO;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.shared.Registration;
+import com.vaadin.flow.shared.communication.PushMode;
 import infrastructure.Broadcaster;
 
 @AnonymousAllowed
@@ -41,11 +42,14 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
     private Registration tabBroadcasterRegistration;
     private final ActiveOrderService activeOrderService;
 
-    public MainLayout(IAuth auth, UserService userService, ActiveOrderService activeOrderService, CompanyService companyService) {
+    public MainLayout(IAuth auth, UserService userService, ActiveOrderService activeOrderService,
+            CompanyService companyService) {
         this.auth = auth;
         this.userService = userService;
         this.activeOrderService = activeOrderService;
         this.companyService = companyService;
+
+        UI.getCurrent().getPushConfiguration().setPushMode(PushMode.AUTOMATIC);
 
         registerToBroadcaster();
         createHeader();
@@ -55,8 +59,8 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
-        Boolean webQueueAdmitted =
-                (Boolean) VaadinSession.getCurrent().getAttribute("webQueueAdmitted_" + getCurrentTabId());
+        Boolean webQueueAdmitted = (Boolean) VaadinSession.getCurrent()
+                .getAttribute("webQueueAdmitted_" + getCurrentTabId());
 
         if (!Boolean.TRUE.equals(webQueueAdmitted)) {
             event.rerouteTo("");
@@ -118,10 +122,9 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
         UI.getCurrent().getPage().executeJs(
                 """
-                sessionStorage.removeItem("eventCommerceEventQueueToken");
-                sessionStorage.removeItem("eventCommerceEventQueueEventId");
-                """
-        );
+                        sessionStorage.removeItem("eventCommerceEventQueueToken");
+                        sessionStorage.removeItem("eventCommerceEventQueueEventId");
+                        """);
     }
 
     private void registerBrowserCloseHandler() {
@@ -140,35 +143,34 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
         UI.getCurrent().getPage().executeJs(
                 """
-                window.__eventCommerceAuthToken = $0;
-    
-                if (!window.__eventCommerceCloseTabHandlerRegistered) {
-                    window.__eventCommerceCloseTabHandlerRegistered = true;
-    
-                    window.addEventListener("beforeunload", function () {
-                        const token = window.__eventCommerceAuthToken;
-    
-                        const eventQueueToken = sessionStorage.getItem("eventCommerceEventQueueToken");
-                        const eventQueueEventId = sessionStorage.getItem("eventCommerceEventQueueEventId");
-                
-                        if (eventQueueToken && eventQueueEventId) {
-                            navigator.sendBeacon(
-                                "/api/session/cancel-event-queue",
-                                new Blob(
-                                    [eventQueueToken + ":" + eventQueueEventId],
-                                    { type: "text/plain" }
-                                )
-                            );
+                        window.__eventCommerceAuthToken = $0;
+
+                        if (!window.__eventCommerceCloseTabHandlerRegistered) {
+                            window.__eventCommerceCloseTabHandlerRegistered = true;
+
+                            window.addEventListener("beforeunload", function () {
+                                const token = window.__eventCommerceAuthToken;
+
+                                const eventQueueToken = sessionStorage.getItem("eventCommerceEventQueueToken");
+                                const eventQueueEventId = sessionStorage.getItem("eventCommerceEventQueueEventId");
+
+                                if (eventQueueToken && eventQueueEventId) {
+                                    navigator.sendBeacon(
+                                        "/api/session/cancel-event-queue",
+                                        new Blob(
+                                            [eventQueueToken + ":" + eventQueueEventId],
+                                            { type: "text/plain" }
+                                        )
+                                    );
+                                }
+                                navigator.sendBeacon(
+                                    "/api/session/close-tab",
+                                    new Blob([token], { type: "text/plain" })
+                                );
+                            });
                         }
-                        navigator.sendBeacon(
-                            "/api/session/close-tab",
-                            new Blob([token], { type: "text/plain" })
-                        );
-                    });
-                }
-                """,
-                token
-        );
+                        """,
+                token);
     }
 
     private void registerToBroadcaster() {
@@ -184,13 +186,11 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
             return;
         }
 
-        String userIdentifier =
-                (String) VaadinSession.getCurrent()
-                        .getAttribute("notificationUserIdentifier_" + tabId);
+        String userIdentifier = (String) VaadinSession.getCurrent()
+                .getAttribute("notificationUserIdentifier_" + tabId);
 
-        String token =
-                (String) VaadinSession.getCurrent()
-                        .getAttribute("token_" + tabId);
+        String token = (String) VaadinSession.getCurrent()
+                .getAttribute("token_" + tabId);
 
         if (userIdentifier != null && !userIdentifier.isBlank()) {
             userBroadcasterRegistration = Broadcaster.registerUser(userIdentifier, notification -> {
@@ -230,7 +230,8 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
             case KICKOUT_TAB_NAVIGATION -> handleKickout(notification);
             case ROLE_APPOINTMENT_REQUEST -> showAppointmentDialog(notification);
             case ACCOUNT_REMOVED -> handleAccountRemoved(notification);
-            default -> { }
+            default -> {
+            }
         }
     }
 
@@ -254,8 +255,7 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         Notification notification = Notification.show(
                 "Your session has expired. Please start again.",
                 4000,
-                Notification.Position.TOP_CENTER
-        );
+                Notification.Position.TOP_CENTER);
         notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
 
         if (tabId != null && !tabId.isBlank()) {
@@ -272,10 +272,9 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
         ui.getPage().executeJs(
                 """
-                sessionStorage.removeItem("eventCommerceEventQueueToken");
-                sessionStorage.removeItem("eventCommerceEventQueueEventId");
-                """
-        );
+                        sessionStorage.removeItem("eventCommerceEventQueueToken");
+                        sessionStorage.removeItem("eventCommerceEventQueueEventId");
+                        """);
 
         ui.navigate("");
     }
@@ -376,8 +375,7 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         Notification vaadinNotification = Notification.show(
                 message,
                 5000,
-                Notification.Position.TOP_CENTER
-        );
+                Notification.Position.TOP_CENTER);
 
         vaadinNotification.addThemeVariants(NotificationVariant.LUMO_PRIMARY);
     }
@@ -422,7 +420,6 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         Response<String> roleResponse = auth.getRole(token);
         String role = roleResponse.getValue();
 
-
         if ("MEMBER".equals(role)) {
             // Registered member
             SideNavItem orders = new SideNavItem("My Orders", "my-orders");
@@ -441,25 +438,19 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
             SideNavItem adminCompanyManagement = null;
 
             if (isAdmin) {
-                adminPurchaseHistory =
-                        new SideNavItem(
-                                "Admin Purchase History",
-                                "admin/purchase-history"
-                        );
+                adminPurchaseHistory = new SideNavItem(
+                        "Admin Purchase History",
+                        "admin/purchase-history");
 
                 adminPurchaseHistory.setPrefixComponent(
-                        VaadinIcon.CLIPBOARD_TEXT.create()
-                );
+                        VaadinIcon.CLIPBOARD_TEXT.create());
 
-                adminCompanyManagement =
-                        new SideNavItem(
-                                "Company Management",
-                                "admin/company-management"
-                        );
+                adminCompanyManagement = new SideNavItem(
+                        "Company Management",
+                        "admin/company-management");
 
                 adminCompanyManagement.setPrefixComponent(
-                        VaadinIcon.OFFICE.create()
-                );
+                        VaadinIcon.OFFICE.create());
             }
 
             SideNavItem logout = new SideNavItem("Logout", "logout");
@@ -472,8 +463,7 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
                         company,
                         adminPurchaseHistory,
                         adminCompanyManagement,
-                        logout
-                );
+                        logout);
             } else {
                 nav.addItem(orders, notifications, company, logout);
             }
@@ -517,8 +507,7 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         Notification notification = Notification.show(
                 message,
                 3000,
-                Notification.Position.TOP_CENTER
-        );
+                Notification.Position.TOP_CENTER);
         notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
     }
 
@@ -526,24 +515,25 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         Notification notification = Notification.show(
                 message,
                 4000,
-                Notification.Position.TOP_CENTER
-        );
+                Notification.Position.TOP_CENTER);
         notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
     }
+
     private void handleAccountRemoved(NotifyDTO notification) {
         UI ui = UI.getCurrent();
-        if (ui == null) return;
+        if (ui == null)
+            return;
 
         String message = "Your account has been removed by the administrator.";
-        if (notification != null && notification.getPayload() != null && notification.getPayload().getMessage() != null) {
+        if (notification != null && notification.getPayload() != null
+                && notification.getPayload().getMessage() != null) {
             message = notification.getPayload().getMessage();
         }
 
         Notification vaadinNotification = Notification.show(
                 message,
                 6000,
-                Notification.Position.TOP_CENTER
-        );
+                Notification.Position.TOP_CENTER);
         vaadinNotification.addThemeVariants(NotificationVariant.LUMO_ERROR);
 
         String tabId = ui.getElement().getProperty("currentTabId");
@@ -559,10 +549,9 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
         ui.getPage().executeJs(
                 """
-                sessionStorage.removeItem("eventCommerceEventQueueToken");
-                sessionStorage.removeItem("eventCommerceEventQueueEventId");
-                """
-        );
+                        sessionStorage.removeItem("eventCommerceEventQueueToken");
+                        sessionStorage.removeItem("eventCommerceEventQueueEventId");
+                        """);
 
         ui.navigate("");
     }

@@ -5,6 +5,7 @@ import Log.LoggerSetup;
 
 import java.util.*;
 
+import domain.lottery.AccessCodeGenerator;
 import domain.user.NotificationStatus;
 import domain.user.UserNotification;
 import infrastructure.Auth;
@@ -80,6 +81,10 @@ class ActiveOrderServiceTest {
 
     @BeforeEach
     void setUp() {
+        AccessCodeGenerator.configure(
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                6
+        );
         LoggerSetup.setup();
         tokenService = new TokenService();
         userRepo = new UserRepo();
@@ -1427,7 +1432,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
         Response<Integer> result = service.checkoutAndPayment(validToken, orderId, paymentDetails);
 
         assertNotNull(result.getValue(), "checkout failed: " + result.getMessage());
@@ -1620,7 +1625,7 @@ class ActiveOrderServiceTest {
                     .thenReturn(supplyResult);
 
             PaymentDetailsDTO paymentDetails =
-                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
             Response<CheckoutPriceDTO> checkoutPriceResponse =
                     service.prepareCheckout(validToken, activeOrderId);
@@ -1694,7 +1699,7 @@ class ActiveOrderServiceTest {
                 .when(notifier).notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class));
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<CheckoutPriceDTO> checkoutPriceResponse =
                 service.prepareCheckout(validToken, activeOrderId);
@@ -1737,7 +1742,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(null);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<CheckoutPriceDTO> checkoutPriceResponse =
                 service.prepareCheckout(validToken, activeOrderId);
@@ -1807,7 +1812,7 @@ class ActiveOrderServiceTest {
                     .thenReturn(true);
 
             PaymentDetailsDTO paymentDetails =
-                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
             Response<CheckoutPriceDTO> checkoutPriceResponse =
                     service.prepareCheckout(validToken, activeOrderId);
@@ -1909,7 +1914,7 @@ class ActiveOrderServiceTest {
                     .thenReturn(true);
 
             PaymentDetailsDTO paymentDetails =
-                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
             Response<CheckoutPriceDTO> checkoutPriceResponse =
                     service.prepareCheckout(validToken, activeOrderId);
@@ -2013,7 +2018,7 @@ class ActiveOrderServiceTest {
                     .thenReturn(false);
 
             PaymentDetailsDTO paymentDetails =
-                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
             Response<CheckoutPriceDTO> checkoutPriceResponse =
                     service.prepareCheckout(validToken, activeOrderId);
@@ -2095,7 +2100,7 @@ class ActiveOrderServiceTest {
         forceExpireOrder(activeOrderId);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2145,7 +2150,7 @@ class ActiveOrderServiceTest {
         int activeOrderId = activeOrderRepo.findOrderByUserId(userEmail).getId();
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2171,7 +2176,7 @@ class ActiveOrderServiceTest {
         String invalidToken = "not-a-real-token";
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(invalidToken, 999, paymentDetails);
@@ -2231,7 +2236,7 @@ class ActiveOrderServiceTest {
                 start.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
                 return service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
             }));
@@ -2360,7 +2365,7 @@ class ActiveOrderServiceTest {
                 start.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
                 return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
             }));
@@ -2478,7 +2483,7 @@ class ActiveOrderServiceTest {
                 start.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
                 return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
             }));
@@ -2603,7 +2608,7 @@ class ActiveOrderServiceTest {
                 start.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
                 return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
             }));
@@ -2723,7 +2728,7 @@ class ActiveOrderServiceTest {
             futures.add(executor.submit(() -> {
                 start.await();
                 return service.checkoutAndPayment(token, orderId,
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null));
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null));
             }));
         }
 
@@ -2810,7 +2815,7 @@ class ActiveOrderServiceTest {
             futures.add(executor.submit(() -> {
                 start.await();
                 return service.checkoutAndPayment(token, orderId,
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null));
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null));
             }));
         }
 
@@ -2851,7 +2856,7 @@ class ActiveOrderServiceTest {
         String tokenB = userService.login(emailB, "pass").getValue();
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(tokenB, orderId, paymentDetails);
@@ -2881,7 +2886,7 @@ class ActiveOrderServiceTest {
         eventRepo.store(event);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2941,7 +2946,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(true);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -2994,7 +2999,7 @@ class ActiveOrderServiceTest {
                 .thenThrow(new RuntimeException("payment service unavailable"));
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3042,7 +3047,7 @@ class ActiveOrderServiceTest {
                 .thenReturn("   ");
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3065,7 +3070,7 @@ class ActiveOrderServiceTest {
     @Test
     void GivenNonExistingActiveOrder_WhenCheckoutAndPayment_ThenNotFoundAndNoExternalServicesCalled() {
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> response =
                 service.checkoutAndPayment(validToken, 999999, paymentDetails);
@@ -3240,7 +3245,7 @@ class ActiveOrderServiceTest {
                 checkoutStart.await();
 
                 PaymentDetailsDTO paymentDetails =
-                        new PaymentDetailsDTO("1234", "12/30", "123", "111111111", 1, null);
+                        new PaymentDetailsDTO("1234", "12/30", "123", "111111111", "Yarin Sheme",1, null);
                 return service.checkoutAndPayment(token, activeOrderId, paymentDetails);
             }));
         }
@@ -3386,7 +3391,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3437,7 +3442,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3511,7 +3516,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1,null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1,null);
         userService.cleanDelayedNotifications("testuser1@gmail.com");
         userService.cleanDelayedNotifications("owner2@gmail.com");
         userService.cleanDelayedNotifications("manager1@gmail.com");
@@ -3570,7 +3575,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3631,7 +3636,7 @@ class ActiveOrderServiceTest {
                     .thenReturn(supplyResult);
 
             PaymentDetailsDTO paymentDetails =
-                    new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                    new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
             Response<Integer> checkoutResponse =
                     service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3705,7 +3710,7 @@ class ActiveOrderServiceTest {
         Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
                 .thenReturn(supplyResult);
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         // Drop appointment-time notifications so the delayed list reflects only the sold-out event
         userService.cleanDelayedNotifications(manager1Email);
@@ -3811,7 +3816,7 @@ class ActiveOrderServiceTest {
         Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
                 .thenReturn(supplyResult);
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         // Drop appointment-time notifications so the delayed-list sizes reflect only the sold-out event
         userService.cleanDelayedNotifications(manager1Email);
@@ -3909,7 +3914,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(supplyResult);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
@@ -3957,7 +3962,7 @@ class ActiveOrderServiceTest {
         Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
                 .thenReturn(supplyResult);
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         // Purchase 1 — buy both seats only; standing zone untouched, event NOT sold out
         service.enterEventPurchase(validToken, companyId, boundaryEventId,null);
@@ -4079,7 +4084,7 @@ class ActiveOrderServiceTest {
         Mockito.when(supplyResult.isSuccess()).thenReturn(true);
         Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
                 .thenReturn(supplyResult);
-        PaymentDetailsDTO paymentDetails = new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+        PaymentDetailsDTO paymentDetails = new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         userService.cleanDelayedNotifications("testuser1@gmail.com");
         userService.cleanDelayedNotifications("owner2@gmail.com");
@@ -4178,7 +4183,7 @@ class ActiveOrderServiceTest {
         });
 
         // Act
-        PaymentDetailsDTO payment = new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+        PaymentDetailsDTO payment = new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
         Response<Integer> checkoutResp = service.checkoutAndPayment(firstFillerToken, firstFillerOrderId, payment);
 
         assertNotNull(checkoutResp.getValue(), "Checkout failed, promoteNextInQueue will not be triggered. Server says: " + checkoutResp.getMessage());
@@ -4503,7 +4508,7 @@ class ActiveOrderServiceTest {
                 .thenReturn(true);
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<CheckoutPriceDTO> checkoutPriceResponse =
                 serviceWithMockNotifier.prepareCheckout(validToken, activeOrderId);
@@ -4564,5 +4569,281 @@ class ActiveOrderServiceTest {
                 .anyMatch(n -> n.getStatus() == NotificationStatus.DELIVERED
                         && n.getPayload().getMessage().contains("Refund processed"));
         assertTrue(hasDelivered, "Online user should have the refund processed notification marked as DELIVERED");
+    }
+
+    @Test
+    void GivenInvalidToken_WhenValidateLotteryCode_ThenInvalidTokenReturned() {
+        Response<Boolean> response =
+                service.validateLotteryCode("invalid-token", companyId, eventId, "ANY");
+
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenWrongCompany_WhenValidateLotteryCode_ThenCompanyMismatchReturned() {
+        Event event = eventRepo.findById(eventId);
+        event.setSaleStartDateForTest(LocalDateTime.now().minusHours(1));
+        eventRepo.store(event);
+
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, 999, eventId, "ANY");
+
+        assertNull(response.getValue());
+        assertEquals("The selected event does not belong to the company", response.getMessage());
+    }
+
+    @Test
+    void GivenInactiveEvent_WhenValidateLotteryCode_ThenInactiveEventReturned() {
+        Event event = eventRepo.findById(concurrentEventId);
+        event.setActive(false);
+        eventRepo.store(event);
+
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, companyId, concurrentEventId, "ANY");
+
+        assertNull(response.getValue());
+        assertEquals("The selected event is not active", response.getMessage());
+    }
+
+    @Test
+    void GivenSaleNotStarted_WhenValidateLotteryCode_ThenSaleNotStartedReturned() {
+        // eventId is created in setUp with saleStartDate in the future
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, companyId, eventId, "ANY");
+
+        assertNull(response.getValue());
+        assertEquals("The sale for this event has not started yet", response.getMessage());
+    }
+
+    @Test
+    void GivenEventWithoutLottery_WhenValidateLotteryCode_ThenTrueReturned() {
+        // concurrentEventId has no lottery and sale already started
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, companyId, concurrentEventId, null);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue());
+        assertEquals("Lottery code is not required", response.getMessage());
+    }
+
+    @Test
+    void GivenExpiredLotteryPeriod_WhenValidateLotteryCode_ThenTrueReturned() {
+        int expiredLotteryEventId = companyEventService.createEvent(
+                validToken,
+                companyId,
+                LocalDateTime.now().plusDays(5),
+                "Expired Lottery Validation Event",
+                LocalDateTime.now().plusDays(1),
+                true,
+                GeographicalArea.CENTER,
+                CategoryEvent.SPORTS
+        ).getValue();
+
+        lotteryService.createLottery(
+                validToken,
+                expiredLotteryEventId,
+                10,
+                LocalDateTime.now().plusHours(1),
+                1
+        );
+
+        Event event = eventRepo.findById(expiredLotteryEventId);
+        event.setSaleStartDateForTest(LocalDateTime.now().minusHours(3));
+        eventRepo.store(event);
+
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, companyId, expiredLotteryEventId, null);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue());
+        assertEquals("Lottery period has ended. Everyone can purchase tickets", response.getMessage());
+    }
+
+    @Test
+    void GivenMissingLotteryCodeDuringExclusivePeriod_WhenValidateLotteryCode_ThenFalseReturned() {
+        Event event = eventRepo.findById(eventId);
+        event.setSaleStartDateForTest(LocalDateTime.now().minusHours(1));
+        eventRepo.store(event);
+
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, companyId, eventId, "   ");
+
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue());
+        assertEquals("Please enter your lottery code", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingEvent_WhenValidateLotteryCode_ThenEventOrLotteryNotFoundReturned() {
+        Response<Boolean> response =
+                service.validateLotteryCode(validToken, companyId, -999, "ANY");
+
+        assertNull(response.getValue());
+        assertEquals("Event or lottery not found", response.getMessage());
+    }
+
+    @Test
+    void GivenValidCheckoutOrder_WhenGetCheckoutRemainingSeconds_ThenTimerReturned() {
+        int activeOrderId = createCheckoutOrder(validToken, concurrentEventId, 3);
+
+        Response<Long> response =
+                service.getCheckoutRemainingSeconds(validToken, activeOrderId);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue() > 0);
+        assertTrue(response.getValue() <= 600);
+        assertEquals("Checkout timer retrieved successfully", response.getMessage());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenGetCheckoutRemainingSeconds_ThenInvalidTokenReturned() {
+        Response<Long> response =
+                service.getCheckoutRemainingSeconds("invalid-token", 1);
+
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingActiveOrder_WhenGetCheckoutRemainingSeconds_ThenActiveOrderNotFoundReturned() {
+        Response<Long> response =
+                service.getCheckoutRemainingSeconds(validToken, -999);
+
+        assertNull(response.getValue());
+        assertEquals("Active order not found", response.getMessage());
+    }
+
+    @Test
+    void GivenOrderBelongsToAnotherUser_WhenGetCheckoutRemainingSeconds_ThenOwnershipErrorReturned() {
+        int activeOrderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+
+        String otherToken = registerAndLoginTestUser("timer_other_user@mail.com");
+
+        Response<Long> response =
+                service.getCheckoutRemainingSeconds(otherToken, activeOrderId);
+
+        assertNull(response.getValue());
+        assertEquals("Active order does not belong to user", response.getMessage());
+    }
+
+    @Test
+    void GivenExpiredActiveOrder_WhenGetCheckoutRemainingSeconds_ThenZeroReturnedAndOrderCleaned() {
+        int activeOrderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+
+        forceExpireOrder(activeOrderId);
+
+        Response<Long> response =
+                service.getCheckoutRemainingSeconds(validToken, activeOrderId);
+
+        assertNotNull(response.getValue());
+        assertEquals(0L, response.getValue());
+        assertEquals("Active order expired", response.getMessage());
+
+        assertThrows(NoSuchElementException.class,
+                () -> activeOrderRepo.findById(activeOrderId),
+                "Expired active order should be cleaned from repo");
+    }
+
+    private String registerAndLoginTestUser(String email) {
+        userService.registerUser("", new UserDTO(
+                email,
+                "first",
+                "last",
+                "pass",
+                1,
+                1,
+                2000,
+                "Israel",
+                "050-111-2222"
+        ));
+
+        return userService.login(email, "pass").getValue();
+    }
+
+    private int createCheckoutOrder(String token, int eventId, int standingTickets) {
+        Response<EnterPurchaseDTO> enterResponse =
+                service.enterEventPurchase(token, companyId, eventId, null);
+
+        assertNotNull(enterResponse.getValue(), "enter purchase failed: " + enterResponse.getMessage());
+
+        Response<Integer> selectResponse =
+                service.userSelectTickets(
+                        token,
+                        eventId,
+                        new HashMap<>(),
+                        Map.of("floor", standingTickets)
+                );
+
+        assertNotNull(selectResponse.getValue(), "select tickets failed: " + selectResponse.getMessage());
+        assertEquals("Tickets selected successfully", selectResponse.getMessage());
+
+        return selectResponse.getValue();
+    }
+
+    // ---------- cancelEventQueueEntry coverage ----------
+
+    @Test
+    void GivenInvalidToken_WhenCancelEventQueueEntry_ThenInvalidTokenReturned() {
+        Response<Boolean> response =
+                service.cancelEventQueueEntry("invalid-token", concurrentEventId);
+
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingEvent_WhenCancelEventQueueEntry_ThenEventNotFoundReturned() {
+        Response<Boolean> response =
+                service.cancelEventQueueEntry(validToken, -999);
+
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue());
+        assertEquals("Event not found", response.getMessage());
+    }
+
+    @Test
+    void GivenUserNotInEventQueue_WhenCancelEventQueueEntry_ThenFalseReturned() {
+        Response<Boolean> response =
+                service.cancelEventQueueEntry(validToken, concurrentEventId);
+
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue());
+        assertEquals("User was not waiting in event queue", response.getMessage());
+    }
+
+    @Test
+    void GivenUserWaitingInEventQueue_WhenCancelEventQueueEntry_ThenUserRemoved() {
+        List<String> fillerTokens = new ArrayList<>();
+
+        for (int i = 0; i < capacity; i++) {
+            String token = registerAndLoginTestUser("queue_filler_" + i + "@mail.com");
+            fillerTokens.add(token);
+
+            Response<EnterPurchaseDTO> response =
+                    service.enterEventPurchase(token, companyId, concurrentEventId, null);
+
+            assertNotNull(response.getValue(), "filler should enter purchase");
+            assertFalse(response.getValue().isWaitingInQueue());
+        }
+
+        String waitingToken = registerAndLoginTestUser("waiting_to_cancel@mail.com");
+
+        Response<EnterPurchaseDTO> enterResponse =
+                service.enterEventPurchase(waitingToken, companyId, concurrentEventId, null);
+
+        assertNotNull(enterResponse.getValue());
+        assertTrue(enterResponse.getValue().isWaitingInQueue());
+        assertTrue(eventRepo.findById(concurrentEventId).getEventQueue().contains(waitingToken));
+
+        Response<Boolean> cancelResponse =
+                service.cancelEventQueueEntry(waitingToken, concurrentEventId);
+
+        assertNotNull(cancelResponse.getValue());
+        assertTrue(cancelResponse.getValue());
+        assertEquals("Removed from event queue", cancelResponse.getMessage());
+
+        assertFalse(eventRepo.findById(concurrentEventId).getEventQueue().contains(waitingToken));
     }
 }

@@ -14,6 +14,7 @@ import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.OrderStatus;
+import domain.lottery.AccessCodeGenerator;
 import domain.lottery.ILotteryRepo;
 import domain.user.NotificationStatus;
 import domain.user.UserNotification;
@@ -80,6 +81,10 @@ class AdminServiceTest {
 
     @BeforeEach
     void setUp() {
+        AccessCodeGenerator.configure(
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                6
+        );
         LoggerSetup.setup();
         WebQueue.resetForTesting();
         WebQueue.getInstance(100);
@@ -725,7 +730,7 @@ class AdminServiceTest {
         );
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 activeOrderService.checkoutAndPayment(buyerToken, activeOrderId, paymentDetails);

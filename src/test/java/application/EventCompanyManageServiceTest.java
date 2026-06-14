@@ -17,6 +17,7 @@ import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.OrderStatus;
 import domain.event.Order;
+import domain.lottery.AccessCodeGenerator;
 import domain.lottery.ILotteryRepo;
 import domain.user.UserNotification;
 import domain.user.IUserRepo;
@@ -93,6 +94,10 @@ class EventCompanyManageServiceTest {
 
     @BeforeEach
     void setUp() {
+        AccessCodeGenerator.configure(
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                6
+        );
         LoggerSetup.setup();
         userRepo=new UserRepo();
         passwordEncoder=new PasswordEncoderUtil();
@@ -207,7 +212,7 @@ class EventCompanyManageServiceTest {
 
 
         PaymentDetailsDTO paymentDetails =
-                new PaymentDetailsDTO("1234", "12/30", "123", "111", 1, null);
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
         Response<Integer> checkoutResponse =
                 activeOrderService.checkoutAndPayment(
@@ -550,7 +555,7 @@ class EventCompanyManageServiceTest {
 
         // Then
         assertFalse(response.getValue());
-        assertTrue(response.getMessage().startsWith("failed to create event : "));
+        assertTrue(response.getMessage().startsWith("failed to update event date"));
     }
 
     @Test
@@ -1163,7 +1168,7 @@ class EventCompanyManageServiceTest {
         );
 
         assertFalse(response.getValue());
-        assertTrue(response.getMessage().contains("Failed to process refund"));
+        assertTrue(response.getMessage().contains("Refund rejected"));
         assertEquals(OrderStatus.REFUND_REQUIRED, order.getStatus());
 
         Mockito.verify(paymentSystem).refund("pay123", 100.0);
@@ -1194,7 +1199,7 @@ class EventCompanyManageServiceTest {
 
         // Then
         assertTrue(response.getValue());
-        assertEquals("Orders deleted successfully", response.getMessage());
+        assertEquals("Event delete successfully", response.getMessage());
 
         Event updatedEvent = eventRepo.findById(eventId);
         assertFalse(updatedEvent.isActive());
@@ -1239,7 +1244,7 @@ class EventCompanyManageServiceTest {
 
         // Then
         assertFalse(response.getValue());
-        assertTrue(response.getMessage().startsWith("failed to detele event : "));
+        assertTrue(response.getMessage().startsWith("failed to delete event : "));
     }
 
     // Race Condition

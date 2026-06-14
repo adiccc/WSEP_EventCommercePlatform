@@ -37,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 @Service
 
@@ -148,9 +149,7 @@ public class ActiveOrderService {
                 String eventPurchasePolicy =
                         e.getPurchasePolicy().describe();
 
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(token).getValue()
-                        : token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 try {
                     ActiveOrderDTO existingOrderDTO =
@@ -510,9 +509,7 @@ public class ActiveOrderService {
             c.quantityExceedsPolicy(userResponse.getValue(), totalTickets,totalUserTickets);
             ActiveOrder newActiveOrder;
             try {
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(identifier).getValue()
-                        : identifier;
+                String userIdentifier = auth.getUserIdentifier(identifier).getValue();
 
                     ActiveOrderDTO activeOrderDTO = activeOrderRepo
                             .findActiveOrderByUserAndEvent(userIdentifier, eventId)
@@ -583,11 +580,9 @@ public class ActiveOrderService {
                     return new Response<>(null, "Invalid token");
                 }
 
-                String userIdentifier = token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 if (role.equals("MEMBER")) {
-                    userIdentifier = auth.getUserEmail(token).getValue();
-
                     if (userIdentifier == null) {
                         logger.log(Level.SEVERE, "not a valid user email");
                         return new Response<>(null, "not a valid user email");
@@ -677,13 +672,11 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
-                String userIdentifier = token; // for Guest
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
                 if (role.equals("MEMBER")) { // if it's a member should be email
-                    userIdentifier = auth.getUserEmail(token).getValue();
                     if (userIdentifier == null) {
                         logger.log(Level.SEVERE, "not a valid user email");
                         return new Response<>(null, "not a valid user email");
-
                     }
                     if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(token))) {
                         logger.severe("User does not have write access caused by suspension");
@@ -754,13 +747,36 @@ public class ActiveOrderService {
                 shouldDeleteActiveOrder = true;
 
                 boolean issuanceFailed = false;
-
+                List<String> successfullyIssuedCodes = new ArrayList<>(); //for any case of rollback
                 try {
-                    TicketSupplyResultDTO issueResult = ticketSupply.issue(
-                            new TicketSupplyRequestDTO(activeOrder.getTickets()));
+                    List<PurchasedTicketDTO> purchasedDetails = event.getPurchasedTicketDetails(activeOrder.getTickets());
+                    Map<String, List<PurchasedTicketDTO>> ticketsByZone = purchasedDetails.stream()
+                            .collect(Collectors.groupingBy(PurchasedTicketDTO::getZoneName));
+
+                    for (Map.Entry<String, List<PurchasedTicketDTO>> entry : ticketsByZone.entrySet()) {
+                        String zoneName = entry.getKey();
+                        List<PurchasedTicketDTO> zoneTickets = entry.getValue();
+
+                        boolean isSeating = zoneTickets.get(0).getTicketType().equalsIgnoreCase("SEATING");
+
+                        TicketSupplyRequestDTO supplyRequest = new TicketSupplyRequestDTO(
+                                userIdentifier, // customer_id
+                                String.valueOf(event.getId()),
+                                zoneName,
+                                isSeating,
+                                zoneTickets
+                        );
+
+                    TicketSupplyResultDTO issueResult = ticketSupply.issue(supplyRequest);
 
                     if (issueResult == null || !issueResult.isSuccess()) {
                         issuanceFailed = true;
+                        break;
+                    } else {
+                        if (issueResult.getIssuedCodes() != null) {
+                            successfullyIssuedCodes.addAll(issueResult.getIssuedCodes());
+                        }
+                    }
                     }
 
                 } catch (Exception e) {
@@ -769,6 +785,14 @@ public class ActiveOrderService {
                 }
 
                 if (issuanceFailed) {
+                    logger.log(Level.WARNING, "Issuance failed. Initiating rollback for " + successfullyIssuedCodes.size() + " tickets.");
+                    for (String issuedCode : successfullyIssuedCodes) { //cancelTicketAtTheTicketSystem
+                        try {
+                            ticketSupply.cancelTicket(issuedCode);
+                        } catch (Exception cancelEx) {
+                            logger.warning("Failed to cancel ticket " + issuedCode + " during rollback: " + cancelEx.getMessage());
+                        }
+                    }
                     boolean refundApproved = paymentSystem.refund(paymentConfirmationId, total);
 
                     if (refundApproved) {
@@ -778,7 +802,7 @@ public class ActiveOrderService {
                             NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId()
                                     + " in event " + event.getId() + " because ticket issuance failed", event.getId(),
                                     null);
-                            sendOrSaveNotification(auth.getUserIdentifier(token).getValue(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));                        } catch (Exception e) {
+                            sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));                        } catch (Exception e) {
                             logger.log(Level.WARNING,
                                     "Failed to notify user about successful refund: " + e.getMessage());
                         }
@@ -789,7 +813,7 @@ public class ActiveOrderService {
                                     "Refund for order " + order.getOrderId() + " in event " + event.getId()
                                             + " because ticket issuance failed has been failed, please contact support",
                                     event.getId(), null);
-                            sendOrSaveNotification(auth.getUserIdentifier(token).getValue(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
+                            sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
                         } catch (Exception e) {
                             logger.log(Level.WARNING, "Failed to notify user about required refund: " + e.getMessage());
                         }
@@ -980,9 +1004,7 @@ public class ActiveOrderService {
                 }
                 // Match the ownership key the order was stored under in enterEventPurchase:
                 // member -> email, guest -> raw token.
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(token).getValue()
-                        : token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(userIdentifier);
                 ActiveOrder order = activeOrderRepo.findById(dto.getId());
@@ -1037,9 +1059,7 @@ public class ActiveOrderService {
                 }
                 // Match the ownership key the order was stored under in enterEventPurchase:
                 // member -> email, guest -> raw token.
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(token).getValue()
-                        : token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 // the case that a user tries to remove and add the same tickets
                 if (seatingToRemove != null && seatingToAdd != null) {
@@ -1227,10 +1247,7 @@ public class ActiveOrderService {
         boolean skipped = RetryHelper.executeWithRetry(() -> {
             try {
                 String role = getValidatedRole(token);
-                String userIdentifier = token;
-                if (role.equals("MEMBER")) {
-                    userIdentifier = auth.getUserEmail(token).getValue();
-                }
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
                 activeOrderRepo.alreadyHasActiveOrder(userIdentifier, eventId);
                 int orderId = idGenerator.getAndIncrement();
                 ActiveOrder nextOrder = new ActiveOrder(orderId, userIdentifier, eventId, new ArrayList<>());
@@ -1327,37 +1344,39 @@ public class ActiveOrderService {
     //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
     private Response<Long> saveDelayedNotificationAsPending(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() ->
-            transactionTemplate.execute(status -> {
-                try {
-                    Member member = userRepo.findUserByEmail(userIdentifier);
+                transactionTemplate.execute(status -> {
+                    try {
+                        Member member = userRepo.findUserByEmail(userIdentifier);
 
-                    if (member == null) {
-                        logger.warning("User not found for identifier: " + userIdentifier);
-                        return new Response<>(null, "User not found");
-                    }
+                        if (member == null) {
+                            logger.warning("User not found for identifier: " + userIdentifier);
+                            return new Response<>(null, "User not found");
+                        }
+                        UserNotification userNotification = new UserNotification(notifyDTO.getType(),notifyDTO.getPayload());
+                        member.addPendingNotification(userNotification);
+                        userRepo.store(member);
+                        member=userRepo.findUserByEmail(userIdentifier);
+                        Long msgId=member.getMessageId(userNotification);
 
-                    UserNotification userNotification = new UserNotification(notifyDTO.getType(), notifyDTO.getPayload());
-                    member.addPendingNotification(userNotification);
-                    userRepo.store(member);
+                        logger.info("Pending notification saved successfully for: " + member.getIdentifier());
+                        return new Response<>(msgId, "Notification saved as pending");
 
-                    logger.info("Pending notification saved successfully for: " + member.getIdentifier());
-                    return new Response<>(userNotification.getNotificationId(), "Notification saved as pending");
-
-                } catch (OptimisticLockingFailureException e) {
-                    status.setRollbackOnly();
-                    throw e;
-                }catch (TransientDataAccessException e) {
+                    } catch (OptimisticLockingFailureException e) {
+                        status.setRollbackOnly();
+                        throw e;
+                    }catch (TransientDataAccessException e) {
                         status.setRollbackOnly();
                         logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                         throw e;
-                } catch (Exception e) {
-                    status.setRollbackOnly();
-                    logger.severe("Fatal error during notification save: " + e.getMessage());
-                    return new Response<>(-1L, "Fatal error");
-                }
-            })
+                    } catch (Exception e) {
+                        status.setRollbackOnly();
+                        logger.severe("Fatal error during notification save: " + e.getMessage());
+                        return new Response<>(-1L, "Fatal error");
+                    }
+                })
         );
     }
+
     //marking notification as delivered because we succeed in real-time
     private Response<Boolean> markNotificationAsDelivered(String userIdentifier, Long notificationId) {
         return RetryHelper.executeWithRetry(() ->
@@ -1365,16 +1384,7 @@ public class ActiveOrderService {
                     try {
                         Member member = userRepo.findUserByEmail(userIdentifier);
                         if (member != null) {
-                            for (UserNotification dn : member.getPendingNotifications()) {
-                                boolean isMatch = (notificationId != null) ?
-                                        notificationId.equals(dn.getNotificationId()) :
-                                        (dn.getStatus() == NotificationStatus.PENDING);
-
-                                if (isMatch) {
-                                    dn.setStatus(NotificationStatus.DELIVERED);
-                                    break;
-                                }
-                            }
+                            member.setMessageStatus(notificationId,NotificationStatus.DELIVERED);
                             userRepo.store(member);
                         }
                         return new Response<>(true, "Notification marked as DELIVERED");
@@ -1390,6 +1400,7 @@ public class ActiveOrderService {
                 })
         );
     }
+
     private void notifyTokenExpired(String token) {
         try {
             NotifyPayload payload = new NotifyPayload("Your session has expired");
@@ -1422,9 +1433,7 @@ public class ActiveOrderService {
                     return new Response<>(null, "Invalid token");
                 }
 
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(token).getValue()
-                        : token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 ActiveOrder order = activeOrderRepo.findById(activeOrderId);
 
@@ -1474,9 +1483,7 @@ public class ActiveOrderService {
                     return new Response<>(null, "user does not have write access caused by suspension.");
                 }
 
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(token).getValue()
-                        : token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 ActiveOrderDTO activeOrderDTO =
                         activeOrderRepo.findOrderByUserId(userIdentifier);
@@ -1517,9 +1524,7 @@ public class ActiveOrderService {
                     return new Response<>(null, "Invalid token");
                 }
 
-                String userIdentifier = role.equals("MEMBER")
-                        ? auth.getUserEmail(token).getValue()
-                        : token;
+                String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 if (userIdentifier == null || userIdentifier.isBlank()) {
                     return new Response<>(null, "Invalid user identifier");
