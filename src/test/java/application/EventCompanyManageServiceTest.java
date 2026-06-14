@@ -550,7 +550,7 @@ class EventCompanyManageServiceTest {
 
         // Then
         assertFalse(response.getValue());
-        assertTrue(response.getMessage().startsWith("failed to create event : "));
+        assertTrue(response.getMessage().startsWith("failed to update event date"));
     }
 
     @Test
@@ -1163,7 +1163,7 @@ class EventCompanyManageServiceTest {
         );
 
         assertFalse(response.getValue());
-        assertTrue(response.getMessage().contains("Failed to process refund"));
+        assertTrue(response.getMessage().contains("Refund rejected"));
         assertEquals(OrderStatus.REFUND_REQUIRED, order.getStatus());
 
         Mockito.verify(paymentSystem).refund("pay123", 100.0);
@@ -1194,7 +1194,7 @@ class EventCompanyManageServiceTest {
 
         // Then
         assertTrue(response.getValue());
-        assertEquals("Orders deleted successfully", response.getMessage());
+        assertEquals("Event delete successfully", response.getMessage());
 
         Event updatedEvent = eventRepo.findById(eventId);
         assertFalse(updatedEvent.isActive());
@@ -1239,7 +1239,7 @@ class EventCompanyManageServiceTest {
 
         // Then
         assertFalse(response.getValue());
-        assertTrue(response.getMessage().startsWith("failed to detele event : "));
+        assertTrue(response.getMessage().startsWith("failed to delete event : "));
     }
 
     // Race Condition
