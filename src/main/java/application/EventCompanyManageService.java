@@ -30,7 +30,6 @@ import static domain.dataType.PermissionType.*;
 
 @Service
 public class EventCompanyManageService {
-    private static final org.slf4j.Logger log = LoggerFactory.getLogger(EventCompanyManageService.class);
     private final ICompanyRepo companyRepo;
     private final IEventRepo eventRepo;
     private final Logger logger;
@@ -39,7 +38,6 @@ public class EventCompanyManageService {
     private final ISuspensionRepo suspensionRepo;
     private final INotifier notifier;
     private final IUserRepo userRepo;
-    AtomicInteger ticketIdGenerator = new AtomicInteger(1);
     private final TransactionTemplate transactionTemplate;
 
 
