@@ -53,19 +53,6 @@ public class Lottery {
     // Field for optimistic locking
     @Version
     private long version;
-    @ElementCollection(fetch = FetchType.LAZY)
-    @CollectionTable(
-            name = "lottery_notified_winners",
-            joinColumns = @JoinColumn(
-                    name = "event_id",
-                    referencedColumnName = "event_id"
-            ),
-            uniqueConstraints = {
-                    @UniqueConstraint(columnNames = {"event_id", "user_id"})
-            }
-    )
-    @Column(name = "user_id", nullable = false)
-    private Set<Integer> notifiedWinners;
 
     protected Lottery() {
         // for JPA
@@ -79,7 +66,6 @@ public class Lottery {
         this.registerWindow = registerWindow;
         this.expirationTime = expirationTime;
         this.version = 0; // Initial version
-        this.notifiedWinners = new HashSet<>();
     }
 
     // Copy Constructor - essential for returning detached copies from the Repo
@@ -97,10 +83,6 @@ public class Lottery {
         this.winners = other.winners == null
                 ? new HashMap<>()
                 : new HashMap<>(other.winners);
-
-        this.notifiedWinners = other.notifiedWinners == null
-                ? new HashSet<>()
-                : new HashSet<>(other.notifiedWinners);
     }
 
     public int getId() {
@@ -164,8 +146,8 @@ public class Lottery {
     }
 
     public void updateLottery(LotteryDTO dto, LocalDateTime eventSaleStartDate) {
-        if (!notifiedWinners.isEmpty())
-            throw new IllegalStateException("Cannot update lottery after winners have been notified");
+        if (!winners.isEmpty())
+            throw new IllegalStateException("Cannot update lottery after winners have been drawn");
         if (dto.getCapacity() <= 0 || dto.getRegisterWindow() == null || dto.getExpirationTime() <= 0)
             throw new IllegalArgumentException("Please complete all lottery details: capacity, register window, and expiration time");
         if (dto.getRegisterWindow().isBefore(LocalDateTime.now()))
@@ -193,22 +175,6 @@ public class Lottery {
 
     public Map<Integer, String> getWinnerCodes() {
         return Collections.unmodifiableMap(winners);
-    }
-
-    public boolean isWinnerNotified(int userId) {
-        return notifiedWinners.contains(userId);
-    }
-
-    public void markWinnerNotified(int userId) {
-        if (!winners.containsKey(userId)) {
-            throw new IllegalArgumentException("Cannot mark non-winner as notified");
-        }
-
-        notifiedWinners.add(userId);
-    }
-
-    public Set<Integer> getNotifiedWinners() {
-        return Collections.unmodifiableSet(notifiedWinners);
     }
 
 }
