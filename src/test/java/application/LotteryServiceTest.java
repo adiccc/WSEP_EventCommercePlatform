@@ -12,6 +12,7 @@ import domain.lottery.Lottery;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import domain.user.NotificationStatus;
+import domain.user.UserNotification;
 import infrastructure.Auth;
 import infrastructure.Broadcaster;
 import infrastructure.PasswordEncoderUtil;
@@ -215,6 +216,38 @@ class LotteryServiceTest {
                                 && n.getPayload().getMessage().contains("Your code is: "))
                         .count();
         }
+
+        private boolean isLoserUserNotification(UserNotification notification) {
+                return notification.getType() == NotifyType.GENERAL_POPUP
+                        && notification.getPayload() != null
+                        && notification.getPayload().getMessage() != null
+                        && notification.getPayload().getMessage().contains("not selected");
+        }
+
+        private boolean isLoserNotification(NotifyDTO notification) {
+                return notification != null
+                        && notification.getType() == NotifyType.GENERAL_POPUP
+                        && notification.getPayload() != null
+                        && notification.getPayload().getMessage() != null
+                        && notification.getPayload().getMessage().contains("not selected");
+        }
+
+        private boolean isWinnerNotification(NotifyDTO notification) {
+                return notification != null
+                        && notification.getType() == NotifyType.GENERAL_POPUP
+                        && notification.getPayload() != null
+                        && notification.getPayload().getMessage() != null
+                        && notification.getPayload().getMessage().contains("Your code is: ");
+        }
+
+        private boolean isWinnerUserNotification(domain.user.UserNotification notification) {
+                return notification.getType() == NotifyType.GENERAL_POPUP
+                        && notification.getPayload() != null
+                        && notification.getPayload().getMessage() != null
+                        && notification.getPayload().getMessage().contains("Your code is: ");
+        }
+
+
 
         @AfterEach
         void tearDown() {
@@ -526,6 +559,10 @@ class LotteryServiceTest {
                                                                 && n.getPayload().getMessage()
                                                                                 .contains("Your code is: ")),
                                                 "Offline non-winner should not receive a delayed code");
+                                assertTrue(offlineUser.getPendingNotifications().stream()
+                                                .anyMatch(n -> isLoserUserNotification(n)
+                                                        && n.getStatus() == NotificationStatus.PENDING),
+                                        "Offline loser should have a PENDING loser notification");
                         }
 
                         if (offlineUserWon) {
@@ -538,14 +575,21 @@ class LotteryServiceTest {
                                                                                 .contains("Your code is: ")
                                         && n.getStatus() == NotificationStatus.PENDING),
                                 "Offline winner should have a PENDING lottery code notification");
-                                assertNull(onlineNotification.get(),
-                                                "Online non-winner should not receive a lottery code notification");
+                                assertTrue(onlineLatch.await(2000, TimeUnit.MILLISECONDS),
+                                        "Online loser should receive a live loser notification");
 
-                                assertFalse(onlineUser.getPendingNotifications().stream()
-                                                .anyMatch(n -> n.getPayload() != null
-                                                                && n.getPayload().getMessage()
-                                                                                .contains("Your code is: ")),
-                                                "Online non-winner should not have delayed lottery code");
+                                assertNotNull(onlineNotification.get());
+
+                                assertTrue(isLoserNotification(onlineNotification.get()),
+                                        "Online non-winner should receive a loser notification");
+
+                                assertFalse(isWinnerNotification(onlineNotification.get()),
+                                        "Online non-winner should not receive a lottery code notification");
+
+                                assertTrue(onlineUser.getPendingNotifications().stream()
+                                                .anyMatch(n -> isLoserUserNotification(n)
+                                                        && n.getStatus() == NotificationStatus.DELIVERED),
+                                        "Online loser notification should be saved and marked as DELIVERED");
                         }
                 } finally {
                         onlineRegistration.remove();
@@ -571,7 +615,7 @@ class LotteryServiceTest {
                 String id3 = auth.getUserIdentifier(validToken2).getValue();
                 String id4 = auth.getUserIdentifier(validToken3).getValue();
 
-                CountDownLatch notificationLatch = new CountDownLatch(2);
+                CountDownLatch notificationLatch = new CountDownLatch(4);
                 AtomicInteger notificationCount = new AtomicInteger(0);
                 List<NotifyDTO> receivedNotifications = new CopyOnWriteArrayList<>();
 
@@ -613,16 +657,19 @@ class LotteryServiceTest {
                         assertTrue(notificationCount.get() >= 2,
                                         "At least the 2 winners should receive live notifications");
 
-                        assertTrue(receivedNotifications.stream()
-                                        .allMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
-                                                        && n.getPayload() != null
-                                                        && n.getPayload().getMessage() != null
-                                                        && n.getPayload().getMessage().contains("Your code is: ")
-                                                        && n.getPayload().getMessage()
-                                                                        .contains("event " + eventRepo
-                                                                                        .findById(lottery.getId())
-                                                                                        .getName())),
-                                        "All received notifications should be lottery code notifications for this lottery");
+                        long winnerLiveNotifications = receivedNotifications.stream()
+                                .filter(this::isWinnerNotification)
+                                .count();
+
+                        long loserLiveNotifications = receivedNotifications.stream()
+                                .filter(this::isLoserNotification)
+                                .count();
+
+                        assertEquals(2, winnerLiveNotifications,
+                                "Exactly 2 users should receive winner code notifications");
+
+                        assertEquals(2, loserLiveNotifications,
+                                "Exactly 2 users should receive loser notifications");
 
                         List<Member> users = List.of(
                                         userRepo.findUserByEmail(id1),
@@ -635,21 +682,25 @@ class LotteryServiceTest {
 
                                 if (isWinner) {
                                         assertTrue(user.getPendingNotifications().stream()
-                                                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
-                                                                && n.getPayload() != null
-                                                                && n.getPayload().getMessage() != null
-                                                                && n.getPayload().getMessage().contains("Your code is: ")
-                                                                && n.getPayload().getMessage().contains("event " + eventRepo.findById(lottery.getId()).getName())
+                                                        .anyMatch(n -> isWinnerUserNotification(n)
                                                                 && n.getStatus() == NotificationStatus.DELIVERED),
-                                                "Online winner should have the notification saved and marked as DELIVERED");
+                                                "Online winner should have winner notification marked as DELIVERED");
+
+                                        assertEquals(0, user.getPendingNotifications().stream()
+                                                        .filter(this::isLoserUserNotification)
+                                                        .count(),
+                                                "Winner should not have loser notification");
+
                                 } else {
-                                        assertFalse(user.getPendingNotifications().stream()
-                                                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
-                                                                && n.getPayload() != null
-                                                                && n.getPayload().getMessage() != null
-                                                                && n.getPayload().getMessage().contains("Your code is: ")
-                                                                && n.getPayload().getMessage().contains("event " + eventRepo.findById(lottery.getId()).getName())),
-                                                "Non-winner should not have any lottery winner notification");
+                                        assertTrue(user.getPendingNotifications().stream()
+                                                        .anyMatch(n -> isLoserUserNotification(n)
+                                                                && n.getStatus() == NotificationStatus.DELIVERED),
+                                                "Online loser should have loser notification marked as DELIVERED");
+
+                                        assertEquals(0, user.getPendingNotifications().stream()
+                                                        .filter(this::isWinnerUserNotification)
+                                                        .count(),
+                                                "Loser should not have winner code notification");
                                 }
                         }
                 } finally {
@@ -1477,6 +1528,133 @@ class LotteryServiceTest {
 
                         Mockito.verify(notifierMock, Mockito.atLeastOnce())
                                 .notifyUser(Mockito.eq(userIdentifier), Mockito.any(NotifyDTO.class));
+
+                } finally {
+                        service.shutdown();
+                }
+        }
+
+        @Test
+        void GivenMoreRegistrationsThanCapacityAndUsersOffline_WhenDrawLottery_ThenWinnersGetCodeAndLosersGetPendingLossNotification() {
+                LocalDateTime lotteryDate = LocalDateTime.now().plusDays(7);
+                lotteryService.createLottery(validToken, eventId, 1, lotteryDate, 24L);
+
+                lotteryService.registerUserToLottery(validToken, eventId);
+                lotteryService.registerUserToLottery(validToken2, eventId);
+                lotteryService.registerUserToLottery(validToken3, eventId);
+
+                String id1 = auth.getUserIdentifier(validToken).getValue();
+                String id2 = auth.getUserIdentifier(validToken2).getValue();
+                String id3 = auth.getUserIdentifier(validToken3).getValue();
+
+                userService.logout(validToken);
+                userService.logout(validToken2);
+                userService.logout(validToken3);
+
+                lotteryService.drawLottery(eventId);
+
+                Lottery updatedLottery = lotteryRepo.findById(eventId);
+
+                assertEquals(1, updatedLottery.getWinners().size());
+
+                List<Member> users = List.of(
+                        userRepo.findUserByEmail(id1),
+                        userRepo.findUserByEmail(id2),
+                        userRepo.findUserByEmail(id3)
+                );
+
+                for (Member user : users) {
+                        boolean isWinner = updatedLottery.getWinners().contains(user.getUserId());
+
+                        if (isWinner) {
+                                assertTrue(user.getPendingNotifications().stream()
+                                                .anyMatch(n -> isWinnerUserNotification(n)
+                                                        && n.getStatus() == NotificationStatus.PENDING),
+                                        "Offline winner should have PENDING winner code notification");
+
+                                assertEquals(0, user.getPendingNotifications().stream()
+                                                .filter(this::isLoserUserNotification)
+                                                .count(),
+                                        "Winner should not receive loser notification");
+                        } else {
+                                assertTrue(user.getPendingNotifications().stream()
+                                                .anyMatch(n -> isLoserUserNotification(n)
+                                                        && n.getStatus() == NotificationStatus.PENDING),
+                                        "Offline loser should have PENDING loser notification");
+
+                                assertEquals(0, user.getPendingNotifications().stream()
+                                                .filter(this::isWinnerUserNotification)
+                                                .count(),
+                                        "Loser should not receive winner code notification");
+                        }
+                }
+        }
+
+        @Test
+        void GivenMoreRegistrationsThanCapacity_WhenDrawLottery_WithMockNotifier_ThenNotifierCalledForWinnersAndLosers() {
+                INotifier notifierMock = Mockito.mock(INotifier.class);
+
+                Mockito.when(notifierMock.notifyUser(
+                        Mockito.anyString(),
+                        Mockito.any(NotifyDTO.class)
+                )).thenReturn(true);
+
+                LotteryService service =
+                        new LotteryService(
+                                lotteryRepo,
+                                eventRepo,
+                                auth,
+                                companyRepo,
+                                suspensionRepo,
+                                notifierMock,
+                                userRepo,
+                                transactionTemplate
+                        );
+
+                try {
+                        LocalDateTime lotteryDate = LocalDateTime.now().plusDays(7);
+                        service.createLottery(validToken, eventId, 1, lotteryDate, 24L);
+
+                        service.registerUserToLottery(validToken, eventId);
+                        service.registerUserToLottery(validToken2, eventId);
+                        service.registerUserToLottery(validToken3, eventId);
+
+                        String id1 = auth.getUserIdentifier(validToken).getValue();
+                        String id2 = auth.getUserIdentifier(validToken2).getValue();
+                        String id3 = auth.getUserIdentifier(validToken3).getValue();
+
+                        service.drawLottery(eventId);
+
+                        Mockito.verify(notifierMock, Mockito.atLeastOnce())
+                                .notifyUser(Mockito.eq(id1), Mockito.any(NotifyDTO.class));
+
+                        Mockito.verify(notifierMock, Mockito.atLeastOnce())
+                                .notifyUser(Mockito.eq(id2), Mockito.any(NotifyDTO.class));
+
+                        Mockito.verify(notifierMock, Mockito.atLeastOnce())
+                                .notifyUser(Mockito.eq(id3), Mockito.any(NotifyDTO.class));
+
+                        Lottery updatedLottery = lotteryRepo.findById(eventId);
+                        assertEquals(1, updatedLottery.getWinners().size());
+
+                        List<Member> users = List.of(
+                                userRepo.findUserByEmail(id1),
+                                userRepo.findUserByEmail(id2),
+                                userRepo.findUserByEmail(id3)
+                        );
+
+                        long winnerNotifications = users.stream()
+                                .flatMap(u -> u.getPendingNotifications().stream())
+                                .filter(this::isWinnerUserNotification)
+                                .count();
+
+                        long loserNotifications = users.stream()
+                                .flatMap(u -> u.getPendingNotifications().stream())
+                                .filter(this::isLoserUserNotification)
+                                .count();
+
+                        assertEquals(1, winnerNotifications);
+                        assertEquals(2, loserNotifications);
 
                 } finally {
                         service.shutdown();

@@ -351,24 +351,37 @@ public class LotteryService {
             if (member == null) {
                 throw new IllegalStateException("Winner member not found for user id: " + winnerUserId);
             }
+
             String userEmail = member.getIdentifier();
 
             NotifyDTO notifyDTO = buildWinnerNotification(event, code);
 
-            Response<Long> msgIdRes = saveDelayedNotificationAsPending(userEmail, notifyDTO);
+            tasks.add(createPendingNotificationTask(userEmail, notifyDTO));
 
-            if (msgIdRes == null || msgIdRes.getValue() == null || msgIdRes.getValue() == -1L) {
-                throw new IllegalStateException("Failed saving pending notification for: " + userEmail);
-            }
             logger.info("Pending winner notification saved for user: " + userEmail);
-
-            tasks.add(new NotificationDeliveryTask(
-                    userEmail,
-                    msgIdRes.getValue(),
-                    notifyDTO));
-
         }
 
+        Set<Integer> winnerIds = winners.keySet();
+
+        for (Integer registeredUserId : lottery.getRegistered()) {
+            if (winnerIds.contains(registeredUserId)) {
+                continue;
+            }
+
+            Member member = userRepo.findById(registeredUserId);
+
+            if (member == null) {
+                throw new IllegalStateException("Registered member not found for user id: " + registeredUserId);
+            }
+
+            String userEmail = member.getIdentifier();
+
+            NotifyDTO notifyDTO = buildLoserNotification(event);
+
+            tasks.add(createPendingNotificationTask(userEmail, notifyDTO));
+
+            logger.info("Pending loser notification saved for user: " + userEmail);
+        }
         return new Response<>(tasks, "Lottery drawn and pending notifications saved");
     }
 
@@ -382,6 +395,32 @@ public class LotteryService {
                 null);
 
         return new NotifyDTO(GENERAL_POPUP, payload);
+    }
+
+    private NotifyDTO buildLoserNotification(Event event) {
+        NotifyPayload payload = new NotifyPayload(
+                "Lottery results are in for event "
+                        + event.getName()
+                        + ". Unfortunately, you were not selected this time.",
+                event.getId(),
+                null);
+
+        return new NotifyDTO(GENERAL_POPUP, payload);
+    }
+
+    private NotificationDeliveryTask createPendingNotificationTask(
+            String userIdentifier,
+            NotifyDTO notifyDTO) {
+        Response<Long> msgIdRes = saveDelayedNotificationAsPending(userIdentifier, notifyDTO);
+
+        if (msgIdRes == null || msgIdRes.getValue() == null || msgIdRes.getValue() == -1L) {
+            throw new IllegalStateException("Failed saving pending notification for: " + userIdentifier);
+        }
+
+        return new NotificationDeliveryTask(
+                userIdentifier,
+                msgIdRes.getValue(),
+                notifyDTO);
     }
 
     private void deliverLotteryNotifications(List<NotificationDeliveryTask> tasks) {
