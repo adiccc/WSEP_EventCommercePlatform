@@ -249,321 +249,335 @@ public class CompanyService {
 
     public Response<Boolean> addRuleToCompany(String token, int companyId, PurchaseRuleDTO ruleDTO) {
         return RetryHelper.executeWithRetry(() ->
-        {
-            logger.info("addRuleToCompany called for companyId: " + companyId);
-            try {
-                String role = getValidatedRole(token);
-                if (role == null) {
-                    return new Response<>(false, "Invalid token");
-                }
-                int userId = getUserIdFromToken(token);
-                if (userId == -1) {
-                    logger.warning("addRuleToCompany failed: invalid or expired token");
-                    return Response.error("Invalid or expired token");
-                }
-                if (suspensionRepo.haveActiveSuspension(userId)) {
-                    logger.severe("User does not have write access caused by suspension");
-                    return new Response<>(null, "user does not have write access caused by suspension.");
-                }
+            transactionTemplate.execute(status -> {
+                logger.info("addRuleToCompany called for companyId: " + companyId);
+                try {
+                    String role = getValidatedRole(token);
+                    if (role == null) {
+                        return new Response<>(false, "Invalid token");
+                    }
+                    int userId = getUserIdFromToken(token);
+                    if (userId == -1) {
+                        logger.warning("addRuleToCompany failed: invalid or expired token");
+                        return Response.error("Invalid or expired token");
+                    }
+                    if (suspensionRepo.haveActiveSuspension(userId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
+                    }
 
-                Company company = companyRepo.findById(companyId);
-                if (company == null) {
-                    logger.warning("addRuleToCompany failed: company not found, id: " + companyId);
-                    return Response.error("Company not found");
+                    Company company = companyRepo.findById(companyId);
+                    if (company == null) {
+                        logger.warning("addRuleToCompany failed: company not found, id: " + companyId);
+                        return Response.error("Company not found");
+                    }
+
+                    if (ruleDTO == null) {
+                        logger.warning("addRuleToCompany failed: null rule DTO");
+                        return Response.error("Invalid rule data");
+                    }
+
+                    company.addRule(userId, ruleDTO);
+                    companyRepo.store(company);
+
+                    logger.info("addRuleToCompany succeeded for companyId: " + companyId);
+                    return Response.ok(true);
+
+                } catch (SecurityException e) {
+                    status.setRollbackOnly();
+                    logger.warning("addRuleToCompany unauthorized: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (IllegalArgumentException e) {
+                    status.setRollbackOnly();
+                    logger.warning("addRuleToCompany invalid data: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (IllegalStateException e) {
+                    status.setRollbackOnly();
+                    logger.warning("addRuleToCompany invalid state: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error in addRuleToCompany: " + e.getMessage());
+                    return Response.error("Unexpected error: " + e.getMessage());
                 }
-
-                if (ruleDTO == null) {
-                    logger.warning("addRuleToCompany failed: null rule DTO");
-                    return Response.error("Invalid rule data");
-                }
-
-                company.addRule(userId, ruleDTO);
-                companyRepo.store(company);
-
-                logger.info("addRuleToCompany succeeded for companyId: " + companyId);
-                return Response.ok(true);
-
-            } catch (SecurityException e) {
-                logger.warning("addRuleToCompany unauthorized: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (IllegalArgumentException e) {
-                logger.warning("addRuleToCompany invalid data: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (IllegalStateException e) {
-                logger.warning("addRuleToCompany invalid state: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Unexpected error in addRuleToCompany: " + e.getMessage());
-                return Response.error("Unexpected error: " + e.getMessage());
-            }
-        });
+            })
+        );
     }
 
     public Response<Boolean> removeRuleFromCompany(String token, int companyId, PurchaseRuleDTO ruleDTO) {
         return RetryHelper.executeWithRetry(() ->
-        {
-            logger.info("removeRuleFromCompany called for companyId: " + companyId);
-            try {
-                String role = getValidatedRole(token);
-                if (role == null) {
-                    return new Response<>(false, "Invalid token");
-                }
-                int userId = getUserIdFromToken(token);
-                if (userId == -1) {
-                    logger.warning("removeRuleFromCompany failed: invalid or expired token");
-                    return Response.error("Invalid or expired token");
-                }
-                if (suspensionRepo.haveActiveSuspension(userId)) {
-                    logger.severe("User does not have write access caused by suspension");
-                    return new Response<>(null, "user does not have write access caused by suspension.");
-                }
-                Company company = companyRepo.findById(companyId);
-                if (company == null) {
-                    logger.warning("removeRuleFromCompany failed: company not found, id: " + companyId);
-                    return Response.error("Company not found");
-                }
+            transactionTemplate.execute(status -> {
+                logger.info("removeRuleFromCompany called for companyId: " + companyId);
+                try {
+                    String role = getValidatedRole(token);
+                    if (role == null) {
+                        return new Response<>(false, "Invalid token");
+                    }
+                    int userId = getUserIdFromToken(token);
+                    if (userId == -1) {
+                        logger.warning("removeRuleFromCompany failed: invalid or expired token");
+                        return Response.error("Invalid or expired token");
+                    }
+                    if (suspensionRepo.haveActiveSuspension(userId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
+                    }
+                    Company company = companyRepo.findById(companyId);
+                    if (company == null) {
+                        logger.warning("removeRuleFromCompany failed: company not found, id: " + companyId);
+                        return Response.error("Company not found");
+                    }
 
-                if (ruleDTO == null) {
-                    logger.warning("removeRuleFromCompany failed: null rule DTO");
-                    return Response.error("Invalid rule data");
+                    if (ruleDTO == null) {
+                        logger.warning("removeRuleFromCompany failed: null rule DTO");
+                        return Response.error("Invalid rule data");
+                    }
+
+                    company.removeRule(userId, ruleDTO);
+                    companyRepo.store(company);
+
+                    logger.info("removeRuleFromCompany succeeded for companyId: " + companyId);
+                    return Response.ok(true);
+
+                } catch (SecurityException e) {
+                    status.setRollbackOnly();
+                    logger.warning("removeRuleFromCompany unauthorized: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (IllegalArgumentException e) {
+                    status.setRollbackOnly();
+                    logger.warning("removeRuleFromCompany invalid data: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (IllegalStateException e) {
+                    status.setRollbackOnly();
+                    logger.warning("removeRuleFromCompany invalid state: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error in removeRuleFromCompany: " + e.getMessage());
+                    return Response.error("Unexpected error: " + e.getMessage());
                 }
-
-                company.removeRule(userId, ruleDTO);
-                companyRepo.store(company);
-
-                logger.info("removeRuleFromCompany succeeded for companyId: " + companyId);
-                return Response.ok(true);
-
-            } catch (SecurityException e) {
-                logger.warning("removeRuleFromCompany unauthorized: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (IllegalArgumentException e) {
-                logger.warning("removeRuleFromCompany invalid data: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (IllegalStateException e) {
-                logger.warning("removeRuleFromCompany invalid state: " + e.getMessage());
-                return Response.error(e.getMessage());
-
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            }
-            catch (Exception e) {
-                logger.severe("Unexpected error in removeRuleFromCompany: " + e.getMessage());
-                return Response.error("Unexpected error: " + e.getMessage());
-            }
-        });
+            })
+        );
     }
 
     public Response<Boolean> addDiscountToCompany(String token, int companyId, DiscountDTO discountDTO) {
         return RetryHelper.executeWithRetry(() ->
-        {
-            logger.info("addDiscountToCompany called for companyId: " + companyId);
+            transactionTemplate.execute(status -> {
+                logger.info("addDiscountToCompany called for companyId: " + companyId);
+                try {
+                    String role = getValidatedRole(token);
+                    if (role == null) {
+                        return new Response<>(false, "Invalid token");
+                    }
+                    int userId = getUserIdFromToken(token);
+                    if (userId == -1) {
+                        logger.warning("addDiscountToCompany failed: invalid or expired token");
+                        return Response.error("Invalid or expired token");
+                    }
+                    if (suspensionRepo.haveActiveSuspension(userId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
+                    }
 
-            try {
-                String role = getValidatedRole(token);
-                if (role == null) {
-                    return new Response<>(false, "Invalid token");
+                    Company company = companyRepo.findById(companyId);
+                    if (company == null) {
+                        logger.warning("addDiscountToCompany failed: company not found, id: " + companyId);
+                        return Response.error("Company not found");
+                    }
+
+                    if (!company.isActive()) {
+                        logger.warning("addDiscountToCompany failed: company is not active, id: " + companyId);
+                        return Response.error("Company is not active");
+                    }
+
+                    if (discountDTO == null) {
+                        logger.warning("addDiscountToCompany failed: null discount DTO");
+                        return Response.error("Invalid discount data");
+                    }
+
+                    company.addDiscount(userId, discountDTO);
+                    companyRepo.store(company);
+
+                    logger.info("addDiscountToCompany succeeded for companyId: " + companyId);
+                    return Response.ok(true);
+
+                } catch (SecurityException e) {
+                    status.setRollbackOnly();
+                    logger.warning("addDiscountToCompany unauthorized: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (IllegalArgumentException e) {
+                    status.setRollbackOnly();
+                    logger.warning("addDiscountToCompany invalid data: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (IllegalStateException e) {
+                    status.setRollbackOnly();
+                    logger.warning("addDiscountToCompany invalid state: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error in addDiscountToCompany: " + e.getMessage());
+                    return Response.error("Unexpected error: " + e.getMessage());
                 }
-                // 1. Validate token
-                int userId = getUserIdFromToken(token);
-                if (userId == -1) {
-                    logger.warning("addDiscountToCompany failed: invalid or expired token");
-                    return Response.error("Invalid or expired token");
-                }
-                if (suspensionRepo.haveActiveSuspension(userId)) {
-                    logger.severe("User does not have write access caused by suspension");
-                    return new Response<>(null, "user does not have write access caused by suspension.");
-                }
-
-                // 2. Company must exist
-                Company company = companyRepo.findById(companyId);
-                if (company == null) {
-                    logger.warning("addDiscountToCompany failed: company not found, id: " + companyId);
-                    return Response.error("Company not found");
-                }
-
-                // 3. Company must be active
-                if (!company.isActive()) {
-                    logger.warning("addDiscountToCompany failed: company is not active, id: " + companyId);
-                    return Response.error("Company is not active");
-                }
-
-                // 4. DTO must be present
-                if (discountDTO == null) {
-                    logger.warning("addDiscountToCompany failed: null discount DTO");
-                    return Response.error("Invalid discount data");
-                }
-
-                // 5. Apply (permissions + duplicates checked inside Company)
-                company.addDiscount(userId, discountDTO);
-                companyRepo.store(company);
-
-                logger.info("addDiscountToCompany succeeded for companyId: " + companyId);
-                return Response.ok(true);
-
-            } catch (SecurityException e) {
-                logger.warning("addDiscountToCompany unauthorized: " + e.getMessage());
-                return Response.error(e.getMessage());
-
-            } catch (IllegalArgumentException e) {
-                logger.warning("addDiscountToCompany invalid data: " + e.getMessage());
-                return Response.error(e.getMessage());
-
-            } catch (IllegalStateException e) {
-                logger.warning("addDiscountToCompany invalid state: " + e.getMessage());
-                return Response.error(e.getMessage());
-
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Unexpected error in addDiscountToCompany: " + e.getMessage());
-                return Response.error("Unexpected error: " + e.getMessage());
-            }
-        });
+            })
+        );
     }
 
     public Response<Boolean> removeDiscountFromCompany(String token, int companyId, DiscountDTO discountDTO) {
         return RetryHelper.executeWithRetry(() ->
-        {
-            logger.info("removeDiscountFromCompany called for companyId: " + companyId);
+            transactionTemplate.execute(status -> {
+                logger.info("removeDiscountFromCompany called for companyId: " + companyId);
+                try {
+                    String role = getValidatedRole(token);
+                    if (role == null) {
+                        return new Response<>(false, "Invalid token");
+                    }
+                    int userId = getUserIdFromToken(token);
+                    if (userId == -1) {
+                        logger.warning("removeDiscountFromCompany failed: invalid or expired token");
+                        return Response.error("Invalid or expired token");
+                    }
+                    if (suspensionRepo.haveActiveSuspension(userId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
+                    }
 
-            try {
-                String role = getValidatedRole(token);
-                if (role == null) {
-                    return new Response<>(false, "Invalid token");
+                    Company company = companyRepo.findById(companyId);
+                    if (company == null) {
+                        logger.warning("removeDiscountFromCompany failed: company not found, id: " + companyId);
+                        return Response.error("Company not found");
+                    }
+
+                    if (!company.isActive()) {
+                        logger.warning("removeDiscountFromCompany failed: company is not active, id: " + companyId);
+                        return Response.error("Company is not active");
+                    }
+
+                    if (discountDTO == null) {
+                        logger.warning("removeDiscountFromCompany failed: null discount DTO");
+                        return Response.error("Invalid discount data");
+                    }
+
+                    company.removeDiscount(userId, discountDTO);
+                    companyRepo.store(company);
+
+                    logger.info("removeDiscountFromCompany succeeded for companyId: " + companyId);
+                    return Response.ok(true);
+
+                } catch (SecurityException e) {
+                    status.setRollbackOnly();
+                    logger.warning("removeDiscountFromCompany unauthorized: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (IllegalArgumentException e) {
+                    status.setRollbackOnly();
+                    logger.warning("removeDiscountFromCompany invalid data: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (IllegalStateException e) {
+                    status.setRollbackOnly();
+                    logger.warning("removeDiscountFromCompany invalid state: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error in removeDiscountFromCompany: " + e.getMessage());
+                    return Response.error("Unexpected error: " + e.getMessage());
                 }
-                // 1. Validate token
-                int userId = getUserIdFromToken(token);
-                if (userId == -1) {
-                    logger.warning("removeDiscountFromCompany failed: invalid or expired token");
-                    return Response.error("Invalid or expired token");
-                }
-                if (suspensionRepo.haveActiveSuspension(userId)) {
-                    logger.severe("User does not have write access caused by suspension");
-                    return new Response<>(null, "user does not have write access caused by suspension.");
-                }
-
-                // 2. Company must exist
-                Company company = companyRepo.findById(companyId);
-                if (company == null) {
-                    logger.warning("removeDiscountFromCompany failed: company not found, id: " + companyId);
-                    return Response.error("Company not found");
-                }
-
-                // 3. Company must be active
-                if (!company.isActive()) {
-                    logger.warning("removeDiscountFromCompany failed: company is not active, id: " + companyId);
-                    return Response.error("Company is not active");
-                }
-
-                // 4. DTO must be present
-                if (discountDTO == null) {
-                    logger.warning("removeDiscountFromCompany failed: null discount DTO");
-                    return Response.error("Invalid discount data");
-                }
-
-                // 5. Apply (permissions + existence checked inside Company)
-                company.removeDiscount(userId, discountDTO);
-                companyRepo.store(company);
-
-                logger.info("removeDiscountFromCompany succeeded for companyId: " + companyId);
-                return Response.ok(true);
-
-            } catch (SecurityException e) {
-                logger.warning("removeDiscountFromCompany unauthorized: " + e.getMessage());
-                return Response.error(e.getMessage());
-
-            } catch (IllegalArgumentException e) {
-                logger.warning("removeDiscountFromCompany invalid data: " + e.getMessage());
-                return Response.error(e.getMessage());
-
-            } catch (IllegalStateException e) {
-                logger.warning("removeDiscountFromCompany invalid state: " + e.getMessage());
-                return Response.error(e.getMessage());
-
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Unexpected error in removeDiscountFromCompany: " + e.getMessage());
-                return Response.error("Unexpected error: " + e.getMessage());
-            }
-        });
+            })
+        );
     }
 
     public Response<Void> changeDiscountPolicyType(String token, int companyId, DiscountPolicyType policyType) {
-        return RetryHelper.executeWithRetry(() -> {
-            logger.info("changeDiscountPolicyType called for companyId: " + companyId);
-            try {
-                String role = getValidatedRole(token);
-                if (role == null) {
-                    return new Response<>(null, "Invalid token");
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
+                logger.info("changeDiscountPolicyType called for companyId: " + companyId);
+                try {
+                    String role = getValidatedRole(token);
+                    if (role == null) {
+                        return new Response<>(null, "Invalid token");
+                    }
+                    int userId = getUserIdFromToken(token);
+                    if (userId == -1)
+                        return Response.error("Invalid or expired token");
+                    if (suspensionRepo.haveActiveSuspension(userId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
+                    }
+                    Company company = companyRepo.findById(companyId);
+                    if (!company.isActive())
+                        return Response.error("Company is not active");
+
+                    company.changeDiscountPolicyType(userId, policyType);
+                    companyRepo.store(company);
+
+                    logger.info("changeDiscountPolicyType succeeded for companyId: " + companyId);
+                    return Response.ok(null);
+
+                } catch (SecurityException e) {
+                    status.setRollbackOnly();
+                    logger.warning("changeDiscountPolicyType unauthorized: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error in changeDiscountPolicyType: " + e.getMessage());
+                    return Response.error("Unexpected error: " + e.getMessage());
                 }
-                int userId = getUserIdFromToken(token);
-                if (userId == -1)
-                    return Response.error("Invalid or expired token");
-                if (suspensionRepo.haveActiveSuspension(userId)) {
-                    logger.severe("User does not have write access caused by suspension");
-                    return new Response<>(null, "user does not have write access caused by suspension.");
-                }
-                Company company = companyRepo.findById(companyId);
-                if (!company.isActive())
-                    return Response.error("Company is not active");
-
-                company.changeDiscountPolicyType(userId, policyType);
-                companyRepo.store(company);
-
-                logger.info("changeDiscountPolicyType succeeded for companyId: " + companyId);
-                return Response.ok(null);
-
-            } catch (SecurityException e) {
-                logger.warning("changeDiscountPolicyType unauthorized: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Unexpected error in changeDiscountPolicyType: " + e.getMessage());
-                return Response.error("Unexpected error: " + e.getMessage());
-            }
-        });
+            })
+        );
     }
 
     public Response<Void> changePurchasePolicyType(String token, int companyId, PurchasePolicyType policyType) {
-        return RetryHelper.executeWithRetry(() -> {
-            logger.info("changePurchasePolicyType called for companyId: " + companyId);
-            try {
-                String role = getValidatedRole(token);
-                if (role == null) {
-                    return new Response<>(null, "Invalid token");
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
+                logger.info("changePurchasePolicyType called for companyId: " + companyId);
+                try {
+                    String role = getValidatedRole(token);
+                    if (role == null) {
+                        return new Response<>(null, "Invalid token");
+                    }
+                    int userId = getUserIdFromToken(token);
+                    if (userId == -1)
+                        return Response.error("Invalid or expired token");
+                    if (suspensionRepo.haveActiveSuspension(userId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
+                    }
+                    Company company = companyRepo.findById(companyId);
+                    if (!company.isActive())
+                        return Response.error("Company is not active");
+
+                    company.changePurchasePolicyType(userId, policyType);
+                    companyRepo.store(company);
+
+                    logger.info("changePurchasePolicyType succeeded for companyId: " + companyId);
+                    return Response.ok(null);
+
+                } catch (SecurityException e) {
+                    status.setRollbackOnly();
+                    logger.warning("changePurchasePolicyType unauthorized: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error in changePurchasePolicyType: " + e.getMessage());
+                    return Response.error("Unexpected error: " + e.getMessage());
                 }
-                int userId = getUserIdFromToken(token);
-                if (userId == -1)
-                    return Response.error("Invalid or expired token");
-                if (suspensionRepo.haveActiveSuspension(userId)) {
-                    logger.severe("User does not have write access caused by suspension");
-                    return new Response<>(null, "user does not have write access caused by suspension.");
-                }
-                Company company = companyRepo.findById(companyId);
-                if (!company.isActive())
-                    return Response.error("Company is not active");
-
-                company.changePurchasePolicyType(userId, policyType);
-                companyRepo.store(company);
-
-                logger.info("changePurchasePolicyType succeeded for companyId: " + companyId);
-                return Response.ok(null);
-
-            } catch (SecurityException e) {
-                logger.warning("changePurchasePolicyType unauthorized: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Unexpected error in changePurchasePolicyType: " + e.getMessage());
-                return Response.error("Unexpected error: " + e.getMessage());
-            }
-        });
+            })
+        );
     }
 
     public Response<List<CompanyDTO>> getAvailableCompanies(String token) {
@@ -612,339 +626,373 @@ public class CompanyService {
     }
     public Response<Boolean> updateManagerPermissions(String token, int companyId, int managerId,
                                                        Set<PermissionType> newPermissions) {
-        return RetryHelper.executeWithRetry(() -> {
-            logger.info("updateManagerPermissions called for companyId: " + companyId + ", managerId: " + managerId);
-            try {
-                String role = getValidatedRole(token);
-                if (role == null) {
-                    return new Response<>(false, "Invalid token");
-                }
-                int userId = getUserIdFromToken(token);
-                if (userId == -1) {
-                    logger.warning("updateManagerPermissions failed: invalid or expired token");
-                    return Response.error("Invalid or expired token");
-                }
-                if (suspensionRepo.haveActiveSuspension(userId)) {
-                    logger.severe("User does not have write access caused by suspension");
-                    return new Response<>(null, "user does not have write access caused by suspension.");
-                }
-                if (newPermissions == null) {
-                    logger.warning("updateManagerPermissions failed: null permissions list");
-                    return Response.error("Permissions list cannot be null");
-                }
-                Company company = companyRepo.findById(companyId);
-                if (!company.isOwner(userId)) {
-                    logger.warning("updateManagerPermissions failed: user " + userId + " is not an owner of company " + companyId);
-                    return Response.error("User does not have the required owner permissions");
-                }
-                Member managerMember = userRepo.findById(managerId);
-                if (managerMember == null) {
-                    logger.warning("updateManagerPermissions failed: manager " + managerId + " not found");
-                    return Response.error("Manager not found");
-                }
-                company.updateManagerPermissions(userId, managerId, newPermissions);
-                companyRepo.store(company);
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
+                logger.info("updateManagerPermissions called for companyId: " + companyId + ", managerId: " + managerId);
+                try {
+                    String role = getValidatedRole(token);
+                    if (role == null) {
+                        return new Response<>(false, "Invalid token");
+                    }
+                    int userId = getUserIdFromToken(token);
+                    if (userId == -1) {
+                        logger.warning("updateManagerPermissions failed: invalid or expired token");
+                        return Response.error("Invalid or expired token");
+                    }
+                    if (suspensionRepo.haveActiveSuspension(userId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
+                    }
+                    if (newPermissions == null) {
+                        logger.warning("updateManagerPermissions failed: null permissions list");
+                        return Response.error("Permissions list cannot be null");
+                    }
+                    Company company = companyRepo.findById(companyId);
+                    if (!company.isOwner(userId)) {
+                        logger.warning("updateManagerPermissions failed: user " + userId + " is not an owner of company " + companyId);
+                        return Response.error("User does not have the required owner permissions");
+                    }
+                    Member managerMember = userRepo.findById(managerId);
+                    if (managerMember == null) {
+                        logger.warning("updateManagerPermissions failed: manager " + managerId + " not found");
+                        return Response.error("Manager not found");
+                    }
+                    company.updateManagerPermissions(userId, managerId, newPermissions);
+                    companyRepo.store(company);
 
-                NotifyPayload payload = new NotifyPayload("Your manager permissions have been updated in company " + company.getCompanyName(),null, companyId);
-                NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                sendOrSaveNotification(managerMember.getIdentifier(), notifyDTO);
-                logger.info("updateManagerPermissions sent notification successfully");
+                    NotifyPayload payload = new NotifyPayload("Your manager permissions have been updated in company " + company.getCompanyName(),null, companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
+                    sendOrSaveNotification(managerMember.getIdentifier(), notifyDTO);
+                    logger.info("updateManagerPermissions sent notification successfully");
 
-                logger.info("updateManagerPermissions succeeded for managerId: " + managerId);
-                return Response.ok(true);
-            } catch (NoSuchElementException e) {
-                logger.warning("updateManagerPermissions failed: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (SecurityException e) {
-                logger.warning("updateManagerPermissions unauthorized: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (IllegalArgumentException e) {
-                logger.warning("updateManagerPermissions invalid argument: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Unexpected error in updateManagerPermissions: " + e.getMessage());
-                return Response.error("Unexpected error: " + e.getMessage());
-            }
-        });
+                    logger.info("updateManagerPermissions succeeded for managerId: " + managerId);
+                    return Response.ok(true);
+                } catch (NoSuchElementException e) {
+                    status.setRollbackOnly();
+                    logger.warning("updateManagerPermissions failed: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (SecurityException e) {
+                    status.setRollbackOnly();
+                    logger.warning("updateManagerPermissions unauthorized: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (IllegalArgumentException e) {
+                    status.setRollbackOnly();
+                    logger.warning("updateManagerPermissions invalid argument: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error in updateManagerPermissions: " + e.getMessage());
+                    return Response.error("Unexpected error: " + e.getMessage());
+                }
+            })
+        );
     }
     public Response<Boolean> requestAppointOwner(String token, int companyId, int appointeeId) {
-        return RetryHelper.executeWithRetry(() -> {
-            logger.info("requestAppointOwner called for companyId: " + companyId + ", appointeeId: " + appointeeId);
-            try {
-                String role = getValidatedRole(token);
-                if (role == null) {
-                    return new Response<>(false, "Invalid token");
-                }
-                int appointerId = getUserIdFromToken(token);
-                if (appointerId == -1) {
-                    logger.warning("requestAppointOwner failed: invalid or expired token");
-                    return Response.error("Invalid or expired token");
-                }
-                if (suspensionRepo.haveActiveSuspension(appointerId)) {
-                    logger.severe("User does not have write access caused by suspension");
-                    return new Response<>(null, "user does not have write access caused by suspension.");
-                }
-                Company company;
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
+                logger.info("requestAppointOwner called for companyId: " + companyId + ", appointeeId: " + appointeeId);
                 try {
-                    company = companyRepo.findById(companyId);
-                } catch (NoSuchElementException e) {
-                    logger.warning("requestAppointOwner failed: company not found, id: " + companyId);
-                    return Response.error("Company not found");
-                }
-                Member appointee = null;
-                try {
-                    appointee = userRepo.findById(appointeeId);
-                } catch (NoSuchElementException ignored) {}
-                if (appointee == null) {
-                    logger.warning("requestAppointOwner failed: appointee " + appointeeId + " not found");
-                    return Response.error("Only a registered subscriber can be appointed");
-                }
-                company.requestAppointOwner(appointerId, appointeeId);
-                companyRepo.store(company);
-                NotifyPayload payload = new NotifyPayload("You have been invited to be a owner at company " + company.getCompanyName(), null,companyId);
-                NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
-                sendOrSaveNotification(appointee.getIdentifier(), notifyDTO);
-                logger.info("requestAppointOwner sent notification successfully");
+                    String role = getValidatedRole(token);
+                    if (role == null) {
+                        return new Response<>(false, "Invalid token");
+                    }
+                    int appointerId = getUserIdFromToken(token);
+                    if (appointerId == -1) {
+                        logger.warning("requestAppointOwner failed: invalid or expired token");
+                        return Response.error("Invalid or expired token");
+                    }
+                    if (suspensionRepo.haveActiveSuspension(appointerId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
+                    }
+                    Company company;
+                    try {
+                        company = companyRepo.findById(companyId);
+                    } catch (NoSuchElementException e) {
+                        logger.warning("requestAppointOwner failed: company not found, id: " + companyId);
+                        return Response.error("Company not found");
+                    }
+                    Member appointee = null;
+                    try {
+                        appointee = userRepo.findById(appointeeId);
+                    } catch (NoSuchElementException ignored) {}
+                    if (appointee == null) {
+                        logger.warning("requestAppointOwner failed: appointee " + appointeeId + " not found");
+                        return Response.error("Only a registered subscriber can be appointed");
+                    }
+                    company.requestAppointOwner(appointerId, appointeeId);
+                    companyRepo.store(company);
+                    NotifyPayload payload = new NotifyPayload("You have been invited to be a owner at company " + company.getCompanyName(), null,companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
+                    sendOrSaveNotification(appointee.getIdentifier(), notifyDTO);
+                    logger.info("requestAppointOwner sent notification successfully");
 
-                logger.info("requestAppointOwner succeeded: pending appointment created for " + appointeeId);
-                return Response.ok(true);
-            } catch (SecurityException e) {
-                logger.warning("requestAppointOwner unauthorized: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (IllegalStateException e) {
-                logger.warning("requestAppointOwner invalid state: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Unexpected error in requestAppointOwner: " + e.getMessage());
-                return Response.error("Unexpected error: " + e.getMessage());
-            }
-        });
+                    logger.info("requestAppointOwner succeeded: pending appointment created for " + appointeeId);
+                    return Response.ok(true);
+                } catch (SecurityException e) {
+                    status.setRollbackOnly();
+                    logger.warning("requestAppointOwner unauthorized: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (IllegalStateException e) {
+                    status.setRollbackOnly();
+                    logger.warning("requestAppointOwner invalid state: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error in requestAppointOwner: " + e.getMessage());
+                    return Response.error("Unexpected error: " + e.getMessage());
+                }
+            })
+        );
     }
     public Response<Boolean> respondToOwnerAppointment(String token, int companyId, boolean accept) {
-        return RetryHelper.executeWithRetry(() -> {
-            logger.info("respondToOwnerAppointment called for companyId: " + companyId + ", accept: " + accept);
-            try {
-                String role = getValidatedRole(token);
-                if (role == null) {
-                    return new Response<>(false, "Invalid token");
-                }
-                int userId = getUserIdFromToken(token);
-                if (userId == -1) {
-                    logger.warning("respondToOwnerAppointment failed: invalid or expired token");
-                    return Response.error("Invalid or expired token");
-                }
-                if (suspensionRepo.haveActiveSuspension(userId)) {
-                    logger.severe("User does not have write access caused by suspension");
-                    return new Response<>(null, "user does not have write access caused by suspension.");
-                }
-                Company company;
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
+                logger.info("respondToOwnerAppointment called for companyId: " + companyId + ", accept: " + accept);
                 try {
-                    company = companyRepo.findById(companyId);
+                    String role = getValidatedRole(token);
+                    if (role == null) {
+                        return new Response<>(false, "Invalid token");
+                    }
+                    int userId = getUserIdFromToken(token);
+                    if (userId == -1) {
+                        logger.warning("respondToOwnerAppointment failed: invalid or expired token");
+                        return Response.error("Invalid or expired token");
+                    }
+                    if (suspensionRepo.haveActiveSuspension(userId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
+                    }
+                    Company company;
+                    try {
+                        company = companyRepo.findById(companyId);
+                    } catch (NoSuchElementException e) {
+                        logger.warning("respondToOwnerAppointment failed: company not found, id: " + companyId);
+                        return Response.error("Company not found");
+                    }
+                    if (!company.isPendingOwner(userId)) {
+                        logger.warning("respondToOwnerAppointment failed: no pending appointment for user " + userId);
+                        return Response.error("No pending owner appointment found for this user");
+                    }
+                    company.respondOwnerAppointment(userId, accept);
+                    if (accept) {
+                        Member member = userRepo.findById(userId);
+                        member.changeState(new Owner());
+                        userRepo.store(member);
+                    } else {
+                        logger.info("respondToOwnerAppointment: user " + userId + " rejected appointment for company " + companyId);
+                    }
+                    companyRepo.store(company);
+                    if(accept){
+                        NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
+                        NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
+                        sendOrSaveNotification(userRepo.getUserEmail(userId), notifyDTO);
+                        logger.info("respondToOwnerAppointment: user " + userId + " accepted and became owner of company " + companyId);
+                    }
+                    return Response.ok(accept);
                 } catch (NoSuchElementException e) {
+                    status.setRollbackOnly();
                     logger.warning("respondToOwnerAppointment failed: company not found, id: " + companyId);
                     return Response.error("Company not found");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error in respondToOwnerAppointment: " + e.getMessage());
+                    return Response.error("Unexpected error: " + e.getMessage());
                 }
-                if (!company.isPendingOwner(userId)) {
-                    logger.warning("respondToOwnerAppointment failed: no pending appointment for user " + userId);
-                    return Response.error("No pending owner appointment found for this user");
-                }
-                company.respondOwnerAppointment(userId, accept);
-                if (accept) {
-                    Member member = userRepo.findById(userId);
-                    member.changeState(new Owner());
-                    userRepo.store(member);
-                } else {
-                    logger.info("respondToOwnerAppointment: user " + userId + " rejected appointment for company " + companyId);
-                }
-                companyRepo.store(company);
-                if(accept){ //just after successful save to the repo we are sending the notification!
-                    NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
-                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                    sendOrSaveNotification(userRepo.getUserEmail(userId), notifyDTO);
-                    logger.info("respondToOwnerAppointment: user " + userId + " accepted and became owner of company " + companyId);
-                }
-                return Response.ok(accept);
-            } catch (NoSuchElementException e) {
-                logger.warning("respondToOwnerAppointment failed: company not found, id: " + companyId);
-                return Response.error("Company not found");
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Unexpected error in respondToOwnerAppointment: " + e.getMessage());
-                return Response.error("Unexpected error: " + e.getMessage());
-            }
-        });
+            })
+        );
     }
     public Response<Boolean> requestAppointManager(String token, int companyId, int appointeeId,
                                                     Set<PermissionType> permissions) {
-        return RetryHelper.executeWithRetry(() -> {
-            logger.info("requestAppointManager called for companyId: " + companyId + ", appointeeId: " + appointeeId);
-            try {
-                String role = getValidatedRole(token);
-                if (role == null) {
-                    return Response.error("Invalid token");
-                }
-                int appointerId = getUserIdFromToken(token);
-
-                if (appointerId == -1) {
-                    logger.warning("requestAppointManager failed: invalid or expired token");
-                    return Response.error("Invalid or expired token");
-                }
-                if (suspensionRepo.haveActiveSuspension(appointerId)) {
-                    logger.severe("User does not have write access caused by suspension");
-                    return new Response<>(null, "user does not have write access caused by suspension.");
-                }
-                Company company;
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
+                logger.info("requestAppointManager called for companyId: " + companyId + ", appointeeId: " + appointeeId);
                 try {
-                    company = companyRepo.findById(companyId);
-                } catch (NoSuchElementException e) {
-                    logger.warning("requestAppointManager failed: company not found, id: " + companyId);
-                    return Response.error("Company not found");
-                }
-                Member member = null;
-                try {
-                    member = userRepo.findById(appointeeId);
-                } catch (NoSuchElementException e) {
-                    logger.warning("requestAppointManager failed: appointee not found, id: " + appointeeId);
-                    return Response.error("Only a registered subscriber can be appointed");
-                }
-                company.requestAppointManager(appointerId, appointeeId, permissions);
-                companyRepo.store(company);
-                NotifyPayload payload = new NotifyPayload("You have been invited to be a manager at company " + company.getCompanyName(), null,companyId);
-                NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
-                sendOrSaveNotification(member.getIdentifier(), notifyDTO);
-                logger.info("requestAppointManager sent notification successfully");
+                    String role = getValidatedRole(token);
+                    if (role == null) {
+                        return Response.error("Invalid token");
+                    }
+                    int appointerId = getUserIdFromToken(token);
 
-                logger.info("requestAppointManager succeeded for appointeeId: " + appointeeId);
-                return Response.ok(true);
-            } catch (SecurityException e) {
-                logger.warning("requestAppointManager unauthorized: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (IllegalStateException e) {
-                logger.warning("requestAppointManager invalid state: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (IllegalArgumentException e) {
-                logger.warning("requestAppointManager invalid argument: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Unexpected error in requestAppointManager: " + e.getMessage());
-                return Response.error("Unexpected error: " + e.getMessage());
-            }
-        });
+                    if (appointerId == -1) {
+                        logger.warning("requestAppointManager failed: invalid or expired token");
+                        return Response.error("Invalid or expired token");
+                    }
+                    if (suspensionRepo.haveActiveSuspension(appointerId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
+                    }
+                    Company company;
+                    try {
+                        company = companyRepo.findById(companyId);
+                    } catch (NoSuchElementException e) {
+                        logger.warning("requestAppointManager failed: company not found, id: " + companyId);
+                        return Response.error("Company not found");
+                    }
+                    Member member = null;
+                    try {
+                        member = userRepo.findById(appointeeId);
+                    } catch (NoSuchElementException e) {
+                        logger.warning("requestAppointManager failed: appointee not found, id: " + appointeeId);
+                        return Response.error("Only a registered subscriber can be appointed");
+                    }
+                    company.requestAppointManager(appointerId, appointeeId, permissions);
+                    companyRepo.store(company);
+                    NotifyPayload payload = new NotifyPayload("You have been invited to be a manager at company " + company.getCompanyName(), null,companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
+                    sendOrSaveNotification(member.getIdentifier(), notifyDTO);
+                    logger.info("requestAppointManager sent notification successfully");
+
+                    logger.info("requestAppointManager succeeded for appointeeId: " + appointeeId);
+                    return Response.ok(true);
+                } catch (SecurityException e) {
+                    status.setRollbackOnly();
+                    logger.warning("requestAppointManager unauthorized: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (IllegalStateException e) {
+                    status.setRollbackOnly();
+                    logger.warning("requestAppointManager invalid state: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (IllegalArgumentException e) {
+                    status.setRollbackOnly();
+                    logger.warning("requestAppointManager invalid argument: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error in requestAppointManager: " + e.getMessage());
+                    return Response.error("Unexpected error: " + e.getMessage());
+                }
+            })
+        );
     }
     public Response<Boolean> respondToManagerAppointment(String token, int companyId, boolean accept) {
-        return RetryHelper.executeWithRetry(() -> {
-            logger.info("respondToManagerAppointment called for companyId: " + companyId + ", accept: " + accept);
-            try {
-                String role = getValidatedRole(token);
-                if (role == null) {
-                    return new Response<>(false, "Invalid token");
-                }
-                int userId = getUserIdFromToken(token);
-                if (userId == -1) {
-                    logger.warning("respondToManagerAppointment failed: invalid or expired token");
-                    return Response.error("Invalid or expired token");
-                }
-                if (suspensionRepo.haveActiveSuspension(userId)) {
-                    logger.severe("User does not have write access caused by suspension");
-                    return new Response<>(null, "user does not have write access caused by suspension.");
-                }
-                Company company;
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
+                logger.info("respondToManagerAppointment called for companyId: " + companyId + ", accept: " + accept);
                 try {
-                    company = companyRepo.findById(companyId);
-                } catch (NoSuchElementException e) {
-                    logger.warning("respondToManagerAppointment failed: company not found, id: " + companyId);
-                    return Response.error("Company not found");
+                    String role = getValidatedRole(token);
+                    if (role == null) {
+                        return new Response<>(false, "Invalid token");
+                    }
+                    int userId = getUserIdFromToken(token);
+                    if (userId == -1) {
+                        logger.warning("respondToManagerAppointment failed: invalid or expired token");
+                        return Response.error("Invalid or expired token");
+                    }
+                    if (suspensionRepo.haveActiveSuspension(userId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
+                    }
+                    Company company;
+                    try {
+                        company = companyRepo.findById(companyId);
+                    } catch (NoSuchElementException e) {
+                        logger.warning("respondToManagerAppointment failed: company not found, id: " + companyId);
+                        return Response.error("Company not found");
+                    }
+                    if (!company.isPendingManager(userId)) {
+                        logger.warning("respondToManagerAppointment failed: no pending appointment for user " + userId);
+                        return Response.error("No pending manager appointment found for this user");
+                    }
+                    company.respondManagerAppointment(userId, accept);
+                    if (accept) {
+                        Member member = userRepo.findById(userId);
+                        member.changeState(new Manager());
+                        userRepo.store(member);
+                    }
+                    companyRepo.store(company);
+                    if(accept){
+                        NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
+                        NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
+                        sendOrSaveNotification(userRepo.getUserEmail(userId), notifyDTO);
+                        logger.info("respondToManagerAppointment succeeded for userId: " + userId + ", accepted: " + accept);
+                    }
+                    return Response.ok(accept);
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error in respondToManagerAppointment: " + e.getMessage());
+                    return Response.error("Unexpected error: " + e.getMessage());
                 }
-                if (!company.isPendingManager(userId)) {
-                    logger.warning("respondToManagerAppointment failed: no pending appointment for user " + userId);
-                    return Response.error("No pending manager appointment found for this user");
-                }
-                company.respondManagerAppointment(userId, accept);
-                if (accept) {
-
-                    Member member = userRepo.findById(userId);
-                    member.changeState(new Manager());
-                    userRepo.store(member);
-                }
-                companyRepo.store(company);
-                if(accept){
-                    NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
-                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                    sendOrSaveNotification(userRepo.getUserEmail(userId), notifyDTO);
-                    logger.info("respondToManagerAppointment succeeded for userId: " + userId + ", accepted: " + accept);
-                }
-                return Response.ok(accept);
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Unexpected error in respondToManagerAppointment: " + e.getMessage());
-                return Response.error("Unexpected error: " + e.getMessage());
-            }
-        });
+            })
+        );
     }
     public Response<Boolean> removeManagerAppointment(String token, int companyId, int managerId) {
-        return RetryHelper.executeWithRetry(() -> {
-            logger.info("removeManagerAppointment called for companyId: " + companyId + ", managerId: " + managerId);
-            try {
-                String role = getValidatedRole(token);
-                if (role == null) {
-                    return new Response<>(false, "Invalid token");
-                }
-                int actingOwnerId = getUserIdFromToken(token);
-
-                if (actingOwnerId == -1) {
-                    logger.warning("removeManagerAppointment failed: invalid or expired token");
-                    return Response.error("Invalid or expired token");
-                }
-                if (suspensionRepo.haveActiveSuspension(actingOwnerId)) {
-                    logger.severe("User does not have write access caused by suspension");
-                    return new Response<>(null, "user does not have write access caused by suspension.");
-                }
-                Company company;
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
+                logger.info("removeManagerAppointment called for companyId: " + companyId + ", managerId: " + managerId);
                 try {
-                    company = companyRepo.findById(companyId);
-                } catch (NoSuchElementException e) {
-                    logger.warning("removeManagerAppointment failed: company not found, id: " + companyId);
-                    return Response.error("Company not found");
-                }
-                company.removeManagerAppointment(actingOwnerId, managerId);
-                Member managerMember;
-                try {
-                    managerMember = userRepo.findById(managerId);
-                } catch (NoSuchElementException e) {
-                    logger.warning("removeManagerAppointment failed: manager user not found, id: " + managerId);
-                    return Response.error("Manager user not found");
-                }
-                managerMember.changeState(null);
-                userRepo.store(managerMember);
-                companyRepo.store(company);
-                NotifyPayload payload = new NotifyPayload("Your manager role has been removed from company " + company.getCompanyName(), null, companyId);
-                NotifyDTO notifyDTO = new NotifyDTO( NotifyType.KICKOUT_TAB_NAVIGATION,payload);
-                sendOrSaveNotification(managerMember.getIdentifier(), notifyDTO);
-                logger.info("removeManagerAppointment succeeded sending notification for userId: " + managerMember.getIdentifier());
+                    String role = getValidatedRole(token);
+                    if (role == null) {
+                        return new Response<>(false, "Invalid token");
+                    }
+                    int actingOwnerId = getUserIdFromToken(token);
 
-                logger.info("removeManagerAppointment succeeded for managerId: " + managerId);
-                return Response.ok(true);
-            } catch (SecurityException e) {
-                logger.warning("removeManagerAppointment unauthorized: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (IllegalStateException e) {
-                logger.warning("removeManagerAppointment invalid state: " + e.getMessage());
-                return Response.error(e.getMessage());
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Unexpected error in removeManagerAppointment: " + e.getMessage());
-                return Response.error("Unexpected error: " + e.getMessage());
-            }
-        });
+                    if (actingOwnerId == -1) {
+                        logger.warning("removeManagerAppointment failed: invalid or expired token");
+                        return Response.error("Invalid or expired token");
+                    }
+                    if (suspensionRepo.haveActiveSuspension(actingOwnerId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
+                    }
+                    Company company;
+                    try {
+                        company = companyRepo.findById(companyId);
+                    } catch (NoSuchElementException e) {
+                        logger.warning("removeManagerAppointment failed: company not found, id: " + companyId);
+                        return Response.error("Company not found");
+                    }
+                    company.removeManagerAppointment(actingOwnerId, managerId);
+                    Member managerMember;
+                    try {
+                        managerMember = userRepo.findById(managerId);
+                    } catch (NoSuchElementException e) {
+                        logger.warning("removeManagerAppointment failed: manager user not found, id: " + managerId);
+                        return Response.error("Manager user not found");
+                    }
+                    managerMember.changeState(null);
+                    userRepo.store(managerMember);
+                    companyRepo.store(company);
+                    NotifyPayload payload = new NotifyPayload("Your manager role has been removed from company " + company.getCompanyName(), null, companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.KICKOUT_TAB_NAVIGATION,payload);
+                    sendOrSaveNotification(managerMember.getIdentifier(), notifyDTO);
+                    logger.info("removeManagerAppointment succeeded sending notification for userId: " + managerMember.getIdentifier());
+
+                    logger.info("removeManagerAppointment succeeded for managerId: " + managerId);
+                    return Response.ok(true);
+                } catch (SecurityException e) {
+                    status.setRollbackOnly();
+                    logger.warning("removeManagerAppointment unauthorized: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (IllegalStateException e) {
+                    status.setRollbackOnly();
+                    logger.warning("removeManagerAppointment invalid state: " + e.getMessage());
+                    return Response.error(e.getMessage());
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error in removeManagerAppointment: " + e.getMessage());
+                    return Response.error("Unexpected error: " + e.getMessage());
+                }
+            })
+        );
     }
 
     /**
@@ -977,33 +1025,33 @@ public class CompanyService {
     }
     public Response<Boolean> deactivateCompany(String ownerToken, int companyId) {
         return RetryHelper.executeWithRetry(() ->
-        {
-            logger.info("deactivateCompany called");
-            String role = getValidatedRole(ownerToken);
-            if (role == null) {
-                return new Response<>(false, "Invalid token");
-            }
-            int userId = getUserIdFromToken(ownerToken);
-            if(userId == -1) {
-                return new Response<>(false, "Invalid or expired token");
-            }
-            if (suspensionRepo.haveActiveSuspension(userId)) {
-                logger.severe("User does not have write access caused by suspension");
-                return new Response<>(false, "user does not have write access caused by suspension.");
-            }
-            try {
-                Company company = companyRepo.findById(companyId);
-                if (company == null) {
-                    logger.warning("deactivateCompany failed: company not found, id: " + companyId);
-                    return new Response<>(false, "Company not found");
-                }
-                if (!company.isOwner(userId)) {
-                    logger.warning("deactivateCompany failed: user isn't owner of the company");
-                    return new Response<>(false, "user is not owner of the company");
-                }
-                if (company.isActive()) {
-                    company.deactivate();
-                    companyRepo.store(company);
+            transactionTemplate.execute(status -> {
+                logger.info("deactivateCompany called");
+                try {
+                    String role = getValidatedRole(ownerToken);
+                    if (role == null) {
+                        return new Response<>(false, "Invalid token");
+                    }
+                    int userId = getUserIdFromToken(ownerToken);
+                    if(userId == -1) {
+                        return new Response<>(false, "Invalid or expired token");
+                    }
+                    if (suspensionRepo.haveActiveSuspension(userId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(false, "user does not have write access caused by suspension.");
+                    }
+                    Company company = companyRepo.findById(companyId);
+                    if (company == null) {
+                        logger.warning("deactivateCompany failed: company not found, id: " + companyId);
+                        return new Response<>(false, "Company not found");
+                    }
+                    if (!company.isOwner(userId)) {
+                        logger.warning("deactivateCompany failed: user isn't owner of the company");
+                        return new Response<>(false, "user is not owner of the company");
+                    }
+                    if (company.isActive()) {
+                        company.deactivate();
+                        companyRepo.store(company);
                         Set<Integer> allStaff = new HashSet<>(company.getOwnerIds());
                         allStaff.addAll(company.getCompanyPermission().getManagers());
                         for(Integer staffId : allStaff){
@@ -1011,23 +1059,27 @@ public class CompanyService {
                             NotifyDTO notifyDTO = new NotifyDTO(NotifyType.KICKOUT_TAB_NAVIGATION, payload);
                             sendOrSaveNotification(userRepo.getUserEmail(staffId), notifyDTO);
                             logger.info("deactivateCompany succeeded sending notification for userId: " + staffId);
+                        }
+                        logger.info("deactivateCompany succeeded for companyId: " + companyId);
+                        return new Response<>(true, "Company deactivated successfully");
+                    } else {
+                        logger.warning("deactivateCompany failed: company is already deactivated, id: " + companyId);
+                        return new Response<>(false, "Company is already deactivated");
                     }
-                    logger.info("deactivateCompany succeeded for companyId: " + companyId);
-                    return new Response<>(true, "Company deactivated successfully");
-                } else {
-                    logger.warning("deactivateCompany failed: company is already deactivated, id: " + companyId);
-                    return new Response<>(false, "Company is already deactivated");
+                } catch (NoSuchElementException e) {
+                    status.setRollbackOnly();
+                    logger.warning("deactivateCompany failed: company not found, id: " + companyId);
+                    return new Response<>(false, "Company not found");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error in deactivateCompany: " + e.getMessage());
+                    return new Response<>(false, "Unexpected error: " + e.getMessage());
                 }
-            } catch (NoSuchElementException e) {
-                logger.warning("deactivateCompany failed: company not found, id: " + companyId);
-                return new Response<>(false, "Company not found");
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("Unexpected error in deactivateCompany: " + e.getMessage());
-                return new Response<>(false, "Unexpected error: " + e.getMessage());
-            }
-        });
+            })
+        );
     }
        private int getUserIdFromToken(String token) {
             String email = auth.getUserEmail(token).getValue();
