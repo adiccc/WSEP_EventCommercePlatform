@@ -46,65 +46,69 @@ public class CompanyService {
 
     public Response<Company> createProductionCompany(String sessionToken, int companyId, String companyName,
                                                      String email, String phone, String bankAccount) {
-        return RetryHelper.executeWithRetry(() ->{
-        try {
-                logger.info("Attempting to create company: " + companyName + " for user: " + sessionToken);
-                String role = getValidatedRole(sessionToken);
-                if (role == null) {
-                    return new Response<>(null, "Invalid token");
-                }
-                int userId = getUserIdFromToken(sessionToken);
-                if (userId == -1) {
-                    return new Response<>(null, "User must be logged in to create a company, or session expired.");
-                }
-                Member user = userRepo.findById(userId);
-                if (user == null) {
-                    return new Response<>(null, "User not found.");
-                }
-                if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(sessionToken))) {
-                    logger.severe("User does not have write access caused by suspension");
-                    return new Response<>(null, "user does not have write access caused by suspension.");
-                }
-
-                if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
-                    return new Response<>(null, "Invalid contact or bank account information.");
-                }
-
-                synchronized (companyRepo) {
-                    try {
-                        companyRepo.findById(companyId);
-                        // no exception → company already exists
-                        return new Response<>(null, "Company ID already exists in the system.");
-                    } catch (NoSuchElementException ignored) {
-                        // expected: company does not exist yet, continue
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
+                try {
+                    logger.info("Attempting to create company: " + companyName + " for user: " + sessionToken);
+                    String role = getValidatedRole(sessionToken);
+                    if (role == null) {
+                        return new Response<>(null, "Invalid token");
                     }
-                    if (companyRepo.existsByName(companyName)) {
-                        return new Response<>(null, "Company name is already taken.");
+                    int userId = getUserIdFromToken(sessionToken);
+                    if (userId == -1) {
+                        return new Response<>(null, "User must be logged in to create a company, or session expired.");
+                    }
+                    Member user = userRepo.findById(userId);
+                    if (user == null) {
+                        return new Response<>(null, "User not found.");
+                    }
+                    if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(sessionToken))) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
                     }
 
-                    ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
-                    PurchasePolicy defaultPurchase = new AndPurchasePolicy();
-                    DiscountPolicy defaultDiscount = new SumDiscountPolicy();
-                    Permissions companyPermission = new Permissions(userId);
-                    Company newCompany = new Company(companyId, companyName,
-                            contactInfo, defaultPurchase, defaultDiscount, companyPermission);
+                    if (email == null || !email.contains("@") || phone == null || bankAccount == null) {
+                        return new Response<>(null, "Invalid contact or bank account information.");
+                    }
 
-                    user.changeState(new Founder());
+                    synchronized (companyRepo) {
+                        try {
+                            companyRepo.findById(companyId);
+                            // no exception → company already exists
+                            return new Response<>(null, "Company ID already exists in the system.");
+                        } catch (NoSuchElementException ignored) {
+                            // expected: company does not exist yet, continue
+                        }
+                        if (companyRepo.existsByName(companyName)) {
+                            return new Response<>(null, "Company name is already taken.");
+                        }
 
-                    companyRepo.store(newCompany);
-                    userRepo.store(user);
+                        ContactInfo contactInfo = new ContactInfo(email, phone, bankAccount);
+                        PurchasePolicy defaultPurchase = new AndPurchasePolicy();
+                        DiscountPolicy defaultDiscount = new SumDiscountPolicy();
+                        Permissions companyPermission = new Permissions(userId);
+                        Company newCompany = new Company(companyId, companyName,
+                                contactInfo, defaultPurchase, defaultDiscount, companyPermission);
 
-                    logger.info("Company " + companyName + " created successfully");
-                    return Response.ok(newCompany);
+                        user.changeState(new Founder());
+
+                        companyRepo.store(newCompany);
+                        userRepo.store(user);
+
+                        logger.info("Company " + companyName + " created successfully");
+                        return Response.ok(newCompany);
+                    }
+
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Failed to create company " + companyName + ". Error: " + e.getMessage());
+                    return new Response<>(null, "System error occurred: " + e.getMessage());
                 }
-
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch(Exception e){
-                logger.severe("Failed to create company " + companyName + ". Error: " + e.getMessage());
-                return new Response<>(null, "System error occurred: " + e.getMessage());
-            }
-        });
+            })
+        );
     }
 
     public Response<CompanyDetailsDTO> getProductionCompany(String sessionToken, int companyId) {
