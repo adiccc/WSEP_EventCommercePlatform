@@ -127,10 +127,19 @@ public class LotteryService {
             } catch (NoSuchElementException e) {
                 logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                 return new Response<>(false, "event not found");
+
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
+
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error while creating lottery: " + e.getMessage());
+                throw e;
+
             } catch (Exception e) {
-                logger.log(Level.SEVERE, "failed creating lottery : " + e.getMessage());
+                status.setRollbackOnly();
+                logger.log(Level.SEVERE, "failed creating lottery : " + e.getMessage(), e);
                 return new Response<>(false, "failed to create lottery : " + e.getMessage());
             }
         }));
@@ -155,13 +164,16 @@ public class LotteryService {
             try {
                 event = eventRepo.findById(eventId);
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(false, "Event does not exist");
             }
+
             Company company;
             try {
                 company = companyRepo.findById(event.getCompanyId());
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Company not found: " + e.getMessage());
                 return new Response<>(false, "Company does not exist");
             }
@@ -216,12 +228,22 @@ public class LotteryService {
                 logger.log(Level.INFO, msg);
                 return new Response<>(true, msg);
             } catch (IllegalStateException | IllegalArgumentException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Invalid lottery update: " + e.getMessage());
                 return new Response<>(false, e.getMessage());
+
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
+
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error while updating lottery: " + e.getMessage());
+                throw e;
+
             } catch (Exception e) {
-                logger.log(Level.SEVERE, "failed updating lottery: " + e.getMessage());
+                status.setRollbackOnly();
+                logger.log(Level.SEVERE, "failed updating lottery: " + e.getMessage(), e);
                 return new Response<>(false, "failed to update lottery: " + e.getMessage());
             }
         }));
@@ -241,9 +263,21 @@ public class LotteryService {
         }
 
         // Schedule the task
-        scheduler.schedule(() -> drawLottery(lottery.getId()), delayInSeconds, TimeUnit.SECONDS);
+        int lotteryId = lottery.getId();
+
+        scheduler.schedule(() -> {
+            try {
+                lotteryRepo.findById(lotteryId);
+                drawLottery(lotteryId);
+
+            } catch (NoSuchElementException e) {
+                logger.info("Skipping scheduled lottery draw because lottery no longer exists: " + lotteryId);
+            }
+        }, delayInSeconds, TimeUnit.SECONDS);
+
         logger.log(Level.INFO,
-                "Scheduled lottery ID: " + lottery.getId() + " to run in " + delayInSeconds + " seconds.");
+                "Scheduled lottery ID: " + lotteryId
+                        + " to run in " + delayInSeconds + " seconds.");
     }
 
     // Executes the actual lottery draw. This method is called automatically by the
@@ -312,9 +346,7 @@ public class LotteryService {
             Integer winnerUserId = entry.getKey();
             String code = entry.getValue();
 
-            logger.info("Handling winner userId: " + winnerUserId);
             Member member = userRepo.findById(winnerUserId);
-            logger.info("Winner member found? " + (member != null));
 
             if (member == null) {
                 throw new IllegalStateException("Winner member not found for user id: " + winnerUserId);
@@ -324,16 +356,11 @@ public class LotteryService {
             NotifyDTO notifyDTO = buildWinnerNotification(event, code);
 
             Response<Long> msgIdRes = saveDelayedNotificationAsPending(userEmail, notifyDTO);
-            logger.info("msgIdRes is: " + msgIdRes);
-            logger.info("msgIdRes value is: " + (msgIdRes == null ? "null response" : msgIdRes.getValue()));
-            logger.info("msgIdRes message is: " + (msgIdRes == null ? "null response" : msgIdRes.getMessage()));
-
-            logger.info("Pending notification save result: "
-                    + (msgIdRes == null ? "null response" : msgIdRes.getValue()));
 
             if (msgIdRes == null || msgIdRes.getValue() == null || msgIdRes.getValue() == -1L) {
                 throw new IllegalStateException("Failed saving pending notification for: " + userEmail);
             }
+            logger.info("Pending winner notification saved for user: " + userEmail);
 
             tasks.add(new NotificationDeliveryTask(
                     userEmail,
@@ -364,9 +391,6 @@ public class LotteryService {
                         task.userIdentifier(),
                         task.notifyDTO());
 
-                logger.log(Level.INFO,
-                        "Lottery notification sent to: " + task.userIdentifier());
-
                 if (!isDelivered) {
                     logger.log(Level.INFO,
                             "Lottery notification could not be sent live to: "
@@ -374,6 +398,9 @@ public class LotteryService {
                                     + ", the message is pending and will be sent after login");
                     continue;
                 }
+
+                logger.log(Level.INFO,
+                        "Lottery notification sent to: " + task.userIdentifier());
 
                 markNotificationAsDelivered(task.userIdentifier(), task.notificationId());
 
@@ -444,10 +471,17 @@ public class LotteryService {
                 return new Response<>(false, "Event not found");
 
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error while registering user to lottery: " + e.getMessage());
                 throw e;
 
             } catch (Exception e) {
-                logger.log(Level.SEVERE, "Failed to register user to lottery: " + e.getMessage());
+                status.setRollbackOnly();
+                logger.log(Level.SEVERE, "Failed to register user to lottery: " + e.getMessage(), e);
                 return new Response<>(false, "Failed to register user to lottery: " + e.getMessage());
             }
         }));
@@ -491,6 +525,7 @@ public class LotteryService {
                 return new Response<>(true, "User can register to lottery");
 
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (NoSuchElementException e) {
                 return new Response<>(null, "Lottery not found");
@@ -592,6 +627,12 @@ public class LotteryService {
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
+
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error while marking notification as delivered: " + e.getMessage());
+                throw e;
+
             } catch (Exception e) {
                 status.setRollbackOnly();
                 logger.warning("Failed to mark notification as delivered: " + e.getMessage());
