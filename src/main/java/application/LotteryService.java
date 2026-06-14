@@ -268,9 +268,10 @@ public class LotteryService {
         scheduler.schedule(() -> {
             try {
                Lottery lotteryDb =  lotteryRepo.findById(lotteryId);
-               if (!lotteryDb.getRegisterWindow().equals(lottery.getRegisterWindow())) {
-                   return; // the lottery was updated and the registration window was changed, so we should not draw it now
-               }
+                if (!lotteryDb.getRegisterWindow().truncatedTo(ChronoUnit.MINUTES)
+                        .equals(lottery.getRegisterWindow().truncatedTo(ChronoUnit.MINUTES))) {
+                    return;
+                }
                 drawLottery(lotteryId);
             } catch (NoSuchElementException e) {
                 logger.info("Skipping scheduled lottery draw because lottery no longer exists: " + lotteryId);
