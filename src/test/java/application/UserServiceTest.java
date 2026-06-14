@@ -9,6 +9,7 @@ import domain.company.ICompanyRepo;
 import domain.dataType.PermissionType;
 import domain.dto.UserDTO;
 import domain.event.IEventRepo;
+import domain.lottery.AccessCodeGenerator;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import domain.webQueue.WebQueue;
@@ -54,6 +55,10 @@ class UserServiceTest {
 
     @BeforeEach
     void setUp() {
+        AccessCodeGenerator.configure(
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                6
+        );
         LoggerSetup.setup();
         WebQueue.resetForTesting();
         WebQueue.getInstance(100);

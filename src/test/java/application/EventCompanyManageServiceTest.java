@@ -17,6 +17,7 @@ import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.OrderStatus;
 import domain.event.Order;
+import domain.lottery.AccessCodeGenerator;
 import domain.lottery.ILotteryRepo;
 import domain.user.UserNotification;
 import domain.user.IUserRepo;
@@ -93,6 +94,10 @@ class EventCompanyManageServiceTest {
 
     @BeforeEach
     void setUp() {
+        AccessCodeGenerator.configure(
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                6
+        );
         LoggerSetup.setup();
         userRepo=new UserRepo();
         passwordEncoder=new PasswordEncoderUtil();

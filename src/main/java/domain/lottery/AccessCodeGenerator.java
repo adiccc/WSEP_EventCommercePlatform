@@ -25,6 +25,19 @@ public class AccessCodeGenerator {
         CODE_LENGTH = systemProperties.getAccessCodeLength();
     }
 
+    public static void configure(String chars, int length) {
+        if (chars == null || chars.isBlank()) {
+            throw new IllegalArgumentException("Access code characters cannot be empty");
+        }
+
+        if (length <= 0) {
+            throw new IllegalArgumentException("Access code length must be positive");
+        }
+
+        CHARACTERS = chars;
+        CODE_LENGTH = length;
+    }
+
     public static String generate() {
         StringBuilder code = new StringBuilder(CODE_LENGTH);
         for (int i = 0; i < CODE_LENGTH; i++) {
