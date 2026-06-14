@@ -23,7 +23,9 @@
     { "type": "appoint-manager", "params": { "ownerToken": "${u2Token}", "appointeeToken": "${u3Token}", "companyId": "1", "appointeeId": "${u3Id}", "permissions": "MANAGE_EVENTS_INVENTORY,CREATE_EVENT,DELETE_EVENT" } },
 
     { "type": "create-event", "params": { "token": "${u2Token}", "companyId": "1", "name": "e1", "date": "+1M", "saleStart": "-1D", "area": "CENTER", "category": "LIVEMUSIC" }, "store": "e1Id" },
-    { "type": "define-venue", "params": { "token": "${u2Token}", "eventId": "${e1Id}" } }
+    { "type": "define-venue", "params": { "token": "${u2Token}", "eventId": "${e1Id}", "standingCapacity": "30", "standingPrice": "50.0", "standingName": "Standing", "seatingRows": "10", "seatingCols": "10", "seatingPrice": "100.0", "seatingName": "Seating" } },
+
+    { "type": "add-company-discount", "params": { "token": "${u2Token}", "companyId": "1", "couponCode": "sale123", "percent": "20.0", "expiryDaysFromNow": "365" } }
 
   ]
 }
