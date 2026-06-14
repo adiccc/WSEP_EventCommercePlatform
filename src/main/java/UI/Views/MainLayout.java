@@ -29,6 +29,7 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 import DTO.NotifyDTO;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.shared.Registration;
+import com.vaadin.flow.shared.communication.PushMode;
 import infrastructure.Broadcaster;
 
 @AnonymousAllowed
@@ -46,6 +47,8 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         this.userService = userService;
         this.activeOrderService = activeOrderService;
         this.companyService = companyService;
+
+        UI.getCurrent().getPushConfiguration().setPushMode(PushMode.AUTOMATIC);
 
         registerToBroadcaster();
         createHeader();
@@ -195,12 +198,14 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         if (userIdentifier != null && !userIdentifier.isBlank()) {
             userBroadcasterRegistration = Broadcaster.registerUser(userIdentifier, notification -> {
                 ui.access(() -> handleNotification(notification));
+                ui.push();
             });
         }
 
         if (token != null && !token.isBlank()) {
             tabBroadcasterRegistration = Broadcaster.registerTab(token, notification -> {
                 ui.access(() -> handleNotification(notification));
+                ui.push();
             });
         }
 

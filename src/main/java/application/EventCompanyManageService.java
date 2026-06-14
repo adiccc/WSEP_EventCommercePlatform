@@ -13,6 +13,7 @@ import Exception.OptimisticLockingFailureException;
 import domain.user.*;
 import domain.user.IUserRepo;
 import domain.user.Member;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.TransientDataAccessException;
@@ -20,19 +21,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.*;
-
-import java.util.List;
-import java.util.NoSuchElementException;
 
 import static DTO.NotifyType.GENERAL_POPUP;
 import static domain.dataType.PermissionType.*;
 
 @Service
 public class EventCompanyManageService {
+    private static final org.slf4j.Logger log = LoggerFactory.getLogger(EventCompanyManageService.class);
     private final ICompanyRepo companyRepo;
     private final IEventRepo eventRepo;
     private final Logger logger;
@@ -62,30 +60,30 @@ public class EventCompanyManageService {
     public Response<Boolean> DefineVenueAndSeatingMap(String token, Integer eventId, ElementPositionDTO stage,
             List<ElementPositionDTO> entries, List<StandingZoneDTO> standingZone, List<SeatingZoneDTO> seatingZone) {
         return RetryHelper.executeWithRetry(() ->
-        {
-            logger.log(Level.INFO, "DefineVenueAndSeatingMap called");
-            String role = getValidatedRole(token);
-            if (role == null) {
-                logger.log(Level.SEVERE, "Invalid or expired token");
-                return new Response<>(false, "Invalid or expired token");
-            }
-            // check valid token
-            int userId = getUserIdFromToken(token);
-            if (userId == -1) {
-                logger.severe("Invalid token");
-                return new Response<>(false, "Only members can define venue");
-            }
-            if (suspensionRepo.haveActiveSuspension(userId)) {
-                logger.severe("User does not have write access caused by suspension");
-                return new Response<>(null, "user does not have write access caused by suspension.");
-            }
+        { return transactionTemplate.execute(status -> {
             try {
+                logger.log(Level.INFO, "DefineVenueAndSeatingMap called");
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid or expired token");
+                    return new Response<>(false, "Invalid or expired token");
+                }
+                // check valid token
+                int userId = getUserIdFromToken(token);
+                if (userId == -1) {
+                    logger.severe("Invalid token");
+                    return new Response<>(false, "Only members can define venue");
+                }
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.severe("User does not have write access caused by suspension");
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
                 Event event = eventRepo.findById(eventId);
                 int companyId = event.getCompanyId();
                 int eventCreator = event.getCreatorId();
                 Company c = this.companyRepo.findById(companyId);
 
-                if(!c.isActive()){
+                if (!c.isActive()) {
                     logger.severe("Company is closed, cannot define venue and seating map for events of this company");
                     return new Response<>(false, "Company is closed, cannot define venue and seating map for events of this company");
                 }
@@ -121,16 +119,19 @@ public class EventCompanyManageService {
                 // success
                 logger.log(Level.INFO, "map created and linked to event " + eventId);
                 return new Response<>(true, "map saved successfully");
-
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "failed creating a map : " + e.getMessage());
                 return new Response<>(false, "failed to create map : " + e.getMessage());
             }
+            });
         });
 
     }
@@ -155,7 +156,7 @@ public class EventCompanyManageService {
                 logger.severe("User does not have write access caused by suspension");
                 return new Response<>(null, "user does not have write access caused by suspension.");
             }
-
+            return  transactionTemplate.execute(status -> {
             try {
                 Company c = this.companyRepo.findById(companyId);
 
@@ -190,69 +191,114 @@ public class EventCompanyManageService {
                 logger.log(Level.INFO, "Event created successfully");
                 return new Response<>(event.getId(), "Event created successfully");
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "company not found: " + e.getMessage());
                 return new Response<>(null, "Company not found");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
                 return new Response<>(null, "failed to create event : " + e.getMessage());
-            }
+            }});
         });
     }
     public Response<Boolean> UpdateEventDate(String token, Integer eventId, LocalDateTime date) {
         return RetryHelper.executeWithRetry(() ->
-        {
-            logger.log(Level.INFO, "UpdateEventDate called");
-            String role = getValidatedRole(token);
-            if (role == null) {
-                logger.log(Level.SEVERE, "Invalid token");
-                return new Response<>(false, "Invalid token");
-            }
-            // check valid token
-            int userId = getUserIdFromToken(token);
-            if (userId == -1) {
-                logger.severe("Only members can update event's dates");
-                return new Response<>(false, "Only members can update event's dates");
-            }
-            if (suspensionRepo.haveActiveSuspension(userId)) {
-                logger.severe("User does not have write access caused by suspension");
-                return new Response<>(null, "user does not have write access caused by suspension.");
-            }
-            try {
-                Event event = eventRepo.findById(eventId);
-                Company company = companyRepo.findById(event.getCompanyId());
-                if (!company.checkPermission(userId, CREATE_EVENT)) {
-                    logger.severe("User does not have permission to update event date");
-                    return new Response<>(false, "User id mismatch to the creator of the event");
-                }
-                if (date.isBefore(event.getDate())) {
-                    logger.severe("Event date can only be after the original date");
-                    return new Response<>(false, "Event date can only be after the original date");
-                }
-                if (event.getDate().isBefore(LocalDateTime.now())) {
-                    logger.severe("Event date must be in the future");
-                    return new Response<>(false, "Event date must be in the future");
-                }
+                {
+                    Response<Map<String,Long>> res=transactionTemplate.execute(status -> {
+                        try {
+                            logger.log(Level.INFO, "UpdateEventDate called");
+                            String role = getValidatedRole(token);
+                            if (role == null) {
+                                logger.log(Level.SEVERE, "Invalid token");
+                                return new Response<>(null, "Invalid token");
+                            }
+                            // check valid token
+                            int userId = getUserIdFromToken(token);
+                            if (userId == -1) {
+                                logger.severe("Only members can update event's dates");
+                                return new Response<>(null, "Only members can update event's dates");
+                            }
+                            if (suspensionRepo.haveActiveSuspension(userId)) {
+                                logger.severe("User does not have write access caused by suspension");
+                                return new Response<>(null, "user does not have write access caused by suspension.");
+                            }
+                            Event event = eventRepo.findById(eventId);
+                            Company company = companyRepo.findById(event.getCompanyId());
+                            if (!company.checkPermission(userId, CREATE_EVENT)) {
+                                logger.severe("User does not have permission to update event date");
+                                return new Response<>(null, "User id mismatch to the creator of the event");
+                            }
+                            if (date.isBefore(event.getDate())) {
+                                logger.severe("Event date can only be after the original date");
+                                return new Response<>(null, "Event date can only be after the original date");
+                            }
+                            if (event.getDate().isBefore(LocalDateTime.now())) {
+                                logger.severe("Event date must be in the future");
+                                return new Response<>(null, "Event date must be in the future");
+                            }
 
-                event.setDate(date);
-                eventRepo.store(event);
-                logger.log(Level.INFO, "Event updated successfully");
-                    List<String> purchasers = eventRepo.getAllEventPurchasers(eventId);
+                            event.setDate(date);
+                            eventRepo.store(event);
+                            logger.log(Level.INFO, "Event updated successfully");
+                            List<String> purchasers = eventRepo.getAllEventPurchasers(eventId);
+                            NotifyPayload payload = new NotifyPayload("The Date of event " + event.getName() + " has been updated to " + event.getDate().toString(), eventId, null);
+                            NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
+                            Map<String,Long> identifierToMsgId=new HashMap<>();
+                            // save pending message for each user during the main transaction
+                            for (String purchaser : purchasers) {
+                                // check if it is a user
+                                Member member = userRepo.findUserByEmail(purchaser);
+                                boolean isGuest = (member == null);
+                                if (!isGuest) {
+                                    Response<Long> msgIdRes=saveDelayedNotificationAsPending(purchaser, notifyDTO);
+                                    if(msgIdRes!=null && msgIdRes.getValue()!=null)
+                                        identifierToMsgId.put(purchaser,msgIdRes.getValue());
+                                }
+                            }
+                            logger.log(Level.INFO, "Event updated successfully");
+                            return new Response<>(identifierToMsgId, "Event updated successfully");
+
+                        } catch (OptimisticLockingFailureException e) {
+                            throw e;
+
+                        } catch (Exception e) {
+                            status.setRollbackOnly();
+                            logger.log(Level.SEVERE, "failed updating event date: " + e.getMessage());
+                            return new Response<>(null, "failed to update event date: " + e.getMessage());
+                        }
+                    });
+                    Map<String,Long> memberToMsgId=res.getValue();
+                    // transaction failed
+                    if(memberToMsgId==null)
+                        return new Response<>(false, res.getMessage());
+
+                    //transaction succeed - send pending message for all purchasers
+                    // keep in mind that if the res was not null then the logic action succeed there for there is an event with this eventId
+                    Event event = eventRepo.findById(eventId);
                     NotifyPayload payload = new NotifyPayload("The Date of event " + event.getName() + " has been updated to " + event.getDate().toString(), eventId, null);
                     NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
-                    for (String purchaser : purchasers) {
-                        sendOrSaveNotification(purchaser, notifyDTO);
-                    }
-                    return new Response<>(true, "Event updated successfully");
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.log(Level.SEVERE, "failed creating event : " + e.getMessage());
-                return new Response<>(false, "failed to create event : " + e.getMessage());
-            }
-        });
+                    List<String> purchasers = eventRepo.getAllEventPurchasers(eventId);
+                    for(String purchaser: purchasers){
+                        boolean isDelivered = notifier.notifyUser(purchaser, notifyDTO);
+                        logger.log(Level.INFO,"Event date update notification sent to:" + purchaser);
+                        if (!isDelivered) {
+                            logger.log(Level.INFO,"Event date update notification could not send in live to : " + purchaser+" ,the message is pending and will be sent after the user will log in");
+                            continue;
+                        }
 
+                        // in case the user is a guest than he will not be included in the map keys
+                        if (isDelivered && memberToMsgId.get(purchaser)!=null) {
+                            markNotificationAsDelivered(purchaser, memberToMsgId.get(purchaser)); //if we succeed sending in real time we need to mark as delivered
+                            logger.log(Level.INFO,"Event date update notification to:" + purchaser+" marked as Delivered");
+                        }
+                    }
+                    logger.log(Level.INFO, "Event updated successfully");
+                    return new Response<>(true, "Event updated successfully");
+                }
+        );
     }
 
     // adding new zones to an existing map of an event
@@ -276,7 +322,7 @@ public class EventCompanyManageService {
                 logger.severe("User does not have write access caused by suspension");
                 return new Response<>(null, "user does not have write access caused by suspension.");
             }
-
+            return  transactionTemplate.execute(status -> {
             try {
                 Event event = eventRepo.findById(eventId);
                 int eventCreator = event.getCreatorId();
@@ -325,69 +371,77 @@ public class EventCompanyManageService {
                 return new Response<>(true, "Zones added to event map successfully");
 
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
 
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "failed adding zones to event map : " + e.getMessage());
                 return new Response<>(false, "failed to add zones to event map : " + e.getMessage());
-            }
+            }});
         });
     }
 
     public Response<EventMapDTO> getEventMapForManagement(String token, Integer eventId) {
-        return RetryHelper.executeWithRetry(() -> {
-            logger.log(Level.INFO, "getEventMapForManagement called");
+        return RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
+                try {
+                    logger.log(Level.INFO, "getEventMapForManagement called");
 
-            String role = getValidatedRole(token);
-            if (role == null) {
-                logger.log(Level.SEVERE, "Invalid token");
-                return new Response<>(null, "Invalid token");
-            }
+                    String role = getValidatedRole(token);
+                    if (role == null) {
+                        logger.log(Level.SEVERE, "Invalid token");
+                        return new Response<>(null, "Invalid token");
+                    }
 
-            int userId = getUserIdFromToken(token);
-            if (userId == -1) {
-                logger.severe("Only members can view event map for management");
-                return new Response<>(null, "Only members can view event map for management");
-            }
+                    int userId = getUserIdFromToken(token);
+                    if (userId == -1) {
+                        logger.severe("Only members can view event map for management");
+                        return new Response<>(null, "Only members can view event map for management");
+                    }
 
-            if (suspensionRepo.haveActiveSuspension(userId)) {
-                logger.severe("User does not have write access caused by suspension");
-                return new Response<>(null, "user does not have write access caused by suspension.");
-            }
+                    if (suspensionRepo.haveActiveSuspension(userId)) {
+                        logger.severe("User does not have write access caused by suspension");
+                        return new Response<>(null, "user does not have write access caused by suspension.");
+                    }
 
-            try {
-                Event event = eventRepo.findById(eventId);
-                Company company = companyRepo.findById(event.getCompanyId());
+                    Event event = eventRepo.findById(eventId);
+                    Company company = companyRepo.findById(event.getCompanyId());
 
-                if (!company.checkPermission(userId, CREATE_EVENT)) {
-                    logger.severe("User does not have permission to view event map for management");
-                    return new Response<>(null, "Permission required");
+                    if (!company.checkPermission(userId, CREATE_EVENT)) {
+                        logger.severe("User does not have permission to view event map for management");
+                        return new Response<>(null, "Permission required");
+                    }
+
+                    EventMap map = event.getMap();
+
+                    if (map == null) {
+                        logger.severe("Event map not defined yet");
+                        return new Response<>(null, "Event map not defined yet");
+                    }
+
+                    return new Response<>(new EventMapDTO(map), "Event map retrieved successfully");
+
+                } catch (NoSuchElementException e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "event not found: " + e.getMessage());
+                    return new Response<>(null, "Event not found");
+
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "failed retrieving event map : " + e.getMessage());
+                    return new Response<>(null, "failed to retrieve event map : " + e.getMessage());
                 }
-
-                EventMap map = event.getMap();
-
-                if (map == null) {
-                    logger.severe("Event map not defined yet");
-                    return new Response<>(null, "Event map not defined yet");
-                }
-
-                return new Response<>(new EventMapDTO(map), "Event map retrieved successfully");
-
-            } catch (NoSuchElementException e) {
-                logger.log(Level.SEVERE, "event not found: " + e.getMessage());
-                return new Response<>(null, "Event not found");
-
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-
-            } catch (Exception e) {
-                logger.log(Level.SEVERE, "failed retrieving event map : " + e.getMessage());
-                return new Response<>(null, "failed to retrieve event map : " + e.getMessage());
-            }
-        });
+            })
+        );
     }
 
     public Response<Boolean> DeleteEvent(String token, Integer eventId) {
@@ -407,58 +461,96 @@ public class EventCompanyManageService {
                 logger.severe("User does not have write access caused by suspension");
                 return new Response<>(null, "user does not have write access caused by suspension.");
             }
-            try{
-                Event event = eventRepo.findById(eventId);
-                if (!event.isActive()){
-                    logger.severe("Event is not active yet, cannot be deleted");
-                    return new Response<>(false, "Event is not active yet, cannot be deleted");
-                }
-                if(event.getDate().isBefore(LocalDateTime.now())) {
-                    logger.severe("Event deletion can be on future events only");
-                    return new Response<>(false, "Event deletion can be on future events only");
-                }
-                int companyId= event.getCompanyId();
-                Company company = companyRepo.findById(companyId);
-                if(!company.checkPermission(userId,DELETE_EVENT)){
-                    logger.severe("User does not have permission to delete event");
-                    return new Response<>(false, "User does not have permission to delete event");
-                }
-                event.setActive(false);
-                // not in version 1 - send notification to all users who bought tickets to the event
-                List<Order> orders = event.getOrders();
-
-                for(Order order : orders){
-                    order.markRefundRequired();
-                }
-                eventRepo.store(event);
-                event=eventRepo.findById(eventId);
-                orders = event.getOrders();
-                for(Order order : orders){
-                    try {
-                        String purchaserIdentifier = order.getUserIdentifier();
-                        NotifyPayload payload = new NotifyPayload("Event " + eventId + "cancelled", eventId, null);
-                        NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP,payload);
-                        sendOrSaveNotification(purchaserIdentifier,notifyDTO);
-                        processRefund(token, event.getId(), order.getOrderId());
-                    } catch (Exception e) {
-                        logger.log(Level.SEVERE, "Failed to process automatic refund for order " +
-                                order.getOrderId() + " in event " + event.getId() + ": " + e.getMessage());
+            Response<Map<String,Long>> res= transactionTemplate.execute(status -> {
+                try{
+                    Event event = eventRepo.findById(eventId);
+                    if (!event.isActive()){
+                        logger.severe("Event is not active yet, cannot be deleted");
+                        return new Response<>(null, "Event is not active yet, cannot be deleted");
                     }
+                    if(event.getDate().isBefore(LocalDateTime.now())) {
+                        logger.severe("Event deletion can be on future events only");
+                        return new Response<>(null, "Event deletion can be on future events only");
+                    }
+                    int companyId= event.getCompanyId();
+                    Company company = companyRepo.findById(companyId);
+                    if(!company.checkPermission(userId,DELETE_EVENT)){
+                        logger.severe("User does not have permission to delete event");
+                        return new Response<>(null, "User does not have permission to delete event");
+                    }
+                    event.setActive(false);
+                    // not in version 1 - send notification to all users who bought tickets to the event
+                    List<Order> orders = event.getOrders();
+
+                    for(Order order : orders){
+                        order.markRefundRequired();
+                    }
+                    eventRepo.store(event);
+                    event=eventRepo.findById(eventId);
+                    orders = event.getOrders();
+                    HashMap<String,Long> identifierToMsgId=new HashMap<>();
+                    for(Order order : orders){
+                        try {
+                            String purchaserIdentifier = order.getUserIdentifier();
+                            NotifyPayload payload = new NotifyPayload("Event " + event.getName() + "cancelled", eventId, null);
+                            NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP,payload);
+                            // check if it is a user
+                            Member member = userRepo.findUserByEmail(purchaserIdentifier);
+                            boolean isGuest = (member == null);
+                            // save the message as delayed for members
+                            if (!isGuest) {
+                                Response<Long> msgIdRes=saveDelayedNotificationAsPending(purchaserIdentifier, notifyDTO);
+                                if(msgIdRes!=null && msgIdRes.getValue()!=null)
+                                    identifierToMsgId.put(purchaserIdentifier,msgIdRes.getValue());
+                            }
+                            // make the refund (for members and guests)
+                            processRefund(token, event.getId(), order.getOrderId());
+                        } catch (Exception e) {
+                            logger.log(Level.SEVERE, "Failed to process automatic refund for order " +
+                                    order.getOrderId() + " in event " + event.getId() + ": " + e.getMessage());
+                        }
+                    }
+                    logger.log(Level.INFO, "Orders deleted successfully");
+                    return new Response<>(identifierToMsgId, "Orders deleted successfully");
+                }catch (OptimisticLockingFailureException e) {
+                    throw e;
+                } catch(Exception e){
+                    logger.log(Level.SEVERE, "failed delete event : " + e.getMessage());
+                    return new Response<>(null, "failed to delete event : " + e.getMessage());
                 }
-                logger.log(Level.INFO, "Orders deleted successfully");
-                return new Response<>(true, "Orders deleted successfully");
-            }catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch(Exception e){
-                logger.log(Level.SEVERE, "failed delete event : " + e.getMessage());
-                return new Response<>(false, "failed to detele event : " + e.getMessage());
+            });
+
+            Map<String,Long> memberToMsgId=res.getValue();
+            // transaction failed
+            if(memberToMsgId==null)
+                return new Response<>(false, res.getMessage());
+
+            //transaction succeed - send pending message for all purchasers
+            // keep in mind that if the res was not null then the logic action succeed there for there is an event with this eventId
+            Event event = eventRepo.findById(eventId);
+            NotifyPayload payload = new NotifyPayload("Event " + event.getName() + "cancelled", eventId, null);
+            NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
+            List<String> purchasers = eventRepo.getAllEventPurchasers(eventId);
+            for(String purchaser: purchasers){
+                boolean isDelivered = notifier.notifyUser(purchaser, notifyDTO);
+                logger.log(Level.INFO,"Event cancelled notification sent to:" + purchaser);
+                if (!isDelivered) {
+                    logger.log(Level.INFO,"Event cancelled notification could not send in live to : " + purchaser+" ,the message is pending and will be sent after the user will log in");
+                    continue;
+                }
+                // in case the user is a guest than he will not be included in the map keys
+                if (isDelivered && memberToMsgId.get(purchaser)!=null) {
+                    markNotificationAsDelivered(purchaser, memberToMsgId.get(purchaser)); //if we succeed sending in real time we need to mark as delivered
+                    logger.log(Level.INFO,"Event cancelled notification to:" + purchaser+" marked as Delivered");
+                }
             }
+            logger.log(Level.INFO, "Event delete successfully");
+            return new Response<>(true, "Event delete successfully");
         });
     }
 
     public Response<List<OrderDTO>> getOrdersByCompany(String token, int companyId) {
-        return RetryHelper.executeWithRetry(() ->
-        {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "getOrdersByCompany called");
             String role = getValidatedRole(token);
             if (role == null) {
@@ -497,20 +589,22 @@ public class EventCompanyManageService {
                 return new Response<>(orderDTOs, "Orders found");
 
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "company not found: " + e.getMessage());
                 return new Response<>(null, "company not found");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "failed getOrdersByCompany : " + e.getMessage());
                 return new Response<>(null, "failed getOrdersByCompany : " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<CompanyDetailsDTO> getCompanyDetails(String token, int companyId) {
-        return RetryHelper.executeWithRetry(() ->
-        {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "retrieving company details for company: " + companyId);
             try {
                 Company company = companyRepo.findById(companyId);
@@ -559,16 +653,18 @@ public class EventCompanyManageService {
                 logger.log(Level.INFO, "Company details found: " + companyDetailsDTO);
                 return new Response<>(companyDetailsDTO, "Company details found");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "failed getCompanyDetails : " + e.getMessage());
                 return new Response<>(null, "failed getCompanyDetails : " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<SalesReportDTO> generateSalesReports(int companyId, String token){
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
         logger.log(Level.INFO, "generateSalesReports called");
         try {
             Company company = companyRepo.findById(companyId);
@@ -583,8 +679,8 @@ public class EventCompanyManageService {
             }
             int userId = getUserIdFromToken(token);
             boolean isMember = userId != -1;
-            boolean isUserPermitted = isMember && (company.getCompanyPermission().checkPermission(userId, PermissionType.GENERATE_SALES_REPORTS)); 
-            //The requerment is just for the Owner 
+            boolean isUserPermitted = isMember && (company.getCompanyPermission().checkPermission(userId, PermissionType.GENERATE_SALES_REPORTS));
+            //The requerment is just for the Owner
             if (!isUserPermitted) {
                 logger.log(Level.SEVERE, "User is not permitted to generate sales report");
                 return new Response<>(null, "User is not permitted generate sales report");
@@ -620,80 +716,110 @@ public class EventCompanyManageService {
             return new Response<>(result, "Sales Report generated successfully");
         }
         catch (OptimisticLockingFailureException e) {
+            status.setRollbackOnly();
             throw e;
         } catch(Exception e){
+            status.setRollbackOnly();
             logger.log(Level.SEVERE, "failed generate sales report : " + e.getMessage());
             return new Response<>(null, "failed generate sales report : " + e.getMessage());
         }
-        });
+        }));
     }
     public Response<Boolean> processRefund(String token, Integer eventId, int orderId) {
         return RetryHelper.executeWithRetry(() -> {
-            logger.log(Level.INFO, "processRefund called");
-            String role = getValidatedRole(token);
-            if (role == null) {
-                logger.log(Level.SEVERE, "Invalid token");
-                return new Response<>(false, "Invalid token");
-            }
-            int userId = getUserIdFromToken(token);
-            if (userId == -1) {
-                logger.severe("Invalid token");
-                return new Response<>(false, "Invalid token");
-            }
-
-            try {
-                Event event = eventRepo.findById(eventId);
-                Order order = event.findOrderById(orderId);
-
-                if (order == null) {
-                    logger.log(Level.SEVERE, "Order not found for refund");
-                    return new Response<>(false, "No matching order found for refund");
+            Response<Order> orderResponse=transactionTemplate.execute(status -> {
+                logger.log(Level.INFO, "processRefund called");
+                String role = getValidatedRole(token);
+                if (role == null) {
+                    logger.log(Level.SEVERE, "Invalid token");
+                    return new Response<>(null, "Invalid token");
                 }
-
-                if (!order.canBeRefunded()) {
-                    logger.log(Level.SEVERE, "Order cannot be refunded");
-                    return new Response<>(false, "Order cannot be refunded");
+                int userId = getUserIdFromToken(token);
+                if (userId == -1) {
+                    logger.severe("Invalid token");
+                    return new Response<>(null, "Invalid token");
                 }
+                try {
+                    Event event = eventRepo.findById(eventId);
+                    Order order = event.findOrderById(orderId);
 
-                boolean refundApproved = paymentSystem.refund(
-                        order.getPaymentConfirmationId(),
-                        order.getTotalSum()
+                    if (order == null) {
+                        logger.log(Level.SEVERE, "Order not found for refund");
+                        return new Response<>(null, "No matching order found for refund");
+                    }
+
+                    if (!order.canBeRefunded()) {
+                        logger.log(Level.SEVERE, "Order cannot be refunded");
+                        return new Response<>(null, "Order cannot be refunded");
+                    }
+                    logger.log(Level.INFO,"Order "+orderId+" conditions are valid, the refund init");
+                    return new Response<>(order,"Order conditions are valid, the refund init");
+                }catch(Exception e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
+                    return new Response<>(null, "Failed to process refund: " + e.getMessage());
+                }
+            });
+
+            //handle bad response from order refund first part
+            if(orderResponse==null || orderResponse.getValue()==null) {
+                return new Response<>(false,orderResponse.getMessage());
+            }
+
+            // use external system to refund
+            Order orderToRefund=orderResponse.getValue();
+            boolean refundApproved=false;
+            try{
+                refundApproved=paymentSystem.refund(
+                        orderToRefund.getPaymentConfirmationId(),
+                        orderToRefund.getTotalSum()
                 );
+            }catch(Exception e){
+                logger.log(Level.WARNING,"Failed to process refund");
+            }
+            final boolean finalRefundApproved = refundApproved;
 
-                if (refundApproved) {
-                    order.markRefunded();
-                    eventRepo.store(event);
-                    logger.log(Level.INFO, "Refund completed successfully");
+            //update system state according the refund status
+            return transactionTemplate.execute(status -> {
+                try {
+                    Event event = eventRepo.findById(eventId);
+                    Order order = event.findOrderById(orderId);
+                    if (finalRefundApproved) {
+                        order.markRefunded();
+                        eventRepo.store(event);
+                        logger.log(Level.INFO, "Refund completed successfully");
+
+                        String userIdentifier = order.getUserIdentifier();
+                        NotifyPayload payload = new NotifyPayload("Refund process for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId, null);
+                        sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
+                        return new Response<>(true, "Refund completed successfully");
+                    }
 
                     String userIdentifier = order.getUserIdentifier();
-                    NotifyPayload payload = new NotifyPayload("Refund process for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId,null);
-                    sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
-                    return new Response<>(true, "Refund completed successfully");
+                    NotifyPayload payload = new NotifyPayload("Refund process failed for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId, null);
+                    sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
+                    logger.log(Level.SEVERE, "Refund rejected by external payment service");
+                    return new Response<>(false, "Refund rejected by external payment service");
+                } catch (NoSuchElementException e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
+                    return new Response<>(false, "Event not found");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
+                    return new Response<>(false, "Failed to process refund: " + e.getMessage());
                 }
+            });
 
-                order.markRefundRequired();
-                eventRepo.store(event);
-                String userIdentifier = order.getUserIdentifier();
-                NotifyPayload payload = new NotifyPayload("Refund process failed for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId,null);
-                sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
-                logger.log(Level.SEVERE, "Refund rejected by external payment service");
-                return new Response<>(false, "Refund rejected by external payment service");
-
-            } catch (NoSuchElementException e) {
-                logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
-                return new Response<>(false, "Event not found");
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
-                return new Response<>(false, "Failed to process refund: " + e.getMessage());
-            }
         });
     }
 
 
     public Response<Boolean> addRuleToEvent(String token, int eventId, PurchaseRuleDTO ruleDTO) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.info("addRuleToEvent called for eventId: " + eventId);
             try {
                 String role = getValidatedRole(token);
@@ -725,25 +851,30 @@ public class EventCompanyManageService {
                 return Response.ok(true);
 
             } catch (SecurityException e) {
+                status.setRollbackOnly();
                 logger.warning("addRuleToEvent unauthorized: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (IllegalArgumentException e) {
+                status.setRollbackOnly();
                 logger.warning("addRuleToEvent invalid data: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (IllegalStateException e) {
+                status.setRollbackOnly();
                 logger.warning("addRuleToEvent invalid state: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.severe("Unexpected error in addRuleToEvent: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<Boolean> removeRuleFromEvent(String token, int eventId, PurchaseRuleDTO ruleDTO) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.info("removeRuleFromEvent called for eventId: " + eventId);
             try {
                 String role = getValidatedRole(token);
@@ -775,25 +906,30 @@ public class EventCompanyManageService {
                 return Response.ok(true);
 
             } catch (SecurityException e) {
+                status.setRollbackOnly();
                 logger.warning("removeRuleFromEvent unauthorized: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (IllegalArgumentException e) {
+                status.setRollbackOnly();
                 logger.warning("removeRuleFromEvent invalid data: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (IllegalStateException e) {
+                status.setRollbackOnly();
                 logger.warning("removeRuleFromEvent invalid state: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.severe("Unexpected error in removeRuleFromEvent: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<Boolean> addDiscountToEvent(String token, int eventId, DiscountDTO discountDTO) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->  transactionTemplate.execute(status -> {
             logger.info("addDiscountToEvent called for eventId: " + eventId);
             try {
                 String role = getValidatedRole(token);
@@ -825,25 +961,30 @@ public class EventCompanyManageService {
                 return Response.ok(true);
 
             } catch (SecurityException e) {
+                status.setRollbackOnly();
                 logger.warning("addDiscountToEvent unauthorized: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (IllegalArgumentException e) {
+                status.setRollbackOnly();
                 logger.warning("addDiscountToEvent invalid data: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (IllegalStateException e) {
+                status.setRollbackOnly();
                 logger.warning("addDiscountToEvent invalid state: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.severe("Unexpected error in addDiscountToEvent: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<Boolean> removeDiscountFromEvent(String token, int eventId, DiscountDTO discountDTO) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->  transactionTemplate.execute(status -> {
             logger.info("removeDiscountFromEvent called for eventId: " + eventId);
             try {
                 String role = getValidatedRole(token);
@@ -875,25 +1016,30 @@ public class EventCompanyManageService {
                 return Response.ok(true);
 
             } catch (SecurityException e) {
+                status.setRollbackOnly();
                 logger.warning("removeDiscountFromEvent unauthorized: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (IllegalArgumentException e) {
+                status.setRollbackOnly();
                 logger.warning("removeDiscountFromEvent invalid data: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (IllegalStateException e) {
+                status.setRollbackOnly();
                 logger.warning("removeDiscountFromEvent invalid state: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.severe("Unexpected error in removeDiscountFromEvent: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<Void> changeEventPurchasePolicyType(String token, int eventId, PurchasePolicyType policyType) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.info("changeEventPurchasePolicyType called for eventId: " + eventId);
             try {
                 String role = getValidatedRole(token);
@@ -922,19 +1068,22 @@ public class EventCompanyManageService {
                 return Response.ok(null);
 
             } catch (SecurityException e) {
+                status.setRollbackOnly();
                 logger.warning("changeEventPurchasePolicyType unauthorized: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.severe("Unexpected error in changeEventPurchasePolicyType: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<Void> changeEventDiscountPolicyType(String token, int eventId, DiscountPolicyType policyType) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->  transactionTemplate.execute(status -> {
             logger.info("changeEventDiscountPolicyType called for eventId: " + eventId);
             try {
                 String role = getValidatedRole(token);
@@ -963,19 +1112,22 @@ public class EventCompanyManageService {
                 return Response.ok(null);
 
             } catch (SecurityException e) {
+                status.setRollbackOnly();
                 logger.warning("changeEventDiscountPolicyType unauthorized: " + e.getMessage());
                 return Response.error(e.getMessage());
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.severe("Unexpected error in changeEventDiscountPolicyType: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<List<PurchaseHistoryDTO>> getPurchaseHistoryByUser(String token) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() ->  transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "getPurchaseHistoryByUser called");
             String role = getValidatedRole(token);
             if (role == null) {
@@ -1011,12 +1163,14 @@ public class EventCompanyManageService {
                 return new Response<>(purchaseHistory, "Purchase history found");
 
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Failed to get purchase history: " + e.getMessage());
                 return new Response<>(null, "Failed to get purchase history: " + e.getMessage());
             }
-        });
+        }));
     }
     private int getUserIdFromToken(String token) {
         String email = auth.getUserEmail(token).getValue();
@@ -1085,6 +1239,7 @@ public class EventCompanyManageService {
             logger.info("Member is offline. Notification remains PENDING for: " + userIdentifier);
             return new Response<>(null, "Notification saved as PENDING");
     }
+
     //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
     private Response<Long> saveDelayedNotificationAsPending(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() ->
@@ -1099,9 +1254,11 @@ public class EventCompanyManageService {
                             UserNotification userNotification = new UserNotification(notifyDTO.getType(),notifyDTO.getPayload());
                             member.addPendingNotification(userNotification);
                             userRepo.store(member);
+                            member=userRepo.findUserByEmail(userIdentifier);
+                            Long msgId=member.getMessageId(userNotification);
 
                             logger.info("Pending notification saved successfully for: " + member.getIdentifier());
-                            return new Response<>(userNotification.getNotificationId(), "Notification saved as pending");
+                            return new Response<>(msgId, "Notification saved as pending");
 
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
@@ -1118,6 +1275,7 @@ public class EventCompanyManageService {
                 })
         );
     }
+
     //marking notification as delivered because we succeed in real-time
     private Response<Boolean> markNotificationAsDelivered(String userIdentifier, Long notificationId) {
         return RetryHelper.executeWithRetry(() ->
@@ -1125,16 +1283,7 @@ public class EventCompanyManageService {
                     try {
                         Member member = userRepo.findUserByEmail(userIdentifier);
                         if (member != null) {
-                            for (UserNotification dn : member.getPendingNotifications()) {
-                                boolean isMatch = (notificationId != null) ?
-                                        notificationId.equals(dn.getNotificationId()) :
-                                        (dn.getStatus() == NotificationStatus.PENDING);
-
-                                if (isMatch) {
-                                    dn.setStatus(NotificationStatus.DELIVERED);
-                                    break;
-                                }
-                            }
+                            member.setMessageStatus(notificationId,NotificationStatus.DELIVERED);
                             userRepo.store(member);
                         }
                         return new Response<>(true, "Notification marked as DELIVERED");

@@ -694,6 +694,7 @@ public class AdminService {
                 transactionTemplate.execute(status -> {
                     try {
                         Member member = userRepo.findUserByEmail(userIdentifier);
+
                         if (member == null) {
                             logger.warning("User not found for identifier: " + userIdentifier);
                             return new Response<>(null, "User not found");
@@ -701,9 +702,12 @@ public class AdminService {
                         UserNotification userNotification = new UserNotification(notifyDTO.getType(),notifyDTO.getPayload());
                         member.addPendingNotification(userNotification);
                         userRepo.store(member);
+                        member=userRepo.findUserByEmail(userIdentifier);
+                        Long msgId=member.getMessageId(userNotification);
 
                         logger.info("Pending notification saved successfully for: " + member.getIdentifier());
-                        return new Response<>(userNotification.getNotificationId(), "Notification saved as pending");
+                        return new Response<>(msgId, "Notification saved as pending");
+
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
                         throw e;
@@ -719,6 +723,7 @@ public class AdminService {
                 })
         );
     }
+
     //marking notification as delivered because we succeed in real-time
     private Response<Boolean> markNotificationAsDelivered(String userIdentifier, Long notificationId) {
         return RetryHelper.executeWithRetry(() ->
@@ -726,16 +731,7 @@ public class AdminService {
                     try {
                         Member member = userRepo.findUserByEmail(userIdentifier);
                         if (member != null) {
-                            for (UserNotification dn : member.getPendingNotifications()) {
-                                boolean isMatch = (notificationId != null) ?
-                                        notificationId.equals(dn.getNotificationId()) :
-                                        (dn.getStatus() == NotificationStatus.PENDING);
-
-                                if (isMatch) {
-                                    dn.setStatus(NotificationStatus.DELIVERED);
-                                    break;
-                                }
-                            }
+                            member.setMessageStatus(notificationId,NotificationStatus.DELIVERED);
                             userRepo.store(member);
                         }
                         return new Response<>(true, "Notification marked as DELIVERED");

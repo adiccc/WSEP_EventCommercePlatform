@@ -139,4 +139,23 @@ public class Member extends User{
         }
         return pendingNotifications;
     }
+
+    public void setMessageStatus(Long id,NotificationStatus status){
+        for(UserNotification noti:this.userNotifications){
+            if(noti.getNotificationId().equals(id)){
+                noti.setStatus(status);
+                return;
+            }
+        }
+    }
+
+    public Long getMessageId(UserNotification userNotification ){
+        for(UserNotification un:this.userNotifications){
+            if(un.getType().equals(userNotification.getType())
+            && un.getPayload().equals(userNotification.getPayload())
+                    && un.getStatus().equals(userNotification.getStatus()))
+                return un.getNotificationId();
+        }
+        return null;
+    }
 }
