@@ -14,6 +14,7 @@ import domain.dto.UserDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.OrderStatus;
+import domain.lottery.AccessCodeGenerator;
 import domain.lottery.ILotteryRepo;
 import domain.user.NotificationStatus;
 import domain.user.UserNotification;
@@ -80,6 +81,10 @@ class AdminServiceTest {
 
     @BeforeEach
     void setUp() {
+        AccessCodeGenerator.configure(
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                6
+        );
         LoggerSetup.setup();
         WebQueue.resetForTesting();
         WebQueue.getInstance(100);

@@ -5,6 +5,7 @@ import DTO.NotifyType;
 import com.vaadin.flow.shared.Registration;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
+import domain.lottery.AccessCodeGenerator;
 import infrastructure.inMemory.ActiveOrderRepoImpl;
 import infrastructure.Auth;
 import infrastructure.Broadcaster;
@@ -38,6 +39,10 @@ class PreExpirationNotificationSchedulerTest {
 
     @BeforeEach
     void setUp() {
+        AccessCodeGenerator.configure(
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                6
+        );
         activeOrderRepo = new ActiveOrderRepoImpl();
         TokenService tokenService = new TokenService();
         IAuth auth = new Auth(tokenService);

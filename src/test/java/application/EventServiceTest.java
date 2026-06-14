@@ -9,6 +9,7 @@ import domain.dataType.*;
 import domain.dto.EventDTO;
 import domain.dto.EventDetailsDTO;
 import domain.dto.UserDTO;
+import domain.lottery.AccessCodeGenerator;
 import domain.user.IUserRepo;
 import infrastructure.Auth;
 import infrastructure.Broadcaster;
@@ -63,6 +64,10 @@ class EventServiceTest {
 
     @BeforeEach
     void setUp() {
+        AccessCodeGenerator.configure(
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                6
+        );
         LoggerSetup.setup();
         eventRepo = new EventRepoImpl();
         tokenService = new TokenService();

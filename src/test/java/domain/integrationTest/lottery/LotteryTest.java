@@ -1,6 +1,7 @@
 package domain.integrationTest.lottery;
 
 import domain.dto.LotteryDTO;
+import domain.lottery.AccessCodeGenerator;
 import domain.lottery.Lottery;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,10 @@ class LotteryTest {
 
     @BeforeEach
     void setUp() {
+        AccessCodeGenerator.configure(
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                6
+        );
         // Create a lottery with a capacity of 3
         lottery = new Lottery(201, capacity, LocalDateTime.now().plusDays(5), 24);
     }

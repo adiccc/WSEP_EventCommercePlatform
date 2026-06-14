@@ -12,6 +12,7 @@ import domain.company.ICompanyRepo;
 import domain.dto.UserDTO;
 
 import domain.event.IEventRepo;
+import domain.lottery.AccessCodeGenerator;
 import domain.policy.*;
 import domain.user.IUserRepo;
 import domain.dto.CompanyDTO;
@@ -78,6 +79,10 @@ class CompanyServiceUpdatedTest {
 
     @BeforeEach
     void setUp() {
+        AccessCodeGenerator.configure(
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                6
+        );
         LoggerSetup.setup();
         suspensionRepo=new SuspensionRepoImpl();
         userRepo = new UserRepo();

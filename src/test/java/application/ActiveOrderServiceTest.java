@@ -5,6 +5,7 @@ import Log.LoggerSetup;
 
 import java.util.*;
 
+import domain.lottery.AccessCodeGenerator;
 import domain.user.NotificationStatus;
 import domain.user.UserNotification;
 import infrastructure.Auth;
@@ -80,6 +81,10 @@ class ActiveOrderServiceTest {
 
     @BeforeEach
     void setUp() {
+        AccessCodeGenerator.configure(
+                "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                6
+        );
         LoggerSetup.setup();
         tokenService = new TokenService();
         userRepo = new UserRepo();

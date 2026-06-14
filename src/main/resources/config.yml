@@ -3,3 +3,5 @@ system:
   max-concurrent-users: 50
   active-order-ttl-minutes: 10
   init-state-file: classpath:init-state.json
+  access-code-chars : "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+  access-code-length : 6

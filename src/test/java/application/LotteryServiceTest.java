@@ -8,6 +8,7 @@ import domain.Suspension.ISuspensionRepo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.UserDTO;
+import domain.lottery.AccessCodeGenerator;
 import domain.lottery.Lottery;
 import domain.user.IUserRepo;
 import domain.user.Member;
@@ -73,6 +74,10 @@ class LotteryServiceTest {
 
         @BeforeEach
         void setUp() {
+                AccessCodeGenerator.configure(
+                        "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
+                        6
+                );
                 LoggerSetup.setup();
                 userRepo = new UserRepo();
                 transactionTemplate = mock(TransactionTemplate.class);
