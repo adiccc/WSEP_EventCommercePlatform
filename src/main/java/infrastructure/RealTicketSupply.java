@@ -61,8 +61,8 @@ public class RealTicketSupply implements ITicketSupply {
 
             String ticketCode = response.getBody();
 
-            if (ticketCode == null || ticketCode.trim().equals("1")) {
-                logger.warning("External ticket system returned failure (1)");
+            if (ticketCode == null || ticketCode.trim().equals("-1")) {
+                logger.warning("External ticket system returned failure (-1)");
                 return new TicketSupplyResultDTO(false, List.of());
             }
 

@@ -18,6 +18,7 @@ public class Order {
     private List<Integer> tickets;
     private double totalSum;
     private String paymentConfirmationId;
+    private List<String> externalTicketCodes = new ArrayList<>();
 
 
     public Order(int orderId,
@@ -28,7 +29,8 @@ public class Order {
                  String eventLocation,
                  List<PurchasedTicketDTO> purchasedTickets,
                  List<Integer> tickets, double totalSum,
-                 String paymentConfirmationId) {
+                 String paymentConfirmationId, List<String> externalTicketCodes) {
+
         this.orderId = orderId;
         this.userIdentifier = userIdentifier;
         this.eventId = eventId;
@@ -42,6 +44,7 @@ public class Order {
         this.status = OrderStatus.APPROVED;
         this.totalSum = totalSum;
         this.paymentConfirmationId = paymentConfirmationId;
+        this.externalTicketCodes = externalTicketCodes;
     }
 
     public Order(Order order) {
@@ -130,5 +133,12 @@ public class Order {
                 purchasedTickets,
                 totalSum
         );
+    }
+    public List<String> getExternalTicketCodes() {
+        return externalTicketCodes;
+    }
+
+    public void setExternalTicketCodes(List<String> externalTicketCodes) {
+        this.externalTicketCodes = externalTicketCodes;
     }
 }

@@ -742,7 +742,8 @@ public class ActiveOrderService {
                         event.getPurchasedTicketDetails(activeOrder.getTickets()),
                         activeOrder.getTickets(),
                         total,
-                        paymentConfirmationId);
+                        paymentConfirmationId,
+                        new ArrayList<>());
 
                 shouldDeleteActiveOrder = true;
 
@@ -783,6 +784,7 @@ public class ActiveOrderService {
                     logger.log(Level.SEVERE, "Ticket issuance failed: " + e.getMessage());
                     issuanceFailed = true;
                 }
+                order.setExternalTicketCodes(successfullyIssuedCodes);
 
                 if (issuanceFailed) {
                     logger.log(Level.WARNING, "Issuance failed. Initiating rollback for " + successfullyIssuedCodes.size() + " tickets.");
@@ -822,7 +824,6 @@ public class ActiveOrderService {
                     shouldReleaseTickets = true;
                     return new Response<>(null, "Ticket issuance failed");
                 }
-
                 try {
                     NotifyDTO confirmation = new NotifyDTO(
                             NotifyType.GENERAL_POPUP,

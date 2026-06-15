@@ -766,6 +766,20 @@ public class EventCompanyManageService {
 
             // use external system to refund
             Order orderToRefund=orderResponse.getValue();
+            boolean allTicketsCancelled = true;
+            for (String ticketCode : orderToRefund.getIssuedTicketCodes()) {
+                try {
+                    boolean cancelled = ticketSupply.cancelTicket(ticketCode);
+                    if (!cancelled) {
+                        logger.log(Level.WARNING, "Failed to cancel ticket " + ticketCode + " in external system.");
+                        allTicketsCancelled = false;
+                    }
+                } catch (Exception e) {
+                    logger.log(Level.SEVERE, "Exception cancelling ticket " + ticketCode, e);
+                    allTicketsCancelled = false;
+                }
+            }
+
             boolean refundApproved=false;
             try{
                 refundApproved=paymentSystem.refund(
