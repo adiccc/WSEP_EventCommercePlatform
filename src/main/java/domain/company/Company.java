@@ -6,20 +6,50 @@ import domain.dataType.PermissionType;
 import domain.dto.UserDTO;
 import domain.policy.*;
 import domain.dto.HierarchyDTO;
+import jakarta.persistence.*;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+@Entity
+@Table(name = "companies")
 public class Company {
-    private final int companyId;
-    private final String companyName;
+
+    @Id
+    @Column(name = "company_id")
+    private int companyId;
+
+    @Column(name = "company_name", nullable = false)
+    private String companyName;
+
+    @Column(name = "is_active", nullable = false)
     private boolean isActive;
-    private final ContactInfo contactInfo;
+
+    @Embedded
+    private ContactInfo contactInfo;
+
+    // Permissions is now a JPA @Entity — mapped with @OneToOne
+    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "permissions_id")
+    private Permissions companyPermission;
+
+    // PurchasePolicy is already a JPA @Entity hierarchy — mapped with @OneToOne
+    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "purchase_policy_id")
     private PurchasePolicy purchasePolicy;
+
+    // DiscountPolicy is already a JPA @Entity hierarchy — mapped with @OneToOne
+    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "discount_policy_id")
     private DiscountPolicy discountPolicy;
-    private final Permissions companyPermission;
+
+    @Version
+    @Column(name = "version", nullable = false)
     private long version;
+
+    /** Required by JPA/Hibernate — do not use directly */
+    public Company() {}
 
     public Company(int companyId, String companyName, ContactInfo contactInfo,
                    PurchasePolicy defaultPurchase, DiscountPolicy defaultDiscount,
@@ -34,7 +64,7 @@ public class Company {
         this.version = 0;
     }
 
-    /** Deep-copy constructor — used by the repo for defensive copying */
+    /** Deep-copy constructor — used by the in-memory repo for defensive copying */
     public Company(Company company) {
         this.companyId = company.companyId;
         this.companyName = company.companyName;
