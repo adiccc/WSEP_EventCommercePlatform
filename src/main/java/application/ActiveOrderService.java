@@ -785,16 +785,22 @@ public class ActiveOrderService {
                     issuanceFailed = true;
                 }
                 order.setExternalTicketCodes(successfullyIssuedCodes);
-
+                List<String> cancelledCodes = new ArrayList<>();
                 if (issuanceFailed) {
                     logger.log(Level.WARNING, "Issuance failed. Initiating rollback for " + successfullyIssuedCodes.size() + " tickets.");
                     for (String issuedCode : successfullyIssuedCodes) { //cancelTicketAtTheTicketSystem
                         try {
-                            ticketSupply.cancelTicket(issuedCode);
+                            boolean cancelled = ticketSupply.cancelTicket(issuedCode);
+                            if (cancelled) {
+                                cancelledCodes.add(issuedCode);
+                            } else {
+                                logger.warning("Failed to cancel ticket " + issuedCode + " during rollback.");
+                            }
                         } catch (Exception cancelEx) {
                             logger.warning("Failed to cancel ticket " + issuedCode + " during rollback: " + cancelEx.getMessage());
                         }
                     }
+                    successfullyIssuedCodes.removeAll(cancelledCodes);
                     boolean refundApproved = paymentSystem.refund(paymentConfirmationId, total);
 
                     if (refundApproved) {

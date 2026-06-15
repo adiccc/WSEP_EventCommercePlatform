@@ -44,11 +44,12 @@ public class AdminService {
     private final ScheduledExecutorService scheduler;
     private final INotifier notifier;
     private final TransactionTemplate transactionTemplate;
+    private final ITicketSupply ticketSupply;
 
 
 
     @Autowired
-    public AdminService(IAuth auth, IUserRepo userRepo, ICompanyRepo companyRepo, IEventRepo eventRepo, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo, INotifier notifier,TransactionTemplate transactionTemplate) {
+    public AdminService(IAuth auth, IUserRepo userRepo, ICompanyRepo companyRepo, IEventRepo eventRepo, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo, INotifier notifier,TransactionTemplate transactionTemplate,ITicketSupply ticketSupply) {
         this.auth = auth;
         this.userRepo = userRepo;
         this.eventRepo = eventRepo;
@@ -58,6 +59,7 @@ public class AdminService {
         this.scheduler = Executors.newScheduledThreadPool(1);
         this.notifier = notifier;
         this.transactionTemplate = transactionTemplate;
+        this.ticketSupply = ticketSupply;
     }
 
     //permanent suspension
@@ -478,6 +480,22 @@ public class AdminService {
                 if (!order.canBeRefunded()) {
                     logger.log(Level.SEVERE, "Order cannot be refunded");
                     return new Response<>(false, "Order cannot be refunded");
+                }
+                List<String> cancelledCodes = new ArrayList<>();
+                if (order.getExternalTicketCodes() != null) {
+                    for (String ticketCode : order.getExternalTicketCodes()) {
+                        try {
+                            boolean cancelled = ticketSupply.cancelTicket(ticketCode);
+                            if (cancelled) {
+                                cancelledCodes.add(ticketCode);
+                            } else {
+                                logger.log(Level.WARNING, "Failed to cancel ticket " + ticketCode + " in external system.");
+                            }
+                        } catch (Exception e) {
+                            logger.log(Level.SEVERE, "Exception cancelling ticket " + ticketCode, e);
+                        }
+                    }
+                    order.getExternalTicketCodes().removeAll(cancelledCodes);
                 }
 
                 boolean refundApproved = paymentSystem.refund(

@@ -39,11 +39,12 @@ public class EventCompanyManageService {
     private final INotifier notifier;
     private final IUserRepo userRepo;
     private final TransactionTemplate transactionTemplate;
+    private final ITicketSupply ticketSupply;
 
 
 
     @Autowired
-    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo,INotifier notifier, IUserRepo userRepo,TransactionTemplate transactionTemplate) {
+    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo,INotifier notifier, IUserRepo userRepo,TransactionTemplate transactionTemplate, ITicketSupply ticketSupply) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;
         this.auth = auth;
@@ -53,6 +54,7 @@ public class EventCompanyManageService {
         this.notifier = notifier;
         this.userRepo = userRepo;
         this.transactionTemplate = transactionTemplate;
+        this.ticketSupply = ticketSupply;
     }
 
     public Response<Boolean> DefineVenueAndSeatingMap(String token, Integer eventId, ElementPositionDTO stage,
@@ -763,21 +765,23 @@ public class EventCompanyManageService {
             if(orderResponse==null || orderResponse.getValue()==null) {
                 return new Response<>(false,orderResponse.getMessage());
             }
-
             // use external system to refund
-            Order orderToRefund=orderResponse.getValue();
-            boolean allTicketsCancelled = true;
-            for (String ticketCode : orderToRefund.getIssuedTicketCodes()) {
-                try {
-                    boolean cancelled = ticketSupply.cancelTicket(ticketCode);
-                    if (!cancelled) {
-                        logger.log(Level.WARNING, "Failed to cancel ticket " + ticketCode + " in external system.");
-                        allTicketsCancelled = false;
+            Order orderToRefund = orderResponse.getValue();
+            List<String> cancelledCodes = new ArrayList<>();
+            if (orderToRefund.getExternalTicketCodes() != null) {
+                for (String ticketCode : orderToRefund.getExternalTicketCodes()) {
+                    try {
+                        boolean cancelled = ticketSupply.cancelTicket(ticketCode);
+                        if (cancelled) {
+                            cancelledCodes.add(ticketCode);
+                        } else {
+                            logger.log(Level.WARNING, "Failed to cancel ticket " + ticketCode + " in external system.");
+                        }
+                    } catch (Exception e) {
+                        logger.log(Level.SEVERE, "Exception cancelling ticket " + ticketCode, e);
                     }
-                } catch (Exception e) {
-                    logger.log(Level.SEVERE, "Exception cancelling ticket " + ticketCode, e);
-                    allTicketsCancelled = false;
                 }
+                orderToRefund.getExternalTicketCodes().removeAll(cancelledCodes);
             }
 
             boolean refundApproved=false;
