@@ -64,34 +64,39 @@ public class AdminService {
     public Response<Boolean> SuspendUser(String token, int userId) {
         return RetryHelper.executeWithRetry(()->{
             logger.log(Level.INFO, "SuspendUser called");
-            try{
-                if(!isVerifiedAdmin(token)){
-                    logger.log(Level.INFO, "SuspendUser failed : user is not admin");
-                    return new Response<>(false, "SuspendUser failed : user is not admin");
+            return transactionTemplate.execute(status -> {
+                try{
+                    if(!isVerifiedAdmin(token)){
+                        logger.log(Level.INFO, "SuspendUser failed : user is not admin");
+                        return new Response<>(false, "SuspendUser failed : user is not admin");
+                    }
+                    if(getUserIdFromToken(token) == userId){
+                        logger.log(Level.INFO, "SuspendUser failed : admin cannot suspend himself");
+                        return new Response<>(false, "SuspendUser failed : admin cannot suspend himself");
+                    }
+                    Member member=userRepo.findById(userId);
+                    if(member.isSuspended()){
+                        logger.log(Level.INFO, "SuspendUser failed : user is already suspended");
+                        return new Response<>(false, "SuspendUser failed : user is already suspended");
+                    }
+                    member.suspend();
+                    suspensionRepo.store(new Suspension(userId));
+                    userRepo.store(member);
+                    logger.log(Level.INFO, "SuspendUser succeeded, user "+userId+" suspended");
+                    return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
+                }catch(OptimisticLockingFailureException e){
+                    status.setRollbackOnly();
+                    throw e;
+                }catch(NoSuchElementException e){
+                    status.setRollbackOnly();
+                    logger.log(Level.INFO, "User not found");
+                    return new Response<>(false, "User not found");
+                }catch(Exception e){
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
+                    return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
                 }
-                if(getUserIdFromToken(token) == userId){
-                    logger.log(Level.INFO, "SuspendUser failed : admin cannot suspend himself");
-                    return new Response<>(false, "SuspendUser failed : admin cannot suspend himself");
-                }
-                Member member=userRepo.findById(userId);
-                if(member.isSuspended()){
-                    logger.log(Level.INFO, "SuspendUser failed : user is already suspended");
-                    return new Response<>(false, "SuspendUser failed : user is already suspended");
-                }
-                member.suspend();
-                suspensionRepo.store(new Suspension(userId));
-                userRepo.store(member);
-                logger.log(Level.INFO, "SuspendUser succeeded, user "+userId+" suspended");
-                return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
-            }catch(OptimisticLockingFailureException e){
-                throw e;
-            }catch(NoSuchElementException e){
-                logger.log(Level.INFO, "User not found");
-                return new Response<>(false, "User not found");
-            }catch(Exception e){
-                logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
-                return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
-            }
+            });
         });
     }
 
@@ -99,71 +104,81 @@ public class AdminService {
     public Response<Boolean> SuspendUser(String token, int userId, int duration) {
         return RetryHelper.executeWithRetry(()->{
             logger.log(Level.INFO, "SuspendUser called");
-            try{
-                if(!isVerifiedAdmin(token)){
-                    logger.log(Level.INFO, "SuspendUser failed : user is not admin");
-                    return new Response<>(false, "SuspendUser failed : user is not admin");
+            return transactionTemplate.execute(status -> {
+                try{
+                    if(!isVerifiedAdmin(token)){
+                        logger.log(Level.INFO, "SuspendUser failed : user is not admin");
+                        return new Response<>(false, "SuspendUser failed : user is not admin");
+                    }
+                    if(getUserIdFromToken(token) == userId){
+                        logger.log(Level.INFO, "SuspendUser failed : admin cannot suspend himself");
+                        return new Response<>(false, "SuspendUser failed : admin cannot suspend himself");
+                    }
+                    Member member=userRepo.findById(userId);
+                    if(member.isSuspended()){
+                        logger.log(Level.INFO, "SuspendUser failed : user is already suspended");
+                        return new Response<>(false, "SuspendUser failed : user is already suspended");
+                    }
+                    if(duration<=0){
+                        logger.log(Level.INFO, "SuspendUser failed : duration must be greater than 0");
+                        return new Response<>(false, "SuspendUser failed : duration must be greater than 0");
+                    }
+                    member.suspend();
+                    suspensionRepo.store(new Suspension(userId, duration));
+                    userRepo.store(member);
+                    scheduleActivateAfterSuspension(userId, duration);
+                    logger.log(Level.INFO, "SuspendUser succeeded, user "+userId+" suspended");
+                    return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
+                }catch(OptimisticLockingFailureException e){
+                    status.setRollbackOnly();
+                    throw e;
+                }catch(NoSuchElementException e){
+                    status.setRollbackOnly();
+                    logger.log(Level.INFO, "User not found");
+                    return new Response<>(false, "User not found");
+                }catch(Exception e){
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
+                    return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
                 }
-                if(getUserIdFromToken(token) == userId){
-                    logger.log(Level.INFO, "SuspendUser failed : admin cannot suspend himself");
-                    return new Response<>(false, "SuspendUser failed : admin cannot suspend himself");
-                }
-                Member member=userRepo.findById(userId);
-                if(member.isSuspended()){
-                    logger.log(Level.INFO, "SuspendUser failed : user is already suspended");
-                    return new Response<>(false, "SuspendUser failed : user is already suspended");
-                }
-                if(duration<=0){
-                    logger.log(Level.INFO, "SuspendUser failed : duration must be greater than 0");
-                    return new Response<>(false, "SuspendUser failed : duration must be greater than 0");
-                }
-                member.suspend();
-                suspensionRepo.store(new Suspension(userId, duration));
-                userRepo.store(member);
-                scheduleActivateAfterSuspension(userId, duration);
-                logger.log(Level.INFO, "SuspendUser succeeded, user "+userId+" suspended");
-                return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
-            }catch(OptimisticLockingFailureException e){
-                throw e;
-            }catch(NoSuchElementException e){
-                logger.log(Level.INFO, "User not found");
-                return new Response<>(false, "User not found");
-            }catch(Exception e){
-                logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
-                return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
-            }
+            });
         });
     }
 
     public Response<Boolean> UnsuspendUser(String token, int userId) {
         return RetryHelper.executeWithRetry(()->{
             logger.log(Level.INFO, "UnsuspendUser called");
-            try{
-                if(!isVerifiedAdmin(token)){
-                    logger.log(Level.INFO, "UnsuspendUser failed : user is not admin");
-                    return new Response<>(false, "UnsuspendUser failed : user is not admin");
+            return transactionTemplate.execute(status -> {
+                try{
+                    if(!isVerifiedAdmin(token)){
+                        logger.log(Level.INFO, "UnsuspendUser failed : user is not admin");
+                        return new Response<>(false, "UnsuspendUser failed : user is not admin");
+                    }
+                    Member member=userRepo.findById(userId);
+                    if(!member.isSuspended()){
+                        logger.log(Level.INFO, "UnsuspendUser failed : user is not suspended");
+                        return new Response<>(false, "UnsuspendUser failed : user is not suspended");
+                    }
+                    member.unsuspend();
+                    Suspension currentSus = suspensionRepo.findLastSuspensionByUserId(userId);
+                    currentSus.unsuspend();
+                    suspensionRepo.store(currentSus);
+                    userRepo.store(member);
+                    logger.log(Level.INFO, "UnsuspendUser succeeded, user "+userId+" not suspended");
+                    return new Response<>(true, "UnsuspendUser succeeded, user "+userId+" not suspended");
+                }catch(OptimisticLockingFailureException e){
+                    status.setRollbackOnly();
+                    throw e;
+                }catch(NoSuchElementException e){
+                    status.setRollbackOnly();
+                    logger.log(Level.INFO, "User not found");
+                    return new Response<>(false, "User not found");
+                }catch(Exception e){
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
+                    return new Response<>(false,"UnsuspendUser failed due to serer error: "+e.getMessage());
                 }
-                Member member=userRepo.findById(userId);
-                if(!member.isSuspended()){
-                    logger.log(Level.INFO, "UnsuspendUser failed : user is not suspended");
-                    return new Response<>(false, "UnsuspendUser failed : user is not suspended");
-                }
-                member.unsuspend();
-                Suspension currentSus = suspensionRepo.findLastSuspensionByUserId(userId);
-                currentSus.unsuspend();
-                suspensionRepo.store(currentSus);
-                userRepo.store(member);
-                logger.log(Level.INFO, "UnsuspendUser succeeded, user "+userId+" not suspended");
-                return new Response<>(true, "UnsuspendUser succeeded, user "+userId+" not suspended");
-            }catch(OptimisticLockingFailureException e){
-                throw e;
-            }catch(NoSuchElementException e){
-                logger.log(Level.INFO, "User not found");
-                return new Response<>(false, "User not found");
-            }catch(Exception e){
-                logger.log(Level.SEVERE, "OptimisticLockingFailureException", e);
-                return new Response<>(false,"UnsuspendUser failed due to serer error: "+e.getMessage());
-            }
+            });
         });
     }
 
@@ -187,21 +202,26 @@ public class AdminService {
     private void scheduleActivateAfterSuspension(int userId, int duration) {
         scheduler.schedule( ()-> RetryHelper.executeWithRetry(()->{
                 logger.log(Level.INFO, "ScheduleActivateAfterSuspension called");
-                try {
-                    Member member = userRepo.findById(userId);
-                    member.unsuspend();
-                    userRepo.store(member);
-                    logger.log(Level.INFO, "activate after suspension succeeded, user "+userId+" not suspended");
-                    return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
-                }catch (OptimisticLockingFailureException e) {
-                    throw e;
-                }catch (NoSuchElementException e){
-                    logger.log(Level.INFO, "User not found");
-                    return new Response<>(false,"User not found");
-                }catch (Exception e){
-                    logger.log(Level.SEVERE, "SuspendUser faild due to serer error: ", e.getMessage());
-                    return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
-                }
+                return transactionTemplate.execute(status -> {
+                    try {
+                        Member member = userRepo.findById(userId);
+                        member.unsuspend();
+                        userRepo.store(member);
+                        logger.log(Level.INFO, "activate after suspension succeeded, user "+userId+" not suspended");
+                        return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
+                    }catch (OptimisticLockingFailureException e) {
+                        status.setRollbackOnly();
+                        throw e;
+                    }catch (NoSuchElementException e){
+                        status.setRollbackOnly();
+                        logger.log(Level.INFO, "User not found");
+                        return new Response<>(false,"User not found");
+                    }catch (Exception e){
+                        status.setRollbackOnly();
+                        logger.log(Level.SEVERE, "SuspendUser faild due to serer error: ", e.getMessage());
+                        return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
+                    }
+                });
             })
         , duration, TimeUnit.DAYS);
     }
@@ -277,6 +297,7 @@ public class AdminService {
     public Response<Boolean> removeUser(String adminToken, int userIdToRemove) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("removeUser attempt for userId: " + userIdToRemove);
+            return transactionTemplate.execute(status -> {
             try {
                 if (!isVerifiedAdmin(adminToken)) {
                     logger.warning("removeUser failed: unauthorized");
@@ -306,6 +327,8 @@ public class AdminService {
                     if (perms.getFounderId() == userIdToRemove) {
                         logger.warning("removeUser blocked: userId " + userIdToRemove + " is the founder of company "
                                 + company.getCompanyId());
+                        // abort: undo any company changes already made earlier in this loop
+                        status.setRollbackOnly();
                         return Response.error("Cannot remove user: they are the founder of company \""
                                 + company.getCompanyName() + "\"");
 
@@ -361,11 +384,14 @@ public class AdminService {
                 return Response.ok(true);
 
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.severe("removeUser failed for userId: " + userIdToRemove + ". Error: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
+            });
         });
     }
 
@@ -390,136 +416,220 @@ public class AdminService {
     public Response<Boolean> closeCompanyByAdmin(String token, int companyId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("closeCompanyByAdmin attempt for companyId: " + companyId);
-            try {
-                if (!isVerifiedAdmin(token)) {
-                    logger.warning("closeCompanyByAdmin failed: unauthorized");
-                    return new Response<>(false, "Unauthorized: admin access required");
-                }
-                Company company = companyRepo.findById(companyId);
-                if (!company.isActive()) {
-                    logger.warning("closeCompanyByAdmin failed: company already closed with id " + companyId);
-                    return Response.error("Company is already closed");
-                }
 
-                Set<Integer> recipients = new HashSet<>(company.getCompanyPermission().getOwnerIds());
-                recipients.addAll(company.getCompanyPermission().getCompanyTree().keySet());
+            if (!isVerifiedAdmin(token)) {
+                logger.warning("closeCompanyByAdmin failed: unauthorized");
+                return new Response<>(false, "Unauthorized: admin access required");
+            }
 
-                company.deactivate();
-                companyRepo.store(company);
-                List<Event> events = eventRepo.findByCompany(companyId);
-                for (Event event : events) {
-                    event.setActive(false);
-                    List<Order> orders = event.getOrders();
-                    for (Order order : orders) {
-                        order.markRefundRequired();
+            Map<Integer, List<Integer>> ordersToRefund = new HashMap<>(); // eventId -> orderIds
+            Map<String, Long> identifierToMsgId = new HashMap<>(); // recipient email -> PENDING notification id
+
+            // Transaction 1: close company + events and save member notifications as PENDING, atomically.
+            Response<Boolean> closeRes = transactionTemplate.execute(status -> {
+                try {
+                    Company company = companyRepo.findById(companyId);
+                    if (!company.isActive()) {
+                        logger.warning("closeCompanyByAdmin failed: company already closed with id " + companyId);
+                        return new Response<>(false, "Company is already closed");
                     }
-                    eventRepo.store(event);
-                    event = eventRepo.findById(event.getId());
-                    orders = event.getOrders();
-                    for (Order order : orders) {
+
+                    Set<Integer> recipients = new HashSet<>();
+                    recipients.addAll(company.getCompanyPermission().getOwnerIds());
+                    recipients.addAll(company.getCompanyPermission().getCompanyTree().keySet());
+
+                    company.deactivate();
+                    companyRepo.store(company);
+
+                    List<Event> events = eventRepo.findByCompany(companyId);
+                    for (Event event : events) {
+                        event.setActive(false);
+                        for (Order order : event.getOrders()) {
+                            order.markRefundRequired();
+                        }
+                        eventRepo.store(event);
+                        // re-fetch so generated order ids are visible
+                        Event stored = eventRepo.findById(event.getId());
+                        List<Integer> orderIds = new ArrayList<>();
+                        for (Order order : stored.getOrders()) {
+                            orderIds.add(order.getOrderId());
+                        }
+                        ordersToRefund.put(stored.getId(), orderIds);
+                    }
+
+                    // Save each member's closure notification as PENDING; delivered live later, outside the txn.
+                    NotifyPayload payload = new NotifyPayload("Company " + company.getCompanyName() + " has been closed by admin, all events are cancelled and refunds are being processed", null, companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
+                    for (Integer userId : recipients) {
                         try {
-                            processRefundAdmin(token, event.getId(), order.getOrderId());
-                        } catch (OptimisticLockingFailureException e) {
-                            throw e;
+                            String identifier = userRepo.getUserEmail(userId);
+                            Response<Long> msgIdRes = saveDelayedNotificationAsPending(identifier, notifyDTO);
+                            if (msgIdRes != null && msgIdRes.getValue() != null) {
+                                identifierToMsgId.put(identifier, msgIdRes.getValue());
+                            }
                         } catch (Exception e) {
-                            logger.log(Level.SEVERE, "Failed to process automatic refund for order " +
-                                    order.getOrderId() + " in event " + event.getId() + ": " + e.getMessage());
+                            logger.log(Level.SEVERE,
+                                    "Failed to persist closure notification for user " + userId + ": " + e.getMessage());
                         }
                     }
-                }
 
-                //notify all company members about the closure
-                NotifyPayload payload= new NotifyPayload("Company " + company.getCompanyName() + " has been closed by admin, all events are cancelled and refunds are being processed", null,companyId);
-                for (Integer userId : recipients) {
+                    return new Response<>(true, "Company closed successfully");
+                } catch (NoSuchElementException e) {
+                    status.setRollbackOnly();
+                    logger.warning("closeCompanyByAdmin failed: company not found with id " + companyId);
+                    return new Response<>(false, "Company not found");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("closeCompanyByAdmin failed due to server error: " + e.getMessage());
+                    return new Response<>(false, e.getMessage());
+                }
+            });
+
+            // txn 1 rolled back -> nothing committed, stop
+            if (closeRes == null || !closeRes.getValue()) {
+                return closeRes == null ? new Response<>(false, "Failed to close company") : closeRes;
+            }
+
+            // Refunds (outside the closure txn). A failed refund does not undo the closure.
+            for (Map.Entry<Integer, List<Integer>> entry : ordersToRefund.entrySet()) {
+                int eventId = entry.getKey();
+                for (int orderId : entry.getValue()) {
                     try {
-                        sendOrSaveNotification(
-                                userRepo.getUserEmail(userId),
-                                new NotifyDTO(GENERAL_POPUP, payload)
-                        );
-                    } catch (OptimisticLockingFailureException e) {
-                        throw e;
+                        processRefundAdmin(token, eventId, orderId);
                     } catch (Exception e) {
-                        logger.log(Level.SEVERE,
-                                "Failed to notify user " + userId + " about company closure: " + e.getMessage());
+                        logger.log(Level.SEVERE, "Failed to process automatic refund for order " +
+                                orderId + " in event " + eventId + ": " + e.getMessage());
                     }
                 }
-                logger.info("Company with id " + companyId + " has been closed by admin");
-                return new Response<>(true, "Company closed successfully");
-            } catch (NoSuchElementException e) {
-                logger.warning("closeCompanyByAdmin failed: company not found with id " + companyId);
-                return new Response<>(false, "Company not found");
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.severe("closeCompanyByAdmin failed due to server error: " + e.getMessage());
-                return new Response<>(false, e.getMessage());
             }
+
+            // Live delivery (no txn held open): deliver the PENDING notifications and mark
+            // delivered ones DELIVERED. An offline member keeps their PENDING message for later.
+            String companyName = companyRepo.findById(companyId).getCompanyName();
+            NotifyPayload payload = new NotifyPayload("Company " + companyName + " has been closed by admin, all events are cancelled and refunds are being processed", null, companyId);
+            NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
+            for (Map.Entry<String, Long> entry : identifierToMsgId.entrySet()) {
+                String identifier = entry.getKey();
+                Long msgId = entry.getValue();
+                try {
+                    boolean isDelivered = notifier.notifyUser(identifier, notifyDTO);
+                    if (isDelivered && msgId != null) {
+                        markNotificationAsDelivered(identifier, msgId);
+                    } else {
+                        logger.info("Member " + identifier + " is offline. Closure notification remains PENDING");
+                    }
+                } catch (Exception e) {
+                    logger.log(Level.SEVERE,
+                            "Failed to notify user " + identifier + " about company closure: " + e.getMessage());
+                }
+            }
+
+            logger.info("Company with id " + companyId + " has been closed by admin");
+            return new Response<>(true, "Company closed successfully");
         });
     }
     // just for admin to process refunds when closing company
     private Response<Boolean> processRefundAdmin(String token, Integer eventId, int orderId) {
         return RetryHelper.executeWithRetry(() -> {
-            logger.log(Level.INFO, "processRefund called");
+            logger.log(Level.INFO, "processRefundAdmin called");
 
             int userId = getUserIdFromToken(token);
             if (userId == -1) {
                 logger.severe("Invalid token");
                 return new Response<>(false, "Invalid token");
             }
-            try{
-                Event event = eventRepo.findById(eventId);
-                Order order = event.findOrderById(orderId);
 
-                if (order == null) {
-                    logger.log(Level.SEVERE, "Order not found for refund");
-                    return new Response<>(false, "No matching order found for refund");
+            // ---- Phase 1 (transaction): validate that the order can be refunded ----
+            Response<Order> orderResponse = transactionTemplate.execute(status -> {
+                try {
+                    Event event = eventRepo.findById(eventId);
+                    Order order = event.findOrderById(orderId);
+
+                    if (order == null) {
+                        logger.log(Level.SEVERE, "Order not found for refund");
+                        return new Response<>(null, "No matching order found for refund");
+                    }
+                    if (!order.canBeRefunded()) {
+                        logger.log(Level.SEVERE, "Order cannot be refunded");
+                        return new Response<>(null, "Order cannot be refunded");
+                    }
+                    return new Response<>(order, "Order conditions are valid, the refund init");
+                } catch (NoSuchElementException e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
+                    return new Response<>(null, "Event not found");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
+                    return new Response<>(null, "Failed to process refund: " + e.getMessage());
                 }
+            });
 
-                if (!order.canBeRefunded()) {
-                    logger.log(Level.SEVERE, "Order cannot be refunded");
-                    return new Response<>(false, "Order cannot be refunded");
-                }
-
-                boolean refundApproved = paymentSystem.refund(
-                        order.getPaymentConfirmationId(),
-                        order.getTotalSum());
-
-                if (refundApproved) {
-                    order.markRefunded();
-                    eventRepo.store(event);
-                    logger.log(Level.INFO, "Refund completed successfully");
-                    // Notify the user about the refund and the company closure
-                    String userIdentifier = order.getUserIdentifier();
-                    NotifyPayload payload= new NotifyPayload("Refund processed for order " + order.getOrderId() + " in event " + event.getId() + "because of closing the company", event.getId(),null);
-                    sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
-
-                    return new Response<>(true, "Refund completed successfully");
-                }
-                order.markRefundRequired();
-                eventRepo.store(event);
-
-                // Notify the user about the refund failure and the company closure
-                String userIdentifier = order.getUserIdentifier();
-                NotifyPayload payload= new NotifyPayload("Refund failed for order " + order.getOrderId() + " in event " + event.getId() + " because of closing the company, please contact support", event.getId(),null);
-                sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP,payload));
-
-                logger.log(Level.SEVERE, "Refund rejected by external payment service");
-                return new Response<>(false, "Refund rejected by external payment service");
-
-            } catch (NoSuchElementException e) {
-                logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
-                return new Response<>(false, "Event not found");
-            } catch (OptimisticLockingFailureException e) {
-                throw e;
-            } catch (Exception e) {
-                logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
-                return new Response<>(false, "Failed to process refund: " + e.getMessage());
+            // validation failed -> nothing to refund
+            if (orderResponse == null || orderResponse.getValue() == null) {
+                return new Response<>(false, orderResponse == null ? "Failed to process refund" : orderResponse.getMessage());
             }
+
+            // ---- External payment call (outside any transaction) ----
+            Order orderToRefund = orderResponse.getValue();
+            boolean refundApproved = false;
+            try {
+                refundApproved = paymentSystem.refund(
+                        orderToRefund.getPaymentConfirmationId(),
+                        orderToRefund.getTotalSum());
+            } catch (Exception e) {
+                logger.log(Level.WARNING, "Failed to process refund through payment system: " + e.getMessage());
+            }
+            final boolean finalRefundApproved = refundApproved;
+
+            // ---- Phase 2 (transaction): record the result of the refund ----
+            return transactionTemplate.execute(status -> {
+                try {
+                    Event event = eventRepo.findById(eventId);
+                    Order order = event.findOrderById(orderId);
+                    String userIdentifier = order.getUserIdentifier();
+
+                    if (finalRefundApproved) {
+                        order.markRefunded();
+                        eventRepo.store(event);
+                        logger.log(Level.INFO, "Refund completed successfully");
+                        NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId() + " in event " + event.getId() + " because of closing the company", event.getId(), null);
+                        sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
+                        return new Response<>(true, "Refund completed successfully");
+                    }
+
+                    order.markRefundRequired();
+                    eventRepo.store(event);
+                    NotifyPayload payload = new NotifyPayload("Refund failed for order " + order.getOrderId() + " in event " + event.getId() + " because of closing the company, please contact support", event.getId(), null);
+                    sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
+                    logger.log(Level.SEVERE, "Refund rejected by external payment service");
+                    return new Response<>(false, "Refund rejected by external payment service");
+
+                } catch (NoSuchElementException e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
+                    return new Response<>(false, "Event not found");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
+                    return new Response<>(false, "Failed to process refund: " + e.getMessage());
+                }
+            });
         });
     }
     public Response<List<AdminPurchaseHistoryDTO>> getGlobalOrders(String token, List<String> usersFilter, List<Integer> eventsFilter, List<Integer> companiesFilter) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("getGlobalOrders attempt for admin");
+            return transactionTemplate.execute(status -> {
             try {
                 if (!isVerifiedAdmin(token)) {
                     logger.warning("getGlobalOrders failed: unauthorized");
@@ -610,11 +720,14 @@ public class AdminService {
                 logger.info("Retrieved history orders successfully for filter");
                 return new Response<>(historyOrders,"Retrieved history orders successfully for filter");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
         } catch (Exception e) {
+            status.setRollbackOnly();
             logger.log(Level.SEVERE, "Failed to retrieve history orders: " + e.getMessage());
             return new Response<>(null, "Failed to retrieve history orders: " + e.getMessage());
         }
+        });
         });
     }
 
@@ -626,6 +739,7 @@ public class AdminService {
                     logger.warning("getAllPurchasers failed: unauthorized");
                     return new Response<>(null, "Unauthorized: Only admin can access");
                 }
+                return transactionTemplate.execute(status -> {
                 try{
                 List<String> purchasers = eventRepo.getAllPurchasers();
                 if (purchasers.isEmpty()) {
@@ -635,11 +749,14 @@ public class AdminService {
                 logger.info("Retrieved all unique purchasers successfully. Total: " + purchasers.size());
                 return new Response<>(purchasers, "Retrieved purchasers successfully");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.severe("Failed to retrieve purchasers: " + e.getMessage());
                 return new Response<>(null, "Failed to retrieve purchasers: " + e.getMessage());
             }
+        });
         });
     }
        private int getUserIdFromToken(String token) {
