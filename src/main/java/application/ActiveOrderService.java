@@ -26,6 +26,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+import jakarta.annotation.PostConstruct;
 
 import java.time.LocalDateTime;
 
@@ -106,6 +107,69 @@ public class ActiveOrderService {
 
     public int getCapacity() {
         return this.capacity;
+    }
+
+    // Crash recovery: an order left in PAYMENT_IN_PROGRESS means the server died during
+    // phase 2 (external payment/issuance). Such orders never expire on their own, so on
+    // startup we return them to checkout and flag them for manual payment reconciliation.
+    @PostConstruct
+    public void recoverDanglingPaymentsOnStartup() {
+        logger.info("recoverDanglingPaymentsOnStartup called");
+
+        Response<List<Integer>> stuck = RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+            try {
+                List<Integer> ids = activeOrderRepo.getAll().stream()
+                        .filter(o -> o.getStage() == STAGE.PAYMENT_IN_PROGRESS)
+                        .map(ActiveOrder::getId)
+                        .collect(Collectors.toList());
+                return new Response<>(ids, "Dangling payment orders loaded");
+            } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.severe("Failed to scan for dangling payment orders: " + e.getMessage());
+                return new Response<>(null, "Failed to scan dangling payment orders");
+            }
+        }));
+
+        if (stuck == null || stuck.getValue() == null) {
+            logger.severe("Could not scan for dangling payment orders on startup");
+            return;
+        }
+
+        for (Integer orderId : stuck.getValue()) {
+            RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
+                try {
+                    ActiveOrder order = activeOrderRepo.findById(orderId);
+                    if (order.getStage() != STAGE.PAYMENT_IN_PROGRESS) {
+                        return new Response<>(true, "Order already resolved");
+                    }
+                    // Payment status at crash time is unknown — flag for manual reconciliation,
+                    // then return to checkout so the normal expiry/cleanup lifecycle takes over.
+                    logger.severe("Recovered dangling PAYMENT_IN_PROGRESS order " + orderId
+                            + " after restart; verify external payment for possible manual refund.");
+                    order.returnToCheckout();
+                    activeOrderRepo.store(order);
+                    return new Response<>(true, "Order returned to checkout");
+                } catch (NoSuchElementException e) {
+                    return new Response<>(true, "Order no longer exists");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                }
+            }));
+        }
+
+        logger.info("Dangling payment recovery complete: "
+                + stuck.getValue().size() + " order(s) processed");
     }
 
     public Response<EnterPurchaseDTO> enterEventPurchase(String token, int companyId, int eventId, String code) {
@@ -688,264 +752,279 @@ public class ActiveOrderService {
             int activeOrderId,
             PaymentDetailsDTO paymentDetails) {
 
-        return RetryHelper.executeWithRetry(() -> {
+        // PHASE 1 (T1): validate and lock the order as PAYMENT_IN_PROGRESS.
+        Response<CheckoutContext> prep = RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "checkoutAndPayment called");
-
-            ActiveOrder activeOrder = null;
-            Event event = null;
-            Order order = null;
-
-            boolean shouldDeleteActiveOrder = false;
-            boolean shouldReleaseTickets = false;
-            boolean paymentStageAcquired = false;
-
             try {
                 String role = getValidatedRole(token);
                 if (role == null) {
-                    logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
                 String userIdentifier = auth.getUserIdentifier(token).getValue();
-                if (role.equals("MEMBER")) { // if it's a member should be email
+                if (role.equals("MEMBER")) {
                     if (userIdentifier == null) {
-                        logger.log(Level.SEVERE, "not a valid user email");
                         return new Response<>(null, "not a valid user email");
                     }
                     if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(token))) {
-                        logger.severe("User does not have write access caused by suspension");
                         return new Response<>(null, "user does not have write access caused by suspension.");
                     }
                 }
-                activeOrder = activeOrderRepo.findById(activeOrderId);
-                if (!(activeOrder.getUserIdentifier().equals(userIdentifier))) { // userIdentifier
+                ActiveOrder activeOrder = activeOrderRepo.findById(activeOrderId);
+                if (!activeOrder.getUserIdentifier().equals(userIdentifier)) {
                     return new Response<>(null, "Active order does not belong to user");
                 }
-
-                event = eventRepo.findById(activeOrder.getEventId());
-
+                Event event = eventRepo.findById(activeOrder.getEventId());
                 if (!event.isActive()) {
                     return new Response<>(null, "Event is not active");
                 }
-
                 if (!activeOrder.hasTickets()) {
                     return new Response<>(null, "Active order has no selected tickets");
                 }
-
                 if (activeOrder.isExpired()) {
-                    shouldDeleteActiveOrder = true;
-                    shouldReleaseTickets = true;
+                    // release the held tickets and drop the expired order in the same tx
+                    event.releaseTickets(activeOrder.getTickets());
+                    eventRepo.store(event);
+                    activeOrderRepo.delete(activeOrderId);
                     return new Response<>(null, "Active order expired");
                 }
-
-                try {
-                    activeOrder.startPayment();
-                    activeOrderRepo.store(activeOrder);
-                    paymentStageAcquired = true;
-                } catch (IllegalStateException e) {
-                    return new Response<>(null, e.getMessage());
-                } catch (OptimisticLockingFailureException e) {
-                    throw e;
-                }
-
-                Company company = companyRepo.findById(event.getCompanyId());
-
                 if (!activeOrder.hasApprovedCheckoutPrice()) {
                     return new Response<>(null, "Checkout price was not approved");
                 }
-
                 double total = activeOrder.getApprovedCheckoutPrice();
 
-                String paymentConfirmationId = paymentSystem.pay(total, paymentDetails);
+                activeOrder.startPayment();
+                activeOrderRepo.store(activeOrder);
 
-                if (paymentConfirmationId == null || paymentConfirmationId.isBlank()) {
-                    ActiveOrder freshOrder = activeOrderRepo.findById(activeOrderId);
-                    freshOrder.returnToCheckout();
-                    activeOrderRepo.store(freshOrder);
-                    paymentStageAcquired = false;
-                    return new Response<>(null, "Payment rejected");
+                List<Integer> tickets = activeOrder.getTickets();
+                Map<String, List<PurchasedTicketDTO>> ticketsByZone =
+                        event.getPurchasedTicketDetails(tickets).stream()
+                                .collect(Collectors.groupingBy(PurchasedTicketDTO::getZoneName));
+                List<TicketSupplyRequestDTO> supplyRequests = new ArrayList<>();
+                for (Map.Entry<String, List<PurchasedTicketDTO>> entry : ticketsByZone.entrySet()) {
+                    boolean isSeating = entry.getValue().get(0).getTicketType().equalsIgnoreCase("SEATING");
+                    supplyRequests.add(new TicketSupplyRequestDTO(
+                            userIdentifier, String.valueOf(event.getId()),
+                            entry.getKey(), isSeating, entry.getValue()));
                 }
 
-                order = new Order(
-                        activeOrder.getId(),
-                        userIdentifier,
-                        event.getId(),
-                        event.getName(),
-                        event.getDate().toString(),
-                        event.getLocation().name(),
-                        event.getPurchasedTicketDetails(activeOrder.getTickets()),
-                        activeOrder.getTickets(),
-                        total,
-                        paymentConfirmationId);
+                CheckoutContext ctx = new CheckoutContext(
+                        activeOrderId, userIdentifier, event.getId(), total, tickets, supplyRequests);
+                return new Response<>(ctx, "Ready for payment");
 
-                shouldDeleteActiveOrder = true;
+            } catch (IllegalStateException e) {
+                status.setRollbackOnly();
+                return new Response<>(null, e.getMessage());
+            } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
+                return new Response<>(null, "Event or active order not found");
+            } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.log(Level.SEVERE, "Failed to prepare checkout: " + e.getMessage());
+                return new Response<>(null, "Failed to complete purchase");
+            }
+        }));
 
-                boolean issuanceFailed = false;
-                List<String> successfullyIssuedCodes = new ArrayList<>(); //for any case of rollback
-                try {
-                    List<PurchasedTicketDTO> purchasedDetails = event.getPurchasedTicketDetails(activeOrder.getTickets());
-                    Map<String, List<PurchasedTicketDTO>> ticketsByZone = purchasedDetails.stream()
-                            .collect(Collectors.groupingBy(PurchasedTicketDTO::getZoneName));
+        if (prep == null || prep.getValue() == null) {
+            return new Response<>(null, prep == null ? "Failed to complete purchase" : prep.getMessage());
+        }
+        CheckoutContext ctx = prep.getValue();
 
-                    for (Map.Entry<String, List<PurchasedTicketDTO>> entry : ticketsByZone.entrySet()) {
-                        String zoneName = entry.getKey();
-                        List<PurchasedTicketDTO> zoneTickets = entry.getValue();
+        // PHASE 2 (no transaction): external payment, then ticket issuance.
+        String paymentConfirmationId = null;
+        boolean paymentCallFailed = false;
+        try {
+            paymentConfirmationId = paymentSystem.pay(ctx.total(), paymentDetails);
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Payment call failed: " + e.getMessage());
+            paymentCallFailed = true;
+        }
 
-                        boolean isSeating = zoneTickets.get(0).getTicketType().equalsIgnoreCase("SEATING");
+        if (paymentCallFailed) {
+            // external error (not a clean decline): leave the order intact for retry
+            resetOrderToCheckout(ctx.activeOrderId());
+            return new Response<>(null, "Failed to complete purchase");
+        }
+        if (paymentConfirmationId == null || paymentConfirmationId.isBlank()) {
+            resetOrderToCheckout(ctx.activeOrderId());
+            return new Response<>(null, "Payment rejected");
+        }
 
-                        TicketSupplyRequestDTO supplyRequest = new TicketSupplyRequestDTO(
-                                userIdentifier, // customer_id
-                                String.valueOf(event.getId()),
-                                zoneName,
-                                isSeating,
-                                zoneTickets
-                        );
-
-                    TicketSupplyResultDTO issueResult = ticketSupply.issue(supplyRequest);
-
-                    if (issueResult == null || !issueResult.isSuccess()) {
-                        issuanceFailed = true;
-                        break;
-                    } else {
-                        if (issueResult.getIssuedCodes() != null) {
-                            successfullyIssuedCodes.addAll(issueResult.getIssuedCodes());
-                        }
-                    }
-                    }
-
-                } catch (Exception e) {
-                    logger.log(Level.SEVERE, "Ticket issuance failed: " + e.getMessage());
+        boolean issuanceFailed = false;
+        List<String> issuedCodes = new ArrayList<>();
+        try {
+            for (TicketSupplyRequestDTO request : ctx.supplyRequests()) {
+                TicketSupplyResultDTO result = ticketSupply.issue(request);
+                if (result == null || !result.isSuccess()) {
                     issuanceFailed = true;
+                    break;
                 }
+                if (result.getIssuedCodes() != null) {
+                    issuedCodes.addAll(result.getIssuedCodes());
+                }
+            }
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Ticket issuance failed: " + e.getMessage());
+            issuanceFailed = true;
+        }
 
-                if (issuanceFailed) {
-                    logger.log(Level.WARNING, "Issuance failed. Initiating rollback for " + successfullyIssuedCodes.size() + " tickets.");
-                    for (String issuedCode : successfullyIssuedCodes) { //cancelTicketAtTheTicketSystem
-                        try {
-                            ticketSupply.cancelTicket(issuedCode);
-                        } catch (Exception cancelEx) {
-                            logger.warning("Failed to cancel ticket " + issuedCode + " during rollback: " + cancelEx.getMessage());
-                        }
-                    }
-                    boolean refundApproved = paymentSystem.refund(paymentConfirmationId, total);
+        boolean refundApproved = false;
+        if (issuanceFailed) {
+            logger.log(Level.WARNING, "Issuance failed. Cancelling " + issuedCodes.size() + " issued tickets.");
+            for (String issuedCode : issuedCodes) {
+                try {
+                    ticketSupply.cancelTicket(issuedCode);
+                } catch (Exception cancelEx) {
+                    logger.warning("Failed to cancel ticket " + issuedCode + ": " + cancelEx.getMessage());
+                }
+            }
+            try {
+                refundApproved = paymentSystem.refund(paymentConfirmationId, ctx.total());
+            } catch (Exception e) {
+                logger.warning("Refund call failed: " + e.getMessage());
+            }
+        }
 
-                    if (refundApproved) {
+        final String confirmationId = paymentConfirmationId;
+        final boolean finalIssuanceFailed = issuanceFailed;
+        final boolean finalRefundApproved = refundApproved;
+
+        // PHASE 3 (T3): persist the outcome on a freshly fetched event/order.
+        Response<FinalizeResult> finalizeResponse = RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+            try {
+                Event event = eventRepo.findById(ctx.eventId());
+                Order order = new Order(
+                        ctx.activeOrderId(), ctx.userIdentifier(), event.getId(),
+                        event.getName(), event.getDate().toString(), event.getLocation().name(),
+                        event.getPurchasedTicketDetails(ctx.tickets()), ctx.tickets(),
+                        ctx.total(), confirmationId);
+
+                if (finalIssuanceFailed) {
+                    if (finalRefundApproved) {
                         order.markRefunded();
-                        try {
-                            // Notify the user about the refund
-                            NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId()
-                                    + " in event " + event.getId() + " because ticket issuance failed", event.getId(),
-                                    null);
-                            sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));                        } catch (Exception e) {
-                            logger.log(Level.WARNING,
-                                    "Failed to notify user about successful refund: " + e.getMessage());
-                        }
+                        NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId()
+                                + " in event " + event.getId() + " because ticket issuance failed", event.getId(), null);
+                        sendOrSaveNotification(ctx.userIdentifier(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
                     } else {
                         order.markRefundRequired();
-                        try {
-                            NotifyPayload payload = new NotifyPayload(
-                                    "Refund for order " + order.getOrderId() + " in event " + event.getId()
-                                            + " because ticket issuance failed has been failed, please contact support",
-                                    event.getId(), null);
-                            sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
-                        } catch (Exception e) {
-                            logger.log(Level.WARNING, "Failed to notify user about required refund: " + e.getMessage());
-                        }
+                        NotifyPayload payload = new NotifyPayload("Refund for order " + order.getOrderId() + " in event "
+                                + event.getId() + " because ticket issuance failed has been failed, please contact support",
+                                event.getId(), null);
+                        sendOrSaveNotification(ctx.userIdentifier(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
                     }
-
-                    shouldReleaseTickets = true;
-                    return new Response<>(null, "Ticket issuance failed");
+                    event.releaseTickets(ctx.tickets());
+                    if (event.findOrderById(order.getOrderId()) == null) {
+                        event.getOrders().add(order);
+                    }
+                    eventRepo.store(event);
+                    activeOrderRepo.delete(ctx.activeOrderId());
+                    return new Response<>(
+                            new FinalizeResult(null, "Ticket issuance failed", true, false),
+                            "Ticket issuance failed");
                 }
 
+                if (event.findOrderById(order.getOrderId()) == null) {
+                    event.getOrders().add(order);
+                }
+                event.markTicketsAsSold(ctx.tickets());
+                eventRepo.store(event);
+                activeOrderRepo.delete(ctx.activeOrderId());
                 try {
-                    NotifyDTO confirmation = new NotifyDTO(
-                            NotifyType.GENERAL_POPUP,
-                            new NotifyPayload(
-                                    "Your order #" + order.getOrderId() + " for \""
-                                            + event.getName() + "\" was completed successfully.",
-                                    event.getId(), event.getCompanyId()));
+                    NotifyDTO confirmation = new NotifyDTO(NotifyType.GENERAL_POPUP, new NotifyPayload(
+                            "Your order #" + order.getOrderId() + " for \"" + event.getName()
+                                    + "\" was completed successfully.", event.getId(), event.getCompanyId()));
                     notifier.notifyTab(token, confirmation);
                 } catch (Exception e) {
                     logger.log(Level.WARNING, "Purchase confirmation notification failed: " + e.getMessage());
                 }
-
-                return new Response<>(order.getOrderId(), "Purchase completed successfully");
+                return new Response<>(
+                        new FinalizeResult(order.getOrderId(), "Purchase completed successfully", true, true),
+                        "Purchase completed successfully");
 
             } catch (NoSuchElementException e) {
-                return new Response<>(null, "Event or active order not found");
-
+                status.setRollbackOnly();
+                return new Response<>(
+                        new FinalizeResult(null, "Event or active order not found", false, false),
+                        "Event or active order not found");
             } catch (OptimisticLockingFailureException e) {
-                if (paymentStageAcquired && activeOrder != null && order == null) {
-                    try {
-                        ActiveOrder freshOrder = activeOrderRepo.findById(activeOrderId);
-                        freshOrder.returnToCheckout();
-                        activeOrderRepo.store(freshOrder);
-                    } catch (Exception resetException) {
-                        logger.log(Level.SEVERE, "Failed to reset active order stage: " + resetException.getMessage());
-                    }
-                }
+                status.setRollbackOnly();
                 throw e;
-
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                throw e;
             } catch (Exception e) {
-                logger.log(Level.SEVERE, "Failed to complete purchase: " + e.getMessage());
+                status.setRollbackOnly();
+                logger.log(Level.SEVERE, "Failed to finalize purchase: " + e.getMessage());
+                return new Response<>(
+                        new FinalizeResult(null, "Failed to complete purchase", false, false),
+                        "Failed to complete purchase");
+            }
+        }));
 
-                if (paymentStageAcquired && activeOrder != null && order == null) {
-                    try {
-                        ActiveOrder freshOrder = activeOrderRepo.findById(activeOrderId);
-                        freshOrder.returnToCheckout();
-                        activeOrderRepo.store(freshOrder);
-                    } catch (Exception resetException) {
-                        logger.log(Level.SEVERE, "Failed to reset active order stage: " + resetException.getMessage());
-                    }
-                }
+        FinalizeResult outcome = finalizeResponse == null ? null : finalizeResponse.getValue();
+        if (outcome == null) {
+            return new Response<>(null, "Failed to complete purchase");
+        }
 
-                return new Response<>(null, "Failed to complete purchase");
-
-            } finally {
-                if (event != null && activeOrder != null) {
-                    if (shouldReleaseTickets || order != null) {
-                        boolean stored = false;
-
-                        while (!stored) {
-                            try {
-                                Event freshEvent = eventRepo.findById(event.getId());
-
-                                if (shouldReleaseTickets) {
-                                    freshEvent.releaseTickets(activeOrder.getTickets());
-                                }
-
-                                if (order != null && freshEvent.findOrderById(order.getOrderId()) == null) {
-                                    freshEvent.getOrders().add(order);
-                                }
-
-                                if (order != null && !shouldReleaseTickets) {
-                                    freshEvent.markTicketsAsSold(activeOrder.getTickets());
-                                }
-
-                                eventRepo.store(freshEvent);
-                                stored = true;
-
-                            } catch (OptimisticLockingFailureException e) {
-                                logger.log(Level.INFO, "Retrying event update after optimistic locking failure");
-                            }
-                        }
-
-                        if (order != null && !shouldReleaseTickets) {
-                            try {
-                                notifySoldOutIfApplicable(event.getId());
-                            } catch (Exception e) {
-                                logger.log(Level.WARNING, "Sold-out notification failed: " + e.getMessage());
-                            }
-                        }
-                    }
-                }
-                if (shouldDeleteActiveOrder) {
-                    activeOrderRepo.delete(activeOrderId);
-                    preExpirationScheduler.cancel(activeOrderId);
-                    promoteNextInQueue(event.getId());
-
+        // Post-commit side effects: need the committed state, so kept out of the transaction.
+        if (outcome.orderConsumed()) {
+            preExpirationScheduler.cancel(ctx.activeOrderId());
+            if (outcome.success()) {
+                try {
+                    notifySoldOutIfApplicable(ctx.eventId());
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Sold-out notification failed: " + e.getMessage());
                 }
             }
-        });
+            promoteNextInQueue(ctx.eventId());
+        }
+
+        return new Response<>(outcome.orderId(), outcome.message());
+    }
+
+    // Reverts a PAYMENT_IN_PROGRESS order back to checkout after a rejected payment.
+    private void resetOrderToCheckout(int activeOrderId) {
+        RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
+            try {
+                ActiveOrder order = activeOrderRepo.findById(activeOrderId);
+                order.returnToCheckout();
+                activeOrderRepo.store(order);
+                return new Response<>(true, "Order reset to checkout");
+            } catch (NoSuchElementException e) {
+                return new Response<>(true, "Order no longer exists");
+            } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                throw e;
+            }
+        }));
+    }
+
+    // Phase-1 snapshot carried across the external calls into phase 3.
+    private record CheckoutContext(
+            int activeOrderId,
+            String userIdentifier,
+            int eventId,
+            double total,
+            List<Integer> tickets,
+            List<TicketSupplyRequestDTO> supplyRequests) {
+    }
+
+    // Phase-3 outcome used to drive post-commit side effects and the final response.
+    private record FinalizeResult(
+            Integer orderId,
+            String message,
+            boolean orderConsumed,
+            boolean success) {
     }
 
     public void cleanupExpiredOrders() {
