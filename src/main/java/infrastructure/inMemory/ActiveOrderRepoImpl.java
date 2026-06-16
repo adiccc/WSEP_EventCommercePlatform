@@ -49,6 +49,15 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
 
     @Override
     public synchronized void store(ActiveOrder entity) {
+        // New entity: the id is assigned here (mirrors a DB IDENTITY column) and set
+        // back on the caller's instance so it can read getId() afterwards.
+        if (entity.getId() == null) {
+            int id = idGenerator.getAndIncrement();
+            entity.setId(id);
+            activeOrders.put(id, new ActiveOrder(entity));
+            return;
+        }
+
         ActiveOrder currentOrder = activeOrders.get(entity.getId());
 
         if (currentOrder == null) {
