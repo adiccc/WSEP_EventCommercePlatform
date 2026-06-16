@@ -1,26 +1,69 @@
 package domain.activeOrder;
 
+import jakarta.persistence.*;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.time.Duration;
 
+@Entity
+@Table(name = "active_orders")
 public class ActiveOrder {
-    private final int orderId;
-    private final String userIdentifier;
-    private final Integer eventId;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "order_id")
+    private Integer orderId;
+
+    @Column(name = "user_identifier", nullable = false)
+    private String userIdentifier;
+
+    @Column(name = "event_id")
+    private Integer eventId;
+
+    // tickets is a small collection that is read in almost every ActiveOrder code
+    // path (including the detached copies the repository hands back), so EAGER is a
+    // justified exception to the LAZY-collections default.
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "active_order_tickets",
+            joinColumns = @JoinColumn(name = "order_id")
+    )
+    @Column(name = "ticket_id")
     private List<Integer> tickets;
+
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    @Column(name = "checkout_started_at")
     private LocalDateTime checkoutStartedAt;
+
+    // Optimistic locking. Kept as a primitive long to stay consistent with the rest
+    // of the domain (Lottery/Suspension) and the existing DTO/equals/in-memory repo.
+    @Version
+    @Column(name = "version")
     private long version;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stage", nullable = false)
     private STAGE stage;
+
+    @Column(name = "approved_checkout_price")
     private Double approvedCheckoutPrice;
+
     private static final int SELECTING_TICKETS_TIMEOUT_MINUTES = 5;
     private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
     private static final int WARNING_BEFORE_CHECKOUT_EXPIRY_MINUTES = 1;
 
-    public ActiveOrder(int orderId, String userIdentifier, Integer eventId, List<Integer> tickets) {
-        this.orderId = orderId;
+    // Required by JPA.
+    protected ActiveOrder() {
+    }
+
+    // Application constructor: the primary key is assigned by the persistence layer
+    // (DB IDENTITY column, or the in-memory repo), so it is intentionally left null.
+    public ActiveOrder(String userIdentifier, Integer eventId, List<Integer> tickets) {
+        this.orderId = null;
         this.userIdentifier = userIdentifier;
         this.eventId = eventId;
         this.tickets = tickets;
@@ -29,6 +72,12 @@ public class ActiveOrder {
         this.checkoutStartedAt = null;
         this.stage = STAGE.SELECTING_TICKETS;
         this.approvedCheckoutPrice = null;
+    }
+
+    // Explicit-id constructor, used by unit tests that need a deterministic id.
+    public ActiveOrder(int orderId, String userIdentifier, Integer eventId, List<Integer> tickets) {
+        this(userIdentifier, eventId, tickets);
+        this.orderId = orderId;
     }
 
     public ActiveOrder(ActiveOrder activeOrder) {
@@ -51,8 +100,13 @@ public class ActiveOrder {
         this.version = version;
     }
 
-    public int getId() {
+    public Integer getId() {
         return orderId;
+    }
+
+    // Used by the in-memory repository to assign a generated id on insert.
+    public void setId(Integer orderId) {
+        this.orderId = orderId;
     }
 
     public Integer getEventId() {
@@ -72,7 +126,7 @@ public class ActiveOrder {
         if (obj == null || getClass() != obj.getClass()) return false;
 
         ActiveOrder other = (ActiveOrder) obj;
-        return orderId==other.orderId && version == other.getVersion();
+        return Objects.equals(orderId, other.orderId) && version == other.getVersion();
     }
     public boolean isExpired() {
         return isExpired(LocalDateTime.now());
@@ -160,7 +214,7 @@ public class ActiveOrder {
             stage = STAGE.CHECKING_OUT;
         }
     }
-    
+
     public String getUserIdentifier() {
         return userIdentifier;
     }
