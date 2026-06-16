@@ -61,7 +61,11 @@ public class Order {
         this.status = order.status;
         this.totalSum = order.totalSum;
         this.paymentConfirmationId = order.paymentConfirmationId;
-    }
+        if (order.externalTicketCodes != null) {
+            this.externalTicketCodes = new ArrayList<>(order.externalTicketCodes);
+        } else {
+            this.externalTicketCodes = new ArrayList<>();
+        }    }
 
     public int getOrderId() {
         return orderId;

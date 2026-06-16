@@ -107,13 +107,13 @@ class AdminServiceTest {
         notifier = new VaadinNotifier();
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier,transactionTemplate);
 
-        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem,suspensionRepo,notifier,transactionTemplate);
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo,paymentSystem,suspensionRepo,notifier,transactionTemplate,ticketSupply);
 
         IActiveOrderRepo activeOrderRepo =new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo = new LotteryRepoImpl();
         activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth),userRepo,transactionTemplate,100);
 
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate,ticketSupply);
         companyService = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier,transactionTemplate);
 
         UserDTO adminDTO = new UserDTO(ADMIN_EMAIL, "Admin", "User", PASSWORD, 1, 1, 1990, "City", "050-000-0000");
@@ -142,7 +142,8 @@ class AdminServiceTest {
         userService.registerUser(null, new UserDTO("notSuspenededUser@gmail.com","notSuspenededUser","test","test",1,1,2000,"test-addtess","050-000-0032"));
         userNotSusToken = userService.login("notSuspenededUser@gmail.com","test").getValue();
         userIdNotSuspened=userService.getUserId(userNotSusToken).getValue();
-
+        Mockito.when(paymentSystem.refund(Mockito.any(), Mockito.anyDouble())).thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.any())).thenReturn(true);
     }
 
 
@@ -1016,7 +1017,8 @@ class AdminServiceTest {
                 ),
                 List.of(1, 2),
                 100.0,
-                "pay123"
+                "pay123",
+                new ArrayList<>()
         );
 
         Order order2 = new Order(
@@ -1033,6 +1035,7 @@ class AdminServiceTest {
                 List.of(3, 4),
                 100.0,
                 "pay456"
+                ,new ArrayList<>()
         );
         event.getOrders().add(order1);
         event.getOrders().add(order2);
@@ -1086,7 +1089,8 @@ class AdminServiceTest {
                 ),
                 List.of(5, 6),
                 150.0,
-                "pay789"
+                "pay789",
+                new ArrayList<>()
         );
         event.getOrders().add(order1);
         eventRepo.store(event);
@@ -1197,7 +1201,8 @@ class AdminServiceTest {
                         ),
                         List.of(1, 2),
                         100.0,
-                        "pay123"
+                        "pay123",
+                        new ArrayList<>()
                 )
         );
         eventRepo.store(event);
@@ -2027,8 +2032,8 @@ class AdminServiceTest {
     void GivenAdminAndNoFiltersProvided_WhenGetGlobalOrders_ThenReturnAllOrders() {
         // Arrange
         Event event = eventRepo.findById(eventId);
-        event.getOrders().add(new Order(1, "buyer1@bgu.ac.il", eventId, "Test Event", "2026-01-01T20:00", "CENTER", List.of(), List.of(1), 50.0, "pay1"));
-        event.getOrders().add(new Order(2, "buyer2@bgu.ac.il", eventId, "Test Event", "2026-01-01T20:00", "CENTER", List.of(), List.of(2), 50.0, "pay2"));
+        event.getOrders().add(new Order(1, "buyer1@bgu.ac.il", eventId, "Test Event", "2026-01-01T20:00", "CENTER", List.of(), List.of(1), 50.0, "pay1",new ArrayList<>()));
+        event.getOrders().add(new Order(2, "buyer2@bgu.ac.il", eventId, "Test Event", "2026-01-01T20:00", "CENTER", List.of(), List.of(2), 50.0, "pay2", new ArrayList<>()));
         eventRepo.store(event);
 
         // Act
@@ -2046,7 +2051,7 @@ class AdminServiceTest {
     void GivenValidInputsAndBuyerOffline_WhenCloseCompanyByAdmin_WithMockNotifier_ThenCompanyAndEventsClosedAndRefundNotificationSavedAsDelayed() {
         // Arrange: Create an order and mock payment success
         int orderId = createCompletedOrderThroughPurchaseFlow(nonAdminToken, eventId, 1);
-        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        Mockito.when(paymentSystem.refund(Mockito.any(), Mockito.anyDouble())).thenReturn(true);
 
         Event event = eventRepo.findById(eventId);
         String buyerIdentifier = event.findOrderById(orderId).getUserIdentifier();
@@ -2057,7 +2062,7 @@ class AdminServiceTest {
 
         // Create AdminService that uses the mock notifier
         AdminService adminServiceWithMockNotifier =
-                new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem, suspensionRepo, notifierMock,transactionTemplate);
+                new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem, suspensionRepo, notifierMock,transactionTemplate,ticketSupply);
 
 
 
@@ -2086,7 +2091,6 @@ class AdminServiceTest {
         assertEquals("Company closed successfully", response.getMessage());
         assertFalse(companyRepo.findById(companyId).isActive());
         assertFalse(eventRepo.findById(eventId).isActive());
-
         assertEquals(OrderStatus.REFUNDED,
                 eventRepo.findById(eventId).findOrderById(orderId).getStatus());
 
@@ -2154,7 +2158,7 @@ class AdminServiceTest {
 
         // Create AdminService that uses the mock notifier
         AdminService adminServiceWithMockNotifier =
-                new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem, suspensionRepo, notifierMock,transactionTemplate);
+                new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem, suspensionRepo, notifierMock,transactionTemplate,ticketSupply);
 
         /*
          * Buyer and owner are considered online:
@@ -2222,5 +2226,75 @@ class AdminServiceTest {
                                         && n.getPayload().getMessage().contains("Company")
                         ),
                 "Owner should receive company closure notification in real time");
+    }
+    @Test
+    void GivenPartialTicketCancellationFailure_WhenCloseCompany_ThenRefundSucceedsAndFailedTicketRemains() {
+        // Arrange
+        int orderId = createCompletedOrderThroughPurchaseFlow(nonAdminToken, eventId, 3);
+
+        // Arrange
+        Event event = eventRepo.findById(eventId);
+        Order order = event.findOrderById(orderId);
+        order.setExternalTicketCodes(new ArrayList<>(List.of("TKT-1", "TKT-2", "TKT-FAIL")));
+        eventRepo.store(event);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any())).thenReturn(true);
+        Mockito.when(mockNotifier.notifyTab(Mockito.anyString(), Mockito.any())).thenReturn(true);
+
+        AdminService testAdminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem, suspensionRepo, mockNotifier, transactionTemplate, ticketSupply);
+
+        Mockito.when(ticketSupply.cancelTicket(Mockito.any())).thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.eq("TKT-FAIL"))).thenReturn(false);
+
+        Mockito.when(paymentSystem.refund(Mockito.any(), Mockito.anyDouble())).thenReturn(true);
+
+        // Act
+        Response<Boolean> response = testAdminService.closeCompanyByAdmin(adminToken, companyId);
+
+        // Assert
+        assertTrue(response.getValue(), "Company should close successfully despite partial ticket cancellation failure");
+
+        Event closedEvent = eventRepo.findById(eventId);
+        Order closedOrder = closedEvent.findOrderById(orderId);
+
+        assertEquals(OrderStatus.REFUNDED, closedOrder.getStatus(), "Financial refund must succeed");
+
+        assertEquals(1, closedOrder.getExternalTicketCodes().size());
+        assertTrue(closedOrder.getExternalTicketCodes().contains("TKT-FAIL"));
+    }
+    @Test
+    void GivenPaymentSystemCrash_WhenCloseCompany_ThenCompanyClosesButOrdersRequireRefund() {
+        // Arrange
+        int orderId = createCompletedOrderThroughPurchaseFlow(nonAdminToken, eventId, 2);
+
+        Event event = eventRepo.findById(eventId);
+        Order order = event.findOrderById(orderId);
+        order.setExternalTicketCodes(new ArrayList<>(List.of("TKT-1", "TKT-2")));
+        eventRepo.store(event);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any())).thenReturn(true);
+        Mockito.when(mockNotifier.notifyTab(Mockito.anyString(), Mockito.any())).thenReturn(true);
+
+        AdminService testAdminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem, suspensionRepo, mockNotifier, transactionTemplate, ticketSupply);
+
+        Mockito.when(ticketSupply.cancelTicket(Mockito.any())).thenReturn(true);
+
+        Mockito.when(paymentSystem.refund(Mockito.any(), Mockito.anyDouble()))
+                .thenThrow(new RuntimeException("Payment Gateway Timeout"));
+
+        // Act
+        Response<Boolean> response = testAdminService.closeCompanyByAdmin(adminToken, companyId);
+
+        // Assert
+        assertTrue(response.getValue(), "Company should close successfully even if payment gateway crashes");
+
+        Event closedEvent = eventRepo.findById(eventId);
+        Order closedOrder = closedEvent.findOrderById(orderId);
+
+        assertEquals(OrderStatus.REFUND_REQUIRED, closedOrder.getStatus(), "Order must require refund because payment crashed");
+
+        assertTrue(closedOrder.getExternalTicketCodes().isEmpty(), "Ticket codes should be removed if cancelTicket succeeded prior to crash");
     }
 }

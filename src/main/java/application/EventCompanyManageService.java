@@ -748,7 +748,15 @@ public class EventCompanyManageService {
                         return new Response<>(null, "No matching order found for refund");
                     }
 
-                    if (!order.canBeRefunded()) {
+//                    if (!order.canBeRefunded()) {
+//                        logger.log(Level.SEVERE, "Order cannot be refunded");
+//                        return new Response<>(null, "Order cannot be refunded");
+//                    }
+                    if (order.getStatus() == OrderStatus.REFUNDED) {
+                        logger.log(Level.SEVERE, "Already refunded");
+                        return new Response<>(null, "Already refunded");
+                    }
+                    if (order.getStatus() != OrderStatus.REFUND_REQUIRED) {
                         logger.log(Level.SEVERE, "Order cannot be refunded");
                         return new Response<>(null, "Order cannot be refunded");
                     }
@@ -766,9 +774,9 @@ public class EventCompanyManageService {
                 return new Response<>(false,orderResponse.getMessage());
             }
             // use external system to refund
-            Order orderToRefund = orderResponse.getValue();
-            List<String> cancelledCodes = new ArrayList<>();
-            if (orderToRefund.getExternalTicketCodes() != null) {
+            Event event = eventRepo.findById(eventId);
+            Order orderToRefund = event.findOrderById(orderId);            List<String> cancelledCodes = new ArrayList<>();
+            if (orderToRefund.getExternalTicketCodes() != null  && !orderToRefund.getExternalTicketCodes().isEmpty()) {
                 for (String ticketCode : orderToRefund.getExternalTicketCodes()) {
                     try {
                         boolean cancelled = ticketSupply.cancelTicket(ticketCode);
@@ -782,6 +790,7 @@ public class EventCompanyManageService {
                     }
                 }
                 orderToRefund.getExternalTicketCodes().removeAll(cancelledCodes);
+                eventRepo.store(event);
             }
 
             boolean refundApproved=false;
@@ -798,21 +807,23 @@ public class EventCompanyManageService {
             //update system state according the refund status
             return transactionTemplate.execute(status -> {
                 try {
-                    Event event = eventRepo.findById(eventId);
-                    Order order = event.findOrderById(orderId);
+                    Event currentEvent = eventRepo.findById(eventId);
+                    Order currentOrder = currentEvent.findOrderById(orderId);
                     if (finalRefundApproved) {
-                        order.markRefunded();
-                        eventRepo.store(event);
+                        currentOrder.markRefunded();
+                        eventRepo.store(currentEvent);
                         logger.log(Level.INFO, "Refund completed successfully");
 
-                        String userIdentifier = order.getUserIdentifier();
-                        NotifyPayload payload = new NotifyPayload("Refund process for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId, null);
+                        String userIdentifier = currentOrder.getUserIdentifier();
+                        NotifyPayload payload = new NotifyPayload("Refund process for " + currentOrder.getOrderId() + "in event " + eventId + "because of event closed", eventId, null);
                         sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
                         return new Response<>(true, "Refund completed successfully");
                     }
+                    currentOrder.markRefundRequired();
+                    eventRepo.store(currentEvent);
 
-                    String userIdentifier = order.getUserIdentifier();
-                    NotifyPayload payload = new NotifyPayload("Refund process failed for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId, null);
+                    String userIdentifier = currentOrder.getUserIdentifier();
+                    NotifyPayload payload = new NotifyPayload("Refund process failed for " + currentOrder.getOrderId() + "in event " + eventId + "because of event closed", eventId, null);
                     sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
                     logger.log(Level.SEVERE, "Refund rejected by external payment service");
                     return new Response<>(false, "Refund rejected by external payment service");

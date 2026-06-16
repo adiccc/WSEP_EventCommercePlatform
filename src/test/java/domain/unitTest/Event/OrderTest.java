@@ -3,6 +3,8 @@ package domain.unitTest.Event;
 import org.junit.jupiter.api.Test;
 import DTO.PurchasedTicketDTO;
 import static org.junit.jupiter.api.Assertions.*;
+
+import java.util.ArrayList;
 import java.util.List;
 import domain.event.Order;
 import domain.event.OrderStatus;
@@ -37,7 +39,8 @@ class OrderTest {
                 ),
                 List.of(1, 2),
                 100.0,
-                "pay123"
+                "pay123",
+                new ArrayList<>()
         );
         order.markRefundRequired();
 
@@ -72,7 +75,8 @@ class OrderTest {
                 ),
                 List.of(1, 2),
                 100.0,
-                "pay123"
+                "pay123",
+                new ArrayList<>()
         );        // As default order in status APPROVED (not REFUND_REQUIRED)
         assertFalse(order.canBeRefunded());
     }
@@ -106,7 +110,8 @@ class OrderTest {
                 ),
                 List.of(1, 2),
                 100.0,
-                "pay123"
+                "pay123",
+                new ArrayList<>()
         );
         order.markRefundRequired();
         order.markRefunded();

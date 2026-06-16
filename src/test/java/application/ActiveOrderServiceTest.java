@@ -128,8 +128,8 @@ class ActiveOrderServiceTest {
         companyService.createProductionCompany(validToken, companyId,
                 "test-company", "testC@company.com", "054-5556677", "leumi");
 
-        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate);
-        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate);
+        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate,ticketSupply);
+        companyEventService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate,ticketSupply);
 
         Response<Integer> r = companyEventService.createEvent(
                 validToken,
@@ -4847,7 +4847,194 @@ class ActiveOrderServiceTest {
 
         assertFalse(eventRepo.findById(concurrentEventId).getEventQueue().contains(waitingToken));
     }
-    // Mock Notifier Tests
+     @Test
+    void GivenPartialTicketIssuanceFailure_WhenCheckoutAndPayment_ThenIssuedTicketsAreCancelledAndRefunded() throws Exception {
+        Map<String, List<SeatingTicketDTO>> seating = Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        Response<Integer> selectResponse = service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+        service.prepareCheckout(validToken, activeOrderId);
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-partial-fail");
+        Mockito.when(paymentSystem.refund(Mockito.eq("payment-partial-fail"), Mockito.anyDouble()))
+                .thenReturn(true);
+
+        TicketSupplyResultDTO successResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(successResult.isSuccess()).thenReturn(true);
+        Mockito.when(successResult.getIssuedCodes()).thenReturn(new ArrayList<>(List.of("TKT-SUCCESS-1", "TKT-SUCCESS-2")));
+
+        TicketSupplyResultDTO failResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(failResult.isSuccess()).thenReturn(false);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(successResult)
+                .thenReturn(failResult);
+
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString())).thenReturn(true);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        // Act
+        Response<Integer> checkoutResponse = service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        // Assert
+        assertNull(checkoutResponse.getValue(), "Checkout must fail due to partial ticket issuance failure");
+        assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
+
+        assertThrows(NoSuchElementException.class, () -> activeOrderRepo.findById(activeOrderId));
+        assertEquals(domain.event.OrderStatus.REFUNDED, eventRepo.findById(concurrentEventId).getOrders().get(0).getStatus());
+
+        Mockito.verify(ticketSupply, Mockito.times(1)).cancelTicket(Mockito.eq("TKT-SUCCESS-1"));
+        Mockito.verify(ticketSupply, Mockito.times(1)).cancelTicket(Mockito.eq("TKT-SUCCESS-2"));
+
+        Mockito.verify(ticketSupply, Mockito.times(2)).issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
+    @Test
+    void GivenCancelTicketThrowsException_WhenRollbackInitiated_ThenFinancialRefundStillProcesses() throws Exception {
+        Map<String, List<SeatingTicketDTO>> seating = Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        Response<Integer> selectResponse = service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+        service.prepareCheckout(validToken, activeOrderId);
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-rollback-crash");
+        Mockito.when(paymentSystem.refund(Mockito.eq("payment-rollback-crash"), Mockito.anyDouble()))
+                .thenReturn(true);
+
+        TicketSupplyResultDTO successResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(successResult.isSuccess()).thenReturn(true);
+        Mockito.when(successResult.getIssuedCodes()).thenReturn(new ArrayList<>(List.of("TKT-CRASH-TEST")));
+
+        TicketSupplyResultDTO failResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(failResult.isSuccess()).thenReturn(false);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(successResult)
+                .thenReturn(failResult);
+
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenThrow(new RuntimeException("External Ticket System Completely Dead!"));
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        // Act
+        Response<Integer> checkoutResponse = service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        // Assert
+        assertNull(checkoutResponse.getValue(), "Checkout must fail due to ticket issuance failure");
+        assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
+
+        Mockito.verify(paymentSystem, Mockito.times(1)).refund(Mockito.eq("payment-rollback-crash"), Mockito.anyDouble());
+
+        Event updatedEvent = eventRepo.findById(concurrentEventId);
+        Order finalOrder = updatedEvent.findOrderById(activeOrderId);
+
+        assertEquals(domain.event.OrderStatus.REFUNDED, finalOrder.getStatus(), "Order should be refunded financially");
+        assertTrue(finalOrder.getExternalTicketCodes().contains("TKT-CRASH-TEST"),
+                "The uncancelled ticket code must remain in the order for manual admin handling");
+    }
+    @Test
+    void GivenTotalSystemFailure_WhenRollbackInitiated_ThenOrderSavedAsRefundRequiredWithTicketCodes() throws Exception {
+        Map<String, List<SeatingTicketDTO>> seating = Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        Response<Integer> selectResponse = service.userSelectTickets(validToken, concurrentEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+        service.prepareCheckout(validToken, activeOrderId);
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-doomsday");
+        Mockito.when(paymentSystem.refund(Mockito.eq("payment-doomsday"), Mockito.anyDouble()))
+                .thenReturn(false);
+        TicketSupplyResultDTO successResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(successResult.isSuccess()).thenReturn(true);
+        Mockito.when(successResult.getIssuedCodes()).thenReturn(new ArrayList<>(List.of("TKT-DOOMSDAY-1")));
+
+        TicketSupplyResultDTO failResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(failResult.isSuccess()).thenReturn(false);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(successResult)
+                .thenReturn(failResult);
+
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenThrow(new RuntimeException("Ticket System completely offline"));
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        // Act
+        Response<Integer> checkoutResponse = service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        // Assert
+        assertNull(checkoutResponse.getValue(), "Checkout must fail");
+        assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
+
+        Event updatedEvent = eventRepo.findById(concurrentEventId);
+        Order finalOrder = updatedEvent.findOrderById(activeOrderId);
+
+        assertNotNull(finalOrder, "Order MUST be saved to DB even if everything failed, so admin can handle it");
+        assertEquals(OrderStatus.REFUND_REQUIRED, finalOrder.getStatus());
+
+        assertEquals(1, finalOrder.getExternalTicketCodes().size());
+        assertTrue(finalOrder.getExternalTicketCodes().contains("TKT-DOOMSDAY-1"));
+    }
+    @Test
+    void GivenConcurrentEventUpdate_WhenCheckoutCompletes_ThenOptimisticLockRecoveredAndNoDoubleCharge() throws Exception {
+        Map<String, List<SeatingTicketDTO>> seating = Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 0);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        int activeOrderId = service.userSelectTickets(validToken, concurrentEventId, seating, standing).getValue();
+        service.prepareCheckout(validToken, activeOrderId);
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-optimistic-test");
+
+        TicketSupplyResultDTO successResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(successResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(successResult);
+        String concurrentEmail = "concurrent_buyer@mail.com";
+        userService.registerUser("", new UserDTO(concurrentEmail, "C", "B", "pass", 1, 1, 2000, "Israel", "050-999-9999"));
+        String concurrentToken = userService.login(concurrentEmail, "pass").getValue();
+        service.enterEventPurchase(concurrentToken, companyId, concurrentEventId, null);
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenAnswer(invocation -> {
+                    service.userSelectTickets(concurrentToken, concurrentEventId, new HashMap<>(), Map.of("floor", 1));
+                    return "payment-optimistic-test";
+                });
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        // Act
+        Response<Integer> checkoutResponse = service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        // Assert
+        assertNotNull(checkoutResponse.getValue(), "Checkout must succeed by catching its own OptimisticLock exception and retrying the final save");
+
+        Event finalEvent = eventRepo.findById(concurrentEventId);
+
+        assertEquals(2, finalEvent.getOrders().size() + activeOrderRepo.getAll().size(), "Both the main order and the concurrent action must exist");
+
+        Mockito.verify(paymentSystem, Mockito.times(1)).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+    }
+        // Mock Notifier Tests
     @Test
     void GivenWaitingUser_WhenCheckoutAndPaymentCompletesWithMockNotifier_ThenWaitingUserPromotedAndNotified() throws Exception {
         // Arrange
@@ -5024,4 +5211,5 @@ class ActiveOrderServiceTest {
         Mockito.verify(mockNotifier, Mockito.times(1)).notifyTab(Mockito.eq(waitingToken), Mockito.any(NotifyDTO.class));
         assertFalse(eventRepo.findById(isolatedEventId).getEventQueue().contains(waitingToken));
     }
+
 }

@@ -785,6 +785,7 @@ public class ActiveOrderService {
                     issuanceFailed = true;
                 }
                 order.setExternalTicketCodes(successfullyIssuedCodes);
+
                 List<String> cancelledCodes = new ArrayList<>();
                 if (issuanceFailed) {
                     logger.log(Level.WARNING, "Issuance failed. Initiating rollback for " + successfullyIssuedCodes.size() + " tickets.");
