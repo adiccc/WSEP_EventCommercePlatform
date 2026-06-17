@@ -43,7 +43,6 @@ import java.util.stream.Collectors;
 
 public class ActiveOrderService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
-
     private final IEventRepo eventRepo;
     private final IActiveOrderRepo activeOrderRepo;
     private final ICompanyRepo companyRepo;
