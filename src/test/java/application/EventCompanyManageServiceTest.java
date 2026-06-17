@@ -2526,7 +2526,7 @@ class EventCompanyManageServiceTest {
         // Arrange
         eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
         int orderId = createCompletedOrderThroughPurchaseFlow(validToken2, eventId, 1);
-        String buyerEmail = "user2@test.com"; // המייל שמוגדר עבור validToken2 ב-setUp
+        String buyerEmail = "user2@test.com"; //  validToken2 related email address
         userService.cleanDelayedNotifications(buyerEmail);
 
         INotifier mockNotifier = Mockito.mock(INotifier.class);
