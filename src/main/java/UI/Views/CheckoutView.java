@@ -1,6 +1,7 @@
 package UI.Views;
 
 import DTO.CheckoutPriceDTO;
+import DTO.CheckoutSuccessDTO;
 import DTO.PaymentDetailsDTO;
 import UI.Presenters.CheckoutPresenter;
 import application.ActiveOrderService;
@@ -358,31 +359,36 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
                 appliedCouponCode
         );
 
-        Response<Integer> response =
+        Response<CheckoutSuccessDTO> response =
                 presenter.checkoutAndPayment(token, activeOrderId, paymentDetails);
 
         if (response.getValue() == null) {
             showError(response.getMessage());
 
             if ("Ticket issuance failed".equals(response.getMessage())) {
-                navigateAfterCheckoutAttempt();
+                navigateAfterCheckoutAttempt(response.getValue());
             }
 
             return;
         }
 
         showSuccess("Payment completed successfully");
-        navigateAfterCheckoutAttempt();
+        navigateAfterCheckoutAttempt(response.getValue());;
     }
 
-    private void navigateAfterCheckoutAttempt() {
+    private void navigateAfterCheckoutAttempt(CheckoutSuccessDTO successData) {
         Response<String> roleResponse = presenter.getRole(token);
         String role = roleResponse.getValue();
 
         if ("MEMBER".equals(role)) {
             UI.getCurrent().navigate("my-orders");
         } else {
-            UI.getCurrent().navigate("home");
+            if (successData != null) {
+                VaadinSession.getCurrent().setAttribute("guestTickets_" + successData.getOrderId(), successData.getTicketCodes());
+                UI.getCurrent().navigate("checkout-success/" + successData.getOrderId());
+            } else {
+                UI.getCurrent().navigate("home");
+            }
         }
     }
 

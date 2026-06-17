@@ -211,7 +211,7 @@ class EventCompanyManageServiceTest {
         PaymentDetailsDTO paymentDetails =
                 new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
-        Response<Integer> checkoutResponse =
+        Response<CheckoutSuccessDTO> checkoutResponse =
                 activeOrderService.checkoutAndPayment(
                         buyerToken,
                         activeOrderId,
@@ -221,7 +221,7 @@ class EventCompanyManageServiceTest {
         assertNotNull(checkoutResponse.getValue(),
                 "checkoutAndPayment failed: " + checkoutResponse.getMessage());
 
-        return checkoutResponse.getValue();
+        return checkoutResponse.getValue().getOrderId();
     }
 
 
@@ -959,7 +959,8 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-1"
                         ),
                         new PurchasedTicketDTO(
                                 2,
@@ -967,7 +968,8 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-2"
                         )
                 ),
                 List.of(1, 2),
@@ -1034,7 +1036,8 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-1"
                         ),
                         new PurchasedTicketDTO(
                                 2,
@@ -1042,7 +1045,8 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-2"
                         )
                 ),
                 List.of(1, 2),
@@ -1090,7 +1094,8 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-1"
                         ),
                         new PurchasedTicketDTO(
                                 2,
@@ -1098,7 +1103,8 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-2"
                         )
                 ),
                 List.of(1, 2),
@@ -1143,7 +1149,8 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-1"
                         ),
                         new PurchasedTicketDTO(
                                 2,
@@ -1151,7 +1158,8 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-2"
                         )
                 ),
                 List.of(1, 2),
@@ -1530,8 +1538,7 @@ class EventCompanyManageServiceTest {
 
         Response<List<PurchaseHistoryDTO>> response =
                 eventCompanyManageService.getPurchaseHistoryByUser(validToken1);
-        assertNotNull(response.getValue());
-        assertEquals(1, response.getValue().size());
+        assertNotNull(response.getValue(), "Response value is null! Server message: " + response.getMessage());        assertEquals(1, response.getValue().size());
         assertEquals(user1OrderId, response.getValue().get(0).getOrderId());
     }
     @Test

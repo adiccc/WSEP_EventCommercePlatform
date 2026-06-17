@@ -128,15 +128,24 @@ public class Order {
     }
 
     public PurchaseHistoryDTO toPurchaseHistoryDTO() {
+        List<PurchasedTicketDTO> enrichedTickets = new ArrayList<>();
+        for(int i=0; i<purchasedTickets.size(); i++) {
+            PurchasedTicketDTO ticketDTO = purchasedTickets.get(i);
+            String barcode = "Processing";
+            if (externalTicketCodes != null && !externalTicketCodes.isEmpty() && i < externalTicketCodes.size()) {
+                barcode = externalTicketCodes.get(i);
+            }
+            enrichedTickets.add(new PurchasedTicketDTO(ticketDTO.getTicketId(), ticketDTO.getZoneName(), ticketDTO.getTicketType(),
+                    ticketDTO.getRow(), ticketDTO.getCol(), ticketDTO.getPriceAtPurchase(), barcode));
+        }
         return new PurchaseHistoryDTO(
                 orderId,
                 eventName,
                 eventDate,
                 eventLocation,
                 status,
-                purchasedTickets,
-                totalSum
-        );
+                enrichedTickets,
+                totalSum);
     }
     public List<String> getExternalTicketCodes() {
         return externalTicketCodes;

@@ -1,6 +1,7 @@
 package UI.Presenters;
 
 import DTO.CheckoutPriceDTO;
+import DTO.CheckoutSuccessDTO;
 import DTO.PaymentDetailsDTO;
 import application.ActiveOrderService;
 import application.IAuth;
@@ -26,7 +27,7 @@ public class CheckoutPresenter {
         return activeOrderService.applyCheckoutCoupon(token, activeOrderId, couponCode);
     }
 
-    public Response<Integer> checkoutAndPayment(
+    public Response<CheckoutSuccessDTO> checkoutAndPayment(
             String token,
             int activeOrderId,
             PaymentDetailsDTO paymentDetails) {

@@ -35,25 +35,25 @@ public class RealTicketSupply implements ITicketSupply {
             map.add("event_id", request.getEventId());
             map.add("zone", request.getZoneName());
 
+            int quantityRequested = 0;
+
             if (request.isSeating()) {
                 map.add("is_seating", "true");
-
-                String seatsJson = "[]";
                 List<PurchasedTicketDTO> purchasedTickets = request.getPurchasedTickets();
+
                 if (purchasedTickets != null && !purchasedTickets.isEmpty()) {
+                    quantityRequested = purchasedTickets.size();
                     String seatsArray = purchasedTickets.stream()
                             .map(t -> String.format("{\"row\": %d, \"seat\": %d}", t.getRow(), t.getCol()))
                             .collect(Collectors.joining(", "));
-                    seatsJson = "[" + seatsArray + "]";
+                    map.add("seats", "[" + seatsArray + "]");
                 }
-                map.add("seats", seatsJson);
-
             } else {
                 List<PurchasedTicketDTO> purchasedTickets = request.getPurchasedTickets();
-                int quantity = (purchasedTickets != null && !purchasedTickets.isEmpty())
+                quantityRequested = (purchasedTickets != null && !purchasedTickets.isEmpty())
                         ? purchasedTickets.size()
                         : request.getTickets().size();
-                map.add("quantity", String.valueOf(quantity));
+                map.add("quantity", String.valueOf(quantityRequested));
             }
 
             HttpEntity<MultiValueMap<String, String>> httpRequest = new HttpEntity<>(map, headers);
@@ -61,19 +61,18 @@ public class RealTicketSupply implements ITicketSupply {
 
             String ticketCode = response.getBody();
 
-            if (ticketCode == null || ticketCode.trim().equals("-1")) {
-                logger.warning("External ticket system returned failure (-1)");
+            if (ticketCode == null || ticketCode.trim().equals("-1") || ticketCode.trim().equals("1") || ticketCode.trim().isEmpty()) {
+                logger.warning("External ticket system returned failure or empty code");
                 return new TicketSupplyResultDTO(false, List.of());
             }
-
-            return new TicketSupplyResultDTO(true, List.of(ticketCode.trim()));
+            List<String> duplicatedCodes = java.util.Collections.nCopies(quantityRequested, ticketCode.trim());
+            return new TicketSupplyResultDTO(true, duplicatedCodes);
 
         } catch (Exception e) {
-            logger.severe("Ticket issue request failed due to communication error: " + e.getMessage());
+            logger.severe("Ticket issue request failed: " + e.getMessage());
             return new TicketSupplyResultDTO(false, List.of());
         }
     }
-
     @Override
     public boolean cancelTicket(String ticketCode) {
         try {

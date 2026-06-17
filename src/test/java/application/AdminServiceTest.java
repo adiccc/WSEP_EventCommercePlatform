@@ -733,12 +733,12 @@ class AdminServiceTest {
         PaymentDetailsDTO paymentDetails =
                 new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
-        Response<Integer> checkoutResponse =
+        Response<CheckoutSuccessDTO> checkoutResponse =
                 activeOrderService.checkoutAndPayment(buyerToken, activeOrderId, paymentDetails);
 
         assertNotNull(checkoutResponse.getValue(), "checkoutAndPayment failed: " + checkoutResponse.getMessage());
 
-        return checkoutResponse.getValue();
+        return checkoutResponse.getValue().getOrderId();
     }
 
     // --- Successful_Removal (plain member) ---
@@ -1012,8 +1012,8 @@ class AdminServiceTest {
                 "2026-01-01T20:00",
                 "TEL_AVIV",
                 List.of(
-                        new PurchasedTicketDTO(1, "floor", "STANDING", null, null, 50.0),
-                        new PurchasedTicketDTO(2, "floor", "STANDING", null, null, 50.0)
+                        new PurchasedTicketDTO(1, "floor", "STANDING", null, null, 50.0,"TKT-1"),
+                        new PurchasedTicketDTO(2, "floor", "STANDING", null, null, 50.0, "TKT-2")
                 ),
                 List.of(1, 2),
                 100.0,
@@ -1029,8 +1029,8 @@ class AdminServiceTest {
                 "2026-01-01T20:00",
                 "TEL_AVIV",
                 List.of(
-                        new PurchasedTicketDTO(3, "floor", "STANDING", null, null, 50.0),
-                        new PurchasedTicketDTO(4, "floor", "STANDING", null, null, 50.0)
+                        new PurchasedTicketDTO(3, "floor", "STANDING", null, null, 50.0,"TKT-3"),
+                        new PurchasedTicketDTO(4, "floor", "STANDING", null, null, 50.0,"TKT-4")
                 ),
                 List.of(3, 4),
                 100.0,
@@ -1076,7 +1076,8 @@ class AdminServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                75.0
+                                75.0,
+                                "TKT-5"
                         ),
                         new PurchasedTicketDTO(
                                 6,
@@ -1084,7 +1085,8 @@ class AdminServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                75.0
+                                75.0,
+                                "TKT-6"
                         )
                 ),
                 List.of(5, 6),
@@ -1188,7 +1190,8 @@ class AdminServiceTest {
                                         "STANDING",
                                         null,
                                         null,
-                                        50.0
+                                        50.0,
+                                        "TKT-1"
                                 ),
                                 new PurchasedTicketDTO(
                                         2,
@@ -1196,7 +1199,8 @@ class AdminServiceTest {
                                         "STANDING",
                                         null,
                                         null,
-                                        50.0
+                                        50.0,
+                                        "TKT-1"
                                 )
                         ),
                         List.of(1, 2),

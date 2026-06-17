@@ -650,7 +650,7 @@ public class ActiveOrderService {
         });
     }
 
-    public Response<Integer> checkoutAndPayment(
+    public Response<CheckoutSuccessDTO> checkoutAndPayment(
             String token,
             int activeOrderId,
             PaymentDetailsDTO paymentDetails) {
@@ -749,6 +749,7 @@ public class ActiveOrderService {
 
                 boolean issuanceFailed = false;
                 List<String> successfullyIssuedCodes = new ArrayList<>(); //for any case of rollback
+                Map<Integer, String> ticketIdToBarcodeMap = new HashMap<>();
                 try {
                     List<PurchasedTicketDTO> purchasedDetails = event.getPurchasedTicketDetails(activeOrder.getTickets());
                     Map<String, List<PurchasedTicketDTO>> ticketsByZone = purchasedDetails.stream()
@@ -775,7 +776,13 @@ public class ActiveOrderService {
                         break;
                     } else {
                         if (issueResult.getIssuedCodes() != null) {
-                            successfullyIssuedCodes.addAll(issueResult.getIssuedCodes());
+                            List<String> issuedCodes = issueResult.getIssuedCodes();
+                            successfullyIssuedCodes.addAll(issuedCodes);
+                            for (int k = 0; k < zoneTickets.size(); k++) {
+                                if (k < issuedCodes.size()) {
+                                    ticketIdToBarcodeMap.put(zoneTickets.get(k).getTicketId(), issuedCodes.get(k));
+                                }
+                            }
                         }
                     }
                     }
@@ -783,6 +790,14 @@ public class ActiveOrderService {
                 } catch (Exception e) {
                     logger.log(Level.SEVERE, "Ticket issuance failed: " + e.getMessage());
                     issuanceFailed = true;
+                }
+                List<String> orderedCodesForOrder = new ArrayList<>();
+                if (!issuanceFailed) {
+                    List<PurchasedTicketDTO> purchasedDetails = event.getPurchasedTicketDetails(activeOrder.getTickets());
+                    for (PurchasedTicketDTO ticket : purchasedDetails) {
+                        String barcode = ticketIdToBarcodeMap.getOrDefault(ticket.getTicketId(), "Processing");
+                        orderedCodesForOrder.add(barcode);
+                    }
                 }
                 order.setExternalTicketCodes(successfullyIssuedCodes);
 
@@ -843,7 +858,7 @@ public class ActiveOrderService {
                     logger.log(Level.WARNING, "Purchase confirmation notification failed: " + e.getMessage());
                 }
 
-                return new Response<>(order.getOrderId(), "Purchase completed successfully");
+                return new Response<>(new CheckoutSuccessDTO(order.getOrderId(), successfullyIssuedCodes), "Purchase completed successfully");
 
             } catch (NoSuchElementException e) {
                 return new Response<>(null, "Event or active order not found");
