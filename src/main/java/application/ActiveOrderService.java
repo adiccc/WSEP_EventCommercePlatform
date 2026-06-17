@@ -43,9 +43,7 @@ import java.util.stream.Collectors;
 
 public class ActiveOrderService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
-    // NOTE: order ids are now assigned by the persistence layer (DB IDENTITY column,
-    // or the in-memory repo) — the old in-memory AtomicInteger was removed because it
-    // reset to 1 on restart and could collide with already-persisted ids.
+
     private final IEventRepo eventRepo;
     private final IActiveOrderRepo activeOrderRepo;
     private final ICompanyRepo companyRepo;
@@ -109,9 +107,7 @@ public class ActiveOrderService {
         return this.capacity;
     }
 
-    // Crash recovery: an order left in PAYMENT_IN_PROGRESS means the server died during
-    // phase 2 (external payment/issuance). Such orders never expire on their own, so on
-    // startup we return them to checkout and flag them for manual payment reconciliation.
+
     @PostConstruct
     public void recoverDanglingPaymentsOnStartup() {
         logger.info("recoverDanglingPaymentsOnStartup called");
@@ -809,7 +805,8 @@ public class ActiveOrderService {
                 }
 
                 CheckoutContext ctx = new CheckoutContext(
-                        activeOrderId, userIdentifier, event.getId(), total, tickets, supplyRequests);
+                        activeOrderId, userIdentifier, event.getId(), event.getName(), event.getCompanyId(),
+                        total, tickets, supplyRequests);
                 return new Response<>(ctx, "Ready for payment");
 
             } catch (IllegalStateException e) {
@@ -936,14 +933,6 @@ public class ActiveOrderService {
                 event.markTicketsAsSold(ctx.tickets());
                 eventRepo.store(event);
                 activeOrderRepo.delete(ctx.activeOrderId());
-                try {
-                    NotifyDTO confirmation = new NotifyDTO(NotifyType.GENERAL_POPUP, new NotifyPayload(
-                            "Your order #" + order.getOrderId() + " for \"" + event.getName()
-                                    + "\" was completed successfully.", event.getId(), event.getCompanyId()));
-                    notifier.notifyTab(token, confirmation);
-                } catch (Exception e) {
-                    logger.log(Level.WARNING, "Purchase confirmation notification failed: " + e.getMessage());
-                }
                 return new Response<>(
                         new FinalizeResult(order.getOrderId(), "Purchase completed successfully", true, true),
                         "Purchase completed successfully");
@@ -977,6 +966,14 @@ public class ActiveOrderService {
         if (outcome.orderConsumed()) {
             preExpirationScheduler.cancel(ctx.activeOrderId());
             if (outcome.success()) {
+                try {
+                    NotifyDTO confirmation = new NotifyDTO(NotifyType.GENERAL_POPUP, new NotifyPayload(
+                            "Your order #" + outcome.orderId() + " for \"" + ctx.eventName()
+                                    + "\" was completed successfully.", ctx.eventId(), ctx.companyId()));
+                    notifier.notifyTab(token, confirmation);
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Purchase confirmation notification failed: " + e.getMessage());
+                }
                 try {
                     notifySoldOutIfApplicable(ctx.eventId());
                 } catch (Exception e) {
@@ -1014,6 +1011,8 @@ public class ActiveOrderService {
             int activeOrderId,
             String userIdentifier,
             int eventId,
+            String eventName,
+            int companyId,
             double total,
             List<Integer> tickets,
             List<TicketSupplyRequestDTO> supplyRequests) {
