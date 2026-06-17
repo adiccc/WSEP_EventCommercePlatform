@@ -407,8 +407,16 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
     private HorizontalLayout createUserBadge() {
         String displayName = getLoggedInUserText();
+        boolean guest = isGuestUserBadge();
 
-        Span avatar = new Span(displayName.substring(0, 1).toUpperCase());
+        Div avatar = new Div();
+
+        if (guest) {
+            avatar.add(VaadinIcon.USER.create());
+        } else {
+            avatar.setText(displayName.substring(0, 1).toUpperCase());
+        }
+
         avatar.getStyle()
                 .set("width", "36px")
                 .set("height", "36px")
@@ -437,6 +445,13 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
                 .set("line-height", "1.2");
 
         HorizontalLayout badge = new HorizontalLayout(avatar, textBlock);
+
+        if (guest) {
+            Button signInButton = new Button("Sign in", e -> UI.getCurrent().navigate("login"));
+            signInButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SMALL);
+            badge.add(signInButton);
+        }
+
         badge.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
         badge.setSpacing(true);
         badge.getStyle()
@@ -447,6 +462,18 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
                 .set("box-shadow", "0 2px 8px rgba(15, 23, 42, 0.08)");
 
         return badge;
+    }
+
+    private boolean isGuestUserBadge() {
+        String token = getCurrentToken();
+
+        if (token == null || token.isBlank()) {
+            return true;
+        }
+
+        Response<String> roleResponse = auth.getRole(token);
+
+        return !"MEMBER".equals(roleResponse.getValue());
     }
 
     private String getUserBadgeSubtitle() {
