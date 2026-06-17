@@ -1,7 +1,5 @@
 package UI.Views;
 
-import DTO.NotifyType;
-import DTO.QueueEntryResultDTO;
 import application.ActiveOrderService;
 import application.CompanyService;
 import application.IAuth;
@@ -12,8 +10,10 @@ import com.vaadin.flow.component.applayout.DrawerToggle;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
+import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.html.Paragraph;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
@@ -388,13 +388,135 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
         DrawerToggle toggle = new DrawerToggle();
 
-        HorizontalLayout header = new HorizontalLayout(toggle, logo);
+        Div spacer = new Div();
+        spacer.getStyle().set("flex-grow", "1");
+
+        HorizontalLayout header = new HorizontalLayout(
+                toggle,
+                logo,
+                spacer,
+                createUserBadge()
+        );
+
         header.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
         header.setWidthFull();
         header.setPadding(true);
 
         addToNavbar(header);
     }
+
+    private HorizontalLayout createUserBadge() {
+        String displayName = getLoggedInUserText();
+
+        Span avatar = new Span(displayName.substring(0, 1).toUpperCase());
+        avatar.getStyle()
+                .set("width", "36px")
+                .set("height", "36px")
+                .set("border-radius", "50%")
+                .set("background", "var(--lumo-primary-color-10pct)")
+                .set("color", "var(--lumo-primary-text-color)")
+                .set("display", "flex")
+                .set("align-items", "center")
+                .set("justify-content", "center")
+                .set("font-weight", "700");
+
+        Span name = new Span(displayName);
+        name.getStyle()
+                .set("font-weight", "700")
+                .set("font-size", "var(--lumo-font-size-m)");
+
+        Span subtitle = new Span(getUserBadgeSubtitle());
+        subtitle.getStyle()
+                .set("font-size", "var(--lumo-font-size-xs)")
+                .set("color", "var(--lumo-secondary-text-color)");
+
+        Div textBlock = new Div(name, subtitle);
+        textBlock.getStyle()
+                .set("display", "flex")
+                .set("flex-direction", "column")
+                .set("line-height", "1.2");
+
+        HorizontalLayout badge = new HorizontalLayout(avatar, textBlock);
+        badge.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
+        badge.setSpacing(true);
+        badge.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-20pct)")
+                .set("border-radius", "12px")
+                .set("padding", "0.45rem 0.8rem")
+                .set("background", "white")
+                .set("box-shadow", "0 2px 8px rgba(15, 23, 42, 0.08)");
+
+        return badge;
+    }
+
+    private String getUserBadgeSubtitle() {
+        String token = getCurrentToken();
+
+        if (token == null || token.isBlank()) {
+            return "Guest Mode";
+        }
+
+        Response<String> roleResponse = auth.getRole(token);
+
+        if (!"MEMBER".equals(roleResponse.getValue())) {
+            return "Guest Mode";
+        }
+
+        return "Signed in";
+    }
+
+    private String getCurrentToken() {
+        UI ui = UI.getCurrent();
+
+        if (ui == null) {
+            return null;
+        }
+
+        String tabId = ui.getElement().getProperty("currentTabId");
+
+        if (tabId == null || tabId.isBlank()) {
+            return null;
+        }
+
+        return (String) VaadinSession.getCurrent()
+                .getAttribute("token_" + tabId);
+    }
+
+    private String getLoggedInUserText() {
+        UI ui = UI.getCurrent();
+
+        if (ui == null) {
+            return "Guest";
+        }
+
+        String tabId = ui.getElement().getProperty("currentTabId");
+
+        if (tabId == null || tabId.isBlank()) {
+            return "Guest";
+        }
+
+        String token = (String) VaadinSession.getCurrent()
+                .getAttribute("token_" + tabId);
+
+        if (token == null || token.isBlank()) {
+            return "Guest";
+        }
+
+        Response<String> roleResponse = auth.getRole(token);
+
+        if (!"MEMBER".equals(roleResponse.getValue())) {
+            return "Guest";
+        }
+
+        Response<Integer> userIdResponse = userService.getUserId(token);
+
+        if (userIdResponse.getValue() == null || userIdResponse.getValue() < 1) {
+            return "Member";
+        }
+
+        return userService.getUserDisplayName(userIdResponse.getValue());
+    }
+
 
     private void createDrawer() {
         SideNav nav = new SideNav();
