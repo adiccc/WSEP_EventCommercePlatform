@@ -922,4 +922,122 @@ class UserServiceTest {
 
         registration.remove();
     }
+
+    @Test
+    void GivenNotifierThrowsException_WhenUserAdmittedFromQueue_ThenExceptionCaughtAndUserRemainsAdmitted() {
+
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(1);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        UserService trickyService = new UserService(realTokenService, auth, userRepo, passwordEncoder, mockNotifier, transactionTemplate);
+
+        trickyService.enter();
+        String activeToken = trickyService.continueAsGuest().getValue();
+
+        Response<QueueEntryResultDTO> queuedUserResponse = trickyService.enter();
+        assertFalse(queuedUserResponse.getValue().isAdmitted(), "User should be in queue");
+        String waitingUuid = queuedUserResponse.getValue().getToken();
+
+        Mockito.doThrow(new RuntimeException("Simulated Tab Notification Crash"))
+                .when(mockNotifier).notifyTab(Mockito.eq(waitingUuid), Mockito.any(NotifyDTO.class));
+
+        // Act
+        Response<Boolean> response = trickyService.leaveStore(activeToken);
+
+        // Assert
+        assertTrue(response.getValue(), "leaveStore should succeed even if the notification to the next user fails");
+
+        // Assert
+        assertEquals(0, WebQueue.getInstance().getWaitingCount(), "The queue should be empty because the user was promoted");
+        assertEquals(1, WebQueue.getInstance().getActiveCount(), "The promoted user should take the active spot");
+    }
+
+    @Test
+    void GivenExpiredToken_WhenGetUserId_ThenTokenExpiredNotificationSent() {
+        // המטרה: לוודא שברגע שיש ניסיון שימוש בטוקן פג תוקף בפונקציית getUserId, נשלחת התראת TOKEN_EXPIRED ל-TAB של המשתמש.
+
+        // Arrange
+        String email = "expired_getid@test.com";
+        userService.registerUser(null, new UserDTO(email, "F", "L", "pass", 1, 1, 2000, "Israel", "050-123-4567"));
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        UserService mockService = new UserService(realTokenService, auth, userRepo, passwordEncoder, mockNotifier, transactionTemplate);
+
+        String expiredToken = "eyJhbGciOiJIUzI1NiJ9.expired_token_signature_mock";
+
+        // Act
+        Response<Integer> response = mockService.getUserId(expiredToken);
+
+        // Assert
+        assertEquals(-1, response.getValue());
+
+        // Assert
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyTab(
+                Mockito.eq(expiredToken),
+                Mockito.argThat(notification -> notification.getType() == NotifyType.TOKEN_EXPIRED)
+        );
+    }
+
+    @Test
+    void GivenNotifierThrowsException_WhenSendingTokenExpiredNotification_ThenExceptionCaughtAndSystemContinues() {
+
+        String expiredToken = "eyJhbGciOiJIUzI1NiJ9.expired_token_signature_mock2";
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        UserService mockService = new UserService(realTokenService, auth, userRepo, passwordEncoder, mockNotifier, transactionTemplate);
+
+        Mockito.doThrow(new RuntimeException("Crash during TOKEN_EXPIRED notification"))
+                .when(mockNotifier).notifyTab(Mockito.anyString(), Mockito.any(NotifyDTO.class));
+
+        // Act
+        Response<Integer> response = mockService.getUserId(expiredToken);
+
+        // Assert
+        assertEquals(-1, response.getValue());
+    }
+    @Test
+    void GivenSystemFull_WhenActiveUserLogouts_ThenNextInLineNotifiedViaMockNotifier() {
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(1);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        UserService mockService = new UserService(realTokenService, auth, userRepo, passwordEncoder, mockNotifier, transactionTemplate);
+
+        String email = "active_queue@mail.com";
+        mockService.registerUser(null, new UserDTO(email, "F", "L", "Pass!", 1, 1, 2000, "A", "050-000-0000"));
+        mockService.enter();
+        String activeToken = mockService.login(email, "Pass!").getValue();
+
+        Response<QueueEntryResultDTO> queuedUser = mockService.enter();
+        String waitingUuid = queuedUser.getValue().getToken();
+
+        mockService.logout(activeToken);
+
+        org.mockito.ArgumentCaptor<NotifyDTO> captor = org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyTab(Mockito.eq(waitingUuid), captor.capture());
+        assertEquals(NotifyType.QUEUE_WEB_TURN_ARRIVED, captor.getValue().getType());
+    }
+
+    @Test
+    void GivenSystemFull_WhenGuestLeavesStore_ThenNextInLineNotifiedViaMockNotifier() {
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(1);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        UserService mockService = new UserService(realTokenService, auth, userRepo, passwordEncoder, mockNotifier, transactionTemplate);
+
+        mockService.enter();
+        String guestToken = mockService.continueAsGuest().getValue();
+
+        Response<QueueEntryResultDTO> queuedUser = mockService.enter();
+        String waitingUuid = queuedUser.getValue().getToken();
+
+        mockService.leaveStore(guestToken);
+
+        org.mockito.ArgumentCaptor<NotifyDTO> captor = org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyTab(Mockito.eq(waitingUuid), captor.capture());
+        assertEquals(NotifyType.QUEUE_WEB_TURN_ARRIVED, captor.getValue().getType());
+    }
 }

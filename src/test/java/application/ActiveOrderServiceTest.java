@@ -71,6 +71,7 @@ class ActiveOrderServiceTest {
     private String validToken;
     private Integer eventId;
     private Integer concurrentEventId;
+    private ISuspensionRepo suspensionRepo;
 
     private UserService userService;
     private CompanyRepoImpl companyRepo;
@@ -95,7 +96,7 @@ class ActiveOrderServiceTest {
             return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
         });
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
-        ISuspensionRepo suspensionRepo = new SuspensionRepoImpl();
+        suspensionRepo = new SuspensionRepoImpl();
         auth = new Auth(tokenService);
         notifier = Mockito.spy(new VaadinNotifier());
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier,transactionTemplate);
@@ -4845,5 +4846,182 @@ class ActiveOrderServiceTest {
         assertEquals("Removed from event queue", cancelResponse.getMessage());
 
         assertFalse(eventRepo.findById(concurrentEventId).getEventQueue().contains(waitingToken));
+    }
+    // Mock Notifier Tests
+    @Test
+    void GivenWaitingUser_WhenCheckoutAndPaymentCompletesWithMockNotifier_ThenWaitingUserPromotedAndNotified() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(100);
+
+        Response<Integer> eventResp = companyEventService.createEvent(validToken, companyId,
+                LocalDateTime.now().plusDays(1), "Mock Queue Event",
+                LocalDateTime.now().minusMinutes(10), false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
+
+        int isolatedEventId = eventResp.getValue();
+
+        companyEventService.DefineVenueAndSeatingMap(validToken, isolatedEventId,
+                new ElementPositionDTO(10, 20), List.of(new ElementPositionDTO(0,0)),
+                List.of(new StandingZoneDTO(capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        ActiveOrderService mockService = new ActiveOrderService(
+                auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo, paymentSystem,
+                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, capacity);
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class))).thenReturn("payment-123");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any())).thenReturn(supplyResult);
+
+        String firstFillerToken = null;
+        int firstFillerOrderId = -1;
+        for (int i = 0; i < capacity; i++) {
+            String uniqueEmail = "filler_" + i + "@test.com";
+            userService.registerUser("", new UserDTO(uniqueEmail, "f", "l", "p", 1, 1, 2000, "Israel", "050-000-00" + (i<10?"0"+i:i)));
+            String token = userService.login(uniqueEmail, "p").getValue();
+
+            mockService.enterEventPurchase(token, companyId, isolatedEventId, null);
+            Response<Integer> selectResp = mockService.userSelectTickets(token, isolatedEventId, new HashMap<>(), Map.of("floor", 1));
+
+            if (i == 0) {
+                firstFillerToken = token;
+                firstFillerOrderId = selectResp.getValue();
+                mockService.prepareCheckout(firstFillerToken, firstFillerOrderId);
+            }
+        }
+
+        String waiterEmail = "waiter@test.com";
+        userService.registerUser("", new UserDTO(waiterEmail, "w", "w", "pass", 1, 1, 2000, "Israel", "050-123-4567"));
+        String waitingToken = userService.login(waiterEmail, "pass").getValue();
+
+        Response<EnterPurchaseDTO> enterResp = mockService.enterEventPurchase(waitingToken, companyId, isolatedEventId, null);
+        assertTrue(enterResp.getValue().isWaitingInQueue(), "User should be in queue");
+
+        // Act
+        PaymentDetailsDTO payment = new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+        Response<Integer> checkoutResp = mockService.checkoutAndPayment(firstFillerToken, firstFillerOrderId, payment);
+
+        // Assert
+        assertNotNull(checkoutResp.getValue(), "Checkout must succeed");
+
+        ArgumentCaptor<NotifyDTO> captor = ArgumentCaptor.forClass(NotifyDTO.class);
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyTab(Mockito.eq(waitingToken), captor.capture());
+
+        assertEquals(NotifyType.QUEUE_EVENT_TURN_ARRIVED, captor.getValue().getType());
+        assertEquals(isolatedEventId, captor.getValue().getPayload().getEventId());
+    }
+
+    @Test
+    void GivenExpiredOrderInFullEvent_WhenCleanupRunsWithMockNotifier_ThenWaitingUserPromotedAndNotified() throws Exception {
+        // Arrange
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(100);
+
+        Response<Integer> eventResp = companyEventService.createEvent(validToken, companyId,
+                LocalDateTime.now().plusDays(1), "Cleanup Mock Queue Event",
+                LocalDateTime.now().minusMinutes(10), false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
+
+        int isolatedEventId = eventResp.getValue();
+
+        companyEventService.DefineVenueAndSeatingMap(validToken, isolatedEventId,
+                new ElementPositionDTO(10, 20), List.of(new ElementPositionDTO(0,0)),
+                List.of(new StandingZoneDTO(capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        ActiveOrderService mockService = new ActiveOrderService(
+                auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo, paymentSystem,
+                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, capacity);
+
+        int firstFillerOrderId = -1;
+
+        // Fill capacity
+        for (int i = 0; i < capacity; i++) {
+            String uniqueEmail = "cl_filler_" + i + "@test.com";
+            userService.registerUser("", new UserDTO(uniqueEmail, "f", "l", "p", 1, 1, 2000, "Israel", "050-999-00" + (i<10?"0"+i:i)));
+            String token = userService.login(uniqueEmail, "p").getValue();
+
+            mockService.enterEventPurchase(token, companyId, isolatedEventId, null);
+            Response<Integer> selectResp = mockService.userSelectTickets(token, isolatedEventId, new HashMap<>(), Map.of("floor", 1));
+
+            if (i == 0) {
+                firstFillerOrderId = selectResp.getValue();
+            }
+        }
+
+        // Register waiting user
+        String waiterEmail = "cl_waiter@test.com";
+        userService.registerUser("", new UserDTO(waiterEmail, "w", "w", "pass", 1, 1, 2000, "Israel", "050-765-4321"));
+        String waitingToken = userService.login(waiterEmail, "pass").getValue();
+
+        Response<EnterPurchaseDTO> enterResp = mockService.enterEventPurchase(waitingToken, companyId, isolatedEventId, null);
+        assertTrue(enterResp.getValue().isWaitingInQueue(), "User should be in queue");
+
+        // Force expiration
+        forceExpireOrder(firstFillerOrderId);
+
+        // Act
+        mockService.cleanupExpiredOrders();
+
+        // Assert
+        ArgumentCaptor<NotifyDTO> captor = ArgumentCaptor.forClass(NotifyDTO.class);
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyTab(Mockito.eq(waitingToken), captor.capture());
+
+        assertEquals(NotifyType.QUEUE_EVENT_TURN_ARRIVED, captor.getValue().getType());
+        assertEquals(isolatedEventId, captor.getValue().getPayload().getEventId());
+    }
+
+    @Test
+    void GivenNotifierThrowsException_WhenPromoteNextInQueue_ThenExceptionCaughtAndSystemContinues() throws Exception {
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(100);
+
+        Response<Integer> eventResp = companyEventService.createEvent(validToken, companyId,
+                LocalDateTime.now().plusDays(1), "Exception Queue Event",
+                LocalDateTime.now().minusMinutes(10), false, GeographicalArea.CENTER, CategoryEvent.SPORTS);
+
+        int isolatedEventId = eventResp.getValue();
+
+        companyEventService.DefineVenueAndSeatingMap(validToken, isolatedEventId,
+                new ElementPositionDTO(10, 20), List.of(new ElementPositionDTO(0,0)),
+                List.of(new StandingZoneDTO(capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        ActiveOrderService mockService = new ActiveOrderService(
+                auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo, paymentSystem,
+                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, capacity);
+
+        Mockito.doThrow(new RuntimeException("Simulated Tab Notification Crash"))
+                .when(mockNotifier).notifyTab(Mockito.anyString(), Mockito.any(NotifyDTO.class));
+
+        int firstFillerOrderId = -1;
+
+        for (int i = 0; i < capacity; i++) {
+            String uniqueEmail = "ex_filler_" + i + "@test.com";
+            userService.registerUser("", new UserDTO(uniqueEmail, "f", "l", "p", 1, 1, 2000, "Israel", "050-555-00" + (i<10?"0"+i:i)));
+            String token = userService.login(uniqueEmail, "p").getValue();
+
+            mockService.enterEventPurchase(token, companyId, isolatedEventId, null);
+            Response<Integer> selectResp = mockService.userSelectTickets(token, isolatedEventId, new HashMap<>(), Map.of("floor", 1));
+
+            if (i == 0) {
+                firstFillerOrderId = selectResp.getValue();
+            }
+        }
+
+        String waiterEmail = "ex_waiter@test.com";
+        userService.registerUser("", new UserDTO(waiterEmail, "w", "w", "pass", 1, 1, 2000, "Israel", "050-888-4321"));
+        String waitingToken = userService.login(waiterEmail, "pass").getValue();
+
+        mockService.enterEventPurchase(waitingToken, companyId, isolatedEventId, null);
+
+        forceExpireOrder(firstFillerOrderId);
+
+        // Act
+        mockService.cleanupExpiredOrders();
+
+        // Assert
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyTab(Mockito.eq(waitingToken), Mockito.any(NotifyDTO.class));
+        assertFalse(eventRepo.findById(isolatedEventId).getEventQueue().contains(waitingToken));
     }
 }
