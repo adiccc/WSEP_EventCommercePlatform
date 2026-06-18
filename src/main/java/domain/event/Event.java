@@ -55,8 +55,11 @@ public class Event {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CategoryEvent categoryEvent;
-    @Transient
-    //TODO: after adding annotation to order
+    @OneToMany(
+            cascade = {CascadeType.PERSIST, CascadeType.MERGE},
+            fetch = FetchType.LAZY
+    )
+    @JoinColumn(name = "event_id")
     private List<Order> orders;
     @Version
     private long version;
