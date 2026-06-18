@@ -5,8 +5,6 @@
 
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- Spring Boot parent manages Spring Framework, Spring Security,
-         JUnit, and Surefire versions automatically -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
@@ -21,13 +19,10 @@
 
     <properties>
         <java.version>17</java.version>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
         <vaadin.version>24.4.5</vaadin.version>
         <jjwt.version>0.11.5</jjwt.version>
     </properties>
 
-    <!-- Vaadin BOM pins all vaadin-* artifact versions consistently -->
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -41,15 +36,11 @@
     </dependencyManagement>
 
     <dependencies>
-
-        <!-- ── Vaadin ─────────────────────────────────────────────────── -->
         <dependency>
             <groupId>com.vaadin</groupId>
             <artifactId>vaadin-spring-boot-starter</artifactId>
-            <!-- version managed by vaadin-bom above -->
         </dependency>
 
-        <!-- ── Spring Boot ───────────────────────────────────────────── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
@@ -59,21 +50,17 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
-        <!-- ── H2 (local development / tests) ───────────────────────── -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
         </dependency>
 
-        <!-- ── Spring Security Crypto (PasswordEncoderUtil) ──────────── -->
-        <!-- version managed by spring-boot-starter-parent -->
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-crypto</artifactId>
         </dependency>
 
-        <!-- ── JWT ───────────────────────────────────────────────────── -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
@@ -92,45 +79,19 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- ── Test ──────────────────────────────────────────────────── -->
-        <!-- JUnit version managed by spring-boot-starter-parent -->
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>5.18.0</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>net.bytebuddy</groupId>
-            <artifactId>byte-buddy</artifactId>
-            <version>1.17.6</version>
-        </dependency>
-
-        <dependency>
-            <groupId>net.bytebuddy</groupId>
-            <artifactId>byte-buddy-agent</artifactId>
-            <version>1.17.6</version>
-        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
-
     </dependencies>
 
     <build>
         <plugins>
-            <!-- Packages the app as an executable jar -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
-            <!-- JaCoCo code coverage -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -142,7 +103,6 @@
                             <goal>prepare-agent</goal>
                         </goals>
                     </execution>
-
                     <execution>
                         <id>report</id>
                         <phase>test</phase>
@@ -152,7 +112,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Compiles Vaadin frontend (npm + Vite) before packaging -->
             <plugin>
                 <groupId>com.vaadin</groupId>
                 <artifactId>vaadin-maven-plugin</artifactId>
@@ -167,5 +126,4 @@
             </plugin>
         </plugins>
     </build>
-
 </project>
