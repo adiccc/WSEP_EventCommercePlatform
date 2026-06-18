@@ -19,6 +19,7 @@ import domain.event.OrderStatus;
 import domain.event.Order;
 import domain.lottery.AccessCodeGenerator;
 import domain.lottery.ILotteryRepo;
+import domain.user.NotificationStatus;
 import domain.user.UserNotification;
 import domain.user.IUserRepo;
 import domain.user.Member;
@@ -41,6 +42,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import domain.policy.DiscountPolicyType;
@@ -2399,6 +2401,265 @@ class EventCompanyManageServiceTest {
                                 && n.getPayload() != null
                                 && n.getPayload().getMessage().toLowerCase().contains("refund process")),
                 "Offline buyer should have a delayed notification for refund");
+    }
+
+    @Test
+    void GivenDBSaveFails_WhenProcessRefund_ThenExceptionCaughtAndBusinessLogicSucceeds() {
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+        int orderId = createCompletedOrderThroughPurchaseFlow(validToken2, eventId, 1);
+
+        Event event = eventRepo.findById(eventId);
+        Order order = event.findOrderById(orderId);
+        order.markRefundRequired();
+        eventRepo.store(event);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        TransactionTemplate mockTransactionTemplate = Mockito.mock(TransactionTemplate.class);
+
+        AtomicInteger callCount = new AtomicInteger(0);
+        Mockito.when(mockTransactionTemplate.execute(Mockito.any())).thenAnswer(inv -> {
+            int count = callCount.incrementAndGet();
+            if (count == 3) {
+                throw new RuntimeException("Simulated Database Crash during Notification Save");
+            }
+            TransactionCallback<?> callback = inv.getArgument(0);
+            return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
+        });
+
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+
+        EventCompanyManageService trickyDbService = new EventCompanyManageService(
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, mockTransactionTemplate);
+
+        Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class)))
+                .thenReturn(false);
+
+        Response<Boolean> response = trickyDbService.processRefund(validToken1, eventId, orderId);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue());
+
+        Order updatedOrder = eventRepo.findById(eventId).findOrderById(orderId);
+        assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
+    }
+
+    @Test
+    void GivenMarkDeliveredFails_WhenProcessRefund_ThenExceptionCaughtAndProceedsGracefully() {
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+        int orderId = createCompletedOrderThroughPurchaseFlow(validToken2, eventId, 1);
+
+        Event event = eventRepo.findById(eventId);
+        Order order = event.findOrderById(orderId);
+        order.markRefundRequired();
+        eventRepo.store(event);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        TransactionTemplate mockTransactionTemplate = Mockito.mock(TransactionTemplate.class);
+
+        AtomicInteger callCount = new AtomicInteger(0);
+        Mockito.when(mockTransactionTemplate.execute(Mockito.any())).thenAnswer(inv -> {
+            int count = callCount.incrementAndGet();
+            if (count == 4) {
+                throw new RuntimeException("Simulated DB Crash during markAsDelivered");
+            }
+            TransactionCallback<?> callback = inv.getArgument(0);
+            return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
+        });
+
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+
+        EventCompanyManageService trickyDbService = new EventCompanyManageService(
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, mockTransactionTemplate);
+
+        Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class)))
+                .thenReturn(true);
+
+        Response<Boolean> response = trickyDbService.processRefund(validToken1, eventId, orderId);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue());
+
+        Order updatedOrder = eventRepo.findById(eventId).findOrderById(orderId);
+        assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
+    }
+
+    @Test
+    void GivenGuestUser_WhenProcessRefund_ThenNotificationSentWithoutDBSave() {
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        int orderId = createCompletedOrderThroughPurchaseFlow(GUEST_TOKEN, eventId, 1);
+
+        Event event = eventRepo.findById(eventId);
+        Order order = event.findOrderById(orderId);
+        order.markRefundRequired();
+        eventRepo.store(event);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+
+        TransactionTemplate localMockTransactionTemplate = Mockito.mock(TransactionTemplate.class);
+        Mockito.when(localMockTransactionTemplate.execute(Mockito.any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
+        });
+
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+
+        EventCompanyManageService guestService = new EventCompanyManageService(
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, localMockTransactionTemplate);
+
+        Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class)))
+                .thenReturn(true);
+
+        Response<Boolean> response = guestService.processRefund(validToken1, eventId, orderId);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue());
+
+        Mockito.verify(localMockTransactionTemplate, Mockito.times(2)).execute(Mockito.any());
+
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class));
+    }
+    // Mock Notifier Tests
+
+    @Test
+    void GivenPurchaserOnline_WhenUpdateEventDate_WithMockNotifier_ThenNotificationSentRealtimeAndMarkedDelivered() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+        int orderId = createCompletedOrderThroughPurchaseFlow(validToken2, eventId, 1);
+        String buyerEmail = "user2@test.com"; //  validToken2 related email address
+        userService.cleanDelayedNotifications(buyerEmail);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        EventCompanyManageService mockService = new EventCompanyManageService(
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, transactionTemplate);
+
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(buyerEmail), Mockito.any(NotifyDTO.class)))
+                .thenReturn(true);
+
+        LocalDateTime newDate = eventDate.plusDays(3);
+
+        // Act
+        Response<Boolean> response = mockService.UpdateEventDate(validToken1, eventId, newDate);
+
+        // Assert
+        assertTrue(response.getValue(), "Date update should succeed");
+
+        // Assert
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(buyerEmail), Mockito.any());
+
+        // Assert
+        Member buyer = userRepo.findUserByEmail(buyerEmail);
+        assertTrue(buyer.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload().getMessage().contains("has been updated")
+                                && n.getStatus() == NotificationStatus.DELIVERED),
+                "Online buyer should have the notification marked as DELIVERED in the database");
+    }
+
+    @Test
+    void GivenPurchaserOffline_WhenUpdateEventDate_WithMockNotifier_ThenNotificationFailedRealtimeAndSavedAsPending() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+        int orderId = createCompletedOrderThroughPurchaseFlow(validToken2, eventId, 1);
+        String buyerEmail = "user2@test.com";
+        userService.cleanDelayedNotifications(buyerEmail);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        EventCompanyManageService mockService = new EventCompanyManageService(
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, transactionTemplate);
+
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(buyerEmail), Mockito.any(NotifyDTO.class)))
+                .thenReturn(false);
+
+        LocalDateTime newDate = eventDate.plusDays(4);
+
+        // Act
+        Response<Boolean> response = mockService.UpdateEventDate(validToken1, eventId, newDate);
+
+        // Assert
+        assertTrue(response.getValue(), "Date update should succeed");
+
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(buyerEmail), Mockito.any());
+
+        Member buyer = userRepo.findUserByEmail(buyerEmail);
+        assertTrue(buyer.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload().getMessage().contains("has been updated")
+                                && n.getStatus() == NotificationStatus.PENDING),
+                "Offline buyer should have the notification saved as PENDING in the database");
+    }
+
+    @Test
+    void GivenPurchaserOnline_WhenDeleteEvent_WithMockNotifier_ThenBothNotificationsSentRealtimeAndMarkedDelivered() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+        int orderId = createCompletedOrderThroughPurchaseFlow(validToken2, eventId, 1);
+        String buyerEmail = "user2@test.com";
+        userService.cleanDelayedNotifications(buyerEmail);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        EventCompanyManageService mockService = new EventCompanyManageService(
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, transactionTemplate);
+
+        // Mocks
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(buyerEmail), Mockito.any(NotifyDTO.class))).thenReturn(true);
+
+        // Act
+        Response<Boolean> response = mockService.DeleteEvent(validToken1, eventId);
+
+        // Assert
+        assertTrue(response.getValue());
+        Mockito.verify(mockNotifier, Mockito.times(2)).notifyUser(Mockito.eq(buyerEmail), Mockito.any());
+
+        Member buyer = userRepo.findUserByEmail(buyerEmail);
+
+        long deliveredCount = buyer.getPendingNotifications().stream()
+                .filter(n -> n.getStatus() == NotificationStatus.DELIVERED)
+                .count();
+
+        assertTrue(deliveredCount >= 2, "Buyer should have at least 2 DELIVERED notifications (cancelled + refund)");
+
+        assertTrue(buyer.getPendingNotifications().stream().anyMatch(n -> n.getPayload().getMessage().toLowerCase().contains("cancelled")), "Should contain cancellation message");
+        assertTrue(buyer.getPendingNotifications().stream().anyMatch(n -> n.getPayload().getMessage().toLowerCase().contains("refund")), "Should contain refund message");
+    }
+
+    @Test
+    void GivenPurchaserOnline_WhenProcessRefundFails_WithMockNotifier_ThenFailureNotificationSentRealtime() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+        int orderId = createCompletedOrderThroughPurchaseFlow(validToken2, eventId, 1);
+        String buyerEmail = "user2@test.com";
+
+        Event event = eventRepo.findById(eventId);
+        Order order = event.findOrderById(orderId);
+        order.markRefundRequired();
+        eventRepo.store(event);
+
+        userService.cleanDelayedNotifications(buyerEmail);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        EventCompanyManageService mockService = new EventCompanyManageService(
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, transactionTemplate);
+
+        Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(false);
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(buyerEmail), Mockito.any(NotifyDTO.class))).thenReturn(true);
+
+        // Act
+        Response<Boolean> response = mockService.processRefund(validToken1, eventId, orderId);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Refund rejected by external payment service", response.getMessage());
+
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(buyerEmail), Mockito.any());
+
+        Member buyer = userRepo.findUserByEmail(buyerEmail);
+        assertTrue(buyer.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload().getMessage().contains("failed")
+                                && n.getStatus() == NotificationStatus.DELIVERED),
+                "Online buyer should have the refund failure notification marked as DELIVERED");
     }
 }
 

@@ -18,6 +18,7 @@ import domain.user.IUserRepo;
 import domain.dto.CompanyDTO;
 import domain.user.Manager;
 import domain.user.Member;
+import domain.user.NotificationStatus;
 import infrastructure.*;
 import infrastructure.inMemory.CompanyRepoImpl;
 import infrastructure.inMemory.EventRepoImpl;
@@ -2407,6 +2408,270 @@ class CompanyServiceUpdatedTest {
 
         assertFalse(removeResponse.isError());
         assertEquals(Boolean.TRUE, removeResponse.getValue());
+    }
+    // Mock Notifier Tests
+    @Test
+    void GivenAppointeeOnline_WhenRequestAppointOwnerWithMockNotifier_ThenNotificationSentRealtimeAndMarkedDelivered() {
+        // Arrange
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        CompanyService testService = new CompanyService(auth, companyRepo, userRepo, suspensionRepo, mockNotifier, transactionTemplate);
+
+        String appointeeEmail = "other@test.com";
+
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(appointeeEmail), Mockito.any(NotifyDTO.class)))
+                .thenReturn(true);
+
+        // Act
+        Response<Boolean> response = testService.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+
+        // Assert
+        assertTrue(response.getValue(), "Requesting owner appointment should succeed");
+
+        // Assert
+        org.mockito.ArgumentCaptor<NotifyDTO> captor = org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(appointeeEmail), captor.capture());
+
+        assertEquals(NotifyType.ROLE_APPOINTMENT_REQUEST, captor.getValue().getType());
+        assertTrue(captor.getValue().getPayload().getMessage().contains("invited to be a owner"));
+
+        // Assert
+        Member appointee = userRepo.findById(OTHER_USER_ID);
+        assertTrue(appointee.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST
+                                && n.getStatus() == NotificationStatus.DELIVERED),
+                "Online user should have the notification marked as DELIVERED in the database");
+    }
+
+    @Test
+    void GivenManagerOffline_WhenUpdateManagerPermissionsWithMockNotifier_ThenNotificationFailedRealtimeAndSavedAsPending() {
+        // Arrange
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        CompanyService testService = new CompanyService(auth, companyRepo, userRepo, suspensionRepo, mockNotifier, transactionTemplate);
+
+        // Mock
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(MANAGER_EMAIL), Mockito.any(NotifyDTO.class)))
+                .thenReturn(false);
+
+        // Act
+        Response<Boolean> response = testService.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+
+        // Assert
+        assertTrue(response.getValue(), "Updating permissions should succeed regardless of user online status");
+
+        // Assert
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(MANAGER_EMAIL), Mockito.any(NotifyDTO.class));
+
+        // Assert
+        Member manager = userRepo.findById(MANAGER_ID);
+        assertTrue(manager.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload().getMessage().contains("permissions have been updated")
+                                && n.getStatus() == NotificationStatus.PENDING),
+                "Offline manager should have the notification saved as PENDING in the database");
+    }
+
+    @Test
+    void GivenManagerOnline_WhenRemoveManagerAppointment_WithMockNotifier_ThenKickoutSentRealtimeAndMarkedDelivered() {
+        // Arrange
+        Company company = companyRepo.findById(COMPANY_ID);
+        UserDTO dto = new UserDTO("manager2@test.com", "Manager2", "Test", "Password123!", 1, 1, 2000, "City", "050-777-7777");
+        userService.registerUser(null, dto);
+        String token = userService.login("manager2@test.com", "Password123!").getValue();
+        int manager2Id = userService.getUserId(token).getValue();
+        company.getCompanyPermission().addToTree(manager2Id, OWNER_ID, new HashSet<>());
+        companyRepo.store(company);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        CompanyService testService = new CompanyService(auth, companyRepo, userRepo, suspensionRepo, mockNotifier, transactionTemplate);
+
+        // Mock
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(MANAGER_EMAIL), Mockito.any(NotifyDTO.class)))
+                .thenReturn(true);
+
+        // Act
+        Response<Boolean> response = testService.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+
+        // Assert
+        assertTrue(response.getValue());
+
+        org.mockito.ArgumentCaptor<NotifyDTO> captor = org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(MANAGER_EMAIL), captor.capture());
+
+        assertEquals(NotifyType.KICKOUT_TAB_NAVIGATION, captor.getValue().getType());
+
+        Member manager = userRepo.findById(MANAGER_ID);
+        assertTrue(manager.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION
+                                && n.getStatus() == NotificationStatus.DELIVERED),
+                "Online manager should have the kickout notification marked as DELIVERED");
+    }
+
+    @Test
+    void GivenMixedOnlineOfflineStaff_WhenDeactivateCompany_WithMockNotifier_ThenCorrectStatusesApplied() {
+        // Arrange
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        CompanyService testService = new CompanyService(auth, companyRepo, userRepo, suspensionRepo, mockNotifier, transactionTemplate);
+
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(OWNER_EMAIL), Mockito.any(NotifyDTO.class)))
+                .thenReturn(true);
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(MANAGER_EMAIL), Mockito.any(NotifyDTO.class)))
+                .thenReturn(false);
+
+        // Act
+        Response<Boolean> response = testService.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+
+        // Assert
+        assertTrue(response.getValue(), "Company deactivation should succeed");
+
+        // Assert
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(OWNER_EMAIL), Mockito.any());
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(MANAGER_EMAIL), Mockito.any());
+
+        // Assert
+        Member owner = userRepo.findById(OWNER_ID);
+        assertTrue(owner.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION
+                                && n.getStatus() == NotificationStatus.DELIVERED),
+                "Online Owner should have KICKOUT marked as DELIVERED");
+
+        // Assert
+        Member manager = userRepo.findById(MANAGER_ID);
+        assertTrue(manager.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION
+                                && n.getStatus() == NotificationStatus.PENDING),
+                "Offline Manager should have KICKOUT marked as PENDING");
+    }
+    // Mock Notifier Tests DB State Validation
+
+    @Test
+    void GivenAppointeeOnline_WhenRequestAppointOwner_WithMockNotifier_ThenNotificationSentRealtimeAndMarkedDelivered() {
+        // Arrange
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        CompanyService testService = new CompanyService(auth, companyRepo, userRepo, suspensionRepo, mockNotifier, transactionTemplate);
+
+        String appointeeEmail = "other@test.com";
+
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(appointeeEmail), Mockito.any(NotifyDTO.class)))
+                .thenReturn(true);
+
+        // Act:
+        Response<Boolean> response = testService.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+
+        // Assert
+        assertTrue(response.getValue(), "Requesting owner appointment should succeed");
+
+        // Assert
+        org.mockito.ArgumentCaptor<NotifyDTO> captor = org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(appointeeEmail), captor.capture());
+
+        assertEquals(NotifyType.ROLE_APPOINTMENT_REQUEST, captor.getValue().getType());
+        assertTrue(captor.getValue().getPayload().getMessage().contains("invited to be a owner"));
+
+        // Assert
+        Member appointee = userRepo.findById(OTHER_USER_ID);
+        assertTrue(appointee.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST
+                                && n.getStatus() == NotificationStatus.DELIVERED),
+                "Online user should have the notification marked as DELIVERED in the database");
+    }
+
+    @Test
+    void GivenManagerOffline_WhenUpdateManagerPermissions_WithMockNotifier_ThenNotificationFailedRealtimeAndSavedAsPending() {
+        // Arrange
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        CompanyService testService = new CompanyService(auth, companyRepo, userRepo, suspensionRepo, mockNotifier, transactionTemplate);
+
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(MANAGER_EMAIL), Mockito.any(NotifyDTO.class)))
+                .thenReturn(false);
+
+        // Act
+        Response<Boolean> response = testService.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID, EnumSet.of(PermissionType.CREATE_EVENT));
+
+        // Assert
+        assertTrue(response.getValue(), "Updating permissions should succeed regardless of user online status");
+
+        // Assert
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(MANAGER_EMAIL), Mockito.any(NotifyDTO.class));
+
+        // Assert
+        Member manager = userRepo.findById(MANAGER_ID);
+        assertTrue(manager.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload().getMessage().contains("permissions have been updated")
+                                && n.getStatus() == NotificationStatus.PENDING),
+                "Offline manager should have the notification saved as PENDING in the database");
+    }
+
+    @Test
+    void GivenManagerOnline_WhenRemoveManagerAppointmentWithMockNotifier_ThenKickoutSentRealtimeAndMarkedDelivered() {
+        // Arrange
+        Company company = companyRepo.findById(COMPANY_ID);
+        UserDTO dto = new UserDTO("manager2@test.com", "Manager2", "Test", "Password123!", 1, 1, 2000, "City", "050-777-7777");
+        userService.registerUser(null, dto);
+        String token = userService.login("manager2@test.com", "Password123!").getValue();
+        int manager2Id = userService.getUserId(token).getValue();
+        company.getCompanyPermission().addToTree(manager2Id, OWNER_ID, new HashSet<>());
+        companyRepo.store(company);
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        CompanyService testService = new CompanyService(auth, companyRepo, userRepo, suspensionRepo, mockNotifier, transactionTemplate);
+
+        // Mock
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(MANAGER_EMAIL), Mockito.any(NotifyDTO.class)))
+                .thenReturn(true);
+
+        // Act
+        Response<Boolean> response = testService.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+
+        // Assert
+        assertTrue(response.getValue());
+
+        org.mockito.ArgumentCaptor<NotifyDTO> captor = org.mockito.ArgumentCaptor.forClass(NotifyDTO.class);
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(MANAGER_EMAIL), captor.capture());
+
+        assertEquals(NotifyType.KICKOUT_TAB_NAVIGATION, captor.getValue().getType());
+
+        Member manager = userRepo.findById(MANAGER_ID);
+        assertTrue(manager.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION
+                                && n.getStatus() == NotificationStatus.DELIVERED),
+                "Online manager should have the kickout notification marked as DELIVERED");
+    }
+
+    @Test
+    void GivenMixedOnlineOfflineStaff_WhenDeactivateCompanyWithMockNotifier_ThenCorrectStatusesApplied() {
+        // Arrange
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        CompanyService testService = new CompanyService(auth, companyRepo, userRepo, suspensionRepo, mockNotifier, transactionTemplate);
+
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(OWNER_EMAIL), Mockito.any(NotifyDTO.class)))
+                .thenReturn(true);
+        Mockito.when(mockNotifier.notifyUser(Mockito.eq(MANAGER_EMAIL), Mockito.any(NotifyDTO.class)))
+                .thenReturn(false);
+
+        // Act
+        Response<Boolean> response = testService.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+
+        // Assert
+        assertTrue(response.getValue(), "Company deactivation should succeed");
+
+        // Assert
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(OWNER_EMAIL), Mockito.any());
+        Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(MANAGER_EMAIL), Mockito.any());
+
+        // Assert
+        Member owner = userRepo.findById(OWNER_ID);
+        assertTrue(owner.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION
+                                && n.getStatus() == NotificationStatus.DELIVERED),
+                "Online Owner should have KICKOUT marked as DELIVERED");
+
+        // Assert
+        Member manager = userRepo.findById(MANAGER_ID);
+        assertTrue(manager.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.KICKOUT_TAB_NAVIGATION
+                                && n.getStatus() == NotificationStatus.PENDING),
+                "Offline Manager should have KICKOUT marked as PENDING");
     }
 
 }
