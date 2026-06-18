@@ -799,7 +799,7 @@ public class ActiveOrderService {
                         orderedCodesForOrder.add(barcode);
                     }
                 }
-                order.setExternalTicketCodes(successfullyIssuedCodes);
+                order.setExternalTicketCodes(orderedCodesForOrder);
 
                 List<String> cancelledCodes = new ArrayList<>();
                 if (issuanceFailed) {

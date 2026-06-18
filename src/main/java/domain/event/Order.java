@@ -131,7 +131,7 @@ public class Order {
         List<PurchasedTicketDTO> enrichedTickets = new ArrayList<>();
         for(int i=0; i<purchasedTickets.size(); i++) {
             PurchasedTicketDTO ticketDTO = purchasedTickets.get(i);
-            String barcode = "Processing";
+            String barcode = "-";
             if (externalTicketCodes != null && !externalTicketCodes.isEmpty() && i < externalTicketCodes.size()) {
                 barcode = externalTicketCodes.get(i);
             }
