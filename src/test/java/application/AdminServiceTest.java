@@ -2223,4 +2223,63 @@ class AdminServiceTest {
                         ),
                 "Owner should receive company closure notification in real time");
     }
+
+    // ============================================================
+    // closeCompanyByAdmin - member closure notification persistence
+    // (PENDING-in-transaction then deliver-and-mark-DELIVERED flow)
+    // ============================================================
+
+    @Test
+    void GivenOfflineCompanyOwner_WhenCloseCompanyByAdmin_ThenClosureNotificationSavedAsPending() {
+        // Arrange: appoint a second owner so there is a company member besides the founder
+        assertTrue(companyService.requestAppointOwner(adminToken, companyId, userIdNotSuspened).getValue());
+        assertTrue(companyService.respondToOwnerAppointment(userNotSusToken, companyId, true).getValue());
+
+        // The owner goes offline before the admin closes the company
+        userService.logout(userNotSusToken);
+
+        // Act
+        Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
+
+        // Assert
+        assertTrue(response.getValue());
+        Member owner = userRepo.findById(userIdNotSuspened);
+        assertTrue(owner.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().contains("has been closed by admin")
+                                && n.getStatus() == NotificationStatus.PENDING),
+                "Offline owner should have the closure notification saved as PENDING");
+    }
+
+    @Test
+    void GivenOnlineCompanyOwner_WhenCloseCompanyByAdmin_ThenClosureNotificationPersistedAndDelivered()
+            throws InterruptedException {
+        // Arrange: appoint a second owner who stays online
+        assertTrue(companyService.requestAppointOwner(adminToken, companyId, userIdNotSuspened).getValue());
+        assertTrue(companyService.respondToOwnerAppointment(userNotSusToken, companyId, true).getValue());
+
+        String ownerIdentifier = auth.getUserEmail(userNotSusToken).getValue();
+        CountDownLatch latch = new CountDownLatch(1);
+        Registration reg = Broadcaster.registerUser(ownerIdentifier, dto -> latch.countDown());
+
+        try {
+            // Act
+            Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
+
+            // Assert
+            assertTrue(response.getValue());
+            assertTrue(latch.await(2000, TimeUnit.MILLISECONDS), "Online owner should receive a live notification");
+
+            Member owner = userRepo.findById(userIdNotSuspened);
+            assertTrue(owner.getPendingNotifications().stream()
+                            .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                    && n.getPayload() != null
+                                    && n.getPayload().getMessage().contains("has been closed by admin")
+                                    && n.getStatus() == NotificationStatus.DELIVERED),
+                    "Online owner's closure notification should be persisted and marked DELIVERED");
+        } finally {
+            reg.remove();
+        }
+    }
 }

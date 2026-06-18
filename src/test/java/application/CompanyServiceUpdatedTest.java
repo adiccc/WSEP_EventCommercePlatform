@@ -2674,4 +2674,130 @@ class CompanyServiceUpdatedTest {
                 "Offline Manager should have KICKOUT marked as PENDING");
     }
 
+    // ===================== getProductionCompany =====================
+
+    @Test
+    void GivenInvalidToken_WhenGetProductionCompany_ThenError() {
+        Response<domain.dto.CompanyDetailsDTO> response = service.getProductionCompany("invalid-token", COMPANY_ID);
+        assertNull(response.getValue());
+        assertEquals("Invalid or expired token", response.getMessage());
+    }
+
+    @Test
+    void GivenOwnerMember_WhenGetProductionCompany_ThenReturnsDetails() {
+        Response<domain.dto.CompanyDetailsDTO> response = service.getProductionCompany(OWNER_TOKEN, COMPANY_ID);
+        assertNotNull(response.getValue());
+    }
+
+    @Test
+    void GivenGuest_WhenGetProductionCompany_ThenReturnsDetails() {
+        Response<domain.dto.CompanyDetailsDTO> response = service.getProductionCompany(GUEST_TOKEN, COMPANY_ID);
+        assertNotNull(response.getValue());
+    }
+
+    @Test
+    void GivenNonExistingCompany_WhenGetProductionCompany_ThenError() {
+        Response<domain.dto.CompanyDetailsDTO> response = service.getProductionCompany(OWNER_TOKEN, 9999);
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("System error"));
+    }
+
+    // ===================== getUserRoleInCompany =====================
+
+    @Test
+    void GivenInvalidToken_WhenGetUserRoleInCompany_ThenError() {
+        Response<String> response = service.getUserRoleInCompany("invalid-token", COMPANY_ID);
+        assertNull(response.getValue());
+        assertEquals("Invalid or expired token", response.getMessage());
+    }
+
+    @Test
+    void GivenFounder_WhenGetUserRoleInCompany_ThenFounder() {
+        Response<String> response = service.getUserRoleInCompany(OWNER_TOKEN, COMPANY_ID);
+        assertEquals("FOUNDER", response.getValue());
+    }
+
+    @Test
+    void GivenManager_WhenGetUserRoleInCompany_ThenManager() {
+        Response<String> response = service.getUserRoleInCompany(MANAGER_TOKEN, COMPANY_ID);
+        assertEquals("MANAGER", response.getValue());
+    }
+
+    @Test
+    void GivenPlainMember_WhenGetUserRoleInCompany_ThenMember() {
+        Response<String> response = service.getUserRoleInCompany(OTHER_TOKEN, COMPANY_ID);
+        assertEquals("MEMBER", response.getValue());
+    }
+
+    @Test
+    void GivenNonExistingCompany_WhenGetUserRoleInCompany_ThenError() {
+        Response<String> response = service.getUserRoleInCompany(OWNER_TOKEN, 9999);
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("Could not determine role"));
+    }
+
+    // ===================== getMyPermissions =====================
+
+    @Test
+    void GivenInvalidToken_WhenGetMyPermissions_ThenError() {
+        Response<Set<PermissionType>> response = service.getMyPermissions("invalid-token", COMPANY_ID);
+        assertNull(response.getValue());
+        assertEquals("Invalid or expired token", response.getMessage());
+    }
+
+    @Test
+    void GivenManagerWithNoPermissions_WhenGetMyPermissions_ThenEmptySet() {
+        Response<Set<PermissionType>> response = service.getMyPermissions(MANAGER_TOKEN, COMPANY_ID);
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue().isEmpty());
+    }
+
+    @Test
+    void GivenManagerWithPermissions_WhenGetMyPermissions_ThenReturnsGrantedPermissions() {
+        service.updateManagerPermissions(OWNER_TOKEN, COMPANY_ID, MANAGER_ID,
+                EnumSet.of(PermissionType.CREATE_EVENT));
+
+        Response<Set<PermissionType>> response = service.getMyPermissions(MANAGER_TOKEN, COMPANY_ID);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue().contains(PermissionType.CREATE_EVENT));
+    }
+
+    @Test
+    void GivenNonManagerMember_WhenGetMyPermissions_ThenEmptySet() {
+        Response<Set<PermissionType>> response = service.getMyPermissions(OTHER_TOKEN, COMPANY_ID);
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue().isEmpty());
+    }
+
+    // ===================== getMyCompanies =====================
+
+    @Test
+    void GivenInvalidToken_WhenGetMyCompanies_ThenError() {
+        Response<List<CompanyDTO>> response = service.getMyCompanies("invalid-token");
+        assertNull(response.getValue());
+        assertEquals("Invalid or expired token", response.getMessage());
+    }
+
+    @Test
+    void GivenGuest_WhenGetMyCompanies_ThenError() {
+        Response<List<CompanyDTO>> response = service.getMyCompanies(GUEST_TOKEN);
+        assertNull(response.getValue());
+        assertEquals("Guests do not have company roles", response.getMessage());
+    }
+
+    @Test
+    void GivenFounder_WhenGetMyCompanies_ThenReturnsOwnedCompany() {
+        Response<List<CompanyDTO>> response = service.getMyCompanies(OWNER_TOKEN);
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue().isEmpty());
+    }
+
+    @Test
+    void GivenMemberWithNoRoles_WhenGetMyCompanies_ThenEmptyList() {
+        Response<List<CompanyDTO>> response = service.getMyCompanies(OTHER_TOKEN);
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue().isEmpty());
+    }
+
 }

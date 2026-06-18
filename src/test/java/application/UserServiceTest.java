@@ -1040,4 +1040,143 @@ class UserServiceTest {
         Mockito.verify(mockNotifier, Mockito.times(1)).notifyTab(Mockito.eq(waitingUuid), captor.capture());
         assertEquals(NotifyType.QUEUE_WEB_TURN_ARRIVED, captor.getValue().getType());
     }
+
+    // --- getUserIdentifier ---
+
+    @Test
+    void GivenNullOrBlankToken_WhenGetUserIdentifier_ThenInvalidToken() {
+        Response<String> responseNull = userService.getUserIdentifier(null);
+        Response<String> responseBlank = userService.getUserIdentifier("   ");
+
+        assertNull(responseNull.getValue());
+        assertEquals("Invalid token", responseNull.getMessage());
+        assertNull(responseBlank.getValue());
+        assertEquals("Invalid token", responseBlank.getMessage());
+    }
+
+    @Test
+    void GivenLoggedInMember_WhenGetUserIdentifier_ThenReturnsEmail() {
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String token = userService.login(dto.getEmail(), dto.getPassword()).getValue();
+
+        Response<String> response = userService.getUserIdentifier(token);
+
+        assertEquals(dto.getEmail(), response.getValue());
+    }
+
+    @Test
+    void GivenMalformedToken_WhenGetUserIdentifier_ThenNoIdentifierReturned() {
+        // A non-blank but unparseable token: passes the null/blank guard, but the
+        // identifier cannot be extracted -> error response with null value.
+        Response<String> response = userService.getUserIdentifier("malformed.jwt.token");
+
+        assertNull(response.getValue());
+        assertTrue(response.isError());
+    }
+
+    // --- getUserDisplayName ---
+
+    @Test
+    void GivenExistingUser_WhenGetUserDisplayName_ThenReturnsFullName() {
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        int userId = userRepo.findUserByEmail(dto.getEmail()).getUserId();
+
+        String displayName = userService.getUserDisplayName(userId);
+
+        assertEquals("Yarin Levi", displayName);
+    }
+
+    @Test
+    void GivenNonExistingUser_WhenGetUserDisplayName_ThenReturnsFallback() {
+        String displayName = userService.getUserDisplayName(99999);
+
+        assertEquals("User #99999", displayName);
+    }
+
+    // --- exitQueue ---
+
+    @Test
+    void GivenNullOrBlankToken_WhenExitQueue_ThenInvalidToken() {
+        Response<Boolean> responseNull = userService.exitQueue(null);
+        Response<Boolean> responseBlank = userService.exitQueue("   ");
+
+        assertFalse(responseNull.getValue());
+        assertEquals("Invalid token", responseNull.getMessage());
+        assertFalse(responseBlank.getValue());
+        assertEquals("Invalid token", responseBlank.getMessage());
+    }
+
+    @Test
+    void GivenWaitingUser_WhenExitQueue_ThenRemoved() {
+        WebQueue.resetForTesting();
+        WebQueue.getInstance(1);
+        userService.enter(); // fills the only slot
+        String waitingUuid = userService.enter().getValue().getToken(); // queued
+
+        Response<Boolean> response = userService.exitQueue(waitingUuid);
+
+        assertTrue(response.getValue());
+        assertEquals("User removed from queue", response.getMessage());
+    }
+
+    @Test
+    void GivenTokenNotInQueue_WhenExitQueue_ThenNotFound() {
+        Response<Boolean> response = userService.exitQueue("not-a-queued-token");
+
+        assertFalse(response.getValue());
+        assertEquals("Token not found in waiting queue", response.getMessage());
+    }
+
+    // --- getUserId ---
+
+    @Test
+    void GivenNullToken_WhenGetUserId_ThenMissing() {
+        Response<Integer> response = userService.getUserId(null);
+
+        assertEquals(-1, response.getValue());
+        assertEquals("Token is missing", response.getMessage());
+    }
+
+    @Test
+    void GivenGuestToken_WhenGetUserId_ThenGuestRecognized() {
+        String guestToken = userService.continueAsGuest().getValue();
+
+        Response<Integer> response = userService.getUserId(guestToken);
+
+        assertEquals(-1, response.getValue());
+        assertEquals("Guest token recognized", response.getMessage());
+    }
+
+    @Test
+    void GivenLoggedInMember_WhenGetUserId_ThenReturnsMemberId() {
+        UserDTO dto = createValidDTO();
+        userService.registerUser(null, dto);
+        String token = userService.login(dto.getEmail(), dto.getPassword()).getValue();
+        int expectedId = userRepo.findUserByEmail(dto.getEmail()).getUserId();
+
+        Response<Integer> response = userService.getUserId(token);
+
+        assertEquals(expectedId, response.getValue());
+        assertEquals("Retrieved member ID", response.getMessage());
+    }
+
+    // --- delayed notifications: user not found ---
+
+    @Test
+    void GivenUnknownEmail_WhenGetDelayedNotifications_ThenUserNotFound() {
+        Response<List<NotifyDTO>> response = userService.getDelayedNotifications("ghost@nowhere.com");
+
+        assertNull(response.getValue());
+        assertEquals("User not found", response.getMessage());
+    }
+
+    @Test
+    void GivenUnknownEmail_WhenCleanDelayedNotifications_ThenUserNotFound() {
+        Response<Boolean> response = userService.cleanDelayedNotifications("ghost@nowhere.com");
+
+        assertFalse(response.getValue());
+        assertEquals("User not found", response.getMessage());
+    }
 }
