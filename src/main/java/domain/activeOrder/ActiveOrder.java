@@ -72,13 +72,11 @@ public class ActiveOrder {
     protected ActiveOrder() {
     }
 
-    // Application constructor: the primary key is assigned by the persistence layer
-    // (DB IDENTITY column, or the in-memory repo), so it is intentionally left null.
     public ActiveOrder(String userIdentifier, Integer eventId, List<Integer> tickets) {
         this.orderId = null;
         this.userIdentifier = userIdentifier;
         this.eventId = eventId;
-        this.tickets = tickets;
+        this.tickets = tickets == null ? new ArrayList<>() : new ArrayList<>(tickets);
         this.version = 0;
         this.createdAt = LocalDateTime.now();
         this.checkoutStartedAt = null;
@@ -96,7 +94,7 @@ public class ActiveOrder {
         this.orderId = activeOrder.orderId;
         this.userIdentifier = activeOrder.userIdentifier;
         this.eventId = activeOrder.eventId;
-        this.tickets = new ArrayList<>(activeOrder.tickets);
+        this.tickets = activeOrder.tickets == null ? new ArrayList<>() : new ArrayList<>(activeOrder.tickets);
         this.createdAt = activeOrder.createdAt;
         this.checkoutStartedAt = activeOrder.checkoutStartedAt;
         this.version = activeOrder.version;
@@ -139,6 +137,11 @@ public class ActiveOrder {
 
         ActiveOrder other = (ActiveOrder) obj;
         return Objects.equals(orderId, other.orderId) && version == other.getVersion();
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(orderId, version);
     }
     public boolean isExpired() {
         return isExpired(LocalDateTime.now());
