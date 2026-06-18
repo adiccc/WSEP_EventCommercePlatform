@@ -107,8 +107,11 @@ public class ActiveOrderService {
     }
 
 
+    // Startup recovery: drop unrecoverable guest orders, return interrupted member payments
+    // to checkout, release lapsed holds, and re-arm pre-expiration warnings.
     @PostConstruct
     public void onStartupRecovery() {
+        releaseOrphanedGuestOrders();
         recoverDanglingPayments();
         cleanupExpiredOrders();
         rebuildPreExpirationWarnings();
@@ -150,8 +153,7 @@ public class ActiveOrderService {
                     if (order.getStage() != STAGE.PAYMENT_IN_PROGRESS) {
                         return new Response<>(true, "Order already resolved");
                     }
-                    // Payment status at crash time is unknown — flag for manual reconciliation,
-                    // then return to checkout so the normal expiry/cleanup lifecycle takes over.
+                    // Payment was interrupted. Flag for manual reconciliation and return to checkout.
                     logger.severe("Recovered dangling PAYMENT_IN_PROGRESS order " + orderId
                             + " after restart; verify external payment for possible manual refund.");
                     order.returnToCheckout();
@@ -173,6 +175,66 @@ public class ActiveOrderService {
                 + stuck.getValue().size() + " order(s) processed");
     }
 
+    // Guest sessions cannot survive a restart, so their held seats are freed immediately
+    // rather than waiting for the natural expiry timer.
+    private void releaseOrphanedGuestOrders() {
+        logger.info("releaseOrphanedGuestOrders called");
+
+        Response<List<Integer>> guests = RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+            try {
+                List<Integer> ids = activeOrderRepo.getAll().stream()
+                        // A guest's identifier is not a registered member email.
+                        .filter(o -> userRepo.findUserByEmail(o.getUserIdentifier()) == null)
+                        .map(ActiveOrder::getId)
+                        .collect(Collectors.toList());
+                return new Response<>(ids, "Orphaned guest orders loaded");
+            } catch (OptimisticLockingFailureException | TransientDataAccessException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.severe("Failed to scan for orphaned guest orders: " + e.getMessage());
+                return new Response<>(null, "Failed to scan orphaned guest orders");
+            }
+        }));
+
+        if (guests == null || guests.getValue() == null) {
+            logger.severe("Could not scan for orphaned guest orders on startup");
+            return;
+        }
+
+        for (Integer orderId : guests.getValue()) {
+            releaseHeldOrder(orderId);
+        }
+        logger.info("Orphaned guest orders released: " + guests.getValue().size());
+    }
+
+    // Releases an order's held seats, removes it, and admits the next queued visitor.
+    private void releaseHeldOrder(int orderId) {
+        RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
+            try {
+                ActiveOrder order = activeOrderRepo.findById(orderId);
+                if (order.getStage() == STAGE.PAYMENT_IN_PROGRESS) {
+                    logger.severe("Order " + orderId
+                            + " was mid-payment. Verify external payment for possible manual refund.");
+                }
+                Event event = eventRepo.findById(order.getEventId());
+                event.releaseTickets(order.getTickets());
+                eventRepo.store(event);
+                activeOrderRepo.delete(orderId);
+                preExpirationScheduler.cancel(orderId);
+                promoteNextInQueue(event.getId());
+                return new Response<>(true, "Order released");
+            } catch (NoSuchElementException e) {
+                return new Response<>(true, "Order already removed");
+            } catch (OptimisticLockingFailureException | TransientDataAccessException e) {
+                status.setRollbackOnly();
+                throw e;
+            }
+        }));
+    }
+
     private void rebuildPreExpirationWarnings() {
         logger.info("rebuildPreExpirationWarnings called");
 
@@ -183,7 +245,7 @@ public class ActiveOrderService {
                 List<ActiveOrder> pending = activeOrderRepo.getAll().stream()
                         .filter(o -> o.getStage() == STAGE.CHECKING_OUT || o.getStage() == STAGE.EDITING)
                         .filter(o -> !o.isExpired(now))
-                        // Members only: their stored identifier is a persistent email; guests are ephemeral.
+                        // Members only: guests are not recoverable after a restart.
                         .filter(o -> userRepo.findUserByEmail(o.getUserIdentifier()) != null)
                         .collect(Collectors.toList());
                 return new Response<>(pending, "Pending warnings loaded");
@@ -352,7 +414,6 @@ public class ActiveOrderService {
                 ActiveOrder newActiveOrder = new ActiveOrder(userIdentifier, eventId, new ArrayList<>());
 
                 eventRepo.store(e);
-                // id is assigned by the persistence layer on store; read it afterwards.
                 activeOrderRepo.store(newActiveOrder);
 
                 logger.log(Level.INFO,
@@ -792,7 +853,7 @@ public class ActiveOrderService {
             int activeOrderId,
             PaymentDetailsDTO paymentDetails) {
 
-        // PHASE 1 (T1): validate and lock the order as PAYMENT_IN_PROGRESS.
+        // Step 1: validate the request and reserve the order for payment.
         Response<CheckoutContext> prep = RetryHelper.executeWithRetry(() ->
                 transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "checkoutAndPayment called");
@@ -822,7 +883,7 @@ public class ActiveOrderService {
                     return new Response<>(null, "Active order has no selected tickets");
                 }
                 if (activeOrder.isExpired()) {
-                    // release the held tickets and drop the expired order in the same tx
+                    // Order already expired: release its seats and remove it.
                     event.releaseTickets(activeOrder.getTickets());
                     eventRepo.store(event);
                     activeOrderRepo.delete(activeOrderId);
@@ -877,7 +938,7 @@ public class ActiveOrderService {
         }
         CheckoutContext ctx = prep.getValue();
 
-        // PHASE 2 (no transaction): external payment, then ticket issuance.
+        // Step 2: charge the customer and issue tickets via external systems.
         String paymentConfirmationId = null;
         boolean paymentCallFailed = false;
         try {
@@ -888,7 +949,7 @@ public class ActiveOrderService {
         }
 
         if (paymentCallFailed) {
-            // external error (not a clean decline): leave the order intact for retry
+            // External error rather than a decline, so keep the order for retry.
             resetOrderToCheckout(ctx.activeOrderId());
             return new Response<>(null, "Failed to complete purchase");
         }
@@ -936,7 +997,7 @@ public class ActiveOrderService {
         final boolean finalIssuanceFailed = issuanceFailed;
         final boolean finalRefundApproved = refundApproved;
 
-        // PHASE 3 (T3): persist the outcome on a freshly fetched event/order.
+        // Step 3: record the outcome against current event state.
         Response<FinalizeResult> finalizeResponse = RetryHelper.executeWithRetry(() ->
                 transactionTemplate.execute(status -> {
             try {
@@ -1006,7 +1067,7 @@ public class ActiveOrderService {
             return new Response<>(null, "Failed to complete purchase");
         }
 
-        // Post-commit side effects: need the committed state, so kept out of the transaction.
+        // Side effects that must run only after the outcome is committed.
         if (outcome.orderConsumed()) {
             preExpirationScheduler.cancel(ctx.activeOrderId());
             if (outcome.success()) {
@@ -1030,7 +1091,7 @@ public class ActiveOrderService {
         return new Response<>(outcome.orderId(), outcome.message());
     }
 
-    // Reverts a PAYMENT_IN_PROGRESS order back to checkout after a rejected payment.
+    // Returns an order to checkout after a declined payment.
     private void resetOrderToCheckout(int activeOrderId) {
         RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             try {
@@ -1050,7 +1111,7 @@ public class ActiveOrderService {
         }));
     }
 
-    // Phase-1 snapshot carried across the external calls into phase 3.
+    // Data captured before the external calls, used to finalize the purchase.
     private record CheckoutContext(
             int activeOrderId,
             String userIdentifier,
@@ -1062,7 +1123,7 @@ public class ActiveOrderService {
             List<TicketSupplyRequestDTO> supplyRequests) {
     }
 
-    // Phase-3 outcome used to drive post-commit side effects and the final response.
+    // Outcome of finalization, used to drive post-commit side effects.
     private record FinalizeResult(
             Integer orderId,
             String message,
@@ -1070,38 +1131,11 @@ public class ActiveOrderService {
             boolean success) {
     }
 
+    // Releases the seats held by every order whose reservation window has lapsed.
     public void cleanupExpiredOrders() {
         logger.log(Level.INFO, "cleanupExpiredOrders running");
-        List<ActiveOrder> expired = activeOrderRepo.findExpired(LocalDateTime.now());
-
-        for (ActiveOrder expiredOrder : expired) {
-            try {
-                RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
-                    try {
-                        // re-fetch fresh on each retry, state may have changed
-                        ActiveOrder current = activeOrderRepo.findById(expiredOrder.getId());
-                        Event event = eventRepo.findById(current.getEventId());
-                        event.releaseTickets(current.getTickets());
-                        eventRepo.store(event); // optimistic lock check
-                        activeOrderRepo.delete(current.getId());
-                        preExpirationScheduler.cancel(current.getId());
-                        promoteNextInQueue(event.getId());
-                        return new Response<>(true, "expired");
-                    } catch (NoSuchElementException e) {
-                        // order already gone — user placed it before cleanup hit. Fine.
-                        return new Response<>(true, "already removed");
-                    } catch (OptimisticLockingFailureException e) {
-                        status.setRollbackOnly();
-                        throw e;
-                    } catch (TransientDataAccessException e) {
-                        status.setRollbackOnly();
-                        throw e;
-                    }
-                }));
-            } catch (Exception e) {
-                logger.log(Level.SEVERE, "Failed to expire order " + expiredOrder.getId() + ": " + e.getMessage());
-                // swallow — keep processing other orders
-            }
+        for (ActiveOrder expiredOrder : activeOrderRepo.findExpired(LocalDateTime.now())) {
+            releaseHeldOrder(expiredOrder.getId());
         }
     }
     public Response<ActiveOrderDTO> memberProceedAnActiveOrder(String token) {
@@ -1168,8 +1202,7 @@ public class ActiveOrderService {
                     logger.severe("User does not have write access caused by suspension");
                     return new Response<>(null, "user does not have write access caused by suspension.");
                 }
-                // Match the ownership key the order was stored under in enterEventPurchase:
-                // member -> email, guest -> raw token.
+                // Orders are keyed by the buyer's identifier.
                 String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(userIdentifier);
@@ -1187,8 +1220,6 @@ public class ActiveOrderService {
 
                 order.returnToEditSelection();
                 activeOrderRepo.store(order);
-                // checkoutStartedAt is intentionally NOT touched — the continuous 10-minute
-                // seat-hold timer and its pending pre-expiration warning carry over unchanged.
 
                 logger.log(Level.INFO, "Order moved to EDITING successfully");
                 return new Response<>(new ActiveOrderDTO(order), "Returned to edit selection");
@@ -1230,8 +1261,7 @@ public class ActiveOrderService {
                     logger.severe("User does not have write access caused by suspension");
                     return new Response<>(null, "user does not have write access caused by suspension.");
                 }
-                // Match the ownership key the order was stored under in enterEventPurchase:
-                // member -> email, guest -> raw token.
+                // Orders are keyed by the buyer's identifier.
                 String userIdentifier = auth.getUserIdentifier(token).getValue();
 
                 // the case that a user tries to remove and add the same tickets
@@ -1322,9 +1352,6 @@ public class ActiveOrderService {
 
                 eventRepo.store(event);
                 activeOrderRepo.store(order);
-
-                // The 10-minute seat-hold deadline is fixed at userSelectTickets time and never
-                // resets — the warning scheduled then remains valid, so no reschedule here.
 
                 logger.log(Level.INFO, "Selection updated successfully");
                 return new Response<>(new ActiveOrderDTO(order), "Selection updated successfully");
@@ -1497,8 +1524,7 @@ public class ActiveOrderService {
         }
         return -1; //for guest or invalid
     }
-     // Helper method to send a real-time notification or save it as pending if the
-    // user is offline.
+    // Sends a notification live, or stores it as pending when the user is offline.
     private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
         Member member = userRepo.findUserByEmail(userIdentifier);
         boolean isGuest = (member == null);
@@ -1535,7 +1561,6 @@ public class ActiveOrderService {
         logger.info("Member is offline. Notification remains PENDING for: " + userIdentifier);
         return new Response<>(null, "Notification saved as PENDING");
     }
-    //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
     private Response<Long> saveDelayedNotificationAsPending(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() ->
                 transactionTemplate.execute(status -> {
@@ -1571,7 +1596,6 @@ public class ActiveOrderService {
         );
     }
 
-    //marking notification as delivered because we succeed in real-time
     private Response<Boolean> markNotificationAsDelivered(String userIdentifier, Long notificationId) {
         return RetryHelper.executeWithRetry(() ->
                 transactionTemplate.execute(status -> {
