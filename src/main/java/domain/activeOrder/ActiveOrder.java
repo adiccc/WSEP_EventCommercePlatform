@@ -52,9 +52,21 @@ public class ActiveOrder {
     @Column(name = "approved_checkout_price")
     private Double approvedCheckoutPrice;
 
-    private static final int SELECTING_TICKETS_TIMEOUT_MINUTES = 5;
-    private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
-    private static final int WARNING_BEFORE_CHECKOUT_EXPIRY_MINUTES = 1;
+    private static int selectingTicketsTimeoutMinutes = 5;
+    private static int checkoutTimeoutMinutes = 10;
+    private static int warningBeforeCheckoutExpiryMinutes = 1;
+
+    public static void configure(int selectingTimeout, int checkoutTimeout, int warningBeforeExpiry) {
+        if (selectingTimeout > 0) {
+            selectingTicketsTimeoutMinutes = selectingTimeout;
+        }
+        if (checkoutTimeout > 0) {
+            checkoutTimeoutMinutes = checkoutTimeout;
+        }
+        if (warningBeforeExpiry > 0 && warningBeforeExpiry < checkoutTimeoutMinutes) {
+            warningBeforeCheckoutExpiryMinutes = warningBeforeExpiry;
+        }
+    }
 
     // Required by JPA.
     protected ActiveOrder() {
@@ -162,17 +174,17 @@ public class ActiveOrder {
     public LocalDateTime getCheckoutWarningTime() {
         if ((stage == STAGE.CHECKING_OUT || stage == STAGE.EDITING) && checkoutStartedAt != null) {
             return checkoutStartedAt.plusMinutes(
-                    CHECKOUT_TIMEOUT_MINUTES - WARNING_BEFORE_CHECKOUT_EXPIRY_MINUTES);
+                    checkoutTimeoutMinutes - warningBeforeCheckoutExpiryMinutes);
         }
         return null;
     }
 
     public boolean isExpired(LocalDateTime now) {
         if (stage == STAGE.SELECTING_TICKETS) {
-            return createdAt.plusMinutes(SELECTING_TICKETS_TIMEOUT_MINUTES).isBefore(now);
+            return createdAt.plusMinutes(selectingTicketsTimeoutMinutes).isBefore(now);
         }
         if (stage == STAGE.CHECKING_OUT || stage == STAGE.EDITING) {
-            return checkoutStartedAt.plusMinutes(CHECKOUT_TIMEOUT_MINUTES).isBefore(now);
+            return checkoutStartedAt.plusMinutes(checkoutTimeoutMinutes).isBefore(now);
         }
         return false;
     }
@@ -194,7 +206,7 @@ public class ActiveOrder {
         if (stage == STAGE.SELECTING_TICKETS) {
             this.createdAt = now.minusMinutes(6);
         } else if (stage == STAGE.CHECKING_OUT || stage == STAGE.EDITING) {
-            this.checkoutStartedAt = now.minusMinutes(CHECKOUT_TIMEOUT_MINUTES + 1);
+            this.checkoutStartedAt = now.minusMinutes(checkoutTimeoutMinutes + 1);
         }
     }
         public void startPayment() {
@@ -253,7 +265,7 @@ public class ActiveOrder {
         }
 
         LocalDateTime expiresAt =
-                checkoutStartedAt.plusMinutes(CHECKOUT_TIMEOUT_MINUTES);
+                checkoutStartedAt.plusMinutes(checkoutTimeoutMinutes);
 
         return Math.max(0, Duration.between(now, expiresAt).getSeconds());
     }
