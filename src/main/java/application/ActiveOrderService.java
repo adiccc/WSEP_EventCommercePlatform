@@ -799,7 +799,6 @@ public class ActiveOrderService {
                         orderedCodesForOrder.add(barcode);
                     }
                 }
-                order.setExternalTicketCodes(orderedCodesForOrder);
 
                 List<String> cancelledCodes = new ArrayList<>();
                 if (issuanceFailed) {
@@ -817,6 +816,9 @@ public class ActiveOrderService {
                         }
                     }
                     successfullyIssuedCodes.removeAll(cancelledCodes);
+
+                    order.setExternalTicketCodes(successfullyIssuedCodes);
+
                     boolean refundApproved = paymentSystem.refund(paymentConfirmationId, total);
 
                     if (refundApproved) {

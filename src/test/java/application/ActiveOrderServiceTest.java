@@ -5087,7 +5087,7 @@ class ActiveOrderServiceTest {
 
         // Act
         PaymentDetailsDTO payment = new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
-        Response<Integer> checkoutResp = mockService.checkoutAndPayment(firstFillerToken, firstFillerOrderId, payment);
+        Response<CheckoutSuccessDTO> checkoutResp = mockService.checkoutAndPayment(firstFillerToken, firstFillerOrderId, payment);
 
         // Assert
         assertNotNull(checkoutResp.getValue(), "Checkout must succeed");
