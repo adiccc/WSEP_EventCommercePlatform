@@ -221,10 +221,10 @@ Requests and auto-accepts a manager appointment with specific permissions.
 | `appointeeId`    | Yes — integer, use `get-user-id` first |
 | `permissions`    | Yes — comma-separated list |
 
-Available permissions: `MANAGE_EVENTS_INVENTORY`, `VIEW_ORDERS_HISTORY`, `CREATE_EVENT`, `MANAGE_STAFF`, `VIEW_INCOME_REPORTS`
+Available permissions: `VIEW_ORDERS_HISTORY`, `CREATE_EVENT`, `MANAGE_STAFF`, `VIEW_INCOME_REPORTS`
 
 ```json
-{ "type": "appoint-manager", "params": { "ownerToken": "${aliceToken}", "appointeeToken": "${eveToken}", "companyId": "1", "appointeeId": "${eveId}", "permissions": "MANAGE_EVENTS_INVENTORY,CREATE_EVENT" } }
+{ "type": "appoint-manager", "params": { "ownerToken": "${aliceToken}", "appointeeToken": "${eveToken}", "companyId": "1", "appointeeId": "${eveId}", "permissions": "CREATE_EVENT" } }
 ```
 
 ---
