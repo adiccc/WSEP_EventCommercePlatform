@@ -14,8 +14,7 @@ public class Order {
     private String eventName;
     private String eventDate;
     private String eventLocation;
-    private List<PurchasedTicketDTO> purchasedTickets;
-    private List<Integer> tickets;
+    private List<PurchasedTicketSnapshot> purchasedTickets;
     private double totalSum;
     private String paymentConfirmationId;
 
@@ -27,7 +26,7 @@ public class Order {
                  String eventDate,
                  String eventLocation,
                  List<PurchasedTicketDTO> purchasedTickets,
-                 List<Integer> tickets, double totalSum,
+                 double totalSum,
                  String paymentConfirmationId) {
         this.orderId = orderId;
         this.userIdentifier = userIdentifier;
@@ -35,10 +34,13 @@ public class Order {
         this.eventName = eventName;
         this.eventDate = eventDate;
         this.eventLocation = eventLocation;
-        this.purchasedTickets = purchasedTickets == null
-                ? new ArrayList<>()
-                : new ArrayList<>(purchasedTickets);
-        this.tickets = new ArrayList<>(tickets);
+        this.purchasedTickets = new ArrayList<>();
+
+        if (purchasedTickets != null) {
+            for (PurchasedTicketDTO ticket : purchasedTickets) {
+                this.purchasedTickets.add(new PurchasedTicketSnapshot(ticket));
+            }
+        }
         this.status = OrderStatus.APPROVED;
         this.totalSum = totalSum;
         this.paymentConfirmationId = paymentConfirmationId;
@@ -51,10 +53,13 @@ public class Order {
         this.eventName = order.eventName;
         this.eventDate = order.eventDate;
         this.eventLocation = order.eventLocation;
-        this.purchasedTickets = order.purchasedTickets == null
-                ? new ArrayList<>()
-                : new ArrayList<>(order.purchasedTickets);
-        this.tickets=new ArrayList<>(order.tickets);
+        this.purchasedTickets = new ArrayList<>();
+
+        if (order.purchasedTickets != null) {
+            for (PurchasedTicketSnapshot ticket : order.purchasedTickets) {
+                this.purchasedTickets.add(new PurchasedTicketSnapshot(ticket));
+            }
+        }
         this.status = order.status;
         this.totalSum = order.totalSum;
         this.paymentConfirmationId = order.paymentConfirmationId;
@@ -89,7 +94,7 @@ public class Order {
     }
 
     public int getNumOfTickets() {
-        return tickets.size();
+        return purchasedTickets.size();
     }
 
     public String getUserIdentifier() {
@@ -101,23 +106,17 @@ public class Order {
     }
 
     public List<Integer> getTickets() {
-        return new ArrayList<>(tickets);
+        List<Integer> ticketIds = new ArrayList<>();
+
+        for (PurchasedTicketSnapshot ticket : purchasedTickets) {
+            ticketIds.add(ticket.getTicketId());
+        }
+
+        return ticketIds;
     }
 
     public String getEventName() {
         return eventName;
-    }
-
-    public String getEventDate() {
-        return eventDate;
-    }
-
-    public String getEventLocation() {
-        return eventLocation;
-    }
-
-    public List<PurchasedTicketDTO> getPurchasedTickets() {
-        return new ArrayList<>(purchasedTickets);
     }
 
     public PurchaseHistoryDTO toPurchaseHistoryDTO() {
@@ -127,8 +126,18 @@ public class Order {
                 eventDate,
                 eventLocation,
                 status,
-                purchasedTickets,
+                getPurchasedTickets(),
                 totalSum
         );
+    }
+
+    public List<PurchasedTicketDTO> getPurchasedTickets() {
+        List<PurchasedTicketDTO> result = new ArrayList<>();
+
+        for (PurchasedTicketSnapshot ticket : purchasedTickets) {
+            result.add(ticket.toDTO());
+        }
+
+        return result;
     }
 }

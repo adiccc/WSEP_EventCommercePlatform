@@ -35,7 +35,6 @@ class OrderTest {
                                 50.0
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123"
         );
@@ -70,7 +69,6 @@ class OrderTest {
                                 50.0
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123"
         );        // As default order in status APPROVED (not REFUND_REQUIRED)
@@ -104,7 +102,6 @@ class OrderTest {
                                 50.0
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123"
         );

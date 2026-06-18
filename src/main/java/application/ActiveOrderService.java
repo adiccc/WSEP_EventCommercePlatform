@@ -740,7 +740,6 @@ public class ActiveOrderService {
                         event.getDate().toString(),
                         event.getLocation().name(),
                         event.getPurchasedTicketDetails(activeOrder.getTickets()),
-                        activeOrder.getTickets(),
                         total,
                         paymentConfirmationId);
 
