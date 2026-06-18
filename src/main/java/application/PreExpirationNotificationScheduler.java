@@ -79,6 +79,25 @@ public class PreExpirationNotificationScheduler {
         });
     }
 
+    // Token-free path for crash recovery (Member email as identifier). Only schedules when
+    // the warning instant is still strictly in the future — never fires a late "1 minute left".
+    public void rescheduleOnStartup(String userIdentifier, int orderId, LocalDateTime warningTime) {
+        LocalDateTime now = LocalDateTime.now();
+        if (warningTime == null || !warningTime.isAfter(now)) {
+            cancel(orderId);
+            return;
+        }
+
+        long delayMillis = Duration.between(now, warningTime).toMillis();
+
+        scheduledWarnings.compute(orderId, (id, existing) -> {
+            if (existing != null) {
+                existing.cancel(false);
+            }
+            return scheduler.schedule(() -> fireWarningForIdentifier(userIdentifier, id), delayMillis, TimeUnit.MILLISECONDS);
+        });
+    }
+
     /**
      * Cancels any pending warning for an order (called when the order is completed,
      * paid, or expired) so we don't leak scheduled tasks.
@@ -124,6 +143,37 @@ public class PreExpirationNotificationScheduler {
                             null));
             String identifier = auth.getUserIdentifier(token).getValue();
             notifier.notifyUser(identifier, warning);
+        } catch (Exception e) {
+            logger.log(Level.WARNING,
+                    "Failed to send pre-expiration warning for order " + orderId + ": " + e.getMessage());
+        }
+    }
+
+    // Recovery variant: notifies the supplied (persistent) identifier directly, no token.
+    private void fireWarningForIdentifier(String userIdentifier, int orderId) {
+        ActiveOrder order;
+        try {
+            order = activeOrderRepo.findById(orderId);
+        } catch (NoSuchElementException e) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime warningTime = order.getCheckoutWarningTime();
+
+        if (warningTime == null || now.isBefore(warningTime) || order.isExpired(now)) {
+            return;
+        }
+
+        try {
+            NotifyDTO warning = new NotifyDTO(
+                    NotifyType.GENERAL_POPUP,
+                    new NotifyPayload(
+                            "Your selected seats are reserved for 1 more minute. "
+                                    + "Please complete checkout to avoid losing them.",
+                            order.getEventId(),
+                            null));
+            notifier.notifyUser(userIdentifier, warning);
         } catch (Exception e) {
             logger.log(Level.WARNING,
                     "Failed to send pre-expiration warning for order " + orderId + ": " + e.getMessage());

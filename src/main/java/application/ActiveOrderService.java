@@ -108,8 +108,14 @@ public class ActiveOrderService {
 
 
     @PostConstruct
-    public void recoverDanglingPaymentsOnStartup() {
-        logger.info("recoverDanglingPaymentsOnStartup called");
+    public void onStartupRecovery() {
+        recoverDanglingPayments();
+        cleanupExpiredOrders();
+        rebuildPreExpirationWarnings();
+    }
+
+    private void recoverDanglingPayments() {
+        logger.info("recoverDanglingPayments called");
 
         Response<List<Integer>> stuck = RetryHelper.executeWithRetry(() ->
                 transactionTemplate.execute(status -> {
@@ -165,6 +171,45 @@ public class ActiveOrderService {
 
         logger.info("Dangling payment recovery complete: "
                 + stuck.getValue().size() + " order(s) processed");
+    }
+
+    private void rebuildPreExpirationWarnings() {
+        logger.info("rebuildPreExpirationWarnings called");
+
+        Response<List<ActiveOrder>> res = RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+            try {
+                LocalDateTime now = LocalDateTime.now();
+                List<ActiveOrder> pending = activeOrderRepo.getAll().stream()
+                        .filter(o -> o.getStage() == STAGE.CHECKING_OUT || o.getStage() == STAGE.EDITING)
+                        .filter(o -> !o.isExpired(now))
+                        // Members only: their stored identifier is a persistent email; guests are ephemeral.
+                        .filter(o -> userRepo.findUserByEmail(o.getUserIdentifier()) != null)
+                        .collect(Collectors.toList());
+                return new Response<>(pending, "Pending warnings loaded");
+            } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.severe("Failed to load orders for warning rebuild: " + e.getMessage());
+                return new Response<>(null, "Failed to load orders for warning rebuild");
+            }
+        }));
+
+        if (res == null || res.getValue() == null) {
+            logger.severe("Could not rebuild pre-expiration warnings on startup");
+            return;
+        }
+
+        for (ActiveOrder order : res.getValue()) {
+            preExpirationScheduler.rescheduleOnStartup(
+                    order.getUserIdentifier(), order.getId(), order.getCheckoutWarningTime());
+        }
+        logger.info("Pre-expiration warnings rebuilt for " + res.getValue().size() + " member order(s)");
     }
 
     public Response<EnterPurchaseDTO> enterEventPurchase(String token, int companyId, int eventId, String code) {
