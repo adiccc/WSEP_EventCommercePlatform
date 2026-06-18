@@ -2,22 +2,62 @@ package domain.event;
 
 import DTO.PurchaseHistoryDTO;
 import DTO.PurchasedTicketDTO;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Table;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@Entity
+@Table(name = "orders")
 public class Order {
-    private OrderStatus status;
+    @Id
+    @Column(name = "order_id", nullable = false)
     private int orderId;
-    private String userIdentifier; //for member will be an email, and for guest will be the generated string when purchased
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private OrderStatus status;
+
+    @Column(nullable = false)
+    private String userIdentifier;
+
+    @Column(name = "event_id", insertable = false, updatable = false, nullable = false)
     private Integer eventId;
+
+    @Column(nullable = false)
     private String eventName;
+
+    @Column(nullable = false)
     private String eventDate;
+
+    @Column(nullable = false)
     private String eventLocation;
+
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(
+            name = "order_purchased_tickets",
+            joinColumns = @JoinColumn(name = "order_id")
+    )
     private List<PurchasedTicketSnapshot> purchasedTickets;
+
+    @Column(nullable = false)
     private double totalSum;
+
+    @Column(nullable = false)
     private String paymentConfirmationId;
 
+    protected Order() {
+        this.purchasedTickets = new ArrayList<>();
+    }
 
     public Order(int orderId,
                  String userIdentifier,
@@ -41,6 +81,7 @@ public class Order {
                 this.purchasedTickets.add(new PurchasedTicketSnapshot(ticket));
             }
         }
+
         this.status = OrderStatus.APPROVED;
         this.totalSum = totalSum;
         this.paymentConfirmationId = paymentConfirmationId;
@@ -60,6 +101,7 @@ public class Order {
                 this.purchasedTickets.add(new PurchasedTicketSnapshot(ticket));
             }
         }
+
         this.status = order.status;
         this.totalSum = order.totalSum;
         this.paymentConfirmationId = order.paymentConfirmationId;
