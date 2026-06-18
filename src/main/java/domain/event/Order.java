@@ -27,19 +27,19 @@ public class Order {
     @Column(nullable = false)
     private OrderStatus status;
 
-    @Column(nullable = false)
+    @Column(name = "user_identifier", nullable = false)
     private String userIdentifier;
 
     @Column(name = "event_id", insertable = false, updatable = false, nullable = false)
     private Integer eventId;
 
-    @Column(nullable = false)
+    @Column(name = "event_name", nullable = false)
     private String eventName;
 
-    @Column(nullable = false)
+    @Column(name = "event_date", nullable = false)
     private String eventDate;
 
-    @Column(nullable = false)
+    @Column(name = "event_location", nullable = false)
     private String eventLocation;
 
     @ElementCollection(fetch = FetchType.LAZY)
@@ -49,10 +49,10 @@ public class Order {
     )
     private List<PurchasedTicketSnapshot> purchasedTickets;
 
-    @Column(nullable = false)
+    @Column(name = "total_sum", nullable = false)
     private double totalSum;
 
-    @Column(nullable = false)
+    @Column(name = "payment_confirmation_id", nullable = false)
     private String paymentConfirmationId;
 
     protected Order() {
