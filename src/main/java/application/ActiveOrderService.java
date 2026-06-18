@@ -26,6 +26,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+import jakarta.annotation.PostConstruct;
 
 import java.time.LocalDateTime;
 
@@ -34,7 +35,6 @@ import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -43,7 +43,6 @@ import java.util.stream.Collectors;
 
 public class ActiveOrderService {
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
-    private final AtomicInteger idGenerator = new AtomicInteger(1);
     private final IEventRepo eventRepo;
     private final IActiveOrderRepo activeOrderRepo;
     private final ICompanyRepo companyRepo;
@@ -107,8 +106,114 @@ public class ActiveOrderService {
         return this.capacity;
     }
 
+
+    @PostConstruct
+    public void onStartupRecovery() {
+        recoverDanglingPayments();
+        cleanupExpiredOrders();
+        rebuildPreExpirationWarnings();
+    }
+
+    private void recoverDanglingPayments() {
+        logger.info("recoverDanglingPayments called");
+
+        Response<List<Integer>> stuck = RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+            try {
+                List<Integer> ids = activeOrderRepo.getAll().stream()
+                        .filter(o -> o.getStage() == STAGE.PAYMENT_IN_PROGRESS)
+                        .map(ActiveOrder::getId)
+                        .collect(Collectors.toList());
+                return new Response<>(ids, "Dangling payment orders loaded");
+            } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.severe("Failed to scan for dangling payment orders: " + e.getMessage());
+                return new Response<>(null, "Failed to scan dangling payment orders");
+            }
+        }));
+
+        if (stuck == null || stuck.getValue() == null) {
+            logger.severe("Could not scan for dangling payment orders on startup");
+            return;
+        }
+
+        for (Integer orderId : stuck.getValue()) {
+            RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
+                try {
+                    ActiveOrder order = activeOrderRepo.findById(orderId);
+                    if (order.getStage() != STAGE.PAYMENT_IN_PROGRESS) {
+                        return new Response<>(true, "Order already resolved");
+                    }
+                    // Payment status at crash time is unknown — flag for manual reconciliation,
+                    // then return to checkout so the normal expiry/cleanup lifecycle takes over.
+                    logger.severe("Recovered dangling PAYMENT_IN_PROGRESS order " + orderId
+                            + " after restart; verify external payment for possible manual refund.");
+                    order.returnToCheckout();
+                    activeOrderRepo.store(order);
+                    return new Response<>(true, "Order returned to checkout");
+                } catch (NoSuchElementException e) {
+                    return new Response<>(true, "Order no longer exists");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                }
+            }));
+        }
+
+        logger.info("Dangling payment recovery complete: "
+                + stuck.getValue().size() + " order(s) processed");
+    }
+
+    private void rebuildPreExpirationWarnings() {
+        logger.info("rebuildPreExpirationWarnings called");
+
+        Response<List<ActiveOrder>> res = RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+            try {
+                LocalDateTime now = LocalDateTime.now();
+                List<ActiveOrder> pending = activeOrderRepo.getAll().stream()
+                        .filter(o -> o.getStage() == STAGE.CHECKING_OUT || o.getStage() == STAGE.EDITING)
+                        .filter(o -> !o.isExpired(now))
+                        // Members only: their stored identifier is a persistent email; guests are ephemeral.
+                        .filter(o -> userRepo.findUserByEmail(o.getUserIdentifier()) != null)
+                        .collect(Collectors.toList());
+                return new Response<>(pending, "Pending warnings loaded");
+            } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.severe("Failed to load orders for warning rebuild: " + e.getMessage());
+                return new Response<>(null, "Failed to load orders for warning rebuild");
+            }
+        }));
+
+        if (res == null || res.getValue() == null) {
+            logger.severe("Could not rebuild pre-expiration warnings on startup");
+            return;
+        }
+
+        for (ActiveOrder order : res.getValue()) {
+            preExpirationScheduler.rescheduleOnStartup(
+                    order.getUserIdentifier(), order.getId(), order.getCheckoutWarningTime());
+        }
+        logger.info("Pre-expiration warnings rebuilt for " + res.getValue().size() + " member order(s)");
+    }
+
     public Response<EnterPurchaseDTO> enterEventPurchase(String token, int companyId, int eventId, String code) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "enterEventPurchase called");
             cleanupExpiredOrders();
 
@@ -244,17 +349,16 @@ public class ActiveOrderService {
                             "Event is full, user added to waiting queue. Position: " + position);
                 }
 
-                int orderId = idGenerator.getAndIncrement();
-
-                ActiveOrder newActiveOrder = new ActiveOrder(orderId, userIdentifier, eventId, new ArrayList<>());
-
-                logger.log(Level.INFO,
-                        "Creating active order with ID: " + newActiveOrder.getId()
-                                + " for user identifier: " + newActiveOrder.getUserIdentifier()
-                                + " and event ID: " + newActiveOrder.getEventId());
+                ActiveOrder newActiveOrder = new ActiveOrder(userIdentifier, eventId, new ArrayList<>());
 
                 eventRepo.store(e);
+                // id is assigned by the persistence layer on store; read it afterwards.
                 activeOrderRepo.store(newActiveOrder);
+
+                logger.log(Level.INFO,
+                        "Created active order with ID: " + newActiveOrder.getId()
+                                + " for user identifier: " + newActiveOrder.getUserIdentifier()
+                                + " and event ID: " + newActiveOrder.getEventId());
 
                 logger.log(Level.INFO, "Event map retrieved successfully");
 
@@ -266,25 +370,32 @@ public class ActiveOrderService {
                         "Event map retrieved successfully");
 
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(null, "Event not found");
             } catch (IllegalStateException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, e.getMessage());
                 return new Response<>(null, e.getMessage());
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
-
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error during enterEventPurchase: " + e.getMessage());
+                throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Failed to enter event purchase : " + e.getMessage());
                 return new Response<>(
                         null,
                         "Failed to enter event purchase  : " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<Boolean> isRequiredLotteryCode(String token, int companyId, int eventId) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "isRequiredLotteryCode called");
 
             try {
@@ -350,15 +461,21 @@ public class ActiveOrderService {
                         "Lottery code is required to purchase tickets for this event");
 
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Event or lottery not found: " + e.getMessage());
                 return new Response<>(
                         null,
                         "Event or lottery not found");
 
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
-
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error during isRequiredLotteryCode: " + e.getMessage());
+                throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(
                         Level.SEVERE,
                         "Failed to check lottery code requirement: " + e.getMessage());
@@ -367,11 +484,11 @@ public class ActiveOrderService {
                         null,
                         "Failed to check lottery code requirement: " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<Boolean> validateLotteryCode(String token, int companyId, int eventId, String code) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "validateLotteryCode called");
 
             try {
@@ -435,18 +552,24 @@ public class ActiveOrderService {
                 return new Response<>(true, "Lottery code is valid");
 
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Lottery code validation failed: event or lottery not found");
                 return new Response<>(null, "Event or lottery not found");
 
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 logger.log(Level.WARNING, "Lottery code validation failed due to optimistic locking");
                 throw e;
-
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error during validateLotteryCode: " + e.getMessage());
+                throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Lottery code validation failed: " + e.getMessage());
                 return new Response<>(null, "Failed to validate lottery code: " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<TicketSupplyResultDTO> issueTickets(TicketSupplyRequestDTO request) {
@@ -476,7 +599,7 @@ public class ActiveOrderService {
     }
 
     public Response<Integer> userSelectTickets(String identifier, Integer eventId, Map<String, List<SeatingTicketDTO>> seatingZones, Map<String, Integer> standingZones) {
-        return RetryHelper.executeWithRetry(()->{
+        return RetryHelper.executeWithRetry(()-> transactionTemplate.execute(status ->{
         logger.log(Level.INFO, "userSelectTickets called");
         String role = getValidatedRole(identifier);
         if(role == null){
@@ -534,16 +657,23 @@ public class ActiveOrderService {
                 logger.log(Level.INFO, "Tickets selected successfully");
                 return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                 return new Response<>(null, "Event not found");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error during userSelectTickets: " + e.getMessage());
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Failed to select tickets : " + e.getMessage());
                 return new Response<>(null, "Failed to select tickets : " + e.getMessage());
             }
 
-    });}
+    }));}
 
     public Response<CheckoutPriceDTO> prepareCheckout(String token, int activeOrderId) {
         return prepareCheckoutPrice(token, activeOrderId, null);
@@ -570,7 +700,7 @@ public class ActiveOrderService {
             int activeOrderId,
             String couponCode) {
 
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "prepareCheckoutPrice called");
 
             try {
@@ -640,14 +770,21 @@ public class ActiveOrderService {
                 return new Response<>(checkoutPrice, "Checkout price prepared successfully");
 
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 return new Response<>(null, "Event or active order not found");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error during prepareCheckoutPrice: " + e.getMessage());
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Failed to prepare checkout price: " + e.getMessage());
                 return new Response<>(null, "Failed to prepare checkout price");
             }
-        });
+        }));
     }
 
     public Response<Integer> checkoutAndPayment(
@@ -655,263 +792,283 @@ public class ActiveOrderService {
             int activeOrderId,
             PaymentDetailsDTO paymentDetails) {
 
-        return RetryHelper.executeWithRetry(() -> {
+        // PHASE 1 (T1): validate and lock the order as PAYMENT_IN_PROGRESS.
+        Response<CheckoutContext> prep = RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "checkoutAndPayment called");
-
-            ActiveOrder activeOrder = null;
-            Event event = null;
-            Order order = null;
-
-            boolean shouldDeleteActiveOrder = false;
-            boolean shouldReleaseTickets = false;
-            boolean paymentStageAcquired = false;
-
             try {
                 String role = getValidatedRole(token);
                 if (role == null) {
-                    logger.log(Level.SEVERE, "Invalid token");
                     return new Response<>(null, "Invalid token");
                 }
                 String userIdentifier = auth.getUserIdentifier(token).getValue();
-                if (role.equals("MEMBER")) { // if it's a member should be email
+                if (role.equals("MEMBER")) {
                     if (userIdentifier == null) {
-                        logger.log(Level.SEVERE, "not a valid user email");
                         return new Response<>(null, "not a valid user email");
                     }
                     if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(token))) {
-                        logger.severe("User does not have write access caused by suspension");
                         return new Response<>(null, "user does not have write access caused by suspension.");
                     }
                 }
-                activeOrder = activeOrderRepo.findById(activeOrderId);
-                if (!(activeOrder.getUserIdentifier().equals(userIdentifier))) { // userIdentifier
+                ActiveOrder activeOrder = activeOrderRepo.findById(activeOrderId);
+                if (!activeOrder.getUserIdentifier().equals(userIdentifier)) {
                     return new Response<>(null, "Active order does not belong to user");
                 }
-
-                event = eventRepo.findById(activeOrder.getEventId());
-
+                Event event = eventRepo.findById(activeOrder.getEventId());
                 if (!event.isActive()) {
                     return new Response<>(null, "Event is not active");
                 }
-
                 if (!activeOrder.hasTickets()) {
                     return new Response<>(null, "Active order has no selected tickets");
                 }
-
                 if (activeOrder.isExpired()) {
-                    shouldDeleteActiveOrder = true;
-                    shouldReleaseTickets = true;
+                    // release the held tickets and drop the expired order in the same tx
+                    event.releaseTickets(activeOrder.getTickets());
+                    eventRepo.store(event);
+                    activeOrderRepo.delete(activeOrderId);
                     return new Response<>(null, "Active order expired");
                 }
-
-                try {
-                    activeOrder.startPayment();
-                    activeOrderRepo.store(activeOrder);
-                    paymentStageAcquired = true;
-                } catch (IllegalStateException e) {
-                    return new Response<>(null, e.getMessage());
-                } catch (OptimisticLockingFailureException e) {
-                    throw e;
-                }
-
-                Company company = companyRepo.findById(event.getCompanyId());
-
                 if (!activeOrder.hasApprovedCheckoutPrice()) {
                     return new Response<>(null, "Checkout price was not approved");
                 }
-
                 double total = activeOrder.getApprovedCheckoutPrice();
 
-                String paymentConfirmationId = paymentSystem.pay(total, paymentDetails);
+                activeOrder.startPayment();
+                activeOrderRepo.store(activeOrder);
 
-                if (paymentConfirmationId == null || paymentConfirmationId.isBlank()) {
-                    ActiveOrder freshOrder = activeOrderRepo.findById(activeOrderId);
-                    freshOrder.returnToCheckout();
-                    activeOrderRepo.store(freshOrder);
-                    paymentStageAcquired = false;
-                    return new Response<>(null, "Payment rejected");
+                List<Integer> tickets = activeOrder.getTickets();
+                Map<String, List<PurchasedTicketDTO>> ticketsByZone =
+                        event.getPurchasedTicketDetails(tickets).stream()
+                                .collect(Collectors.groupingBy(PurchasedTicketDTO::getZoneName));
+                List<TicketSupplyRequestDTO> supplyRequests = new ArrayList<>();
+                for (Map.Entry<String, List<PurchasedTicketDTO>> entry : ticketsByZone.entrySet()) {
+                    boolean isSeating = entry.getValue().get(0).getTicketType().equalsIgnoreCase("SEATING");
+                    supplyRequests.add(new TicketSupplyRequestDTO(
+                            userIdentifier, String.valueOf(event.getId()),
+                            entry.getKey(), isSeating, entry.getValue()));
                 }
 
-                order = new Order(
-                        activeOrder.getId(),
-                        userIdentifier,
-                        event.getId(),
-                        event.getName(),
-                        event.getDate().toString(),
-                        event.getLocation().name(),
-                        event.getPurchasedTicketDetails(activeOrder.getTickets()),
-                        total,
-                        paymentConfirmationId);
 
-                shouldDeleteActiveOrder = true;
+                CheckoutContext ctx = new CheckoutContext(
+                        activeOrderId, userIdentifier, event.getId(), event.getName(), event.getCompanyId(),
+                        total, tickets, supplyRequests);
+                return new Response<>(ctx, "Ready for payment");
 
-                boolean issuanceFailed = false;
-                List<String> successfullyIssuedCodes = new ArrayList<>(); //for any case of rollback
-                try {
-                    List<PurchasedTicketDTO> purchasedDetails = event.getPurchasedTicketDetails(activeOrder.getTickets());
-                    Map<String, List<PurchasedTicketDTO>> ticketsByZone = purchasedDetails.stream()
-                            .collect(Collectors.groupingBy(PurchasedTicketDTO::getZoneName));
+            } catch (IllegalStateException e) {
+                status.setRollbackOnly();
+                return new Response<>(null, e.getMessage());
+            } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
+                return new Response<>(null, "Event or active order not found");
+            } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.log(Level.SEVERE, "Failed to prepare checkout: " + e.getMessage());
+                return new Response<>(null, "Failed to complete purchase");
+            }
+        }));
 
-                    for (Map.Entry<String, List<PurchasedTicketDTO>> entry : ticketsByZone.entrySet()) {
-                        String zoneName = entry.getKey();
-                        List<PurchasedTicketDTO> zoneTickets = entry.getValue();
+        if (prep == null || prep.getValue() == null) {
+            return new Response<>(null, prep == null ? "Failed to complete purchase" : prep.getMessage());
+        }
+        CheckoutContext ctx = prep.getValue();
 
-                        boolean isSeating = zoneTickets.get(0).getTicketType().equalsIgnoreCase("SEATING");
+        // PHASE 2 (no transaction): external payment, then ticket issuance.
+        String paymentConfirmationId = null;
+        boolean paymentCallFailed = false;
+        try {
+            paymentConfirmationId = paymentSystem.pay(ctx.total(), paymentDetails);
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Payment call failed: " + e.getMessage());
+            paymentCallFailed = true;
+        }
 
-                        TicketSupplyRequestDTO supplyRequest = new TicketSupplyRequestDTO(
-                                userIdentifier, // customer_id
-                                String.valueOf(event.getId()),
-                                zoneName,
-                                isSeating,
-                                zoneTickets
-                        );
+        if (paymentCallFailed) {
+            // external error (not a clean decline): leave the order intact for retry
+            resetOrderToCheckout(ctx.activeOrderId());
+            return new Response<>(null, "Failed to complete purchase");
+        }
+        if (paymentConfirmationId == null || paymentConfirmationId.isBlank()) {
+            resetOrderToCheckout(ctx.activeOrderId());
+            return new Response<>(null, "Payment rejected");
+        }
 
-                    TicketSupplyResultDTO issueResult = ticketSupply.issue(supplyRequest);
-
-                    if (issueResult == null || !issueResult.isSuccess()) {
-                        issuanceFailed = true;
-                        break;
-                    } else {
-                        if (issueResult.getIssuedCodes() != null) {
-                            successfullyIssuedCodes.addAll(issueResult.getIssuedCodes());
-                        }
-                    }
-                    }
-
-                } catch (Exception e) {
-                    logger.log(Level.SEVERE, "Ticket issuance failed: " + e.getMessage());
+        boolean issuanceFailed = false;
+        List<String> issuedCodes = new ArrayList<>();
+        try {
+            for (TicketSupplyRequestDTO request : ctx.supplyRequests()) {
+                TicketSupplyResultDTO result = ticketSupply.issue(request);
+                if (result == null || !result.isSuccess()) {
                     issuanceFailed = true;
+                    break;
                 }
+                if (result.getIssuedCodes() != null) {
+                    issuedCodes.addAll(result.getIssuedCodes());
+                }
+            }
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Ticket issuance failed: " + e.getMessage());
+            issuanceFailed = true;
+        }
 
-                if (issuanceFailed) {
-                    logger.log(Level.WARNING, "Issuance failed. Initiating rollback for " + successfullyIssuedCodes.size() + " tickets.");
-                    for (String issuedCode : successfullyIssuedCodes) { //cancelTicketAtTheTicketSystem
-                        try {
-                            ticketSupply.cancelTicket(issuedCode);
-                        } catch (Exception cancelEx) {
-                            logger.warning("Failed to cancel ticket " + issuedCode + " during rollback: " + cancelEx.getMessage());
-                        }
-                    }
-                    boolean refundApproved = paymentSystem.refund(paymentConfirmationId, total);
+        boolean refundApproved = false;
+        if (issuanceFailed) {
+            logger.log(Level.WARNING, "Issuance failed. Cancelling " + issuedCodes.size() + " issued tickets.");
+            for (String issuedCode : issuedCodes) {
+                try {
+                    ticketSupply.cancelTicket(issuedCode);
+                } catch (Exception cancelEx) {
+                    logger.warning("Failed to cancel ticket " + issuedCode + ": " + cancelEx.getMessage());
+                }
+            }
+            try {
+                refundApproved = paymentSystem.refund(paymentConfirmationId, ctx.total());
+            } catch (Exception e) {
+                logger.warning("Refund call failed: " + e.getMessage());
+            }
+        }
 
-                    if (refundApproved) {
+        final String confirmationId = paymentConfirmationId;
+        final boolean finalIssuanceFailed = issuanceFailed;
+        final boolean finalRefundApproved = refundApproved;
+
+        // PHASE 3 (T3): persist the outcome on a freshly fetched event/order.
+        Response<FinalizeResult> finalizeResponse = RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+            try {
+                Event event = eventRepo.findById(ctx.eventId());
+                Order order = new Order(
+                        ctx.activeOrderId(), ctx.userIdentifier(), event.getId(),
+                        event.getName(), event.getDate().toString(), event.getLocation().name(),
+                        event.getPurchasedTicketDetails(ctx.tickets()),
+                        ctx.total(), confirmationId);
+
+                if (finalIssuanceFailed) {
+                    if (finalRefundApproved) {
                         order.markRefunded();
-                        try {
-                            // Notify the user about the refund
-                            NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId()
-                                    + " in event " + event.getId() + " because ticket issuance failed", event.getId(),
-                                    null);
-                            sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));                        } catch (Exception e) {
-                            logger.log(Level.WARNING,
-                                    "Failed to notify user about successful refund: " + e.getMessage());
-                        }
+                        NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId()
+                                + " in event " + event.getId() + " because ticket issuance failed", event.getId(), null);
+                        sendOrSaveNotification(ctx.userIdentifier(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
                     } else {
                         order.markRefundRequired();
-                        try {
-                            NotifyPayload payload = new NotifyPayload(
-                                    "Refund for order " + order.getOrderId() + " in event " + event.getId()
-                                            + " because ticket issuance failed has been failed, please contact support",
-                                    event.getId(), null);
-                            sendOrSaveNotification(userIdentifier, new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
-                        } catch (Exception e) {
-                            logger.log(Level.WARNING, "Failed to notify user about required refund: " + e.getMessage());
-                        }
+                        NotifyPayload payload = new NotifyPayload("Refund for order " + order.getOrderId() + " in event "
+                                + event.getId() + " because ticket issuance failed has been failed, please contact support",
+                                event.getId(), null);
+                        sendOrSaveNotification(ctx.userIdentifier(), new NotifyDTO(NotifyType.GENERAL_POPUP, payload));
                     }
-
-                    shouldReleaseTickets = true;
-                    return new Response<>(null, "Ticket issuance failed");
+                    event.releaseTickets(ctx.tickets());
+                    if (event.findOrderById(order.getOrderId()) == null) {
+                        event.getOrders().add(order);
+                    }
+                    eventRepo.store(event);
+                    activeOrderRepo.delete(ctx.activeOrderId());
+                    return new Response<>(
+                            new FinalizeResult(null, "Ticket issuance failed", true, false),
+                            "Ticket issuance failed");
                 }
 
+                if (event.findOrderById(order.getOrderId()) == null) {
+                    event.getOrders().add(order);
+                }
+                event.markTicketsAsSold(ctx.tickets());
+                eventRepo.store(event);
+                activeOrderRepo.delete(ctx.activeOrderId());
+                return new Response<>(
+                        new FinalizeResult(order.getOrderId(), "Purchase completed successfully", true, true),
+                        "Purchase completed successfully");
+
+            } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
+                return new Response<>(
+                        new FinalizeResult(null, "Event or active order not found", false, false),
+                        "Event or active order not found");
+            } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.log(Level.SEVERE, "Failed to finalize purchase: " + e.getMessage());
+                return new Response<>(
+                        new FinalizeResult(null, "Failed to complete purchase", false, false),
+                        "Failed to complete purchase");
+            }
+        }));
+
+        FinalizeResult outcome = finalizeResponse == null ? null : finalizeResponse.getValue();
+        if (outcome == null) {
+            return new Response<>(null, "Failed to complete purchase");
+        }
+
+        // Post-commit side effects: need the committed state, so kept out of the transaction.
+        if (outcome.orderConsumed()) {
+            preExpirationScheduler.cancel(ctx.activeOrderId());
+            if (outcome.success()) {
                 try {
-                    NotifyDTO confirmation = new NotifyDTO(
-                            NotifyType.GENERAL_POPUP,
-                            new NotifyPayload(
-                                    "Your order #" + order.getOrderId() + " for \""
-                                            + event.getName() + "\" was completed successfully.",
-                                    event.getId(), event.getCompanyId()));
+                    NotifyDTO confirmation = new NotifyDTO(NotifyType.GENERAL_POPUP, new NotifyPayload(
+                            "Your order #" + outcome.orderId() + " for \"" + ctx.eventName()
+                                    + "\" was completed successfully.", ctx.eventId(), ctx.companyId()));
                     notifier.notifyTab(token, confirmation);
                 } catch (Exception e) {
                     logger.log(Level.WARNING, "Purchase confirmation notification failed: " + e.getMessage());
                 }
-
-                return new Response<>(order.getOrderId(), "Purchase completed successfully");
-
-            } catch (NoSuchElementException e) {
-                return new Response<>(null, "Event or active order not found");
-
-            } catch (OptimisticLockingFailureException e) {
-                if (paymentStageAcquired && activeOrder != null && order == null) {
-                    try {
-                        ActiveOrder freshOrder = activeOrderRepo.findById(activeOrderId);
-                        freshOrder.returnToCheckout();
-                        activeOrderRepo.store(freshOrder);
-                    } catch (Exception resetException) {
-                        logger.log(Level.SEVERE, "Failed to reset active order stage: " + resetException.getMessage());
-                    }
-                }
-                throw e;
-
-            } catch (Exception e) {
-                logger.log(Level.SEVERE, "Failed to complete purchase: " + e.getMessage());
-
-                if (paymentStageAcquired && activeOrder != null && order == null) {
-                    try {
-                        ActiveOrder freshOrder = activeOrderRepo.findById(activeOrderId);
-                        freshOrder.returnToCheckout();
-                        activeOrderRepo.store(freshOrder);
-                    } catch (Exception resetException) {
-                        logger.log(Level.SEVERE, "Failed to reset active order stage: " + resetException.getMessage());
-                    }
-                }
-
-                return new Response<>(null, "Failed to complete purchase");
-
-            } finally {
-                if (event != null && activeOrder != null) {
-                    if (shouldReleaseTickets || order != null) {
-                        boolean stored = false;
-
-                        while (!stored) {
-                            try {
-                                Event freshEvent = eventRepo.findById(event.getId());
-
-                                if (shouldReleaseTickets) {
-                                    freshEvent.releaseTickets(activeOrder.getTickets());
-                                }
-
-                                if (order != null && freshEvent.findOrderById(order.getOrderId()) == null) {
-                                    freshEvent.getOrders().add(order);
-                                }
-
-                                if (order != null && !shouldReleaseTickets) {
-                                    freshEvent.markTicketsAsSold(activeOrder.getTickets());
-                                }
-
-                                eventRepo.store(freshEvent);
-                                stored = true;
-
-                            } catch (OptimisticLockingFailureException e) {
-                                logger.log(Level.INFO, "Retrying event update after optimistic locking failure");
-                            }
-                        }
-
-                        if (order != null && !shouldReleaseTickets) {
-                            try {
-                                notifySoldOutIfApplicable(event.getId());
-                            } catch (Exception e) {
-                                logger.log(Level.WARNING, "Sold-out notification failed: " + e.getMessage());
-                            }
-                        }
-                    }
-                }
-                if (shouldDeleteActiveOrder) {
-                    activeOrderRepo.delete(activeOrderId);
-                    preExpirationScheduler.cancel(activeOrderId);
-                    promoteNextInQueue(event.getId());
-
+                try {
+                    notifySoldOutIfApplicable(ctx.eventId());
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Sold-out notification failed: " + e.getMessage());
                 }
             }
-        });
+            promoteNextInQueue(ctx.eventId());
+        }
+
+        return new Response<>(outcome.orderId(), outcome.message());
+    }
+
+    // Reverts a PAYMENT_IN_PROGRESS order back to checkout after a rejected payment.
+    private void resetOrderToCheckout(int activeOrderId) {
+        RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
+            try {
+                ActiveOrder order = activeOrderRepo.findById(activeOrderId);
+                order.returnToCheckout();
+                activeOrderRepo.store(order);
+                return new Response<>(true, "Order reset to checkout");
+            } catch (NoSuchElementException e) {
+                return new Response<>(true, "Order no longer exists");
+            } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                throw e;
+            }
+        }));
+    }
+
+    // Phase-1 snapshot carried across the external calls into phase 3.
+    private record CheckoutContext(
+            int activeOrderId,
+            String userIdentifier,
+            int eventId,
+            String eventName,
+            int companyId,
+            double total,
+            List<Integer> tickets,
+            List<TicketSupplyRequestDTO> supplyRequests) {
+    }
+
+    // Phase-3 outcome used to drive post-commit side effects and the final response.
+    private record FinalizeResult(
+            Integer orderId,
+            String message,
+            boolean orderConsumed,
+            boolean success) {
     }
 
     public void cleanupExpiredOrders() {
@@ -920,7 +1077,7 @@ public class ActiveOrderService {
 
         for (ActiveOrder expiredOrder : expired) {
             try {
-                RetryHelper.executeWithRetry(() -> {
+                RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
                     try {
                         // re-fetch fresh on each retry, state may have changed
                         ActiveOrder current = activeOrderRepo.findById(expiredOrder.getId());
@@ -935,9 +1092,13 @@ public class ActiveOrderService {
                         // order already gone — user placed it before cleanup hit. Fine.
                         return new Response<>(true, "already removed");
                     } catch (OptimisticLockingFailureException e) {
+                        status.setRollbackOnly();
+                        throw e;
+                    } catch (TransientDataAccessException e) {
+                        status.setRollbackOnly();
                         throw e;
                     }
-                });
+                }));
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to expire order " + expiredOrder.getId() + ": " + e.getMessage());
                 // swallow — keep processing other orders
@@ -945,7 +1106,7 @@ public class ActiveOrderService {
         }
     }
     public Response<ActiveOrderDTO> memberProceedAnActiveOrder(String token) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "memberProceedActiveOrder called");
             String role = getValidatedRole(token); //if token is expired
             if (role == null) {
@@ -976,19 +1137,26 @@ public class ActiveOrderService {
                 logger.log(Level.INFO, "Active order retrieved successfully");
                 return new Response<>(order, "Active order retrieved successfully");
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Active order not found: " + e.getMessage());
                 return new Response<>(null, "Active order not found");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error during memberProceedAnActiveOrder: " + e.getMessage());
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Failed to proceed active order: " + e.getMessage());
                 return new Response<>(null, "Failed to proceed active order: " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<ActiveOrderDTO> returnToEditSelection(String token) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "returnToEditSelection called");
             try {
                 String role = getValidatedRole(token);
@@ -1027,15 +1195,22 @@ public class ActiveOrderService {
                 return new Response<>(new ActiveOrderDTO(order), "Returned to edit selection");
 
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Active order not found: " + e.getMessage());
                 return new Response<>(null, "Active order not found");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error during returnToEditSelection: " + e.getMessage());
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Failed to return to edit selection: " + e.getMessage());
                 return new Response<>(null, "Failed to return to edit selection: " + e.getMessage());
             }
-        });
+        }));
     }
 
     public Response<ActiveOrderDTO> editTicketSelection(
@@ -1043,7 +1218,7 @@ public class ActiveOrderService {
             Map<String, List<SeatingTicketDTO>> seatingToRemove,
             Map<String, List<SeatingTicketDTO>> seatingToAdd,
             Map<String, Integer> standingDesired) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "editTicketSelection called");
             try {
                 String role = getValidatedRole(token);
@@ -1156,18 +1331,26 @@ public class ActiveOrderService {
                 return new Response<>(new ActiveOrderDTO(order), "Selection updated successfully");
 
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Order or event not found: " + e.getMessage());
                 return new Response<>(null, "Order or event not found");
             } catch (IllegalArgumentException | IllegalStateException e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Invalid edit: " + e.getMessage());
                 return new Response<>(null, "Invalid edit: " + e.getMessage());
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error during editTicketSelection: " + e.getMessage());
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Failed to edit selection: " + e.getMessage());
                 return new Response<>(null, "Failed to edit selection: " + e.getMessage());
             }
-        });
+        }));
     }
 
     public void shutdown() {
@@ -1176,7 +1359,7 @@ public class ActiveOrderService {
     }
 
     public Response<Boolean> cancelEventQueueEntry(String token, int eventId) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             String role = getValidatedRole(token);
             if (role == null) {
                 return new Response<>(false, "Invalid token");
@@ -1196,11 +1379,17 @@ public class ActiveOrderService {
                         removed ? "Removed from event queue" : "User was not waiting in event queue");
 
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 return new Response<>(false, "Event not found");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error during cancelEventQueueEntry: " + e.getMessage());
                 throw e;
             }
-        });
+        }));
     }
 
     private void promoteNextInQueue(int eventId) {
@@ -1226,7 +1415,7 @@ public class ActiveOrderService {
     }
 
     private String dequeueNextToken(int eventId) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             try {
                 Event event = eventRepo.findById(eventId);
                 if (event.getEventQueue().isEmpty()
@@ -1237,28 +1426,35 @@ public class ActiveOrderService {
                 eventRepo.store(event);
                 return new Response<>(nextToken, "Token dequeued successfully");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
                 throw e;
             }
-        }).getValue();
+        })).getValue();
     }
 
     private boolean createActiveOrderForToken(String token, int eventId) {
-        boolean skipped = RetryHelper.executeWithRetry(() -> {
+        boolean skipped = RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             try {
                 String role = getValidatedRole(token);
                 String userIdentifier = auth.getUserIdentifier(token).getValue();
                 activeOrderRepo.alreadyHasActiveOrder(userIdentifier, eventId);
-                int orderId = idGenerator.getAndIncrement();
-                ActiveOrder nextOrder = new ActiveOrder(orderId, userIdentifier, eventId, new ArrayList<>());
+                ActiveOrder nextOrder = new ActiveOrder(userIdentifier, eventId, new ArrayList<>());
                 activeOrderRepo.store(nextOrder);
                 return new Response<>(false, "created");
 
             } catch (IllegalStateException e) {
                 return new Response<>(true, "duplicate");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
                 throw e;
             }
-        }).getValue();
+        })).getValue();
 
         if (skipped) {
             promoteNextInQueue(eventId);
@@ -1421,7 +1617,7 @@ public class ActiveOrderService {
     }
 
     public Response<Integer> getCompanyIdByActiveOrder(String token, int activeOrderId) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "getCompanyIdByActiveOrder called");
 
             try {
@@ -1449,24 +1645,30 @@ public class ActiveOrderService {
                 );
 
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 return new Response<>(
                         null,
                         "Active order or event not found"
                 );
 
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
-
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error during getCompanyIdByActiveOrder: " + e.getMessage());
+                throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 return new Response<>(
                         null,
                         "Failed to retrieve company ID"
                 );
             }
-        });
+        }));
     }
     public Response<ActiveOrderSelectionDTO> getCurrentActiveOrderSelection(String token) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "getCurrentActiveOrderSelection called");
 
             try {
@@ -1503,19 +1705,24 @@ public class ActiveOrderService {
                 );
 
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
                 throw e;
-
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error during getCurrentActiveOrderSelection: " + e.getMessage());
+                throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 return new Response<>(
                         null,
                         "Failed to retrieve current active order selection: " + e.getMessage()
                 );
             }
-        });
+        }));
     }
 
     public Response<Long> getCheckoutRemainingSeconds(String token, int activeOrderId) {
-        return RetryHelper.executeWithRetry(() -> {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             try {
                 String role = getValidatedRole(token);
 
@@ -1549,15 +1756,22 @@ public class ActiveOrderService {
                 );
 
             } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
                 return new Response<>(null, "Active order not found");
             } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error during getCheckoutRemainingSeconds: " + e.getMessage());
                 throw e;
             } catch (Exception e) {
+                status.setRollbackOnly();
                 return new Response<>(
                         null,
                         "Failed to get checkout timer: " + e.getMessage()
                 );
             }
-        });
+        }));
     }
 }

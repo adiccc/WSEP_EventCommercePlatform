@@ -14,10 +14,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 @Repository
-@Profile("memory")
+@Profile("memory & !activeorder-db")
 public class ActiveOrderRepoImpl implements IActiveOrderRepo {
     private ConcurrentHashMap<Integer, ActiveOrder> activeOrders; // key: activeOrderId, value: ActiveOrder
+    private final AtomicInteger idGenerator = new AtomicInteger(1);
 
     public ActiveOrderRepoImpl() {
         activeOrders = new ConcurrentHashMap<>();
@@ -47,6 +49,15 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
 
     @Override
     public synchronized void store(ActiveOrder entity) {
+        // New entity: the id is assigned here (mirrors a DB IDENTITY column) and set
+        // back on the caller's instance so it can read getId() afterwards.
+        if (entity.getId() == null) {
+            int id = idGenerator.getAndIncrement();
+            entity.setId(id);
+            activeOrders.put(id, new ActiveOrder(entity));
+            return;
+        }
+
         ActiveOrder currentOrder = activeOrders.get(entity.getId());
 
         if (currentOrder == null) {
@@ -72,6 +83,7 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
         }
     }
 
+    @Override
     public void alreadyHasActiveOrder(String userId, Integer eventId) {
         for (ActiveOrder order : activeOrders.values()) {
             if (order.getUserIdentifier().equals(userId) && order.getEventId().equals(eventId)) {
