@@ -803,12 +803,20 @@ public class EventCompanyManageService {
                 logger.log(Level.WARNING,"Failed to process refund");
             }
             final boolean finalRefundApproved = refundApproved;
+            final List<String> finalCancelledCodes = new ArrayList<>(cancelledCodes);
 
             //update system state according the refund status
             return transactionTemplate.execute(status -> {
                 try {
                     Event currentEvent = eventRepo.findById(eventId);
                     Order currentOrder = currentEvent.findOrderById(orderId);
+                    List<String> remainingCodes = new ArrayList<>(currentOrder.getExternalTicketCodes());
+
+                    if (!finalCancelledCodes.isEmpty()) {
+                        remainingCodes.removeAll(finalCancelledCodes);
+                    }
+
+                    currentOrder.setExternalTicketCodes(remainingCodes);
                     if (finalRefundApproved) {
                         currentOrder.markRefunded();
                         eventRepo.store(currentEvent);
