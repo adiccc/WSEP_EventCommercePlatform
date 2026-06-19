@@ -1,6 +1,7 @@
 package domain.user;
 
 import DTO.NotifyDTO;
+import DTO.NotifyType;
 import domain.dto.UserDTO;
 import jakarta.persistence.*;
 import java.time.LocalDate;
@@ -163,7 +164,11 @@ public class Member extends User {
         for (UserNotification notification : this.userNotifications) {
             if (notification.getStatus() == NotificationStatus.PENDING) {
                 pendingNotifications.add(new NotifyDTO(notification.getType(), notification.getPayload()));
-                notification.setStatus(NotificationStatus.DELIVERED);
+                // ROLE_APPOINTMENT_REQUEST requires explicit accept/reject — keep PENDING
+                // so it remains visible in the notification list until the user responds.
+                if (notification.getType() != NotifyType.ROLE_APPOINTMENT_REQUEST) {
+                    notification.setStatus(NotificationStatus.DELIVERED);
+                }
             }
         }
         return pendingNotifications;
@@ -186,5 +191,19 @@ public class Member extends User {
                 return un.getNotificationId();
         }
         return null;
+    }
+
+    // Finds the PENDING ROLE_APPOINTMENT_REQUEST notification for a given company and marks it delivered.
+    // Called when the user responds (accept/reject) so the notification disappears from their list.
+    public void markAppointmentRequestDelivered(int companyId) {
+        for (UserNotification un : this.userNotifications) {
+            if (un.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST
+                    && un.getStatus() == NotificationStatus.PENDING
+                    && un.getPayload() != null
+                    && Integer.valueOf(companyId).equals(un.getPayload().getCompanyId())) {
+                un.setStatus(NotificationStatus.DELIVERED);
+                return;
+            }
+        }
     }
 }

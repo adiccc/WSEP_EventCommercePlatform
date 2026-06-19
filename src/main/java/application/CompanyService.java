@@ -757,7 +757,9 @@ public class CompanyService {
                     logger.info("respondToOwnerAppointment: user " + userId + " rejected appointment for company " + companyId);
                 }
                 companyRepo.store(company);
-                if(accept){ //just after successful save to the repo we are sending the notification!
+                // Mark the original appointment request as delivered now that the user responded
+                markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId);
+                if(accept){
                     NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
                     NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
                     sendOrSaveNotification(userRepo.getUserEmail(userId), notifyDTO);
@@ -870,6 +872,8 @@ public class CompanyService {
                     userRepo.store(member);
                 }
                 companyRepo.store(company);
+                // Mark the original appointment request as delivered now that the user responded
+                markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId);
                 if(accept){
                     NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
                     NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
@@ -1093,6 +1097,32 @@ public class CompanyService {
             return new Response<>(null, "Notification saved as PENDING");
     }
     //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
+    // Marks the PENDING ROLE_APPOINTMENT_REQUEST notification for a given user+company as delivered.
+    // Called inside respondToOwnerAppointment / respondToManagerAppointment after the user responds,
+    // so the notification disappears from their list regardless of accept or reject.
+    private void markAppointmentRequestAsDelivered(String userIdentifier, int companyId) {
+        RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
+                try {
+                    Member member = userRepo.findUserByEmail(userIdentifier);
+                    if (member != null) {
+                        member.markAppointmentRequestDelivered(companyId);
+                        userRepo.store(member);
+                        logger.info("Appointment request notification marked DELIVERED for: " + userIdentifier + ", companyId: " + companyId);
+                    }
+                    return new Response<>(true, "ok");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.warning("Failed to mark appointment request notification as delivered: " + e.getMessage());
+                    return new Response<>(false, "failed");
+                }
+            })
+        );
+    }
+
     private Response<Long> saveDelayedNotificationAsPending(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() ->
                 transactionTemplate.execute(status -> {
