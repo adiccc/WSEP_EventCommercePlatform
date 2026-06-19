@@ -794,8 +794,17 @@ public class CompanyService {
         });
     }
     public Response<Boolean> respondToOwnerAppointment(String token, int companyId, boolean accept) {
-        return RetryHelper.executeWithRetry(() ->
-            transactionTemplate.execute(status -> {
+        return RetryHelper.executeWithRetry(() -> {
+            final String[]    identifierHolder = new String[1];
+            final Long[]      msgIdHolder      = new Long[1];
+            final NotifyDTO[] notifyDTOHolder  = new NotifyDTO[1];
+
+            Response<Boolean> res = transactionTemplate.execute(status -> {
+                // Reset holders on every retry to avoid stale data from a failed attempt
+                identifierHolder[0] = null;
+                msgIdHolder[0]      = null;
+                notifyDTOHolder[0]  = null;
+
                 logger.info("respondToOwnerAppointment called for companyId: " + companyId + ", accept: " + accept);
                 try {
                     String role = getValidatedRole(token);
@@ -831,10 +840,17 @@ public class CompanyService {
                         logger.info("respondToOwnerAppointment: user " + userId + " rejected appointment for company " + companyId);
                     }
                     companyRepo.store(company);
-                    if(accept){
+                    // Only notify if accepted — holders stay null on reject, post-tx block skips gracefully
+                    if (accept) {
                         NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
-                        NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                        sendOrSaveNotification(userRepo.getUserEmail(userId), notifyDTO);
+                        NotifyDTO notifyDTO = new NotifyDTO(NotifyType.GENERAL_POPUP, payload);
+                        notifyDTOHolder[0]  = notifyDTO;
+                        identifierHolder[0] = userRepo.getUserEmail(userId);
+
+                        Response<Long> msgIdRes = saveDelayedNotificationAsPending(identifierHolder[0], notifyDTO);
+                        if (msgIdRes != null && msgIdRes.getValue() != null) {
+                            msgIdHolder[0] = msgIdRes.getValue();
+                        }
                         logger.info("respondToOwnerAppointment: user " + userId + " accepted and became owner of company " + companyId);
                     }
                     return Response.ok(accept);
@@ -850,8 +866,22 @@ public class CompanyService {
                     logger.severe("Unexpected error in respondToOwnerAppointment: " + e.getMessage());
                     return Response.error("Unexpected error: " + e.getMessage());
                 }
-            })
-        );
+            });
+
+            // ── After transaction: real-time delivery (external system) ──
+            // identifierHolder[0] is null when accept=false → block skipped automatically
+            if (res != null && Boolean.TRUE.equals(res.getValue())
+                    && identifierHolder[0] != null && notifyDTOHolder[0] != null) {
+                boolean isDelivered = notifier.notifyUser(identifierHolder[0], notifyDTOHolder[0]);
+                if (isDelivered && msgIdHolder[0] != null) {
+                    markNotificationAsDelivered(identifierHolder[0], msgIdHolder[0]);
+                    logger.info("respondToOwnerAppointment notification delivered to: " + identifierHolder[0]);
+                } else {
+                    logger.info("respondToOwnerAppointment notification pending for: " + identifierHolder[0]);
+                }
+            }
+            return res;
+        });
     }
     public Response<Boolean> requestAppointManager(String token, int companyId, int appointeeId,
                                                     Set<PermissionType> permissions) {
@@ -952,8 +982,17 @@ public class CompanyService {
         });
     }
     public Response<Boolean> respondToManagerAppointment(String token, int companyId, boolean accept) {
-        return RetryHelper.executeWithRetry(() ->
-            transactionTemplate.execute(status -> {
+        return RetryHelper.executeWithRetry(() -> {
+            final String[]    identifierHolder = new String[1];
+            final Long[]      msgIdHolder      = new Long[1];
+            final NotifyDTO[] notifyDTOHolder  = new NotifyDTO[1];
+
+            Response<Boolean> res = transactionTemplate.execute(status -> {
+                // Reset holders on every retry to avoid stale data from a failed attempt
+                identifierHolder[0] = null;
+                msgIdHolder[0]      = null;
+                notifyDTOHolder[0]  = null;
+
                 logger.info("respondToManagerAppointment called for companyId: " + companyId + ", accept: " + accept);
                 try {
                     String role = getValidatedRole(token);
@@ -987,10 +1026,17 @@ public class CompanyService {
                         userRepo.store(member);
                     }
                     companyRepo.store(company);
-                    if(accept){
+                    // Only notify if accepted — holders stay null on reject, post-tx block skips gracefully
+                    if (accept) {
                         NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
-                        NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
-                        sendOrSaveNotification(userRepo.getUserEmail(userId), notifyDTO);
+                        NotifyDTO notifyDTO = new NotifyDTO(NotifyType.GENERAL_POPUP, payload);
+                        notifyDTOHolder[0]  = notifyDTO;
+                        identifierHolder[0] = userRepo.getUserEmail(userId);
+
+                        Response<Long> msgIdRes = saveDelayedNotificationAsPending(identifierHolder[0], notifyDTO);
+                        if (msgIdRes != null && msgIdRes.getValue() != null) {
+                            msgIdHolder[0] = msgIdRes.getValue();
+                        }
                         logger.info("respondToManagerAppointment succeeded for userId: " + userId + ", accepted: " + accept);
                     }
                     return Response.ok(accept);
@@ -1002,8 +1048,22 @@ public class CompanyService {
                     logger.severe("Unexpected error in respondToManagerAppointment: " + e.getMessage());
                     return Response.error("Unexpected error: " + e.getMessage());
                 }
-            })
-        );
+            });
+
+            // ── After transaction: real-time delivery (external system) ──
+            // identifierHolder[0] is null when accept=false → block skipped automatically
+            if (res != null && Boolean.TRUE.equals(res.getValue())
+                    && identifierHolder[0] != null && notifyDTOHolder[0] != null) {
+                boolean isDelivered = notifier.notifyUser(identifierHolder[0], notifyDTOHolder[0]);
+                if (isDelivered && msgIdHolder[0] != null) {
+                    markNotificationAsDelivered(identifierHolder[0], msgIdHolder[0]);
+                    logger.info("respondToManagerAppointment notification delivered to: " + identifierHolder[0]);
+                } else {
+                    logger.info("respondToManagerAppointment notification pending for: " + identifierHolder[0]);
+                }
+            }
+            return res;
+        });
     }
     public Response<Boolean> removeManagerAppointment(String token, int companyId, int managerId) {
         return RetryHelper.executeWithRetry(() ->
