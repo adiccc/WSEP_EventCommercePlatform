@@ -1095,8 +1095,17 @@ public class CompanyService {
         });
     }
     public Response<Boolean> removeManagerAppointment(String token, int companyId, int managerId) {
-        return RetryHelper.executeWithRetry(() ->
-            transactionTemplate.execute(status -> {
+        return RetryHelper.executeWithRetry(() -> {
+            final String[]    identifierHolder = new String[1];
+            final Long[]      msgIdHolder      = new Long[1];
+            final NotifyDTO[] notifyDTOHolder  = new NotifyDTO[1];
+
+            Response<Boolean> res = transactionTemplate.execute(status -> {
+                // Reset holders on every retry to avoid stale data from a failed attempt
+                identifierHolder[0] = null;
+                msgIdHolder[0]      = null;
+                notifyDTOHolder[0]  = null;
+
                 logger.info("removeManagerAppointment called for companyId: " + companyId + ", managerId: " + managerId);
                 try {
                     String role = getValidatedRole(token);
@@ -1131,10 +1140,17 @@ public class CompanyService {
                     managerMember.changeState(null);
                     userRepo.store(managerMember);
                     companyRepo.store(company);
+
+                    // Save notification as PENDING — real-time delivery happens after transaction commits
                     NotifyPayload payload = new NotifyPayload("Your manager role has been removed from company " + company.getCompanyName(), null, companyId);
-                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.KICKOUT_TAB_NAVIGATION,payload);
-                    sendOrSaveNotification(managerMember.getIdentifier(), notifyDTO);
-                    logger.info("removeManagerAppointment succeeded sending notification for userId: " + managerMember.getIdentifier());
+                    NotifyDTO notifyDTO = new NotifyDTO(NotifyType.KICKOUT_TAB_NAVIGATION, payload);
+                    notifyDTOHolder[0]  = notifyDTO;
+                    identifierHolder[0] = managerMember.getIdentifier();
+
+                    Response<Long> msgIdRes = saveDelayedNotificationAsPending(managerMember.getIdentifier(), notifyDTO);
+                    if (msgIdRes != null && msgIdRes.getValue() != null) {
+                        msgIdHolder[0] = msgIdRes.getValue();
+                    }
 
                     logger.info("removeManagerAppointment succeeded for managerId: " + managerId);
                     return Response.ok(true);
@@ -1154,8 +1170,22 @@ public class CompanyService {
                     logger.severe("Unexpected error in removeManagerAppointment: " + e.getMessage());
                     return Response.error("Unexpected error: " + e.getMessage());
                 }
-            })
-        );
+            });
+
+            // ── After transaction: real-time delivery (external system) ──
+            // Only fires if the transaction actually committed → no duplicates on retry.
+            if (res != null && Boolean.TRUE.equals(res.getValue())
+                    && identifierHolder[0] != null && notifyDTOHolder[0] != null) {
+                boolean isDelivered = notifier.notifyUser(identifierHolder[0], notifyDTOHolder[0]);
+                if (isDelivered && msgIdHolder[0] != null) {
+                    markNotificationAsDelivered(identifierHolder[0], msgIdHolder[0]);
+                    logger.info("removeManagerAppointment notification delivered to: " + identifierHolder[0]);
+                } else {
+                    logger.info("removeManagerAppointment notification pending for: " + identifierHolder[0]);
+                }
+            }
+            return res;
+        });
     }
 
     /**
