@@ -37,7 +37,15 @@ public class SystemInitializer implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
-        String path = systemProperties.getInitStateFile();
+        String path;
+        if (args.containsOption("init-file")) {
+            String custom = args.getOptionValues("init-file").get(0);
+            path = (custom.startsWith("classpath:") || custom.startsWith("file:"))
+                    ? custom : "file:" + custom;
+            logger.info("Using custom init-state file from --init-file: " + path);
+        } else {
+            path = systemProperties.getInitStateFile();
+        }
         logger.info("Loading init-state file: " + path);
 
         InitStateFile initState;
