@@ -10,6 +10,7 @@ import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
+
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -42,6 +43,10 @@ public class SystemInitializer implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) throws Exception {
         String path;
+        boolean emptyDb = args.containsOption("db") && args.getOptionValues("db").contains("empty");
+        if (!emptyDb) {
+            return;
+        }
         if (args.containsOption("init-file")) {
             String custom = args.getOptionValues("init-file").get(0);
             path = (custom.startsWith("classpath:") || custom.startsWith("file:"))
