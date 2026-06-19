@@ -22,6 +22,8 @@ import domain.user.IUserRepo;
 import domain.user.Member;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
@@ -109,7 +111,7 @@ public class ActiveOrderService {
 
     // Startup recovery: drop unrecoverable guest orders, return interrupted member payments
     // to checkout, release lapsed holds, and re-arm pre-expiration warnings.
-    @PostConstruct
+    @EventListener(ApplicationReadyEvent.class)
     public void onStartupRecovery() {
         releaseOrphanedGuestOrders();
         recoverDanglingPayments();

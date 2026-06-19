@@ -130,10 +130,6 @@ public class Order {
         this.paymentConfirmationId = paymentConfirmationId;
     }
 
-    /**
-     * בנאי תאימות לקוד הישן שלך.
-     * לא שומרים את tickets כשדה נפרד, כי אפשר לגזור אותם מתוך purchasedTickets.
-     */
     public Order(int orderId,
                  String userIdentifier,
                  Integer eventId,

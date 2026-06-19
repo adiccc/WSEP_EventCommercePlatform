@@ -18,11 +18,16 @@ import domain.Suspension.Suspension;
 import domain.webQueue.WebQueue;
 import Exception.OptimisticLockingFailureException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.context.event.EventListener;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -127,9 +132,10 @@ public class AdminService {
                         return new Response<>(false, "SuspendUser failed : duration must be greater than 0");
                     }
                     member.suspend();
-                    suspensionRepo.store(new Suspension(userId, duration));
+                    Suspension s=new Suspension(userId, duration);
+                    suspensionRepo.store(s);
                     userRepo.store(member);
-                    scheduleActivateAfterSuspension(userId, duration);
+                    scheduleActivateAfterSuspension(userId, s.getEndDate());
                     logger.log(Level.INFO, "SuspendUser succeeded, user "+userId+" suspended");
                     return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
                 }catch(OptimisticLockingFailureException e){
@@ -202,31 +208,81 @@ public class AdminService {
         });
     }
 
-    private void scheduleActivateAfterSuspension(int userId, int duration) {
-        scheduler.schedule( ()-> RetryHelper.executeWithRetry(()->{
-                    logger.log(Level.INFO, "ScheduleActivateAfterSuspension called");
-                    return transactionTemplate.execute(status -> {
-                        try {
-                            Member member = userRepo.findById(userId);
-                            member.unsuspend();
-                            userRepo.store(member);
-                            logger.log(Level.INFO, "activate after suspension succeeded, user "+userId+" not suspended");
-                            return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
-                        }catch (OptimisticLockingFailureException e) {
-                            status.setRollbackOnly();
-                            throw e;
-                        }catch (NoSuchElementException e){
-                            status.setRollbackOnly();
-                            logger.log(Level.INFO, "User not found");
-                            return new Response<>(false,"User not found");
-                        }catch (Exception e){
-                            status.setRollbackOnly();
-                            logger.log(Level.SEVERE, "SuspendUser faild due to serer error: ", e.getMessage());
-                            return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
-                        }
-                    });
-                })
-                , duration, TimeUnit.DAYS);
+    private void scheduleActivateAfterSuspension(int userId, LocalDateTime endTime) {
+        long delayMillis = Duration.between(LocalDateTime.now(), endTime).toMillis();
+
+        if (delayMillis <= 0) {
+            activateAfterSuspensionIfNeeded(userId);
+            return;
+        }
+
+        scheduler.schedule(
+                () -> RetryHelper.executeWithRetry(() -> activateAfterSuspensionIfNeeded(userId)),
+                delayMillis,
+                TimeUnit.MILLISECONDS
+        );
+    }
+
+    private Response<Boolean> activateAfterSuspensionIfNeeded(int userId) {
+        logger.log(Level.INFO, "ActivateAfterSuspensionIfNeeded called for user " + userId);
+
+        return transactionTemplate.execute(status -> {
+            try {
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.log(Level.INFO, "User " + userId + " still has an active suspension");
+                    return new Response<>(true, "User still has an active suspension");
+                }
+
+                Member member = userRepo.findById(userId);
+                member.unsuspend();
+                userRepo.store(member);
+
+                logger.log(Level.INFO, "User " + userId + " activated after suspension");
+                return new Response<>(true, "User " + userId + " activated after suspension");
+
+            } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+
+            } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
+                logger.log(Level.INFO, "User not found");
+                return new Response<>(false, "User not found");
+
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.log(Level.SEVERE, "ActivateAfterSuspension failed due to server error", e);
+                return new Response<>(false, "ActivateAfterSuspension failed due to server error: " + e.getMessage());
+            }
+        });
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void restoreSuspensionSchedulesOnStartup() {
+        logger.log(Level.INFO, "Restoring suspension schedules on startup");
+
+        List<Suspension> suspensions = suspensionRepo.getAll();
+
+        LocalDateTime now = LocalDateTime.now();
+
+        for (Suspension suspension : suspensions) {
+            LocalDateTime endTime = suspension.getEndDate();
+
+            // permanent suspension
+            if (endTime == null) {
+                continue;
+            }
+
+            // temporary suspension
+            if (!endTime.isAfter(now)) {
+                activateAfterSuspensionIfNeeded(suspension.getUserId());
+            }
+
+            // temporary suspension
+            else {
+                scheduleActivateAfterSuspension(suspension.getUserId(), endTime);
+            }
+        }
     }
 
     public Response<Boolean> setMaxCapacity(String token, int capacity) {
@@ -285,18 +341,6 @@ public class AdminService {
         });
     }
 
-    /**
-     * Removes a member from the platform entirely.
-     * Effects:
-     * - Member account is deactivated (isActive = false)
-     * - If the user is the founder of a company → removal is blocked (return error)
-     * - If the user is an owner (non-founder) → removed from ownerIds;
-     * all managers they appointed cascade to the founder
-     * - If the user is a manager → removed from companyTree;
-     * all sub-managers they appointed cascade to the founder
-     * - If the user is the creator of any event → creator is reassigned to that
-     * company's founder
-     */
     public Response<Boolean> removeUser(String adminToken, int userIdToRemove) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("removeUser attempt for userId: " + userIdToRemove);
@@ -376,8 +420,7 @@ public class AdminService {
                     try {
                         NotifyPayload payload = new NotifyPayload("Your account has been removed by the administrator.");
                         NotifyDTO kickoutNotify = new NotifyDTO(NotifyType.ACCOUNT_REMOVED, payload);
-
-                        notifier.notifyUser(member.getIdentifier(), kickoutNotify); //notify for all tabs just in realtime
+                        sendOrSaveNotification(member.getIdentifier(), kickoutNotify);
                         logger.info("Sent real-time kickout notification to removed user: " + member.getIdentifier());
                     } catch (Exception ex) {
                         logger.warning("Failed to send kickout notification to user: " + member.getIdentifier());
@@ -493,7 +536,7 @@ public class AdminService {
 
             // txn 1 rolled back -> nothing committed, stop
             if (closeRes == null || !closeRes.getValue()) {
-                return closeRes == null ? new Response<>(false, "Failed to close company") : closeRes;
+                return closeRes == null ? new Response<>(false, closeRes.getMessage()) : closeRes;
             }
 
             // Refunds (outside the closure txn). A failed refund does not undo the closure.
@@ -594,7 +637,6 @@ public class AdminService {
                 return new Response<>(true, "Already refunded");
             }
 
-            // External ticket cancellation and payment refund must not run inside an open DB transaction.
             List<String> cancelledCodes = new ArrayList<>();
             if (orderToRefund.getExternalTicketCodes() != null && !orderToRefund.getExternalTicketCodes().isEmpty()) {
                 for (String ticketCode : new ArrayList<>(orderToRefund.getExternalTicketCodes())) {
@@ -623,7 +665,7 @@ public class AdminService {
             final boolean finalRefundApproved = refundApproved;
             final List<String> finalCancelledCodes = new ArrayList<>(cancelledCodes);
 
-// Phase 2 (transaction): persist cancellation/refund outcome and notify the purchaser.
+            // Phase 2 (transaction): persist cancellation/refund outcome and notify the purchaser.
             return transactionTemplate.execute(status -> {
                 try {
                     Event event = eventRepo.findById(eventId);
