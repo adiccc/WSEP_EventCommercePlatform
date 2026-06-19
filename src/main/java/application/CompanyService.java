@@ -757,8 +757,8 @@ public class CompanyService {
                     logger.info("respondToOwnerAppointment: user " + userId + " rejected appointment for company " + companyId);
                 }
                 companyRepo.store(company);
-                // Mark the original OWNER appointment request as delivered now that the user responded
-                markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId, "owner");
+                // Clear appointment notifications: ALL on accept, only owner's on reject
+                markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId, "owner", accept);
                 if(accept){
                     NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
                     NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
@@ -872,8 +872,8 @@ public class CompanyService {
                     userRepo.store(member);
                 }
                 companyRepo.store(company);
-                // Mark the original MANAGER appointment request as delivered now that the user responded
-                markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId, "manager");
+                // Clear appointment notifications: ALL on accept, only manager's on reject
+                markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId, "manager", accept);
                 if(accept){
                     NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
                     NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
@@ -1100,15 +1100,24 @@ public class CompanyService {
     // Marks the PENDING ROLE_APPOINTMENT_REQUEST notification for a given user+company as delivered.
     // Called inside respondToOwnerAppointment / respondToManagerAppointment after the user responds,
     // so the notification disappears from their list regardless of accept or reject.
-    private void markAppointmentRequestAsDelivered(String userIdentifier, int companyId, String roleKeyword) {
+    // On ACCEPT → clear ALL pending appointment notifications for this company (a user can hold
+    //              only one role per company, so the other invite is no longer actionable).
+    // On REJECT → clear ONLY the notification matching roleKeyword ("owner"/"manager"), leaving
+    //              the other role's invite visible so the user can still accept it.
+    private void markAppointmentRequestAsDelivered(String userIdentifier, int companyId, String roleKeyword, boolean accepted) {
         RetryHelper.executeWithRetry(() ->
             transactionTemplate.execute(status -> {
                 try {
                     Member member = userRepo.findUserByEmail(userIdentifier);
                     if (member != null) {
-                        member.markAppointmentRequestDelivered(companyId, roleKeyword);
+                        if (accepted) {
+                            member.markAllAppointmentRequestsDelivered(companyId);
+                        } else {
+                            member.markAppointmentRequestDelivered(companyId, roleKeyword);
+                        }
                         userRepo.store(member);
-                        logger.info("Appointment request notification (" + roleKeyword + ") marked DELIVERED for: " + userIdentifier + ", companyId: " + companyId);
+                        logger.info("Appointment request notifications updated for: " + userIdentifier
+                                + ", companyId: " + companyId + ", role: " + roleKeyword + ", accepted: " + accepted);
                     }
                     return new Response<>(true, "ok");
                 } catch (OptimisticLockingFailureException e) {

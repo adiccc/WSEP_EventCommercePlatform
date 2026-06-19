@@ -193,10 +193,9 @@ public class Member extends User {
         return null;
     }
 
-    // Finds the PENDING ROLE_APPOINTMENT_REQUEST notification for a given company AND role
-    // (owner vs manager) and marks it delivered. The role discriminator is needed because a
-    // single user can have both an owner and a manager invite pending for the same company —
-    // matching on companyId alone would clear both.
+    // Marks ONE PENDING ROLE_APPOINTMENT_REQUEST notification matching companyId + role keyword
+    // (e.g. "owner" or "manager") as delivered. Used on REJECT so only the rejected invite is
+    // cleared and the other role's invite stays visible.
     public void markAppointmentRequestDelivered(int companyId, String roleKeyword) {
         for (UserNotification un : this.userNotifications) {
             if (un.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST
@@ -207,6 +206,20 @@ public class Member extends User {
                     && un.getPayload().getMessage().contains(roleKeyword)) {
                 un.setStatus(NotificationStatus.DELIVERED);
                 return;
+            }
+        }
+    }
+
+    // Marks ALL PENDING ROLE_APPOINTMENT_REQUEST notifications for a given company as delivered.
+    // Used on ACCEPT — a user can only hold one role per company, so accepting either owner or
+    // manager invalidates any other pending invite for the same company.
+    public void markAllAppointmentRequestsDelivered(int companyId) {
+        for (UserNotification un : this.userNotifications) {
+            if (un.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST
+                    && un.getStatus() == NotificationStatus.PENDING
+                    && un.getPayload() != null
+                    && Integer.valueOf(companyId).equals(un.getPayload().getCompanyId())) {
+                un.setStatus(NotificationStatus.DELIVERED);
             }
         }
     }
