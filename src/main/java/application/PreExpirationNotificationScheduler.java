@@ -3,6 +3,7 @@ package application;
 import DTO.NotifyDTO;
 import DTO.NotifyPayload;
 import DTO.NotifyType;
+import app.config.ActiveOrderProperties;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,9 +40,12 @@ public class PreExpirationNotificationScheduler {
     private final ScheduledExecutorService scheduler;
     private final ConcurrentHashMap<Integer, ScheduledFuture<?>> scheduledWarnings;
     private final IAuth auth;
+    private final int selectingTimeoutMinutes;
+    private final int checkoutTimeoutMinutes;
+    private final int warningBeforeExpiryMinutes;
 
     @Autowired
-    public PreExpirationNotificationScheduler(IActiveOrderRepo activeOrderRepo, INotifier notifier, IAuth auth) {
+    public PreExpirationNotificationScheduler(IActiveOrderRepo activeOrderRepo, INotifier notifier, IAuth auth, ActiveOrderProperties activeOrderProperties) {
         this.activeOrderRepo = activeOrderRepo;
         this.notifier = notifier;
         this.scheduledWarnings = new ConcurrentHashMap<>();
@@ -51,6 +55,9 @@ public class PreExpirationNotificationScheduler {
             return t;
         });
         this.auth = auth;
+        this.selectingTimeoutMinutes = activeOrderProperties.getSelectingTimeoutMinutes();
+        this.checkoutTimeoutMinutes = activeOrderProperties.getCheckoutTimeoutMinutes();
+        this.warningBeforeExpiryMinutes = activeOrderProperties.getWarningBeforeExpiryMinutes();
     }
 
     /**
@@ -124,12 +131,12 @@ public class PreExpirationNotificationScheduler {
         }
 
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime warningTime = order.getCheckoutWarningTime();
+        LocalDateTime warningTime = order.getCheckoutWarningTime(checkoutTimeoutMinutes, warningBeforeExpiryMinutes);
 
         // Fire only inside the [warningTime, deadline) window of the CURRENT checkout timer.
         // This rejects orders that have left CHECKING_OUT (e.g. payment started) and any
         // stale task left over from a reschedule whose deadline has since moved later.
-        if (warningTime == null || now.isBefore(warningTime) || order.isExpired(now)) {
+        if (warningTime == null || now.isBefore(warningTime) || order.isExpired(now, selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
             return;
         }
 
@@ -159,9 +166,9 @@ public class PreExpirationNotificationScheduler {
         }
 
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime warningTime = order.getCheckoutWarningTime();
+        LocalDateTime warningTime = order.getCheckoutWarningTime(checkoutTimeoutMinutes, warningBeforeExpiryMinutes);
 
-        if (warningTime == null || now.isBefore(warningTime) || order.isExpired(now)) {
+        if (warningTime == null || now.isBefore(warningTime) || order.isExpired(now, selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
             return;
         }
 

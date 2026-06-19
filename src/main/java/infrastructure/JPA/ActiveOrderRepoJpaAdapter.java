@@ -57,12 +57,9 @@ public class ActiveOrderRepoJpaAdapter implements IActiveOrderRepo {
     }
 
     @Override
-    public List<ActiveOrder> findExpired(LocalDateTime now) {
-        // Expiry is derived by the domain (stage + timeout constants). We load the
-        // candidates and filter through ActiveOrder#isExpired to keep that rule in a
-        // single place rather than duplicating it in JPQL.
+    public List<ActiveOrder> findExpired(LocalDateTime now, int selectingTimeoutMinutes, int checkoutTimeoutMinutes) {
         return activeOrderJpaRepository.findAll().stream()
-                .filter(order -> order.isExpired(now))
+                .filter(order -> order.isExpired(now, selectingTimeoutMinutes, checkoutTimeoutMinutes))
                 .collect(Collectors.toList());
     }
 

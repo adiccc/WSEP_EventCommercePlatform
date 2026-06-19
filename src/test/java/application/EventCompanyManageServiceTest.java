@@ -3,6 +3,7 @@ package application;
 import DTO.*;
 import Log.LoggerSetup;
 import com.vaadin.flow.shared.Registration;
+import app.config.ActiveOrderProperties;
 import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
@@ -88,6 +89,9 @@ class EventCompanyManageServiceTest {
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
     private ActiveOrderService activeOrderService;
+    private static final int SELECTING_TIMEOUT_MINUTES = 5;
+    private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
+    private static final int WARNING_BEFORE_EXPIRY_MINUTES = 1;
     private String GUEST_TOKEN;
     private String ADMIN_TOKEN;
     private AdminService adminService;
@@ -123,7 +127,12 @@ class EventCompanyManageServiceTest {
         eventService=new EventService(auth,eventRepo,notifier, transactionTemplate);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth),userRepo, transactionTemplate,100);
+        ActiveOrderProperties activeOrderProperties=new ActiveOrderProperties();
+        activeOrderProperties.setCapacity(100);
+        activeOrderProperties.setSelectingTimeoutMinutes(SELECTING_TIMEOUT_MINUTES);
+        activeOrderProperties.setCheckoutTimeoutMinutes(CHECKOUT_TIMEOUT_MINUTES);
+        activeOrderProperties.setWarningBeforeExpiryMinutes(WARNING_BEFORE_EXPIRY_MINUTES);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth,activeOrderProperties),userRepo, transactionTemplate,activeOrderProperties);
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete order repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier,transactionTemplate);

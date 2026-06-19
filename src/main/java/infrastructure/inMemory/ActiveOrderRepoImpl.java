@@ -93,11 +93,11 @@ public class ActiveOrderRepoImpl implements IActiveOrderRepo {
     }
 
     @Override
-    public List<ActiveOrder> findExpired(LocalDateTime now) {
+    public List<ActiveOrder> findExpired(LocalDateTime now, int selectingTimeoutMinutes, int checkoutTimeoutMinutes) {
         List<ActiveOrder> result = new ArrayList<>();
 
         for (ActiveOrder order : activeOrders.values()) {
-            if (order.isExpired(now)) {
+            if (order.isExpired(now, selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
                 result.add(new ActiveOrder(order));
             }
         }
