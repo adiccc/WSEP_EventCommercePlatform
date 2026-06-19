@@ -163,12 +163,18 @@ public class NotificationsView extends VerticalLayout {
                 && notification.getPayload().getCompanyId() != null) {
 
             int companyId = notification.getPayload().getCompanyId();
+            // Detect which role this invite is for so we call the right endpoint — otherwise
+            // a user who has BOTH pending invites would always trigger the owner path.
+            String msg = notification.getPayload().getMessage() != null
+                    ? notification.getPayload().getMessage().toLowerCase()
+                    : "";
+            boolean isManagerInvite = msg.contains("manager");
 
-            Button acceptBtn = new Button("Accept", e -> respondToAppointment(card, companyId, true));
+            Button acceptBtn = new Button("Accept", e -> respondToAppointment(card, companyId, true, isManagerInvite));
             acceptBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);
             acceptBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
 
-            Button rejectBtn = new Button("Reject", e -> respondToAppointment(card, companyId, false));
+            Button rejectBtn = new Button("Reject", e -> respondToAppointment(card, companyId, false, isManagerInvite));
             rejectBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_SMALL);
 
             HorizontalLayout actions = new HorizontalLayout(acceptBtn, rejectBtn);
@@ -179,24 +185,24 @@ public class NotificationsView extends VerticalLayout {
         return card;
     }
 
-    private void respondToAppointment(Div card, int companyId, boolean accept) {
+    private void respondToAppointment(Div card, int companyId, boolean accept, boolean isManagerInvite) {
         String token = getToken();
         if (token == null || token.isBlank()) {
             showError("You must be logged in to respond to an appointment.");
             return;
         }
 
-        var ownerRes = companyService.respondToOwnerAppointment(token, companyId, accept);
-        boolean success = ownerRes != null && ownerRes.getValue() != null;
+        // Call the endpoint matching the invite's role — never both, otherwise a user with both
+        // pending invites would have the wrong role assigned (e.g. become owner on manager-accept).
+        Response<Boolean> res = isManagerInvite
+                ? companyService.respondToManagerAppointment(token, companyId, accept)
+                : companyService.respondToOwnerAppointment(token, companyId, accept);
+        boolean success = res != null && res.getValue() != null;
 
         if (!success) {
-            var managerRes = companyService.respondToManagerAppointment(token, companyId, accept);
-            success = managerRes != null && managerRes.getValue() != null;
-            if (!success) {
-                String errorMsg = managerRes != null ? managerRes.getMessage() : "Failed to respond to appointment.";
-                showError(errorMsg);
-                return;
-            }
+            String errorMsg = res != null ? res.getMessage() : "Failed to respond to appointment.";
+            showError(errorMsg);
+            return;
         }
 
         // The respond endpoint already marks the matching appointment notification as DELIVERED.
