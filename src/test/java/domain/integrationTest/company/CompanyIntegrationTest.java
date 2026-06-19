@@ -143,7 +143,7 @@ class CompanyIntegrationTest {
         int managerId = 200;
         Company stored = companyRepo.findById(COMPANY_ID);
         stored.getCompanyPermission().addToTree(managerId, founder.getUserId(),
-                EnumSet.of(PermissionType.MANAGE_EVENTS_INVENTORY, PermissionType.VIEW_PURCHASE_HISTORY)
+                EnumSet.of(PermissionType.MANAGE_POLICIES, PermissionType.VIEW_PURCHASE_HISTORY)
         );
         companyRepo.store(stored);
 
@@ -153,7 +153,7 @@ class CompanyIntegrationTest {
         assertTrue(perms.getCompanyTree().containsKey(managerId),
                 "Manager should appear in the company tree after being added");
         assertTrue(perms.getCompanyTree().get(managerId).getAllPermissions()
-                .contains(PermissionType.MANAGE_EVENTS_INVENTORY));
+                .contains(PermissionType.MANAGE_POLICIES));
         assertTrue(perms.getCompanyTree().get(managerId).getAllPermissions()
                 .contains(PermissionType.VIEW_PURCHASE_HISTORY));
     }
