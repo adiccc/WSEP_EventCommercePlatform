@@ -886,11 +886,7 @@ public class ActiveOrderService {
                             return new Response<>(null, "Active order has no selected tickets");
                         }
                         if (activeOrder.isExpired()) {
-                            event.releaseTickets(activeOrder.getTickets());
-                            eventRepo.store(event);
-                            activeOrderRepo.delete(activeOrderId);
-                            preExpirationScheduler.cancel(activeOrderId);
-                            promoteNextInQueue(event.getId());
+                            releaseHeldOrder(activeOrderId);
                             return new Response<>(null, "Active order expired");
                         }
                         if (!activeOrder.hasApprovedCheckoutPrice()) {
