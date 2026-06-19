@@ -102,6 +102,10 @@ public class CompanyService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
+                    throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
                     logger.severe("Failed to create company " + companyName + ". Error: " + e.getMessage());
@@ -295,6 +299,10 @@ public class CompanyService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
+                    throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
                     logger.severe("Unexpected error in addRuleToCompany: " + e.getMessage());
@@ -353,6 +361,10 @@ public class CompanyService {
                     return Response.error(e.getMessage());
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
@@ -419,6 +431,10 @@ public class CompanyService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
+                    throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
                     logger.severe("Unexpected error in addDiscountToCompany: " + e.getMessage());
@@ -484,6 +500,10 @@ public class CompanyService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
+                    throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
                     logger.severe("Unexpected error in removeDiscountFromCompany: " + e.getMessage());
@@ -526,6 +546,10 @@ public class CompanyService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
+                    throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
                     logger.severe("Unexpected error in changeDiscountPolicyType: " + e.getMessage());
@@ -567,6 +591,10 @@ public class CompanyService {
                     return Response.error(e.getMessage());
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
@@ -694,6 +722,10 @@ public class CompanyService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
+                    throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
                     logger.severe("Unexpected error in updateManagerPermissions: " + e.getMessage());
@@ -788,6 +820,10 @@ public class CompanyService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
+                    throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
                     logger.severe("Unexpected error in requestAppointOwner: " + e.getMessage());
@@ -877,6 +913,10 @@ public class CompanyService {
                     return Response.error("Company not found");
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
@@ -972,6 +1012,10 @@ public class CompanyService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
+                    throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
                     logger.severe("Unexpected error in requestAppointManager: " + e.getMessage());
@@ -1057,6 +1101,10 @@ public class CompanyService {
                     return Response.ok(accept);
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
@@ -1148,6 +1196,10 @@ public class CompanyService {
                     return Response.error(e.getMessage());
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
@@ -1266,6 +1318,10 @@ public class CompanyService {
                     return new Response<>(false, "Company not found");
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
