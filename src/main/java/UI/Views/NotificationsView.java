@@ -199,12 +199,9 @@ public class NotificationsView extends VerticalLayout {
             }
         }
 
-        // Remove the notification from the store now that it's been acted on
-        String userEmail = getUserEmail();
-        if (userEmail != null && !userEmail.isBlank()) {
-            presenter.cleanDelayedNotifications(userEmail);
-        }
-
+        // The respond endpoint already marks the matching appointment notification as DELIVERED.
+        // Do NOT call cleanDelayedNotifications here — that wipes the user's entire notification
+        // history, including any other pending invite (e.g. manager) the user still needs to act on.
         loadNotifications();
 
         if (accept) {

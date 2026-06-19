@@ -331,13 +331,13 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         String tabId2 = UI.getCurrent().getElement().getProperty("currentTabId");
         String userEmail = (String) VaadinSession.getCurrent().getAttribute("notificationUserIdentifier_" + tabId2);
 
+        // The respond endpoints already mark the matching appointment notification as DELIVERED.
+        // Do NOT call cleanDelayedNotifications here — it wipes the entire notification history
+        // and would also remove the OTHER pending invite (e.g. manager) the user still needs to act on.
         Button acceptBtn = new Button("Accept", e -> {
             var ownerRes = companyService.respondToOwnerAppointment(token, resolvedCompanyId, true);
             if (ownerRes.getValue() == null) {
                 companyService.respondToManagerAppointment(token, resolvedCompanyId, true);
-            }
-            if (userEmail != null && !userEmail.isBlank()) {
-                userService.cleanDelayedNotifications(userEmail);
             }
             dialog.close();
             showSuccess("You have accepted the appointment.");
@@ -348,9 +348,6 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
             var ownerRes = companyService.respondToOwnerAppointment(token, resolvedCompanyId, false);
             if (ownerRes.getValue() == null) {
                 companyService.respondToManagerAppointment(token, resolvedCompanyId, false);
-            }
-            if (userEmail != null && !userEmail.isBlank()) {
-                userService.cleanDelayedNotifications(userEmail);
             }
             dialog.close();
             showError("You have rejected the appointment.");
