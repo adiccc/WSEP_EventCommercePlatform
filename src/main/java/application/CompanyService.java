@@ -21,6 +21,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
+// TODO: notifications sent inside transactionTemplate.execute(...) can be duplicated
+// if RetryHelper retries the block on OptimisticLockingFailureException.
+// External side-effects (sendOrSaveNotification) should be moved OUTSIDE the
+// transaction so they only fire once after the DB write commits successfully.
+// Affects: requestAppointOwner, respondToOwnerAppointment, requestAppointManager,
+//          respondToManagerAppointment, removeManagerAppointment, updateManagerPermissions,
+//          deactivateCompany. Tracked separately from the transactions PR.
 public class CompanyService {
 
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
@@ -1024,10 +1031,20 @@ public class CompanyService {
         });
     }
     public Response<Boolean> deactivateCompany(String ownerToken, int companyId) {
-        return RetryHelper.executeWithRetry(() ->
-            transactionTemplate.execute(status -> {
-                logger.info("deactivateCompany called");
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("deactivateCompany called");
+
+            // Collected during the transaction, used after it commits.
+            // Identifier → notification id returned by saveDelayedNotificationAsPending.
+            final Map<String, Long> staffToMsgId = new HashMap<>();
+            final NotifyDTO[] notifyDTOHolder = new NotifyDTO[1];
+
+            // ── Transaction: DB writes + save notifications as PENDING ──
+            Response<Boolean> res = transactionTemplate.execute(status -> {
                 try {
+                    staffToMsgId.clear();      // reset on retry
+                    notifyDTOHolder[0] = null;
+
                     String role = getValidatedRole(ownerToken);
                     if (role == null) {
                         return new Response<>(false, "Invalid token");
@@ -1049,23 +1066,34 @@ public class CompanyService {
                         logger.warning("deactivateCompany failed: user isn't owner of the company");
                         return new Response<>(false, "user is not owner of the company");
                     }
-                    if (company.isActive()) {
-                        company.deactivate();
-                        companyRepo.store(company);
-                        Set<Integer> allStaff = new HashSet<>(company.getOwnerIds());
-                        allStaff.addAll(company.getCompanyPermission().getManagers());
-                        for(Integer staffId : allStaff){
-                            NotifyPayload payload = new NotifyPayload("Alert: Company " + company.getCompanyName() + " has been deactivated.", null, companyId);
-                            NotifyDTO notifyDTO = new NotifyDTO(NotifyType.KICKOUT_TAB_NAVIGATION, payload);
-                            sendOrSaveNotification(userRepo.getUserEmail(staffId), notifyDTO);
-                            logger.info("deactivateCompany succeeded sending notification for userId: " + staffId);
-                        }
-                        logger.info("deactivateCompany succeeded for companyId: " + companyId);
-                        return new Response<>(true, "Company deactivated successfully");
-                    } else {
+                    if (!company.isActive()) {
                         logger.warning("deactivateCompany failed: company is already deactivated, id: " + companyId);
                         return new Response<>(false, "Company is already deactivated");
                     }
+
+                    company.deactivate();
+                    companyRepo.store(company);
+
+                    // Save notifications as PENDING — internal transaction handles persistence.
+                    // Real-time delivery (notifier.notifyUser) is done AFTER this transaction commits.
+                    NotifyPayload payload = new NotifyPayload(
+                            "Alert: Company " + company.getCompanyName() + " has been deactivated.",
+                            null, companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO(NotifyType.KICKOUT_TAB_NAVIGATION, payload);
+                    notifyDTOHolder[0] = notifyDTO;
+
+                    Set<Integer> allStaff = new HashSet<>(company.getOwnerIds());
+                    allStaff.addAll(company.getCompanyPermission().getManagers());
+                    for(Integer staffId : allStaff){
+                        String identifier = userRepo.getUserEmail(staffId);
+                        Response<Long> msgIdRes = saveDelayedNotificationAsPending(identifier, notifyDTO);
+                        if (msgIdRes != null && msgIdRes.getValue() != null) {
+                            staffToMsgId.put(identifier, msgIdRes.getValue());
+                        }
+                    }
+
+                    logger.info("deactivateCompany succeeded for companyId: " + companyId);
+                    return new Response<>(true, "Company deactivated successfully");
                 } catch (NoSuchElementException e) {
                     status.setRollbackOnly();
                     logger.warning("deactivateCompany failed: company not found, id: " + companyId);
@@ -1078,8 +1106,24 @@ public class CompanyService {
                     logger.severe("Unexpected error in deactivateCompany: " + e.getMessage());
                     return new Response<>(false, "Unexpected error: " + e.getMessage());
                 }
-            })
-        );
+            });
+
+            // ── After transaction: real-time delivery (external system) ──
+            // Only fires if the transaction actually committed → no duplicates on retry.
+            if (res != null && Boolean.TRUE.equals(res.getValue()) && notifyDTOHolder[0] != null) {
+                NotifyDTO notifyDTO = notifyDTOHolder[0];
+                for (Map.Entry<String, Long> e : staffToMsgId.entrySet()) {
+                    boolean isDelivered = notifier.notifyUser(e.getKey(), notifyDTO);
+                    if (isDelivered) {
+                        markNotificationAsDelivered(e.getKey(), e.getValue());
+                        logger.info("deactivateCompany notification delivered to: " + e.getKey());
+                    } else {
+                        logger.info("deactivateCompany notification pending for: " + e.getKey());
+                    }
+                }
+            }
+            return res;
+        });
     }
        private int getUserIdFromToken(String token) {
             String email = auth.getUserEmail(token).getValue();
