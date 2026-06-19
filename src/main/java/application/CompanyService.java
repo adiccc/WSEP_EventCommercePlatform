@@ -21,13 +21,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
-// TODO: notifications sent inside transactionTemplate.execute(...) can be duplicated
-// if RetryHelper retries the block on OptimisticLockingFailureException.
-// External side-effects (sendOrSaveNotification) should be moved OUTSIDE the
-// transaction so they only fire once after the DB write commits successfully.
-// Affects: requestAppointOwner, respondToOwnerAppointment, requestAppointManager,
-//          respondToManagerAppointment, removeManagerAppointment, updateManagerPermissions,
-//          deactivateCompany. Tracked separately from the transactions PR.
 public class CompanyService {
 
     private static final Logger logger = Logger.getLogger(CompanyService.class.getName());
@@ -231,10 +224,7 @@ public class CompanyService {
         });
     }
 
-    /**
-     * Returns the set of PermissionTypes granted to the calling user as a manager in the company.
-     * Returns an empty set if the user is not a manager.
-     */
+
     public Response<Set<PermissionType>> getMyPermissions(String token, int companyId) {
         return RetryHelper.executeWithRetry(() -> {
             try {
@@ -805,8 +795,6 @@ public class CompanyService {
                 }
             });
 
-            // ── After transaction: real-time delivery (external system) ──
-            // Only fires if the transaction actually committed → no duplicates on retry.
             if (res != null && Boolean.TRUE.equals(res.getValue())
                     && appointeeIdentifierHolder[0] != null && notifyDTOHolder[0] != null) {
                 String identifier = appointeeIdentifierHolder[0];
@@ -897,8 +885,6 @@ public class CompanyService {
                 }
             });
 
-            // ── After transaction: real-time delivery (external system) ──
-            // identifierHolder[0] is null when accept=false → block skipped automatically
             if (res != null && Boolean.TRUE.equals(res.getValue())
                     && identifierHolder[0] != null && notifyDTOHolder[0] != null) {
                 boolean isDelivered = notifier.notifyUser(identifierHolder[0], notifyDTOHolder[0]);
@@ -1079,8 +1065,6 @@ public class CompanyService {
                 }
             });
 
-            // ── After transaction: real-time delivery (external system) ──
-            // identifierHolder[0] is null when accept=false → block skipped automatically
             if (res != null && Boolean.TRUE.equals(res.getValue())
                     && identifierHolder[0] != null && notifyDTOHolder[0] != null) {
                 boolean isDelivered = notifier.notifyUser(identifierHolder[0], notifyDTOHolder[0]);
@@ -1220,8 +1204,6 @@ public class CompanyService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("deactivateCompany called");
 
-            // Collected during the transaction, used after it commits.
-            // Identifier → notification id returned by saveDelayedNotificationAsPending.
             final Map<String, Long> staffToMsgId = new HashMap<>();
             final NotifyDTO[] notifyDTOHolder = new NotifyDTO[1];
 
@@ -1260,8 +1242,6 @@ public class CompanyService {
                     company.deactivate();
                     companyRepo.store(company);
 
-                    // Save notifications as PENDING — internal transaction handles persistence.
-                    // Real-time delivery (notifier.notifyUser) is done AFTER this transaction commits.
                     NotifyPayload payload = new NotifyPayload(
                             "Alert: Company " + company.getCompanyName() + " has been deactivated.",
                             null, companyId);
@@ -1294,8 +1274,6 @@ public class CompanyService {
                 }
             });
 
-            // ── After transaction: real-time delivery (external system) ──
-            // Only fires if the transaction actually committed → no duplicates on retry.
             if (res != null && Boolean.TRUE.equals(res.getValue()) && notifyDTOHolder[0] != null) {
                 NotifyDTO notifyDTO = notifyDTOHolder[0];
                 for (Map.Entry<String, Long> e : staffToMsgId.entrySet()) {
