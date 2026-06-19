@@ -927,7 +927,9 @@ public class ActiveOrderService {
                                 event.getCompanyId(),
                                 total,
                                 tickets,
+                                purchasedDetails,
                                 supplyBatches);
+
                         return new Response<>(ctx, "Ready for payment");
 
                     } catch (IllegalStateException e) {
@@ -1001,10 +1003,8 @@ public class ActiveOrderService {
 
         List<String> orderedCodesForOrder = new ArrayList<>();
         if (!issuanceFailed) {
-            for (SupplyBatch batch : ctx.supplyBatches()) {
-                for (PurchasedTicketDTO ticket : batch.zoneTickets()) {
+            for (PurchasedTicketDTO ticket : ctx.purchasedDetails()) {
                     orderedCodesForOrder.add(ticketIdToBarcodeMap.getOrDefault(ticket.getTicketId(), "Processing"));
-                }
             }
         }
 
@@ -1054,7 +1054,7 @@ public class ActiveOrderService {
                                 event.getName(),
                                 event.getDate().toString(),
                                 event.getLocation().name(),
-                                event.getPurchasedTicketDetails(ctx.tickets()),
+                                ctx.purchasedDetails(),
                                 ctx.total(),
                                 confirmationId);
 
@@ -1199,6 +1199,7 @@ public class ActiveOrderService {
             int companyId,
             double total,
             List<Integer> tickets,
+            List<PurchasedTicketDTO> purchasedDetails,
             List<SupplyBatch> supplyBatches) {
     }
 

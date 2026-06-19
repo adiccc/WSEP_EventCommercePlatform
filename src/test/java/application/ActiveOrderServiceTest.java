@@ -5211,5 +5211,117 @@ class ActiveOrderServiceTest {
         Mockito.verify(mockNotifier, Mockito.times(1)).notifyTab(Mockito.eq(waitingToken), Mockito.any(NotifyDTO.class));
         assertFalse(eventRepo.findById(isolatedEventId).getEventQueue().contains(waitingToken));
     }
+    @Test
+    void GivenTicketsFromMultipleZones_WhenCheckoutAndPayment_ThenExternalCodesMatchPurchasedTicketsOrder() {
+        int multiZoneEventId = companyEventService.createEvent(
+                validToken,
+                companyId,
+                LocalDateTime.now().plusDays(10),
+                "Barcode Mapping Event",
+                LocalDateTime.now().minusMinutes(10),
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.FESTIVAL
+        ).getValue();
+
+        companyEventService.DefineVenueAndSeatingMap(
+                validToken,
+                multiZoneEventId,
+                new ElementPositionDTO(10, 20),
+                List.of(new ElementPositionDTO(0, 0)),
+                List.of(
+                        new StandingZoneDTO(10, "zzz", 100.0, new ElementPositionDTO(1, 1)),
+                        new StandingZoneDTO(10, "aaa", 120.0, new ElementPositionDTO(2, 2))
+                ),
+                new ArrayList<>()
+        );
+
+        service.enterEventPurchase(validToken, companyId, multiZoneEventId, null);
+
+        Map<String, Integer> standing = new LinkedHashMap<>();
+        standing.put("zzz", 1);
+        standing.put("aaa", 1);
+
+        Response<Integer> selectResponse = service.userSelectTickets(
+                validToken,
+                multiZoneEventId,
+                new HashMap<>(),
+                standing
+        );
+
+        assertNotNull(selectResponse.getValue(), "setup select failed: " + selectResponse.getMessage());
+
+        int activeOrderId = selectResponse.getValue();
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(
+                checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: " + checkoutPriceResponse.getMessage()
+        );
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-barcode-mapping");
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenAnswer(invocation -> {
+                    TicketSupplyRequestDTO request = invocation.getArgument(0);
+
+                    List<String> issuedCodes = new ArrayList<>();
+                    for (PurchasedTicketDTO ticket : request.getPurchasedTickets()) {
+                        issuedCodes.add(request.getZoneName() + "-CODE-" + ticket.getTicketId());
+                    }
+
+                    return new TicketSupplyResultDTO(true, issuedCodes);
+                });
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        // Act
+        Response<CheckoutSuccessDTO> checkoutResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        // Assert
+        assertNotNull(
+                checkoutResponse.getValue(),
+                "Checkout should succeed. Message: " + checkoutResponse.getMessage()
+        );
+
+        Event updatedEvent = eventRepo.findById(multiZoneEventId);
+        Order createdOrder = updatedEvent.findOrderById(activeOrderId);
+
+        assertNotNull(createdOrder, "Order should be saved after successful checkout");
+        assertEquals(OrderStatus.APPROVED, createdOrder.getStatus());
+
+        List<PurchasedTicketDTO> purchasedTickets = createdOrder.getPurchasedTickets();
+        List<String> externalCodes = createdOrder.getExternalTicketCodes();
+
+        assertEquals(
+                purchasedTickets.size(),
+                externalCodes.size(),
+                "Every purchased ticket must have one external ticket code"
+        );
+
+        for (int i = 0; i < purchasedTickets.size(); i++) {
+            PurchasedTicketDTO ticket = purchasedTickets.get(i);
+
+            String expectedCode = ticket.getZoneName() + "-CODE-" + ticket.getTicketId();
+
+            assertEquals(
+                    expectedCode,
+                    externalCodes.get(i),
+                    "External code at index " + i
+                            + " must match purchased ticket "
+                            + ticket.getTicketId()
+                            + " in zone "
+                            + ticket.getZoneName()
+            );
+        }
+
+        Mockito.verify(ticketSupply, Mockito.times(2))
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+    }
 
 }
