@@ -193,14 +193,18 @@ public class Member extends User {
         return null;
     }
 
-    // Finds the PENDING ROLE_APPOINTMENT_REQUEST notification for a given company and marks it delivered.
-    // Called when the user responds (accept/reject) so the notification disappears from their list.
-    public void markAppointmentRequestDelivered(int companyId) {
+    // Finds the PENDING ROLE_APPOINTMENT_REQUEST notification for a given company AND role
+    // (owner vs manager) and marks it delivered. The role discriminator is needed because a
+    // single user can have both an owner and a manager invite pending for the same company —
+    // matching on companyId alone would clear both.
+    public void markAppointmentRequestDelivered(int companyId, String roleKeyword) {
         for (UserNotification un : this.userNotifications) {
             if (un.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST
                     && un.getStatus() == NotificationStatus.PENDING
                     && un.getPayload() != null
-                    && Integer.valueOf(companyId).equals(un.getPayload().getCompanyId())) {
+                    && Integer.valueOf(companyId).equals(un.getPayload().getCompanyId())
+                    && un.getPayload().getMessage() != null
+                    && un.getPayload().getMessage().contains(roleKeyword)) {
                 un.setStatus(NotificationStatus.DELIVERED);
                 return;
             }

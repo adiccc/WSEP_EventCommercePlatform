@@ -757,8 +757,8 @@ public class CompanyService {
                     logger.info("respondToOwnerAppointment: user " + userId + " rejected appointment for company " + companyId);
                 }
                 companyRepo.store(company);
-                // Mark the original appointment request as delivered now that the user responded
-                markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId);
+                // Mark the original OWNER appointment request as delivered now that the user responded
+                markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId, "owner");
                 if(accept){
                     NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
                     NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
@@ -872,8 +872,8 @@ public class CompanyService {
                     userRepo.store(member);
                 }
                 companyRepo.store(company);
-                // Mark the original appointment request as delivered now that the user responded
-                markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId);
+                // Mark the original MANAGER appointment request as delivered now that the user responded
+                markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId, "manager");
                 if(accept){
                     NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
                     NotifyDTO notifyDTO = new NotifyDTO( NotifyType.GENERAL_POPUP,payload);
@@ -1100,15 +1100,15 @@ public class CompanyService {
     // Marks the PENDING ROLE_APPOINTMENT_REQUEST notification for a given user+company as delivered.
     // Called inside respondToOwnerAppointment / respondToManagerAppointment after the user responds,
     // so the notification disappears from their list regardless of accept or reject.
-    private void markAppointmentRequestAsDelivered(String userIdentifier, int companyId) {
+    private void markAppointmentRequestAsDelivered(String userIdentifier, int companyId, String roleKeyword) {
         RetryHelper.executeWithRetry(() ->
             transactionTemplate.execute(status -> {
                 try {
                     Member member = userRepo.findUserByEmail(userIdentifier);
                     if (member != null) {
-                        member.markAppointmentRequestDelivered(companyId);
+                        member.markAppointmentRequestDelivered(companyId, roleKeyword);
                         userRepo.store(member);
-                        logger.info("Appointment request notification marked DELIVERED for: " + userIdentifier + ", companyId: " + companyId);
+                        logger.info("Appointment request notification (" + roleKeyword + ") marked DELIVERED for: " + userIdentifier + ", companyId: " + companyId);
                     }
                     return new Response<>(true, "ok");
                 } catch (OptimisticLockingFailureException e) {
