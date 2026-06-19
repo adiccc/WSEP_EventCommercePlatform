@@ -798,6 +798,7 @@ public class ActiveOrderService {
                         String barcode = ticketIdToBarcodeMap.getOrDefault(ticket.getTicketId(), "Processing");
                         orderedCodesForOrder.add(barcode);
                     }
+                    order.setExternalTicketCodes(orderedCodesForOrder);
                 }
 
                 List<String> cancelledCodes = new ArrayList<>();
