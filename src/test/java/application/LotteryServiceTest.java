@@ -1911,4 +1911,86 @@ class LotteryServiceTest {
                 assertTrue(response.getValue());
                 assertEquals("User can register to lottery", response.getMessage());
         }
+
+        // --- updateLottery: guest token → "Only members can update lottery" ---
+
+        @Test
+        void GivenGuestToken_WhenUpdateLottery_ThenOnlyMembersError() {
+                String guestToken = tokenService.generateGuestToken();
+                LotteryDTO dto = new LotteryDTO(eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+
+                Response<Boolean> response = lotteryService.updateLottery(guestToken, eventId, dto);
+
+                assertFalse(response.getValue());
+                assertEquals("Only members can update lottery", response.getMessage());
+        }
+
+        // --- updateLottery: lotteryDTO == null on a non-lottery event → "Sales method is already regular purchase" ---
+
+        @Test
+        void GivenRegularEventAndNullDto_WhenUpdateLottery_ThenAlreadyRegularPurchase() {
+                Response<Integer> regularEventResp = eventCompanyManageService.createEvent(
+                                validToken, companyId,
+                                LocalDateTime.now().plusDays(30), "Regular Event",
+                                saleStartDate_Y, false,
+                                GeographicalArea.CENTER, CategoryEvent.FESTIVAL);
+                int regularEventId = regularEventResp.getValue();
+                // activate the event manually (normally done when a map is added)
+                domain.event.Event e = eventRepo.findById(regularEventId);
+                e.setActive(true);
+                eventRepo.store(e);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, regularEventId, null);
+
+                assertTrue(response.getValue());
+                assertEquals("Sales method is already regular purchase", response.getMessage());
+        }
+
+        // --- updateLottery: valid DTO on a non-lottery event → creates new lottery (isNew = true) ---
+
+        @Test
+        void GivenRegularEventAndValidDto_WhenUpdateLottery_ThenNewLotteryCreated() {
+                Response<Integer> regularEventResp = eventCompanyManageService.createEvent(
+                                validToken, companyId,
+                                LocalDateTime.now().plusDays(30), "Regular Event For Lottery",
+                                saleStartDate_Y, false,
+                                GeographicalArea.CENTER, CategoryEvent.FESTIVAL);
+                int regularEventId = regularEventResp.getValue();
+                // activate the event manually (normally done when a map is added)
+                domain.event.Event e = eventRepo.findById(regularEventId);
+                e.setActive(true);
+                eventRepo.store(e);
+                LotteryDTO dto = new LotteryDTO(regularEventId, 5, LocalDateTime.now().plusDays(7), 24L);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, regularEventId, dto);
+
+                assertTrue(response.getValue());
+                assertEquals("Sales method updated to lottery", response.getMessage());
+        }
+
+        // --- registerUserToLottery: guest token → "User is not logged in" ---
+
+        @Test
+        void GivenGuestToken_WhenRegisterUserToLottery_ThenNotLoggedInError() {
+                lotteryService.createLottery(validToken, eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+                String guestToken = tokenService.generateGuestToken();
+
+                Response<Boolean> response = lotteryService.registerUserToLottery(guestToken, eventId);
+
+                assertFalse(response.getValue());
+                assertEquals("User is not logged in", response.getMessage());
+        }
+
+        // --- canRegisterToLottery: guest token → "User is not logged in" ---
+
+        @Test
+        void GivenGuestToken_WhenCanRegisterToLottery_ThenNotLoggedInError() {
+                lotteryService.createLottery(validToken, eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+                String guestToken = tokenService.generateGuestToken();
+
+                Response<Boolean> response = lotteryService.canRegisterToLottery(guestToken, eventId);
+
+                assertNull(response.getValue());
+                assertEquals("User is not logged in", response.getMessage());
+        }
 }

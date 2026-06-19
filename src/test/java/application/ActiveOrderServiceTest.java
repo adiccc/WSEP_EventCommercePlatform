@@ -5024,4 +5024,162 @@ class ActiveOrderServiceTest {
         Mockito.verify(mockNotifier, Mockito.times(1)).notifyTab(Mockito.eq(waitingToken), Mockito.any(NotifyDTO.class));
         assertFalse(eventRepo.findById(isolatedEventId).getEventQueue().contains(waitingToken));
     }
+
+    // ---------- applyCheckoutCoupon ----------
+
+    @Test
+    void GivenValidOrderInCheckout_WhenApplyCheckoutCoupon_ThenPriceReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+
+        Response<CheckoutPriceDTO> response = service.applyCheckoutCoupon(validToken, orderId, null);
+
+        assertNotNull(response.getValue(), "applyCheckoutCoupon should return a price DTO: " + response.getMessage());
+        assertTrue(response.getValue().getFinalPrice() > 0);
+    }
+
+    @Test
+    void GivenInvalidToken_WhenApplyCheckoutCoupon_ThenInvalidTokenReturned() {
+        Response<CheckoutPriceDTO> response = service.applyCheckoutCoupon("", 1, null);
+
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingActiveOrder_WhenApplyCheckoutCoupon_ThenNotFoundReturned() {
+        Response<CheckoutPriceDTO> response = service.applyCheckoutCoupon(validToken, -999, null);
+
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("not found"));
+    }
+
+    @Test
+    void GivenOrderBelongsToAnotherUser_WhenApplyCheckoutCoupon_ThenOwnershipErrorReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+        String otherToken = registerAndLoginTestUser("coupon_other@mail.com");
+
+        Response<CheckoutPriceDTO> response = service.applyCheckoutCoupon(otherToken, orderId, null);
+
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("does not belong"));
+    }
+
+    @Test
+    void GivenSuspendedMember_WhenApplyCheckoutCoupon_ThenSuspensionErrorReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+        int userId = userService.getUserId(validToken).getValue();
+        suspensionRepo.store(new domain.Suspension.Suspension(userId));
+
+        Response<CheckoutPriceDTO> response = service.applyCheckoutCoupon(validToken, orderId, null);
+
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("suspension"));
+
+        // cleanup
+        domain.Suspension.Suspension s = suspensionRepo.findLastSuspensionByUserId(userId);
+        s.unsuspend();
+        suspensionRepo.store(s);
+    }
+
+    // ---------- getCompanyIdByActiveOrder ----------
+
+    @Test
+    void GivenValidOrder_WhenGetCompanyIdByActiveOrder_ThenCompanyIdReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+
+        Response<Integer> response = service.getCompanyIdByActiveOrder(validToken, orderId);
+
+        assertNotNull(response.getValue());
+        assertEquals(companyId, response.getValue().intValue());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenGetCompanyIdByActiveOrder_ThenInvalidTokenReturned() {
+        Response<Integer> response = service.getCompanyIdByActiveOrder("", 1);
+
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingActiveOrder_WhenGetCompanyIdByActiveOrder_ThenNotFoundReturned() {
+        Response<Integer> response = service.getCompanyIdByActiveOrder(validToken, -999);
+
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("not found"));
+    }
+
+    @Test
+    void GivenOrderBelongsToAnotherUser_WhenGetCompanyIdByActiveOrder_ThenUnauthorizedReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+        String otherToken = registerAndLoginTestUser("getco_other@mail.com");
+
+        Response<Integer> response = service.getCompanyIdByActiveOrder(otherToken, orderId);
+
+        assertNull(response.getValue());
+        assertEquals("Unauthorized active order access", response.getMessage());
+    }
+
+    // ---------- getCurrentActiveOrderSelection ----------
+
+    @Test
+    void GivenActiveOrderWithTickets_WhenGetCurrentActiveOrderSelection_ThenSelectionReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 3);
+
+        Response<domain.dto.ActiveOrderSelectionDTO> response =
+                service.getCurrentActiveOrderSelection(validToken);
+
+        assertNotNull(response.getValue(),
+                "getCurrentActiveOrderSelection should return selection: " + response.getMessage());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenGetCurrentActiveOrderSelection_ThenErrorReturned() {
+        Response<domain.dto.ActiveOrderSelectionDTO> response =
+                service.getCurrentActiveOrderSelection("");
+
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenNoActiveOrder_WhenGetCurrentActiveOrderSelection_ThenErrorReturned() {
+        String freshToken = registerAndLoginTestUser("noorder_sel@mail.com");
+
+        Response<domain.dto.ActiveOrderSelectionDTO> response =
+                service.getCurrentActiveOrderSelection(freshToken);
+
+        assertNull(response.getValue());
+        assertNotNull(response.getMessage());
+    }
+
+    @Test
+    void GivenExpiredActiveOrder_WhenGetCurrentActiveOrderSelection_ThenExpiredErrorReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+        forceExpireOrder(orderId);
+
+        Response<domain.dto.ActiveOrderSelectionDTO> response =
+                service.getCurrentActiveOrderSelection(validToken);
+
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().toLowerCase().contains("expir"));
+    }
+
+    @Test
+    void GivenSuspendedMember_WhenGetCurrentActiveOrderSelection_ThenSuspensionErrorReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+        int userId = userService.getUserId(validToken).getValue();
+        suspensionRepo.store(new domain.Suspension.Suspension(userId));
+
+        Response<domain.dto.ActiveOrderSelectionDTO> response =
+                service.getCurrentActiveOrderSelection(validToken);
+
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("suspension"));
+
+        // cleanup
+        domain.Suspension.Suspension s = suspensionRepo.findLastSuspensionByUserId(userId);
+        s.unsuspend();
+        suspensionRepo.store(s);
+    }
 }

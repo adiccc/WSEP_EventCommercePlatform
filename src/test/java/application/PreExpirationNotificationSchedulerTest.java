@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PreExpirationNotificationSchedulerTest {
 
@@ -151,5 +152,96 @@ class PreExpirationNotificationSchedulerTest {
 
         assertFalse(scheduler.hasPendingWarning(ORDER_ID));
         assertNull(delivered.poll(1500, TimeUnit.MILLISECONDS));
+    }
+
+    // ===================== rescheduleOnStartup =====================
+
+    @Test
+    void GivenNullWarningTime_WhenRescheduleOnStartup_ThenPendingWarningCleared() throws InterruptedException {
+        ActiveOrder order = checkingOutOrder();
+        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2));
+        activeOrderRepo.store(order);
+
+        scheduler.scheduleOrReschedule(tabToken, ORDER_ID, LocalDateTime.now().plusSeconds(1));
+        assertTrue(scheduler.hasPendingWarning(ORDER_ID));
+
+        scheduler.rescheduleOnStartup(RECIPIENT, ORDER_ID, null);
+
+        assertFalse(scheduler.hasPendingWarning(ORDER_ID));
+        assertNull(delivered.poll(1200, TimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    void GivenPastWarningTime_WhenRescheduleOnStartup_ThenPendingWarningCleared() throws InterruptedException {
+        ActiveOrder order = checkingOutOrder();
+        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2));
+        activeOrderRepo.store(order);
+
+        scheduler.scheduleOrReschedule(tabToken, ORDER_ID, LocalDateTime.now().plusSeconds(1));
+        assertTrue(scheduler.hasPendingWarning(ORDER_ID));
+
+        scheduler.rescheduleOnStartup(RECIPIENT, ORDER_ID, LocalDateTime.now().minusSeconds(1));
+
+        assertFalse(scheduler.hasPendingWarning(ORDER_ID));
+        assertNull(delivered.poll(1200, TimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    void GivenFutureWarningTimeAndOrderInWindow_WhenRescheduleOnStartup_ThenNotificationSentViaIdentifier()
+            throws InterruptedException {
+        BlockingQueue<NotifyDTO> identifierQueue = new LinkedBlockingQueue<>();
+        Registration reg = Broadcaster.registerUser(RECIPIENT, identifierQueue::add);
+        try {
+            ActiveOrder order = checkingOutOrder();
+            order.forceExpireForTest(LocalDateTime.now().plusMinutes(2)); // puts order in warning window
+            activeOrderRepo.store(order);
+
+            // schedule via startup path to fire in ~50 ms
+            scheduler.rescheduleOnStartup(RECIPIENT, ORDER_ID, LocalDateTime.now().plus(50, java.time.temporal.ChronoUnit.MILLIS));
+            assertTrue(scheduler.hasPendingWarning(ORDER_ID));
+
+            NotifyDTO sent = identifierQueue.poll(2, TimeUnit.SECONDS);
+            assertNotNull(sent, "startup recovery must send warning via identifier");
+            assertEquals(NotifyType.GENERAL_POPUP, sent.getType());
+            assertEquals(EVENT_ID, sent.getPayload().getEventId().intValue());
+        } finally {
+            reg.remove();
+        }
+    }
+
+    @Test
+    void GivenFutureWarningTimeAndOrderNotInRepo_WhenRescheduleOnStartup_ThenNothingSent()
+            throws InterruptedException {
+        BlockingQueue<NotifyDTO> identifierQueue = new LinkedBlockingQueue<>();
+        Registration reg = Broadcaster.registerUser(RECIPIENT, identifierQueue::add);
+        try {
+            // order is NOT stored in repo → fireWarningForIdentifier will catch NoSuchElementException
+            scheduler.rescheduleOnStartup(RECIPIENT, ORDER_ID, LocalDateTime.now().plus(50, java.time.temporal.ChronoUnit.MILLIS));
+            assertTrue(scheduler.hasPendingWarning(ORDER_ID));
+
+            assertNull(identifierQueue.poll(800, TimeUnit.MILLISECONDS),
+                    "no notification must be sent when order is missing from repo");
+        } finally {
+            reg.remove();
+        }
+    }
+
+    @Test
+    void GivenFutureWarningTimeButOrderExpired_WhenRescheduleOnStartup_ThenNothingSent()
+            throws InterruptedException {
+        BlockingQueue<NotifyDTO> identifierQueue = new LinkedBlockingQueue<>();
+        Registration reg = Broadcaster.registerUser(RECIPIENT, identifierQueue::add);
+        try {
+            ActiveOrder order = checkingOutOrder();
+            order.forceExpireForTest(LocalDateTime.now()); // expired now
+            activeOrderRepo.store(order);
+
+            scheduler.rescheduleOnStartup(RECIPIENT, ORDER_ID, LocalDateTime.now().plus(50, java.time.temporal.ChronoUnit.MILLIS));
+
+            assertNull(identifierQueue.poll(800, TimeUnit.MILLISECONDS),
+                    "expired order must not trigger a warning");
+        } finally {
+            reg.remove();
+        }
     }
 }

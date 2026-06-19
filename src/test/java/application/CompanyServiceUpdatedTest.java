@@ -2800,4 +2800,173 @@ class CompanyServiceUpdatedTest {
         assertTrue(response.getValue().isEmpty());
     }
 
+    // ===================== addRuleToCompany: uncovered paths =====================
+
+    @Test
+    void GivenGuestToken_WhenAddRuleToCompany_ThenInvalidOrExpiredTokenError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        Response<Boolean> response = service.addRuleToCompany(GUEST_TOKEN, COMPANY_ID, ruleDTO);
+        assertNull(response.getValue());
+        assertEquals("Invalid or expired token", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenAddRuleToCompany_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(OWNER_ID));
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        Response<Boolean> response = service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID, ruleDTO);
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    // ===================== removeRuleFromCompany: uncovered paths =====================
+
+    @Test
+    void GivenSuspendedOwner_WhenRemoveRuleFromCompany_ThenSuspensionError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        service.addRuleToCompany(OWNER_TOKEN, COMPANY_ID, ruleDTO);
+        suspensionRepo.store(new domain.Suspension.Suspension(OWNER_ID));
+        Response<Boolean> response = service.removeRuleFromCompany(OWNER_TOKEN, COMPANY_ID, ruleDTO);
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    // ===================== requestAppointOwner: uncovered paths =====================
+
+    @Test
+    void GivenSuspendedOwner_WhenRequestAppointOwner_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(OWNER_ID));
+        Response<Boolean> response = service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenNonExistentAppointee_WhenRequestAppointOwner_ThenAppointeeNotFoundError() {
+        Response<Boolean> response = service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, 99999);
+        assertNull(response.getValue());
+        assertEquals("Only a registered subscriber can be appointed", response.getMessage());
+    }
+
+    // ===================== respondToOwnerAppointment: uncovered paths =====================
+
+    @Test
+    void GivenGuestToken_WhenRespondToOwnerAppointment_ThenInvalidOrExpiredTokenError() {
+        Response<Boolean> response = service.respondToOwnerAppointment(GUEST_TOKEN, COMPANY_ID, true);
+        assertNull(response.getValue());
+        assertEquals("Invalid or expired token", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedUser_WhenRespondToOwnerAppointment_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(OTHER_USER_ID));
+        Response<Boolean> response = service.respondToOwnerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenNonExistentCompany_WhenRespondToOwnerAppointment_ThenCompanyNotFoundError() {
+        service.requestAppointOwner(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID);
+        Response<Boolean> response = service.respondToOwnerAppointment(OTHER_TOKEN, 99999, true);
+        assertNull(response.getValue());
+        assertEquals("Company not found", response.getMessage());
+    }
+
+    // ===================== requestAppointManager: uncovered paths =====================
+
+    @Test
+    void GivenGuestToken_WhenRequestAppointManager_ThenInvalidOrExpiredTokenError() {
+        Response<Boolean> response = service.requestAppointManager(GUEST_TOKEN, COMPANY_ID, OTHER_USER_ID, new HashSet<>());
+        assertNull(response.getValue());
+        assertEquals("Invalid or expired token", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenRequestAppointManager_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(OWNER_ID));
+        Response<Boolean> response = service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, OTHER_USER_ID, new HashSet<>());
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenNonExistentAppointeeManager_WhenRequestAppointManager_ThenAppointeeNotFoundError() {
+        Response<Boolean> response = service.requestAppointManager(OWNER_TOKEN, COMPANY_ID, 99999, new HashSet<>());
+        assertNull(response.getValue());
+        assertEquals("Only a registered subscriber can be appointed", response.getMessage());
+    }
+
+    // ===================== respondToManagerAppointment: uncovered paths =====================
+
+    @Test
+    void GivenGuestToken_WhenRespondToManagerAppointment_ThenInvalidOrExpiredTokenError() {
+        Response<Boolean> response = service.respondToManagerAppointment(GUEST_TOKEN, COMPANY_ID, true);
+        assertNull(response.getValue());
+        assertEquals("Invalid or expired token", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedUser_WhenRespondToManagerAppointment_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(OTHER_USER_ID));
+        Response<Boolean> response = service.respondToManagerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenNoPendingManagerAppointmentInNewCompany_WhenRespondToManagerAppointment_ThenNoPendingError() {
+        Response<Boolean> response = service.respondToManagerAppointment(OTHER_TOKEN, COMPANY_ID, true);
+        assertNull(response.getValue());
+        assertEquals("No pending manager appointment found for this user", response.getMessage());
+    }
+
+    // ===================== removeManagerAppointment: uncovered paths =====================
+
+    @Test
+    void GivenGuestToken_WhenRemoveManagerAppointment_ThenInvalidOrExpiredTokenError() {
+        Response<Boolean> response = service.removeManagerAppointment(GUEST_TOKEN, COMPANY_ID, MANAGER_ID);
+        assertNull(response.getValue());
+        assertEquals("Invalid or expired token", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenRemoveManagerAppointment_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(OWNER_ID));
+        Response<Boolean> response = service.removeManagerAppointment(OWNER_TOKEN, COMPANY_ID, MANAGER_ID);
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    // ===================== deactivateCompany: uncovered paths =====================
+
+    @Test
+    void GivenGuestToken_WhenDeactivateCompany_ThenInvalidOrExpiredTokenError() {
+        Response<Boolean> response = service.deactivateCompany(GUEST_TOKEN, COMPANY_ID);
+        assertFalse(response.getValue());
+        assertEquals("Invalid or expired token", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenDeactivateCompany_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(OWNER_ID));
+        Response<Boolean> response = service.deactivateCompany(OWNER_TOKEN, COMPANY_ID);
+        assertFalse(response.getValue());
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenNonExistentCompanyId_WhenDeactivateCompany_ThenCompanyNotFoundError() {
+        Response<Boolean> response = service.deactivateCompany(OWNER_TOKEN, 99999);
+        assertFalse(response.getValue());
+        assertEquals("Company not found", response.getMessage());
+    }
+
+    @Test
+    void GivenNonOwner_WhenDeactivateCompany_ThenNotOwnerError() {
+        Response<Boolean> response = service.deactivateCompany(OTHER_TOKEN, COMPANY_ID);
+        assertFalse(response.getValue());
+        assertEquals("user is not owner of the company", response.getMessage());
+    }
+
 }

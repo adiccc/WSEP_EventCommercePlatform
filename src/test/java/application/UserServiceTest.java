@@ -92,6 +92,13 @@ class UserServiceTest {
         );
     }
 
+    private UserDTO createValidDTO(String email) {
+        return new UserDTO(
+                email, "Test", "User", "Password123!",
+                15, 5, 2000, "Beer Sheva", "050-123-4567"
+        );
+    }
+
     // --- register ---
 
     @Test
@@ -1178,5 +1185,36 @@ class UserServiceTest {
 
         assertFalse(response.getValue());
         assertEquals("User not found", response.getMessage());
+    }
+
+    // --- login edge cases ---
+
+    @Test
+    void GivenDeactivatedMember_WhenLogin_ThenBlockedByAdminError() {
+        UserDTO dto = createValidDTO("blocked@mail.com");
+        userService.registerUser(null, dto);
+        Member m = userRepo.findUserByEmail("blocked@mail.com");
+        m.deactivate();
+        userRepo.store(m);
+
+        Response<String> response = userService.login("blocked@mail.com", dto.getPassword());
+
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("blocked by Admin"));
+    }
+
+    // --- getUserId: member not in database ---
+
+    @Test
+    void GivenLoggedOutToken_WhenGetUserId_ThenNotLoggedIn() {
+        UserDTO dto = createValidDTO("getuid_loggedout@mail.com");
+        userService.registerUser(null, dto);
+        String token = userService.login(dto.getEmail(), dto.getPassword()).getValue();
+        userService.logout(token);
+
+        Response<Integer> response = userService.getUserId(token);
+
+        assertEquals(-1, response.getValue());
+        assertNotNull(response.getMessage());
     }
 }

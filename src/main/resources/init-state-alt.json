@@ -1,0 +1,22 @@
+{
+  "operations": [
+
+    { "type": "enter", "store": "guest" },
+
+    { "type": "register", "params": { "guestToken": "${guest}", "email": "alice@demo.com", "firstName": "Alice", "lastName": "Smith", "password": "Alice123!", "birthDay": "5", "birthMonth": "3", "birthYear": "1992", "address": "10 Herzl St", "phone": "050-111-1111" } },
+    { "type": "register", "params": { "guestToken": "${guest}", "email": "bob@demo.com",   "firstName": "Bob",   "lastName": "Jones",  "password": "Bob12345!", "birthDay": "1", "birthMonth": "6", "birthYear": "1988", "address": "20 Ben Yehuda St", "phone": "050-222-2222" } },
+
+    { "type": "login", "params": { "email": "alice@demo.com", "password": "Alice123!" }, "store": "aliceToken" },
+    { "type": "login", "params": { "email": "bob@demo.com",   "password": "Bob12345!" }, "store": "bobToken"   },
+
+    { "type": "get-user-id", "params": { "token": "${bobToken}" }, "store": "bobId" },
+
+    { "type": "open-company", "params": { "token": "${aliceToken}", "companyId": "2", "companyName": "AltCo Events", "email": "info@altco.com", "phone": "050-300-0001", "bankAccount": "IL-9999-0002" } },
+
+    { "type": "appoint-owner", "params": { "ownerToken": "${aliceToken}", "appointeeToken": "${bobToken}", "companyId": "2", "appointeeId": "${bobId}" } },
+
+    { "type": "create-event", "params": { "token": "${aliceToken}", "companyId": "2", "name": "Alt Festival", "date": "+2M", "saleStart": "-1D", "area": "NORTH", "category": "LIVEMUSIC" }, "store": "altEventId" },
+    { "type": "define-venue", "params": { "token": "${aliceToken}", "eventId": "${altEventId}", "standingCapacity": "100", "standingPrice": "80.0", "standingName": "General", "seatingRows": "5", "seatingCols": "20", "seatingPrice": "150.0", "seatingName": "VIP" } }
+
+  ]
+}
