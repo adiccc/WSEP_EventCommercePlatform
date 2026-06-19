@@ -984,7 +984,6 @@ class EventCompanyManageServiceTest {
                                 50.0
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123"
         );
@@ -1058,7 +1057,6 @@ class EventCompanyManageServiceTest {
                                 50.0
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123"
         );
@@ -1113,7 +1111,6 @@ class EventCompanyManageServiceTest {
                                 50.0
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123"
         );     // markRefundRequired not called
@@ -1165,7 +1162,6 @@ class EventCompanyManageServiceTest {
                                 50.0
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123"
         );

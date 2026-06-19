@@ -915,6 +915,7 @@ public class ActiveOrderService {
                             entry.getKey(), isSeating, entry.getValue()));
                 }
 
+
                 CheckoutContext ctx = new CheckoutContext(
                         activeOrderId, userIdentifier, event.getId(), event.getName(), event.getCompanyId(),
                         total, tickets, supplyRequests);
@@ -1011,7 +1012,7 @@ public class ActiveOrderService {
                 Order order = new Order(
                         ctx.activeOrderId(), ctx.userIdentifier(), event.getId(),
                         event.getName(), event.getDate().toString(), event.getLocation().name(),
-                        event.getPurchasedTicketDetails(ctx.tickets()), ctx.tickets(),
+                        event.getPurchasedTicketDetails(ctx.tickets()),
                         ctx.total(), confirmationId);
 
                 if (finalIssuanceFailed) {

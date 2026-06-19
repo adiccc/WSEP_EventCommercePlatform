@@ -3492,7 +3492,7 @@ class ActiveOrderServiceTest {
 
         Response<Boolean> reqManager = companyService.requestAppointManager(
                 validToken, companyId, manager1Id,
-                Set.of(PermissionType.MANAGE_EVENTS_INVENTORY));
+                Set.of(PermissionType.VIEW_PURCHASE_HISTORY));
         assertNotNull(reqManager.getValue(),
                 "request appoint manager setup failed: " + reqManager.getMessage());
         Response<Boolean> acceptManager = companyService.respondToManagerAppointment(manager1Token, companyId, true);
@@ -3690,7 +3690,7 @@ class ActiveOrderServiceTest {
         int manager1Id = userService.getUserId(manager1Token).getValue();
 
         Response<Boolean> reqManager = companyService.requestAppointManager(
-                validToken, companyId, manager1Id, Set.of(PermissionType.MANAGE_EVENTS_INVENTORY));
+                validToken, companyId, manager1Id, Set.of(PermissionType.VIEW_PURCHASE_HISTORY));
         assertNotNull(reqManager.getValue(), "request appoint manager setup failed: " + reqManager.getMessage());
         Response<Boolean> acceptManager = companyService.respondToManagerAppointment(manager1Token, companyId, true);
         assertNotNull(acceptManager.getValue(), "accept manager setup failed: " + acceptManager.getMessage());
@@ -3789,13 +3789,13 @@ class ActiveOrderServiceTest {
         int manager2Id = userService.getUserId(manager2Token).getValue();
 
         Response<Boolean> reqManager1 = companyService.requestAppointManager(
-                validToken, companyId, manager1Id, Set.of(PermissionType.MANAGE_EVENTS_INVENTORY));
+                validToken, companyId, manager1Id, Set.of(PermissionType.VIEW_PURCHASE_HISTORY));
         assertNotNull(reqManager1.getValue(), "request appoint manager1 setup failed: " + reqManager1.getMessage());
         Response<Boolean> acceptManager1 = companyService.respondToManagerAppointment(manager1Token, companyId, true);
         assertNotNull(acceptManager1.getValue(), "accept manager1 setup failed: " + acceptManager1.getMessage());
 
         Response<Boolean> reqManager2 = companyService.requestAppointManager(
-                validToken, companyId, manager2Id, Set.of(PermissionType.MANAGE_EVENTS_INVENTORY));
+                validToken, companyId, manager2Id, Set.of(PermissionType.VIEW_PURCHASE_HISTORY));
         assertNotNull(reqManager2.getValue(), "request appoint manager2 setup failed: " + reqManager2.getMessage());
         Response<Boolean> acceptManager2 = companyService.respondToManagerAppointment(manager2Token, companyId, true);
         assertNotNull(acceptManager2.getValue(), "accept manager2 setup failed: " + acceptManager2.getMessage());
@@ -4062,7 +4062,7 @@ class ActiveOrderServiceTest {
         assertNotNull(acceptOwner.getValue(), "accept owner setup failed");
 
         Response<Boolean> reqManager1 = companyService.requestAppointManager(
-                validToken, companyId, manager1Id, Set.of(PermissionType.MANAGE_EVENTS_INVENTORY));
+                validToken, companyId, manager1Id, Set.of(PermissionType.VIEW_PURCHASE_HISTORY));
         assertNotNull(reqManager1.getValue(), "request appoint manager1 setup failed");
         Response<Boolean> acceptManager1 = companyService.respondToManagerAppointment(manager1Token, companyId, true);
         assertNotNull(acceptManager1.getValue(), "accept manager1 setup failed");

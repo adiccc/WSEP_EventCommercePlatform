@@ -1023,7 +1023,6 @@ class AdminServiceTest {
                         new PurchasedTicketDTO(1, "floor", "STANDING", null, null, 50.0),
                         new PurchasedTicketDTO(2, "floor", "STANDING", null, null, 50.0)
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123"
         );
@@ -1039,7 +1038,6 @@ class AdminServiceTest {
                         new PurchasedTicketDTO(3, "floor", "STANDING", null, null, 50.0),
                         new PurchasedTicketDTO(4, "floor", "STANDING", null, null, 50.0)
                 ),
-                List.of(3, 4),
                 100.0,
                 "pay456"
         );
@@ -1093,7 +1091,6 @@ class AdminServiceTest {
                                 75.0
                         )
                 ),
-                List.of(5, 6),
                 150.0,
                 "pay789"
         );
@@ -1204,7 +1201,6 @@ class AdminServiceTest {
                                         50.0
                                 )
                         ),
-                        List.of(1, 2),
                         100.0,
                         "pay123"
                 )
@@ -2036,8 +2032,8 @@ class AdminServiceTest {
     void GivenAdminAndNoFiltersProvided_WhenGetGlobalOrders_ThenReturnAllOrders() {
         // Arrange
         Event event = eventRepo.findById(eventId);
-        event.getOrders().add(new Order(1, "buyer1@bgu.ac.il", eventId, "Test Event", "2026-01-01T20:00", "CENTER", List.of(), List.of(1), 50.0, "pay1"));
-        event.getOrders().add(new Order(2, "buyer2@bgu.ac.il", eventId, "Test Event", "2026-01-01T20:00", "CENTER", List.of(), List.of(2), 50.0, "pay2"));
+        event.getOrders().add(new Order(1, "buyer1@bgu.ac.il", eventId, "Test Event", "2026-01-01T20:00", "CENTER", List.of(), 50.0, "pay1"));
+        event.getOrders().add(new Order(2, "buyer2@bgu.ac.il", eventId, "Test Event", "2026-01-01T20:00", "CENTER", List.of(), 50.0, "pay2"));
         eventRepo.store(event);
 
         // Act
