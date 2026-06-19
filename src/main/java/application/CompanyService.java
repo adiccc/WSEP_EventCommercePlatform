@@ -698,10 +698,21 @@ public class CompanyService {
         );
     }
     public Response<Boolean> requestAppointOwner(String token, int companyId, int appointeeId) {
-        return RetryHelper.executeWithRetry(() ->
-            transactionTemplate.execute(status -> {
-                logger.info("requestAppointOwner called for companyId: " + companyId + ", appointeeId: " + appointeeId);
+        return RetryHelper.executeWithRetry(() -> {
+            logger.info("requestAppointOwner called for companyId: " + companyId + ", appointeeId: " + appointeeId);
+
+            // Collected during the transaction, used after it commits.
+            final String[] appointeeIdentifierHolder = new String[1];
+            final Long[] msgIdHolder = new Long[1];
+            final NotifyDTO[] notifyDTOHolder = new NotifyDTO[1];
+
+            // ── Transaction: DB writes + save notification as PENDING ──
+            Response<Boolean> res = transactionTemplate.execute(status -> {
                 try {
+                    appointeeIdentifierHolder[0] = null;   // reset on retry
+                    msgIdHolder[0] = null;
+                    notifyDTOHolder[0] = null;
+
                     String role = getValidatedRole(token);
                     if (role == null) {
                         return new Response<>(false, "Invalid token");
@@ -732,10 +743,18 @@ public class CompanyService {
                     }
                     company.requestAppointOwner(appointerId, appointeeId);
                     companyRepo.store(company);
-                    NotifyPayload payload = new NotifyPayload("You have been invited to be a owner at company " + company.getCompanyName(), null,companyId);
-                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
-                    sendOrSaveNotification(appointee.getIdentifier(), notifyDTO);
-                    logger.info("requestAppointOwner sent notification successfully");
+
+                    // Save notification as PENDING — internal transaction handles persistence.
+                    // Real-time delivery is done AFTER this transaction commits.
+                    NotifyPayload payload = new NotifyPayload("You have been invited to be a owner at company " + company.getCompanyName(), null, companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO(NotifyType.ROLE_APPOINTMENT_REQUEST, payload);
+                    notifyDTOHolder[0] = notifyDTO;
+                    appointeeIdentifierHolder[0] = appointee.getIdentifier();
+
+                    Response<Long> msgIdRes = saveDelayedNotificationAsPending(appointee.getIdentifier(), notifyDTO);
+                    if (msgIdRes != null && msgIdRes.getValue() != null) {
+                        msgIdHolder[0] = msgIdRes.getValue();
+                    }
 
                     logger.info("requestAppointOwner succeeded: pending appointment created for " + appointeeId);
                     return Response.ok(true);
@@ -755,8 +774,24 @@ public class CompanyService {
                     logger.severe("Unexpected error in requestAppointOwner: " + e.getMessage());
                     return Response.error("Unexpected error: " + e.getMessage());
                 }
-            })
-        );
+            });
+
+            // ── After transaction: real-time delivery (external system) ──
+            // Only fires if the transaction actually committed → no duplicates on retry.
+            if (res != null && Boolean.TRUE.equals(res.getValue())
+                    && appointeeIdentifierHolder[0] != null && notifyDTOHolder[0] != null) {
+                String identifier = appointeeIdentifierHolder[0];
+                NotifyDTO notifyDTO = notifyDTOHolder[0];
+                boolean isDelivered = notifier.notifyUser(identifier, notifyDTO);
+                if (isDelivered && msgIdHolder[0] != null) {
+                    markNotificationAsDelivered(identifier, msgIdHolder[0]);
+                    logger.info("requestAppointOwner notification delivered to: " + identifier);
+                } else {
+                    logger.info("requestAppointOwner notification pending for: " + identifier);
+                }
+            }
+            return res;
+        });
     }
     public Response<Boolean> respondToOwnerAppointment(String token, int companyId, boolean accept) {
         return RetryHelper.executeWithRetry(() ->
