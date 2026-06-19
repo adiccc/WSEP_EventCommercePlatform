@@ -1,6 +1,7 @@
 package UI.Views;
 
 import DTO.CheckoutPriceDTO;
+import DTO.CheckoutSuccessDTO;
 import DTO.PaymentDetailsDTO;
 import UI.Presenters.CheckoutPresenter;
 import application.ActiveOrderService;
@@ -334,6 +335,24 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
         if (payButton == null) {
             return;
         }
+        String cvvVal = cvv.getValue();
+        String expiryVal = expirationDate.getValue();
+        boolean isCvvValid = validateCvv(cvvVal);
+        boolean isExpiryValid = validateExpirationDate(expiryVal);
+
+        if (!cvv.isEmpty() && !isCvvValid) {
+            cvv.setErrorMessage("CVV must be 3 or 4 digits");
+            cvv.setInvalid(true);
+        } else {
+            cvv.setInvalid(false);
+        }
+
+        if (!expirationDate.isEmpty() && !isExpiryValid) {
+            expirationDate.setErrorMessage("Expiry must be MM/YY and in the future");
+            expirationDate.setInvalid(true);
+        } else {
+            expirationDate.setInvalid(false);
+        }
 
         boolean hasRequiredDetails =
                 !cardNumber.isEmpty()
@@ -342,7 +361,9 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
                         && !cardHolderName.isEmpty()
                         && !cardHolderId.isEmpty()
                         && numberOfPayments.getValue() != null
-                        && numberOfPayments.getValue() > 0;
+                        && numberOfPayments.getValue() > 0
+                        && isCvvValid
+                        && isExpiryValid;
 
         payButton.setEnabled(hasRequiredDetails);
     }
@@ -358,31 +379,36 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
                 appliedCouponCode
         );
 
-        Response<Integer> response =
+        Response<CheckoutSuccessDTO> response =
                 presenter.checkoutAndPayment(token, activeOrderId, paymentDetails);
 
         if (response.getValue() == null) {
             showError(response.getMessage());
 
             if ("Ticket issuance failed".equals(response.getMessage())) {
-                navigateAfterCheckoutAttempt();
+                navigateAfterCheckoutAttempt(response.getValue());
             }
 
             return;
         }
 
         showSuccess("Payment completed successfully");
-        navigateAfterCheckoutAttempt();
+        navigateAfterCheckoutAttempt(response.getValue());;
     }
 
-    private void navigateAfterCheckoutAttempt() {
+    private void navigateAfterCheckoutAttempt(CheckoutSuccessDTO successData) {
         Response<String> roleResponse = presenter.getRole(token);
         String role = roleResponse.getValue();
 
         if ("MEMBER".equals(role)) {
             UI.getCurrent().navigate("my-orders");
         } else {
-            UI.getCurrent().navigate("home");
+            if (successData != null) {
+                VaadinSession.getCurrent().setAttribute("guestTickets_" + successData.getOrderId(), successData.getTicketCodes());
+                UI.getCurrent().navigate("checkout-success/" + successData.getOrderId());
+            } else {
+                UI.getCurrent().navigate("home");
+            }
         }
     }
 
@@ -506,5 +532,27 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
                 Notification.Position.TOP_CENTER
         );
         notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
+    }
+    private boolean validateCvv(String cvvValue) {
+        if (cvvValue == null) {
+            return false;
+        }
+        return cvvValue.matches("^\\d{3,4}$");
+    }
+    private boolean validateExpirationDate(String expiryValue) {
+        if (expiryValue == null || !expiryValue.matches("^(0[1-9]|1[0-2])/\\d{2}$")) {
+            return false;
+        }
+        try {
+            String[] parts = expiryValue.split("/");
+            int month = Integer.parseInt(parts[0]);
+            int year = 2000 + Integer.parseInt(parts[1]);
+
+            java.time.YearMonth expiryDate = java.time.YearMonth.of(year, month);
+            java.time.YearMonth currentMonth = java.time.YearMonth.now();
+            return !expiryDate.isBefore(currentMonth);
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

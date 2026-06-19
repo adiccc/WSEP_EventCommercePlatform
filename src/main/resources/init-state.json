@@ -3,6 +3,8 @@
 
     { "type": "enter", "store": "guest" },
 
+    { "type": "register", "params": { "guestToken": "${guest}", "email": "systemadmin@demo.com", "firstName": "System", "lastName": "Admin", "password": "Admin123!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "1 Admin St", "phone": "050-000-0000" } },
+
     { "type": "register", "params": { "guestToken": "${guest}", "email": "u1@demo.com", "firstName": "U1", "lastName": "User", "password": "U1user1!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "1 First St",  "phone": "050-001-0001" } },
     { "type": "register", "params": { "guestToken": "${guest}", "email": "u2@demo.com", "firstName": "U2", "lastName": "User", "password": "U2user1!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "2 Second St", "phone": "050-002-0002" } },
     { "type": "register", "params": { "guestToken": "${guest}", "email": "u3@demo.com", "firstName": "U3", "lastName": "User", "password": "U3user1!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "3 Third St",  "phone": "050-003-0003" } },

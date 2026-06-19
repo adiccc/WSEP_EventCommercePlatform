@@ -76,6 +76,7 @@ class CompanyServiceUpdatedTest {
     private INotifier notifier;
     private TokenService tokenService;
     private TransactionTemplate transactionTemplate;
+    private ITicketSupply ticketSupply;
 
 
     @BeforeEach
@@ -94,6 +95,8 @@ class CompanyServiceUpdatedTest {
         companyRepo = new CompanyRepoImpl();
         notifier = new VaadinNotifier();
         transactionTemplate = mock(TransactionTemplate.class);
+        ticketSupply = Mockito.mock(ITicketSupply.class);
+
 
         when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
             TransactionCallback<?> callback = invocation.getArgument(0);
@@ -132,7 +135,7 @@ class CompanyServiceUpdatedTest {
         companyRepo.store(company);
         paymentSystem = Mockito.mock(PaymentSystemProxy.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo,notifier, transactionTemplate);
+        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo,notifier, transactionTemplate,ticketSupply);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
 
