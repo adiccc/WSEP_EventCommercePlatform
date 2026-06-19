@@ -20,15 +20,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * Schedules the one-minute "your checkout is about to expire" warning for active
- * orders sitting in the CHECKING_OUT stage. Each order gets a single one-shot task
- * fired at {@link ActiveOrder#getCheckoutWarningTime()}; editing tickets reschedules
- * it, and completing/expiring an order cancels it.
- *
- * Depends only on the {@link IActiveOrderRepo} interface so it stays decoupled from
- * the concrete (currently in-memory) repository implementation.
- */
 @Component
 public class PreExpirationNotificationScheduler {
 
@@ -60,14 +51,7 @@ public class PreExpirationNotificationScheduler {
         this.warningBeforeExpiryMinutes = activeOrderProperties.getWarningBeforeExpiryMinutes();
     }
 
-    /**
-     * Schedules (or reschedules) the pre-expiration warning for an order. Any warning
-     * already pending for this order is cancelled first, so this is also the reschedule
-     * path used after the checkout timer restarts on an edit.
-     *
-     * @param warningTime the instant to fire, i.e. {@link ActiveOrder#getCheckoutWarningTime()};
-     *                    a null value (order not in CHECKING_OUT) simply clears the schedule.
-     */
+
     public void scheduleOrReschedule(String token,int orderId, LocalDateTime warningTime) {
         if (warningTime == null) {
             cancel(orderId);
