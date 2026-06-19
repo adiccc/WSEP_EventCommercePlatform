@@ -12,7 +12,7 @@ public class SumDiscountPolicy extends DiscountPolicy {
         super();
     }
 
-    private SumDiscountPolicy(List<DiscountNode> discounts) {
+    private SumDiscountPolicy(List<Discount> discounts) {
         super(discounts);
     }
 

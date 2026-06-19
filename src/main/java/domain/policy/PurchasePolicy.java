@@ -9,17 +9,17 @@ import java.util.List;
 
 @Entity
 @Table(name = "purchase_policies")
-public abstract class PurchasePolicy extends PurchaseNode {
+public abstract class PurchasePolicy extends Purchase {
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @JoinColumn(name = "parent_id")
-    protected List<PurchaseNode> rules;
+    protected List<Purchase> rules;
 
     protected PurchasePolicy() {
         this.rules = new ArrayList<>();
     }
 
-    protected PurchasePolicy(List<PurchaseNode> rules) {
+    protected PurchasePolicy(List<Purchase> rules) {
         this.rules = new ArrayList<>(rules);
     }
 
@@ -35,9 +35,9 @@ public abstract class PurchasePolicy extends PurchaseNode {
     @Override
     public Purchase copy() { return copyPolicy(); }
 
-    protected List<PurchaseNode> copyRules() {
-        List<PurchaseNode> copied = new ArrayList<>();
-        for (PurchaseNode p : rules) copied.add((PurchaseNode) p.copy());
+    protected List<Purchase> copyRules() {
+        List<Purchase> copied = new ArrayList<>();
+        for (Purchase p : rules) copied.add((Purchase) p.copy());
         return copied;
     }
 
@@ -70,7 +70,7 @@ public abstract class PurchasePolicy extends PurchaseNode {
             throw new IllegalArgumentException("Invalid rule data");
         if (ruleExists(rule))
             throw new RuntimeException("Rule already exists");
-        rules.add((PurchaseNode) rule);
+        rules.add((Purchase) rule);
     }
 
     public void removeRule(Purchase rule) {
