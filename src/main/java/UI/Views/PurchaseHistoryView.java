@@ -185,6 +185,10 @@ public class PurchaseHistoryView extends VerticalLayout {
                 .setHeader("Seat")
                 .setAutoWidth(true);
 
+        ticketsGrid.addColumn(ticket -> ticket.getBarcode() != null ? ticket.getBarcode() : "Processing...")
+                .setHeader("Ticket Code")
+                .setAutoWidth(true);
+
         ticketsGrid.addColumn(ticket -> formatPrice(ticket.getPriceAtPurchase()))
                 .setHeader("Price")
                 .setAutoWidth(true);
