@@ -623,7 +623,7 @@ public class AdminService {
             final boolean finalRefundApproved = refundApproved;
             final List<String> finalCancelledCodes = new ArrayList<>(cancelledCodes);
 
-            // Phase 2 (transaction): persist cancellation/refund outcome and notify the purchaser.
+// Phase 2 (transaction): persist cancellation/refund outcome and notify the purchaser.
             return transactionTemplate.execute(status -> {
                 try {
                     Event event = eventRepo.findById(eventId);
@@ -634,28 +634,48 @@ public class AdminService {
                         return new Response<>(false, "No matching order found for refund");
                     }
 
-                    if (order.getExternalTicketCodes() != null && !finalCancelledCodes.isEmpty()) {
-                        order.getExternalTicketCodes().removeAll(finalCancelledCodes);
+                    List<String> remainingCodes = new ArrayList<>(order.getExternalTicketCodes());
+
+                    if (!finalCancelledCodes.isEmpty()) {
+                        remainingCodes.removeAll(finalCancelledCodes);
                     }
+
+                    order.setExternalTicketCodes(remainingCodes);
 
                     String userIdentifier = order.getUserIdentifier();
 
                     if (finalRefundApproved) {
                         order.markRefunded();
                         eventRepo.store(event);
+
                         logger.log(Level.INFO, "Refund completed successfully");
-                        NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId()
-                                + " in event " + event.getId() + " because of closing the company", event.getId(), null);
+
+                        NotifyPayload payload = new NotifyPayload(
+                                "Refund processed for order " + order.getOrderId()
+                                        + " in event " + event.getId()
+                                        + " because of closing the company",
+                                event.getId(),
+                                null
+                        );
+
                         sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
+
                         return new Response<>(true, "Refund completed successfully");
                     }
 
                     order.markRefundRequired();
                     eventRepo.store(event);
-                    NotifyPayload payload = new NotifyPayload("Refund failed for order " + order.getOrderId()
-                            + " in event " + event.getId()
-                            + " because of closing the company, please contact support", event.getId(), null);
+
+                    NotifyPayload payload = new NotifyPayload(
+                            "Refund failed for order " + order.getOrderId()
+                                    + " in event " + event.getId()
+                                    + " because of closing the company, please contact support",
+                            event.getId(),
+                            null
+                    );
+
                     sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
+
                     logger.log(Level.SEVERE, "Refund rejected by external payment service");
                     return new Response<>(false, "Refund rejected by external payment service");
 
