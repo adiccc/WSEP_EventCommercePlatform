@@ -253,7 +253,7 @@ public class ActiveOrderService {
                         LocalDateTime now = LocalDateTime.now();
                         List<ActiveOrder> pending = activeOrderRepo.getAll().stream()
                                 .filter(o -> o.getStage() == STAGE.CHECKING_OUT || o.getStage() == STAGE.EDITING)
-                                .filter(o -> !o.isExpired(now))
+                                .filter(o -> !o.isExpired(now, selectingTimeoutMinutes, checkoutTimeoutMinutes))
                                 // Members only: guests are not recoverable after a restart.
                                 .filter(o -> userRepo.findUserByEmail(o.getUserIdentifier()) != null)
                                 .collect(Collectors.toList());
@@ -270,27 +270,6 @@ public class ActiveOrderService {
                         return new Response<>(null, "Failed to load orders for warning rebuild");
                     }
                 }));
-            try {
-                LocalDateTime now = LocalDateTime.now();
-                List<ActiveOrder> pending = activeOrderRepo.getAll().stream()
-                        .filter(o -> o.getStage() == STAGE.CHECKING_OUT || o.getStage() == STAGE.EDITING)
-                        .filter(o -> !o.isExpired(now, selectingTimeoutMinutes, checkoutTimeoutMinutes))
-                        // Members only: guests are not recoverable after a restart.
-                        .filter(o -> userRepo.findUserByEmail(o.getUserIdentifier()) != null)
-                        .collect(Collectors.toList());
-                return new Response<>(pending, "Pending warnings loaded");
-            } catch (OptimisticLockingFailureException e) {
-                status.setRollbackOnly();
-                throw e;
-            } catch (TransientDataAccessException e) {
-                status.setRollbackOnly();
-                throw e;
-            } catch (Exception e) {
-                status.setRollbackOnly();
-                logger.severe("Failed to load orders for warning rebuild: " + e.getMessage());
-                return new Response<>(null, "Failed to load orders for warning rebuild");
-            }
-        }));
 
         if (res == null || res.getValue() == null) {
             logger.severe("Could not rebuild pre-expiration warnings on startup");
@@ -915,7 +894,7 @@ public class ActiveOrderService {
                         if (!activeOrder.hasTickets()) {
                             return new Response<>(null, "Active order has no selected tickets");
                         }
-                        if (activeOrder.isExpired()) {
+                        if (activeOrder.isExpired(LocalDateTime.now(), selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
                             releaseHeldOrder(activeOrderId);
                             return new Response<>(null, "Active order expired");
                         }
@@ -926,46 +905,6 @@ public class ActiveOrderService {
                         double total = activeOrder.getApprovedCheckoutPrice();
                         activeOrder.startPayment();
                         activeOrderRepo.store(activeOrder);
-            logger.log(Level.INFO, "checkoutAndPayment called");
-            try {
-                String role = getValidatedRole(token);
-                if (role == null) {
-                    return new Response<>(null, "Invalid token");
-                }
-                String userIdentifier = auth.getUserIdentifier(token).getValue();
-                if (role.equals("MEMBER")) {
-                    if (userIdentifier == null) {
-                        return new Response<>(null, "not a valid user email");
-                    }
-                    if (suspensionRepo.haveActiveSuspension(getUserIdFromToken(token))) {
-                        return new Response<>(null, "user does not have write access caused by suspension.");
-                    }
-                }
-                ActiveOrder activeOrder = activeOrderRepo.findById(activeOrderId);
-                if (!activeOrder.getUserIdentifier().equals(userIdentifier)) {
-                    return new Response<>(null, "Active order does not belong to user");
-                }
-                Event event = eventRepo.findById(activeOrder.getEventId());
-                if (!event.isActive()) {
-                    return new Response<>(null, "Event is not active");
-                }
-                if (!activeOrder.hasTickets()) {
-                    return new Response<>(null, "Active order has no selected tickets");
-                }
-                if (activeOrder.isExpired(LocalDateTime.now(), selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
-                    // Order already expired: release its seats and remove it.
-                    event.releaseTickets(activeOrder.getTickets());
-                    eventRepo.store(event);
-                    activeOrderRepo.delete(activeOrderId);
-                    return new Response<>(null, "Active order expired");
-                }
-                if (!activeOrder.hasApprovedCheckoutPrice()) {
-                    return new Response<>(null, "Checkout price was not approved");
-                }
-                double total = activeOrder.getApprovedCheckoutPrice();
-
-                activeOrder.startPayment();
-                activeOrderRepo.store(activeOrder);
 
                         List<Integer> tickets = new ArrayList<>(activeOrder.getTickets());
                         List<PurchasedTicketDTO> purchasedDetails = event.getPurchasedTicketDetails(tickets);
