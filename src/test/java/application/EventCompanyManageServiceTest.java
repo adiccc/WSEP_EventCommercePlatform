@@ -972,7 +972,6 @@ class EventCompanyManageServiceTest {
                                 "TKT-2"
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123",
                 new ArrayList<>()
@@ -1049,7 +1048,6 @@ class EventCompanyManageServiceTest {
                                 "TKT-2"
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123",
                 new ArrayList<>()
@@ -1107,7 +1105,6 @@ class EventCompanyManageServiceTest {
                                 "TKT-2"
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123"
                 ,new ArrayList<>()
@@ -1162,7 +1159,6 @@ class EventCompanyManageServiceTest {
                                 "TKT-2"
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123",
                 new ArrayList<>()

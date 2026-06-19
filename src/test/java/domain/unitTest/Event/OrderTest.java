@@ -37,7 +37,6 @@ class OrderTest {
                                 50.0
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123",
                 new ArrayList<>()
@@ -73,7 +72,6 @@ class OrderTest {
                                 50.0
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123",
                 new ArrayList<>()
@@ -108,7 +106,6 @@ class OrderTest {
                                 50.0
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123",
                 new ArrayList<>()
