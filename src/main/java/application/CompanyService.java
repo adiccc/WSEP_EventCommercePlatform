@@ -855,8 +855,17 @@ public class CompanyService {
     }
     public Response<Boolean> requestAppointManager(String token, int companyId, int appointeeId,
                                                     Set<PermissionType> permissions) {
-        return RetryHelper.executeWithRetry(() ->
-            transactionTemplate.execute(status -> {
+        return RetryHelper.executeWithRetry(() -> {
+            final String[] appointeeIdentifierHolder = new String[1];
+            final Long[]   msgIdHolder               = new Long[1];
+            final NotifyDTO[] notifyDTOHolder         = new NotifyDTO[1];
+
+            Response<Boolean> res = transactionTemplate.execute(status -> {
+                // Reset holders on every retry to avoid stale data from a failed attempt
+                appointeeIdentifierHolder[0] = null;
+                msgIdHolder[0]               = null;
+                notifyDTOHolder[0]           = null;
+
                 logger.info("requestAppointManager called for companyId: " + companyId + ", appointeeId: " + appointeeId);
                 try {
                     String role = getValidatedRole(token);
@@ -889,10 +898,17 @@ public class CompanyService {
                     }
                     company.requestAppointManager(appointerId, appointeeId, permissions);
                     companyRepo.store(company);
-                    NotifyPayload payload = new NotifyPayload("You have been invited to be a manager at company " + company.getCompanyName(), null,companyId);
-                    NotifyDTO notifyDTO = new NotifyDTO( NotifyType.ROLE_APPOINTMENT_REQUEST,payload);
-                    sendOrSaveNotification(member.getIdentifier(), notifyDTO);
-                    logger.info("requestAppointManager sent notification successfully");
+
+                    // Save notification as PENDING — real-time delivery happens after transaction commits
+                    NotifyPayload payload = new NotifyPayload("You have been invited to be a manager at company " + company.getCompanyName(), null, companyId);
+                    NotifyDTO notifyDTO = new NotifyDTO(NotifyType.ROLE_APPOINTMENT_REQUEST, payload);
+                    notifyDTOHolder[0]           = notifyDTO;
+                    appointeeIdentifierHolder[0] = member.getIdentifier();
+
+                    Response<Long> msgIdRes = saveDelayedNotificationAsPending(member.getIdentifier(), notifyDTO);
+                    if (msgIdRes != null && msgIdRes.getValue() != null) {
+                        msgIdHolder[0] = msgIdRes.getValue();
+                    }
 
                     logger.info("requestAppointManager succeeded for appointeeId: " + appointeeId);
                     return Response.ok(true);
@@ -916,8 +932,24 @@ public class CompanyService {
                     logger.severe("Unexpected error in requestAppointManager: " + e.getMessage());
                     return Response.error("Unexpected error: " + e.getMessage());
                 }
-            })
-        );
+            });
+
+            // ── After transaction: real-time delivery (external system) ──
+            // Only fires if the transaction actually committed → no duplicates on retry.
+            if (res != null && Boolean.TRUE.equals(res.getValue())
+                    && appointeeIdentifierHolder[0] != null && notifyDTOHolder[0] != null) {
+                String identifier = appointeeIdentifierHolder[0];
+                NotifyDTO notifyDTO = notifyDTOHolder[0];
+                boolean isDelivered = notifier.notifyUser(identifier, notifyDTO);
+                if (isDelivered && msgIdHolder[0] != null) {
+                    markNotificationAsDelivered(identifier, msgIdHolder[0]);
+                    logger.info("requestAppointManager notification delivered to: " + identifier);
+                } else {
+                    logger.info("requestAppointManager notification pending for: " + identifier);
+                }
+            }
+            return res;
+        });
     }
     public Response<Boolean> respondToManagerAppointment(String token, int companyId, boolean accept) {
         return RetryHelper.executeWithRetry(() ->
