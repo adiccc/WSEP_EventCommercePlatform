@@ -1018,6 +1018,8 @@ class EventCompanyManageServiceTest {
     void GivenRefundRequiredOrder_WhenProcessRefundAndExternalPaymentRejects_ThenOrderRemainsRefundRequired() {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenReturn(false);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenReturn(true);
 
         Event event = eventRepo.findById(eventId);
         String buyerEmail = "user2@test.com";
@@ -1065,7 +1067,7 @@ class EventCompanyManageServiceTest {
         );
 
         assertFalse(response.getValue());
-        assertEquals("Refund rejected by external payment service", response.getMessage());
+        assertEquals("Refund rejected by external payment service, while tickets are currently canceled", response.getMessage());
         assertEquals(OrderStatus.REFUND_REQUIRED, order.getStatus());
 
         Mockito.verify(paymentSystem).refund("pay123", 100.0);
@@ -1183,6 +1185,8 @@ class EventCompanyManageServiceTest {
     void GivenValidOwnerAndFutureEventWithOrders_WhenDeleteEvent_ThenEventMarkedInactiveAndRefundProcessed() {
         // Given
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
+                .thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
                 .thenReturn(true);
 
         eventCompanyManageService.DefineVenueAndSeatingMap(
@@ -2374,6 +2378,8 @@ class EventCompanyManageServiceTest {
     void GivenOfflinePurchaser_WhenProcessRefund_ThenRefundNotificationSavedAsDelayed() {
         // Arrange
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenReturn(true);
         eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
 
         String email = "offline_buyer_refund@test.com";
@@ -2441,15 +2447,13 @@ class EventCompanyManageServiceTest {
 
         Response<Boolean> response = eventCompanyManageService.processRefund(validToken1, newEventId, orderId);
 
-        assertTrue(response.getValue(), "Refund should process despite partial ticket cancellation failure");
+        assertFalse(response.getValue(), "Refund should fail cause of partial ticket cancellation failure");
 
         Event updatedEvent = eventRepo.findById(newEventId);
         Order updatedOrder = updatedEvent.findOrderById(orderId);
 
-        assertEquals(OrderStatus.REFUNDED, updatedOrder.getStatus());
+        assertEquals(OrderStatus.REFUND_REQUIRED, updatedOrder.getStatus());
 
-        assertEquals(1, updatedOrder.getExternalTicketCodes().size());
-        assertTrue(updatedOrder.getExternalTicketCodes().contains("TKT-FAIL"));
     }
     @Test
     void GivenDBSaveFails_WhenProcessRefund_ThenExceptionCaughtAndBusinessLogicSucceeds() {
@@ -2475,6 +2479,8 @@ class EventCompanyManageServiceTest {
         });
 
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenReturn(true);
 
         EventCompanyManageService trickyDbService = new EventCompanyManageService(
                 companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, mockTransactionTemplate,ticketSupply);
@@ -2515,6 +2521,8 @@ class EventCompanyManageServiceTest {
         });
 
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenReturn(true);
 
         EventCompanyManageService trickyDbService = new EventCompanyManageService(
                 companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, mockTransactionTemplate,ticketSupply);
@@ -2551,6 +2559,8 @@ class EventCompanyManageServiceTest {
         });
 
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenReturn(true);
 
         EventCompanyManageService guestService = new EventCompanyManageService(
                 companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, localMockTransactionTemplate,ticketSupply);
@@ -2692,13 +2702,15 @@ class EventCompanyManageServiceTest {
 
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(false);
         Mockito.when(mockNotifier.notifyUser(Mockito.eq(buyerEmail), Mockito.any(NotifyDTO.class))).thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenReturn(true);
 
         // Act
         Response<Boolean> response = mockService.processRefund(validToken1, eventId, orderId);
 
         // Assert
         assertFalse(response.getValue());
-        assertEquals("Refund rejected by external payment service", response.getMessage());
+        assertEquals("Refund rejected by external payment service, while tickets are currently canceled", response.getMessage());
 
         Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(buyerEmail), Mockito.any());
 

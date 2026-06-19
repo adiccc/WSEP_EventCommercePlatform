@@ -32,8 +32,6 @@ public class Order {
     @Column(name = "user_identifier", nullable = false)
     private String userIdentifier;
 
-    // חשוב: אם אין @ManyToOne שמשתמש באותו event_id,
-    // לא לשים insertable=false, updatable=false.
     @Column(name = "event_id", nullable = false)
     private Integer eventId;
 

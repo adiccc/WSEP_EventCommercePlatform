@@ -747,11 +747,6 @@ public class EventCompanyManageService {
                         logger.log(Level.SEVERE, "Order not found for refund");
                         return new Response<>(null, "No matching order found for refund");
                     }
-
-//                    if (!order.canBeRefunded()) {
-//                        logger.log(Level.SEVERE, "Order cannot be refunded");
-//                        return new Response<>(null, "Order cannot be refunded");
-//                    }
                     if (order.getStatus() == OrderStatus.REFUNDED) {
                         logger.log(Level.SEVERE, "Already refunded");
                         return new Response<>(null, "Already refunded");
@@ -775,7 +770,8 @@ public class EventCompanyManageService {
             }
             // use external system to refund
             Event event = eventRepo.findById(eventId);
-            Order orderToRefund = event.findOrderById(orderId);            List<String> cancelledCodes = new ArrayList<>();
+            Order orderToRefund = event.findOrderById(orderId);
+            List<String> cancelledCodes = new ArrayList<>();
             if (orderToRefund.getExternalTicketCodes() != null  && !orderToRefund.getExternalTicketCodes().isEmpty()) {
                 for (String ticketCode : orderToRefund.getExternalTicketCodes()) {
                     try {
@@ -789,8 +785,14 @@ public class EventCompanyManageService {
                         logger.log(Level.SEVERE, "Exception cancelling ticket " + ticketCode, e);
                     }
                 }
-                orderToRefund.getExternalTicketCodes().removeAll(cancelledCodes);
-                eventRepo.store(event);
+            }
+
+            if(cancelledCodes.size()!=orderToRefund.getExternalTicketCodes().size()){
+                logger.log(Level.SEVERE,"Only part of the ticket canceled");
+                String userIdentifier = orderToRefund.getUserIdentifier();
+                NotifyPayload payload = new NotifyPayload("Refund process failed for " + orderToRefund.getOrderId() + "in event " + eventId + "because of ticket system failure", eventId, null);
+                sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
+                return new Response<>(false,"Failed to process refund to order "+orderId+" due to failed ticket cancellation,  please contact support ");
             }
 
             boolean refundApproved=false;
@@ -803,20 +805,13 @@ public class EventCompanyManageService {
                 logger.log(Level.WARNING,"Failed to process refund");
             }
             final boolean finalRefundApproved = refundApproved;
-            final List<String> finalCancelledCodes = new ArrayList<>(cancelledCodes);
 
             //update system state according the refund status
             return transactionTemplate.execute(status -> {
                 try {
                     Event currentEvent = eventRepo.findById(eventId);
                     Order currentOrder = currentEvent.findOrderById(orderId);
-                    List<String> remainingCodes = new ArrayList<>(currentOrder.getExternalTicketCodes());
 
-                    if (!finalCancelledCodes.isEmpty()) {
-                        remainingCodes.removeAll(finalCancelledCodes);
-                    }
-
-                    currentOrder.setExternalTicketCodes(remainingCodes);
                     if (finalRefundApproved) {
                         currentOrder.markRefunded();
                         eventRepo.store(currentEvent);
@@ -833,8 +828,8 @@ public class EventCompanyManageService {
                     String userIdentifier = currentOrder.getUserIdentifier();
                     NotifyPayload payload = new NotifyPayload("Refund process failed for " + currentOrder.getOrderId() + "in event " + eventId + "because of event closed", eventId, null);
                     sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
-                    logger.log(Level.SEVERE, "Refund rejected by external payment service");
-                    return new Response<>(false, "Refund rejected by external payment service");
+                    logger.log(Level.SEVERE, "Refund rejected by external payment service, while tickets are currently canceled");
+                    return new Response<>(false, "Refund rejected by external payment service, while tickets are currently canceled");
                 } catch (NoSuchElementException e) {
                     status.setRollbackOnly();
                     logger.log(Level.SEVERE, "Event not found: " + e.getMessage());

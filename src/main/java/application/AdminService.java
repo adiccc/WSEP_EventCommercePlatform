@@ -652,6 +652,13 @@ public class AdminService {
                     }
                 }
             }
+            if(cancelledCodes.size()!=orderToRefund.getExternalTicketCodes().size()){
+                logger.log(Level.SEVERE,"Only part of the ticket canceled");
+                String userIdentifier = orderToRefund.getUserIdentifier();
+                NotifyPayload payload = new NotifyPayload("Refund process failed for " + orderToRefund.getOrderId() + "in event " + eventId + "because of ticket system failure", eventId, null);
+                sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
+                return new Response<>(false,"Failed to process refund to order "+orderId+" due to failed ticket cancellation,  please contact support ");
+            }
 
             boolean refundApproved = false;
             try {
@@ -663,7 +670,6 @@ public class AdminService {
             }
 
             final boolean finalRefundApproved = refundApproved;
-            final List<String> finalCancelledCodes = new ArrayList<>(cancelledCodes);
 
             // Phase 2 (transaction): persist cancellation/refund outcome and notify the purchaser.
             return transactionTemplate.execute(status -> {
@@ -675,14 +681,6 @@ public class AdminService {
                         logger.log(Level.SEVERE, "Order not found while finalizing refund");
                         return new Response<>(false, "No matching order found for refund");
                     }
-
-                    List<String> remainingCodes = new ArrayList<>(order.getExternalTicketCodes());
-
-                    if (!finalCancelledCodes.isEmpty()) {
-                        remainingCodes.removeAll(finalCancelledCodes);
-                    }
-
-                    order.setExternalTicketCodes(remainingCodes);
 
                     String userIdentifier = order.getUserIdentifier();
 
@@ -718,8 +716,8 @@ public class AdminService {
 
                     sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
 
-                    logger.log(Level.SEVERE, "Refund rejected by external payment service");
-                    return new Response<>(false, "Refund rejected by external payment service");
+                    logger.log(Level.SEVERE, "Refund rejected by external payment service, while tickets are currently canceled");
+                    return new Response<>(false, "Refund rejected by external payment service, while tickets are currently canceled");
 
                 } catch (NoSuchElementException e) {
                     status.setRollbackOnly();
