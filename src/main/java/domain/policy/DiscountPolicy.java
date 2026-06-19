@@ -7,17 +7,17 @@ import java.util.List;
 
 @Entity
 @Table(name = "discount_policies")
-public abstract class DiscountPolicy extends DiscountNode {
+public abstract class DiscountPolicy extends Discount {
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @JoinColumn(name = "parent_id")
-    protected List<DiscountNode> discounts;
+    protected List<Discount> discounts;
 
     protected DiscountPolicy() {
         this.discounts = new ArrayList<>();
     }
 
-    protected DiscountPolicy(List<DiscountNode> discounts) {
+    protected DiscountPolicy(List<Discount> discounts) {
         this.discounts = new ArrayList<>(discounts);
     }
 
@@ -33,9 +33,9 @@ public abstract class DiscountPolicy extends DiscountNode {
     @Override
     public Discount copy() { return copyPolicy(); }
 
-    protected List<DiscountNode> copyDiscounts() {
-        List<DiscountNode> copied = new ArrayList<>();
-        for (DiscountNode d : discounts) copied.add((DiscountNode) d.copy());
+    protected List<Discount> copyDiscounts() {
+        List<Discount> copied = new ArrayList<>();
+        for (Discount d : discounts) copied.add((Discount) d.copy());
         return copied;
     }
 
@@ -69,7 +69,7 @@ public abstract class DiscountPolicy extends DiscountNode {
             throw new IllegalArgumentException("Invalid discount data");
         if (discountExists(discount))
             throw new RuntimeException("Discount already exists");
-        discounts.add((DiscountNode) discount);
+        discounts.add((Discount) discount);
     }
 
     public void removeDiscount(Discount discount) {

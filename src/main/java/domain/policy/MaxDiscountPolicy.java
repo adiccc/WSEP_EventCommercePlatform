@@ -12,7 +12,7 @@ public class MaxDiscountPolicy extends DiscountPolicy {
         super();
     }
 
-    private MaxDiscountPolicy(List<DiscountNode> discounts) {
+    private MaxDiscountPolicy(List<Discount> discounts) {
         super(discounts);
     }
 
