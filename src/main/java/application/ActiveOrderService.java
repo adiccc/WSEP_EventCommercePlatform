@@ -982,7 +982,7 @@ public class ActiveOrderService {
 
         boolean issuanceFailed = false;
         List<String> successfullyIssuedCodes = new ArrayList<>();
-        Map<Integer, String> ticketIdToBarcodeMap = new HashMap<>();
+        Map<String, String> ticketIdToBarcodeMap = new HashMap<>();
 
         try {
             for (SupplyBatch batch : ctx.supplyBatches()) {
@@ -997,8 +997,8 @@ public class ActiveOrderService {
                     successfullyIssuedCodes.addAll(issuedCodes);
                     List<PurchasedTicketDTO> zoneTickets = batch.zoneTickets();
                     for (int i = 0; i < zoneTickets.size() && i < issuedCodes.size(); i++) {
-                        ticketIdToBarcodeMap.put(zoneTickets.get(i).getTicketId(), issuedCodes.get(i));
-                    }
+                        String uniqueKey = zoneTickets.get(i).getZoneName() + "-" + zoneTickets.get(i).getTicketId();
+                        ticketIdToBarcodeMap.put(uniqueKey, issuedCodes.get(i));                    }
                 }
             }
         } catch (Exception e) {
@@ -1009,7 +1009,8 @@ public class ActiveOrderService {
         List<String> orderedCodesForOrder = new ArrayList<>();
         if (!issuanceFailed) {
             for (PurchasedTicketDTO ticket : ctx.purchasedDetails()) {
-                    orderedCodesForOrder.add(ticketIdToBarcodeMap.getOrDefault(ticket.getTicketId(), "Processing"));
+                String uniqueKey = ticket.getZoneName() + "-" + ticket.getTicketId();
+                orderedCodesForOrder.add(ticketIdToBarcodeMap.getOrDefault(uniqueKey, "Processing"));
             }
         }
 
