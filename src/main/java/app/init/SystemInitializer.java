@@ -13,6 +13,8 @@ import jakarta.annotation.PostConstruct;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -65,6 +67,20 @@ public class SystemInitializer implements ApplicationRunner {
             initState = objectMapper.readValue(resource.getInputStream(), InitStateFile.class);
         } catch (Exception e) {
             throw new InitializationException("Failed to load init-state file '" + path + "': " + e.getMessage());
+        }
+
+        if (initState.getOperations() == null)
+            throw new InitializationException("Init-state file must contain an 'operations' array.");
+
+        Set<String> registeredEmails = initState.getOperations().stream()
+                .filter(op -> "register".equals(op.getType()) && op.getParams() != null)
+                .map(op -> op.getParams().get("email"))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        for (String adminEmail : systemProperties.getAdminEmails()) {
+            if (!registeredEmails.contains(adminEmail))
+                throw new InitializationException(
+                        "Admin email '" + adminEmail + "' must have a 'register' operation in the init-state file.");
         }
 
         InitContext context = new InitContext();

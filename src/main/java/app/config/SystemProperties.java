@@ -30,6 +30,8 @@ public class SystemProperties {
     @Positive
     private Integer accessCodeLength;
 
+    @NotEmpty
+    private List<String> adminEmails;
     @NotNull
     @Positive
     private Integer tokenExpirationHours;
