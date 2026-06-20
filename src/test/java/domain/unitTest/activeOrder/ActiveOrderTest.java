@@ -9,6 +9,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 class ActiveOrderTest {
+
+    private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
+
     @Test
     void GivenOrderStillSelectingTickets_WhenGetRemainingCheckoutSeconds_ThenZeroReturned() {
         ActiveOrder order = new ActiveOrder(
@@ -19,7 +22,7 @@ class ActiveOrderTest {
         );
 
         long remainingSeconds =
-                order.getRemainingCheckoutSeconds(LocalDateTime.now());
+                order.getRemainingCheckoutSeconds(LocalDateTime.now(), CHECKOUT_TIMEOUT_MINUTES);
 
         assertEquals(0, remainingSeconds);
     }
@@ -36,7 +39,7 @@ class ActiveOrderTest {
         order.proceedToCheckout();
 
         long remainingSeconds =
-                order.getRemainingCheckoutSeconds(LocalDateTime.now());
+                order.getRemainingCheckoutSeconds(LocalDateTime.now(), CHECKOUT_TIMEOUT_MINUTES);
 
         assertTrue(remainingSeconds > 0);
         assertTrue(remainingSeconds <= 600);
@@ -55,7 +58,7 @@ class ActiveOrderTest {
         order.returnToEditSelection();
 
         long remainingSeconds =
-                order.getRemainingCheckoutSeconds(LocalDateTime.now());
+                order.getRemainingCheckoutSeconds(LocalDateTime.now(), CHECKOUT_TIMEOUT_MINUTES);
 
         assertTrue(remainingSeconds > 0);
         assertTrue(remainingSeconds <= 600);
@@ -75,7 +78,7 @@ class ActiveOrderTest {
         order.returnToCheckout();
 
         long remainingSeconds =
-                order.getRemainingCheckoutSeconds(LocalDateTime.now());
+                order.getRemainingCheckoutSeconds(LocalDateTime.now(), CHECKOUT_TIMEOUT_MINUTES);
 
         assertTrue(remainingSeconds > 0);
         assertTrue(remainingSeconds <= 600);
@@ -91,10 +94,10 @@ class ActiveOrderTest {
         );
 
         order.proceedToCheckout();
-        order.forceExpireForTest(LocalDateTime.now());
+        order.forceExpireForTest(LocalDateTime.now(), CHECKOUT_TIMEOUT_MINUTES);
 
         long remainingSeconds =
-                order.getRemainingCheckoutSeconds(LocalDateTime.now());
+                order.getRemainingCheckoutSeconds(LocalDateTime.now(), CHECKOUT_TIMEOUT_MINUTES);
 
         assertEquals(0, remainingSeconds);
     }
@@ -112,7 +115,7 @@ class ActiveOrderTest {
         order.startPayment();
 
         long remainingSeconds =
-                order.getRemainingCheckoutSeconds(LocalDateTime.now());
+                order.getRemainingCheckoutSeconds(LocalDateTime.now(), CHECKOUT_TIMEOUT_MINUTES);
 
         assertEquals(0, remainingSeconds);
     }

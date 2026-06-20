@@ -11,7 +11,7 @@ public interface IActiveOrderRepo extends IRepo<ActiveOrder, Integer> {
 
     void alreadyHasActiveOrder(String value, Integer eventId);
 
-    List<ActiveOrder> findExpired(LocalDateTime now);
+    List<ActiveOrder> findExpired(LocalDateTime now, int selectingTimeoutMinutes, int checkoutTimeoutMinutes);
 
      ActiveOrderDTO findOrderByUserId(String userId);
     Optional<ActiveOrder> findActiveOrderByUserAndEvent(String userIdentifier, int eventId);

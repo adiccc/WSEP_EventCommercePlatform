@@ -1,6 +1,6 @@
 package domain.policy;
 
-public abstract class PurchaseRule extends PurchaseNode {
+public abstract class PurchaseRule extends Purchase {
 
     protected PurchaseRule() {}
 

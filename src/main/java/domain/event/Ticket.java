@@ -8,7 +8,8 @@ import static domain.dataType.TicketStatus.AVAILABLE;
 @MappedSuperclass
 public abstract class Ticket {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "ticket_seq")
+    @SequenceGenerator(name = "ticket_seq", sequenceName = "global_ticket_sequence", allocationSize = 1)
     @Column(name = "ticket_id", nullable = false)
     private Integer ticketId;
     @Version

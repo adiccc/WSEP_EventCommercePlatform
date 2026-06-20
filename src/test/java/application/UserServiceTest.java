@@ -4,6 +4,7 @@ import DTO.NotifyDTO;
 import DTO.NotifyType;
 import DTO.QueueEntryResultDTO;
 import Log.LoggerSetup;
+import app.config.SystemProperties;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.ICompanyRepo;
 import domain.dataType.PermissionType;
@@ -52,6 +53,7 @@ class UserServiceTest {
     private String ADMIN_TOKEN;
     private INotifier notifier;
     private TransactionTemplate transactionTemplate;
+    private ITicketSupply ticketSupply;
 
     @BeforeEach
     void setUp() {
@@ -63,9 +65,10 @@ class UserServiceTest {
         WebQueue.resetForTesting();
         WebQueue.getInstance(100);
         suspensionRepo = new SuspensionRepoImpl();
-        realTokenService = new TokenService();
+        realTokenService = new TokenService(createTestSystemProperties());
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
+        ticketSupply = mock(ITicketSupply.class);
         String adminEmail = "admin@admin.com";
         auth = new Auth(realTokenService, Set.of(adminEmail));
         notifier = new VaadinNotifier();
@@ -79,10 +82,19 @@ class UserServiceTest {
         companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem, suspensionRepo,notifier,transactionTemplate);
+        adminService = new AdminService(auth,userRepo, companyRepo,eventRepo,paymentSystem, suspensionRepo,notifier,transactionTemplate,ticketSupply);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
         companyService = new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier,transactionTemplate);
+    }
+    private SystemProperties createTestSystemProperties() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setMaxConcurrentUsers(50);
+        systemProperties.setInitStateFile("classpath:init-state.json");
+        systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
+        systemProperties.setAccessCodeLength(6);
+        systemProperties.setTokenExpirationHours(24);
+        return systemProperties;
     }
 
     private UserDTO createValidDTO() {

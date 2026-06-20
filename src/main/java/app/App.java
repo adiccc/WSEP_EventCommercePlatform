@@ -9,6 +9,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
+import java.util.Arrays;
+
 @SpringBootApplication(scanBasePackages = {
         "app",
         "UI",
@@ -27,6 +29,11 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 public class App implements AppShellConfigurator {
 
         public static void main(String[] args) {
+                boolean emptyDb = Arrays.stream(args).anyMatch("--db=empty"::equals);
+                if (emptyDb) {
+                        args = Arrays.copyOf(args, args.length + 1);
+                        args[args.length - 1] = "--spring.jpa.hibernate.ddl-auto=create";
+                }
                 SpringApplication.run(App.class, args);
         }
 }

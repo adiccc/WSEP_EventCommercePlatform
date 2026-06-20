@@ -2,7 +2,9 @@ package application;
 
 import DTO.NotifyDTO;
 import DTO.NotifyType;
+import app.config.SystemProperties;
 import com.vaadin.flow.shared.Registration;
+import app.config.ActiveOrderProperties;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.lottery.AccessCodeGenerator;
@@ -31,6 +33,9 @@ class PreExpirationNotificationSchedulerTest {
     private static final int ORDER_ID = 42;
     private static final String RECIPIENT = "buyer@mail.com";
     private static final int EVENT_ID = 7;
+    private static final int SELECTING_TIMEOUT_MINUTES = 5;
+    private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
+    private static final int WARNING_BEFORE_EXPIRY_MINUTES = 1;
 
     private IActiveOrderRepo activeOrderRepo;
     private PreExpirationNotificationScheduler scheduler;
@@ -45,9 +50,14 @@ class PreExpirationNotificationSchedulerTest {
                 6
         );
         activeOrderRepo = new ActiveOrderRepoImpl();
-        TokenService tokenService = new TokenService();
+        TokenService tokenService = new TokenService(createTestSystemProperties());
         IAuth auth = new Auth(tokenService);
-        scheduler = new PreExpirationNotificationScheduler(activeOrderRepo, new VaadinNotifier(), auth);
+        ActiveOrderProperties activeOrderProperties = new ActiveOrderProperties();
+        activeOrderProperties.setCapacity(20);
+        activeOrderProperties.setSelectingTimeoutMinutes(SELECTING_TIMEOUT_MINUTES);
+        activeOrderProperties.setCheckoutTimeoutMinutes(CHECKOUT_TIMEOUT_MINUTES);
+        activeOrderProperties.setWarningBeforeExpiryMinutes(WARNING_BEFORE_EXPIRY_MINUTES);
+        scheduler = new PreExpirationNotificationScheduler(activeOrderRepo, new VaadinNotifier(), auth, activeOrderProperties);
 
         tabToken = tokenService.generateGuestToken();
         String userIdentifier = auth.getUserIdentifier(tabToken).getValue();
@@ -55,6 +65,15 @@ class PreExpirationNotificationSchedulerTest {
         delivered = new LinkedBlockingQueue<>();
         // Warnings now go to the user listener keyed by the token's identifier, not a tab listener.
         recipientRegistration = Broadcaster.registerUser(userIdentifier, delivered::add);
+    }
+    private SystemProperties createTestSystemProperties() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setMaxConcurrentUsers(50);
+        systemProperties.setInitStateFile("classpath:init-state.json");
+        systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
+        systemProperties.setAccessCodeLength(6);
+        systemProperties.setTokenExpirationHours(24);
+        return systemProperties;
     }
 
     @AfterEach
@@ -74,7 +93,7 @@ class PreExpirationNotificationSchedulerTest {
     void GivenOrderInWarningWindow_WhenScheduleOrReschedule_ThenRealTimePopupSentToOrderIdentifier()
             throws InterruptedException {
         ActiveOrder order = checkingOutOrder();
-        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2));
+        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2), CHECKOUT_TIMEOUT_MINUTES);
         activeOrderRepo.store(order);
 
         scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().minusSeconds(1)); // fire immediately
@@ -88,7 +107,7 @@ class PreExpirationNotificationSchedulerTest {
     @Test
     void GivenScheduledWarning_WhenCancel_ThenNothingIsSent() throws InterruptedException {
         ActiveOrder order = checkingOutOrder();
-        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2)); // inside the warning window
+        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2), CHECKOUT_TIMEOUT_MINUTES); // inside the warning window
         activeOrderRepo.store(order);
 
         scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().plusSeconds(1));
@@ -101,7 +120,7 @@ class PreExpirationNotificationSchedulerTest {
     @Test
     void GivenPendingWarning_WhenScheduleOrReschedule_ThenWarningSentExactlyOnce() throws InterruptedException {
         ActiveOrder order = checkingOutOrder();
-        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2)); // inside the warning window
+        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2), CHECKOUT_TIMEOUT_MINUTES); // inside the warning window
         activeOrderRepo.store(order);
 
         scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().plusSeconds(1));  // would fire at +1s
@@ -125,7 +144,7 @@ class PreExpirationNotificationSchedulerTest {
     @Test
     void GivenOrderAlreadyExpired_WhenScheduleOrReschedule_ThenSkippedWithoutSending() throws InterruptedException {
         ActiveOrder order = checkingOutOrder();
-        order.forceExpireForTest(LocalDateTime.now()); // deadline lands at now-1min -> already expired
+        order.forceExpireForTest(LocalDateTime.now(), CHECKOUT_TIMEOUT_MINUTES); // deadline lands at now-1min -> already expired
         activeOrderRepo.store(order);
 
         scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().minusSeconds(1));
@@ -144,7 +163,7 @@ class PreExpirationNotificationSchedulerTest {
     @Test
     void GivenNullWarningTime_WhenScheduleOrReschedule_ThenAnyPendingWarningIsCleared() throws InterruptedException {
         ActiveOrder order = checkingOutOrder();
-        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2));
+        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2), CHECKOUT_TIMEOUT_MINUTES);
         activeOrderRepo.store(order);
 
         scheduler.scheduleOrReschedule(tabToken, ORDER_ID,LocalDateTime.now().plusSeconds(1));
@@ -159,7 +178,7 @@ class PreExpirationNotificationSchedulerTest {
     @Test
     void GivenNullWarningTime_WhenRescheduleOnStartup_ThenPendingWarningCleared() throws InterruptedException {
         ActiveOrder order = checkingOutOrder();
-        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2));
+        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2), CHECKOUT_TIMEOUT_MINUTES);
         activeOrderRepo.store(order);
 
         scheduler.scheduleOrReschedule(tabToken, ORDER_ID, LocalDateTime.now().plusSeconds(1));
@@ -174,7 +193,7 @@ class PreExpirationNotificationSchedulerTest {
     @Test
     void GivenPastWarningTime_WhenRescheduleOnStartup_ThenPendingWarningCleared() throws InterruptedException {
         ActiveOrder order = checkingOutOrder();
-        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2));
+        order.forceExpireForTest(LocalDateTime.now().plusMinutes(2), CHECKOUT_TIMEOUT_MINUTES);
         activeOrderRepo.store(order);
 
         scheduler.scheduleOrReschedule(tabToken, ORDER_ID, LocalDateTime.now().plusSeconds(1));
@@ -193,7 +212,7 @@ class PreExpirationNotificationSchedulerTest {
         Registration reg = Broadcaster.registerUser(RECIPIENT, identifierQueue::add);
         try {
             ActiveOrder order = checkingOutOrder();
-            order.forceExpireForTest(LocalDateTime.now().plusMinutes(2)); // puts order in warning window
+            order.forceExpireForTest(LocalDateTime.now().plusMinutes(2), CHECKOUT_TIMEOUT_MINUTES); // puts order in warning window
             activeOrderRepo.store(order);
 
             // schedule via startup path to fire in ~50 ms
@@ -233,7 +252,7 @@ class PreExpirationNotificationSchedulerTest {
         Registration reg = Broadcaster.registerUser(RECIPIENT, identifierQueue::add);
         try {
             ActiveOrder order = checkingOutOrder();
-            order.forceExpireForTest(LocalDateTime.now()); // expired now
+            order.forceExpireForTest(LocalDateTime.now(), CHECKOUT_TIMEOUT_MINUTES); // expired now
             activeOrderRepo.store(order);
 
             scheduler.rescheduleOnStartup(RECIPIENT, ORDER_ID, LocalDateTime.now().plus(50, java.time.temporal.ChronoUnit.MILLIS));

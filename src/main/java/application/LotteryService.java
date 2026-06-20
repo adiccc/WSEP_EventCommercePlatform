@@ -571,6 +571,10 @@ public class LotteryService {
                 throw e;
             } catch (NoSuchElementException e) {
                 return new Response<>(null, "Lottery not found");
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (Exception e) {
                 return new Response<>(
                         null,
@@ -685,17 +689,35 @@ public class LotteryService {
 
     @PostConstruct
     public void reschedulePendingLotteriesOnStartup() {
-        Response<List<Lottery>> response = RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
-            List<Lottery> result = new ArrayList<>();
+        Response<List<Lottery>> response = RetryHelper.executeWithRetry(() ->
+                transactionTemplate.execute(status -> {
+                    try {
+                        List<Lottery> result = new ArrayList<>();
 
-            for (Lottery lottery : lotteryRepo.getAll()) {
-                if (shouldScheduleLotteryOnStartup(lottery)) {
-                    result.add(new Lottery(lottery));
-                }
-            }
+                        for (Lottery lottery : lotteryRepo.getAll()) {
+                            if (shouldScheduleLotteryOnStartup(lottery)) {
+                                result.add(new Lottery(lottery));
+                            }
+                        }
 
-            return new Response<>(result, "Pending lotteries loaded successfully");
-        }));
+                        return new Response<>(result, "Pending lotteries loaded successfully");
+
+                    } catch (TransientDataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                        throw e;
+
+                    } catch (OptimisticLockingFailureException e) {
+                        status.setRollbackOnly();
+                        throw e;
+
+                    } catch (Exception e) {
+                        status.setRollbackOnly();
+                        logger.severe("Failed to load pending lotteries on startup: " + e.getMessage());
+                        return new Response<>(null, "Failed to load pending lotteries on startup");
+                    }
+                })
+        );
 
         if (response == null || response.getValue() == null) {
             logger.severe("Failed to load pending lotteries on startup");

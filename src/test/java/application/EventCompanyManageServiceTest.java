@@ -2,7 +2,9 @@ package application;
 
 import DTO.*;
 import Log.LoggerSetup;
+import app.config.SystemProperties;
 import com.vaadin.flow.shared.Registration;
+import app.config.ActiveOrderProperties;
 import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
@@ -31,16 +33,11 @@ import infrastructure.inMemory.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import domain.dataType.PermissionType;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -88,6 +85,9 @@ class EventCompanyManageServiceTest {
     private IPaymentSystem paymentSystem;
     private ITicketSupply ticketSupply;
     private ActiveOrderService activeOrderService;
+    private static final int SELECTING_TIMEOUT_MINUTES = 5;
+    private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
+    private static final int WARNING_BEFORE_EXPIRY_MINUTES = 1;
     private String GUEST_TOKEN;
     private String ADMIN_TOKEN;
     private AdminService adminService;
@@ -103,7 +103,7 @@ class EventCompanyManageServiceTest {
         LoggerSetup.setup();
         userRepo=new UserRepo();
         passwordEncoder=new PasswordEncoderUtil();
-        tokenService = new TokenService();
+        tokenService = new TokenService(createTestSystemProperties());
         suspensionRepo = new SuspensionRepoImpl();
         auth=new Auth(tokenService);
         companyRepo=new CompanyRepoImpl();
@@ -123,7 +123,12 @@ class EventCompanyManageServiceTest {
         eventService=new EventService(auth,eventRepo,notifier, transactionTemplate);
         IActiveOrderRepo activeOrderRepo=new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo=new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth),userRepo, transactionTemplate,100);
+        ActiveOrderProperties activeOrderProperties=new ActiveOrderProperties();
+        activeOrderProperties.setCapacity(100);
+        activeOrderProperties.setSelectingTimeoutMinutes(SELECTING_TIMEOUT_MINUTES);
+        activeOrderProperties.setCheckoutTimeoutMinutes(CHECKOUT_TIMEOUT_MINUTES);
+        activeOrderProperties.setWarningBeforeExpiryMinutes(WARNING_BEFORE_EXPIRY_MINUTES);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth,activeOrderProperties),userRepo, transactionTemplate,activeOrderProperties);
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete order repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier,transactionTemplate);
@@ -131,7 +136,7 @@ class EventCompanyManageServiceTest {
                 companyRepo,
                 eventRepo,
                 auth,
-                paymentSystem,suspensionRepo,notifier,userRepo, transactionTemplate
+                paymentSystem,suspensionRepo,notifier,userRepo, transactionTemplate,ticketSupply
         );
 
         validToken1=null; // user with all permissions
@@ -171,7 +176,7 @@ class EventCompanyManageServiceTest {
        // userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "Sys", "Pass123!", 1, 1, 2000, "Address", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
-        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem,suspensionRepo, notifier,transactionTemplate);
+        adminService = new AdminService(auth, userRepo, companyRepo, eventRepo, paymentSystem,suspensionRepo, notifier,transactionTemplate,ticketSupply);
 
     }
 
@@ -216,7 +221,7 @@ class EventCompanyManageServiceTest {
         PaymentDetailsDTO paymentDetails =
                 new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer",1, null);
 
-        Response<Integer> checkoutResponse =
+        Response<CheckoutSuccessDTO> checkoutResponse =
                 activeOrderService.checkoutAndPayment(
                         buyerToken,
                         activeOrderId,
@@ -226,7 +231,16 @@ class EventCompanyManageServiceTest {
         assertNotNull(checkoutResponse.getValue(),
                 "checkoutAndPayment failed: " + checkoutResponse.getMessage());
 
-        return checkoutResponse.getValue();
+        return checkoutResponse.getValue().getOrderId();
+    }
+    private SystemProperties createTestSystemProperties() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setMaxConcurrentUsers(50);
+        systemProperties.setInitStateFile("classpath:init-state.json");
+        systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
+        systemProperties.setAccessCodeLength(6);
+        systemProperties.setTokenExpirationHours(24);
+        return systemProperties;
     }
 
 
@@ -964,7 +978,8 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-1"
                         ),
                         new PurchasedTicketDTO(
                                 2,
@@ -972,12 +987,14 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-2"
                         )
                 ),
                 List.of(1, 2),
                 100.0,
-                "pay123"
+                "pay123",
+                new ArrayList<>()
         );
 
         order.markRefundRequired();
@@ -1021,6 +1038,8 @@ class EventCompanyManageServiceTest {
     void GivenRefundRequiredOrder_WhenProcessRefundAndExternalPaymentRejects_ThenOrderRemainsRefundRequired() {
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
                 .thenReturn(false);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenReturn(true);
 
         Event event = eventRepo.findById(eventId);
         String buyerEmail = "user2@test.com";
@@ -1038,7 +1057,8 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-1"
                         ),
                         new PurchasedTicketDTO(
                                 2,
@@ -1046,12 +1066,13 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-2"
                         )
                 ),
-                List.of(1, 2),
                 100.0,
-                "pay123"
+                "pay123",
+                new ArrayList<>()
         );
 
 
@@ -1066,7 +1087,7 @@ class EventCompanyManageServiceTest {
         );
 
         assertFalse(response.getValue());
-        assertEquals("Refund rejected by external payment service", response.getMessage());
+        assertEquals("Refund rejected by external payment service, while tickets are currently canceled", response.getMessage());
         assertEquals(OrderStatus.REFUND_REQUIRED, order.getStatus());
 
         Mockito.verify(paymentSystem).refund("pay123", 100.0);
@@ -1093,7 +1114,8 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-1"
                         ),
                         new PurchasedTicketDTO(
                                 2,
@@ -1101,12 +1123,13 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-2"
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123"
+                ,new ArrayList<>()
         );     // markRefundRequired not called
 
         event.getOrders().add(order);
@@ -1145,7 +1168,8 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-1"
                         ),
                         new PurchasedTicketDTO(
                                 2,
@@ -1153,12 +1177,13 @@ class EventCompanyManageServiceTest {
                                 "STANDING",
                                 null,
                                 null,
-                                50.0
+                                50.0,
+                                "TKT-2"
                         )
                 ),
-                List.of(1, 2),
                 100.0,
-                "pay123"
+                "pay123",
+                new ArrayList<>()
         );
         order.markRefundRequired();
         event.getOrders().add(order);
@@ -1180,6 +1205,8 @@ class EventCompanyManageServiceTest {
     void GivenValidOwnerAndFutureEventWithOrders_WhenDeleteEvent_ThenEventMarkedInactiveAndRefundProcessed() {
         // Given
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble()))
+                .thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
                 .thenReturn(true);
 
         eventCompanyManageService.DefineVenueAndSeatingMap(
@@ -1531,8 +1558,7 @@ class EventCompanyManageServiceTest {
 
         Response<List<PurchaseHistoryDTO>> response =
                 eventCompanyManageService.getPurchaseHistoryByUser(validToken1);
-        assertNotNull(response.getValue());
-        assertEquals(1, response.getValue().size());
+        assertNotNull(response.getValue(), "Response value is null! Server message: " + response.getMessage());        assertEquals(1, response.getValue().size());
         assertEquals(user1OrderId, response.getValue().get(0).getOrderId());
     }
     @Test
@@ -2195,7 +2221,7 @@ class EventCompanyManageServiceTest {
         ));
 
         // Arrange: Generate a real JWT that has ALREADY EXPIRED
-        TokenService testTokenService = new TokenService();
+        TokenService testTokenService = new TokenService(createTestSystemProperties());
         String expiredToken = testTokenService.generateExpiredTokenForTest(email);
 
         CountDownLatch tabLatch = new CountDownLatch(1);
@@ -2372,6 +2398,8 @@ class EventCompanyManageServiceTest {
     void GivenOfflinePurchaser_WhenProcessRefund_ThenRefundNotificationSavedAsDelayed() {
         // Arrange
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenReturn(true);
         eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
 
         String email = "offline_buyer_refund@test.com";
@@ -2402,7 +2430,51 @@ class EventCompanyManageServiceTest {
                                 && n.getPayload().getMessage().toLowerCase().contains("refund process")),
                 "Offline buyer should have a delayed notification for refund");
     }
+ @Test
+    void GivenPartialTicketCancellation_WhenProcessRefund_ThenRefundSucceedsAndFailedTicketRemains() {
+        int newEventId = eventCompanyManageService.createEvent(
+                validToken1,
+                companyId,
+                LocalDateTime.now().plusDays(10),
+                "Integration Refund Event",
+                LocalDateTime.now().minusMinutes(10),
+                false,
+                GeographicalArea.CENTER,
+                CategoryEvent.FESTIVAL).getValue();
 
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                newEventId,
+                new ElementPositionDTO(10, 20),
+                List.of(new ElementPositionDTO(0, 0)),
+                List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1))),
+                new ArrayList<>()
+        );
+
+        int orderId = createCompletedOrderThroughPurchaseFlow(validToken1, newEventId, 3);
+
+        Event event = eventRepo.findById(newEventId);
+        Order order = event.findOrderById(orderId);
+
+        order.setExternalTicketCodes(new ArrayList<>(List.of("TKT-1", "TKT-2", "TKT-FAIL")));
+        order.markRefundRequired();
+        eventRepo.store(event);
+
+        Mockito.when(ticketSupply.cancelTicket(Mockito.any())).thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.eq("TKT-FAIL"))).thenReturn(false);
+
+        Mockito.when(paymentSystem.refund(Mockito.any(), Mockito.anyDouble())).thenReturn(true);
+
+        Response<Boolean> response = eventCompanyManageService.processRefund(validToken1, newEventId, orderId);
+
+        assertFalse(response.getValue(), "Refund should fail cause of partial ticket cancellation failure");
+
+        Event updatedEvent = eventRepo.findById(newEventId);
+        Order updatedOrder = updatedEvent.findOrderById(orderId);
+
+        assertEquals(OrderStatus.REFUND_REQUIRED, updatedOrder.getStatus());
+
+    }
     @Test
     void GivenDBSaveFails_WhenProcessRefund_ThenExceptionCaughtAndBusinessLogicSucceeds() {
         eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
@@ -2427,9 +2499,11 @@ class EventCompanyManageServiceTest {
         });
 
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenReturn(true);
 
         EventCompanyManageService trickyDbService = new EventCompanyManageService(
-                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, mockTransactionTemplate);
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, mockTransactionTemplate,ticketSupply);
 
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class)))
                 .thenReturn(false);
@@ -2467,9 +2541,11 @@ class EventCompanyManageServiceTest {
         });
 
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenReturn(true);
 
         EventCompanyManageService trickyDbService = new EventCompanyManageService(
-                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, mockTransactionTemplate);
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, mockTransactionTemplate,ticketSupply);
 
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class)))
                 .thenReturn(true);
@@ -2503,9 +2579,11 @@ class EventCompanyManageServiceTest {
         });
 
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenReturn(true);
 
         EventCompanyManageService guestService = new EventCompanyManageService(
-                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, localMockTransactionTemplate);
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, localMockTransactionTemplate,ticketSupply);
 
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class)))
                 .thenReturn(true);
@@ -2531,7 +2609,7 @@ class EventCompanyManageServiceTest {
 
         INotifier mockNotifier = Mockito.mock(INotifier.class);
         EventCompanyManageService mockService = new EventCompanyManageService(
-                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, transactionTemplate);
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, transactionTemplate,ticketSupply);
 
         Mockito.when(mockNotifier.notifyUser(Mockito.eq(buyerEmail), Mockito.any(NotifyDTO.class)))
                 .thenReturn(true);
@@ -2566,7 +2644,7 @@ class EventCompanyManageServiceTest {
 
         INotifier mockNotifier = Mockito.mock(INotifier.class);
         EventCompanyManageService mockService = new EventCompanyManageService(
-                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, transactionTemplate);
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, transactionTemplate,ticketSupply);
 
         Mockito.when(mockNotifier.notifyUser(Mockito.eq(buyerEmail), Mockito.any(NotifyDTO.class)))
                 .thenReturn(false);
@@ -2599,7 +2677,7 @@ class EventCompanyManageServiceTest {
 
         INotifier mockNotifier = Mockito.mock(INotifier.class);
         EventCompanyManageService mockService = new EventCompanyManageService(
-                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, transactionTemplate);
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, transactionTemplate,ticketSupply);
 
         // Mocks
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(true);
@@ -2640,17 +2718,19 @@ class EventCompanyManageServiceTest {
 
         INotifier mockNotifier = Mockito.mock(INotifier.class);
         EventCompanyManageService mockService = new EventCompanyManageService(
-                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, transactionTemplate);
+                companyRepo, eventRepo, auth, paymentSystem, suspensionRepo, mockNotifier, userRepo, transactionTemplate,ticketSupply);
 
         Mockito.when(paymentSystem.refund(Mockito.anyString(), Mockito.anyDouble())).thenReturn(false);
         Mockito.when(mockNotifier.notifyUser(Mockito.eq(buyerEmail), Mockito.any(NotifyDTO.class))).thenReturn(true);
+        Mockito.when(ticketSupply.cancelTicket(Mockito.anyString()))
+                .thenReturn(true);
 
         // Act
         Response<Boolean> response = mockService.processRefund(validToken1, eventId, orderId);
 
         // Assert
         assertFalse(response.getValue());
-        assertEquals("Refund rejected by external payment service", response.getMessage());
+        assertEquals("Refund rejected by external payment service, while tickets are currently canceled", response.getMessage());
 
         Mockito.verify(mockNotifier, Mockito.times(1)).notifyUser(Mockito.eq(buyerEmail), Mockito.any());
 
@@ -2661,6 +2741,8 @@ class EventCompanyManageServiceTest {
                                 && n.getStatus() == NotificationStatus.DELIVERED),
                 "Online buyer should have the refund failure notification marked as DELIVERED");
     }
+
+
 
     // ===================== getEventMapForManagement =====================
 
