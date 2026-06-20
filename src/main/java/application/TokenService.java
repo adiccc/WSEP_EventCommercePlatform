@@ -1,10 +1,12 @@
 
 package application;
 
+import app.config.SystemProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -15,9 +17,14 @@ import java.util.function.Function;
 @Service
 public class TokenService {
 
-    private final long expirationTime = 1000 * 60 * 60 * 24; // 24 hours
+   private final long expirationTime; // 24 hours
 
     private final SecretKey key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+
+    @Autowired
+    public TokenService(SystemProperties systemProperties) {
+        this.expirationTime = systemProperties.getTokenExpirationHours() * 60 * 60 * 1000L;
+    }
 
     public String generateToken(String username) {
         return Jwts.builder()

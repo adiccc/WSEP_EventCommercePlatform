@@ -11,3 +11,6 @@ active-order:
   selecting-timeout-minutes: 5
   checkout-timeout-minutes: 10
   warning-before-expiry-minutes: 1
+# ── JWT / Security ────────────────────────────────────────────────────────────
+jwt:
+  expiration-time-hours: 24
