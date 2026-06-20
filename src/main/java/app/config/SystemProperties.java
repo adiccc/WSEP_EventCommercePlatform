@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
@@ -31,6 +32,18 @@ public class SystemProperties {
 
     @NotEmpty
     private List<String> adminEmails;
+    @NotNull
+    @Positive
+    private Integer tokenExpirationHours;
+
+    public Integer getTokenExpirationHours() {
+        return tokenExpirationHours;
+    }
+
+    public void setTokenExpirationHours(Integer tokenExpirationHours) {
+        this.tokenExpirationHours = tokenExpirationHours;
+    }
+
 
     public Integer getMaxConcurrentUsers() { return maxConcurrentUsers; }
     public void setMaxConcurrentUsers(Integer maxConcurrentUsers) { this.maxConcurrentUsers = maxConcurrentUsers; }

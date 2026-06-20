@@ -2,12 +2,10 @@ package infrastructure.JPA;
 
 import domain.event.Event;
 import domain.event.IEventRepo;
-import domain.event.Order;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -60,27 +58,15 @@ public class EventJpaAdapter implements IEventRepo {
 
     @Override
     public List<String> getAllPurchasers() {
-        HashSet<String> purchasers = new HashSet<>();
-
-        for (Event event : eventJpaRepository.findAll()) {
-            for (Order order : event.getOrders()) {
-                purchasers.add(order.getUserIdentifier());
-            }
-        }
-
-        return purchasers.stream().toList();
+        return eventJpaRepository.findAllPurchasers();
     }
 
     @Override
     public List<String> getAllEventPurchasers(Integer eventId) {
-        Event event = findById(eventId);
-
-        HashSet<String> purchasers = new HashSet<>();
-
-        for (Order order : event.getOrders()) {
-            purchasers.add(order.getUserIdentifier());
+        if (!eventJpaRepository.existsById(eventId)) {
+            throw new NoSuchElementException("Event not found with ID: " + eventId);
         }
 
-        return purchasers.stream().toList();
+        return eventJpaRepository.findAllPurchasersByEventId(eventId);
     }
 }

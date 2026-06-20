@@ -2,6 +2,7 @@ package application;
 
 import DTO.NotifyDTO;
 import DTO.NotifyType;
+import app.config.SystemProperties;
 import com.vaadin.flow.shared.Registration;
 import app.config.ActiveOrderProperties;
 import domain.activeOrder.ActiveOrder;
@@ -48,7 +49,7 @@ class PreExpirationNotificationSchedulerTest {
                 6
         );
         activeOrderRepo = new ActiveOrderRepoImpl();
-        TokenService tokenService = new TokenService();
+        TokenService tokenService = new TokenService(createTestSystemProperties());
         IAuth auth = new Auth(tokenService);
         ActiveOrderProperties activeOrderProperties = new ActiveOrderProperties();
         activeOrderProperties.setCapacity(20);
@@ -63,6 +64,15 @@ class PreExpirationNotificationSchedulerTest {
         delivered = new LinkedBlockingQueue<>();
         // Warnings now go to the user listener keyed by the token's identifier, not a tab listener.
         recipientRegistration = Broadcaster.registerUser(userIdentifier, delivered::add);
+    }
+    private SystemProperties createTestSystemProperties() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setMaxConcurrentUsers(50);
+        systemProperties.setInitStateFile("classpath:init-state.json");
+        systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
+        systemProperties.setAccessCodeLength(6);
+        systemProperties.setTokenExpirationHours(24);
+        return systemProperties;
     }
 
     @AfterEach

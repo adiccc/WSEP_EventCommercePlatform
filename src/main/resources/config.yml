@@ -6,6 +6,7 @@ system:
   access-code-length : 6
   admin-emails:
     - systemadmin@demo.com
+  token-expiration-hours: 24
 
 # ── Active order ──────────────────────────────────────────────────────────────
 active-order:
