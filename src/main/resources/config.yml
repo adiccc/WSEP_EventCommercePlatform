@@ -7,8 +7,6 @@ system:
   admin-emails:
     - systemadmin@demo.com
   token-expiration-hours: 24
-  admin-emails:
-    - systemadmin@demo.com
 
 # ── Active order ──────────────────────────────────────────────────────────────
 active-order:
