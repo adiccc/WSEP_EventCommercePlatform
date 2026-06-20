@@ -5074,11 +5074,6 @@ class ActiveOrderServiceTest {
 
         assertNull(response.getValue());
         assertTrue(response.getMessage().contains("suspension"));
-
-        // cleanup
-        domain.Suspension.Suspension s = suspensionRepo.findLastSuspensionByUserId(userId);
-        s.unsuspend();
-        suspensionRepo.store(s);
     }
 
     // ---------- getCompanyIdByActiveOrder ----------
@@ -5176,10 +5171,5 @@ class ActiveOrderServiceTest {
 
         assertNull(response.getValue());
         assertTrue(response.getMessage().contains("suspension"));
-
-        // cleanup
-        domain.Suspension.Suspension s = suspensionRepo.findLastSuspensionByUserId(userId);
-        s.unsuspend();
-        suspensionRepo.store(s);
     }
 }
