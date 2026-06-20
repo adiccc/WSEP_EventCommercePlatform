@@ -10,7 +10,7 @@ On every startup, `SystemInitializer` reads `src/main/resources/init-state.json`
 
 **Fail-fast:** if any operation fails, startup is aborted immediately with an `InitializationException`. The system will not start in a broken state.
 
-To disable initialization entirely (e.g. in tests), set `system.init-enabled=false`.
+To disable initialization entirely (e.g. in tests), set `system.init-enabled=false` in the active application properties and keep the init-state file off the test path.
 
 ---
 
@@ -20,19 +20,18 @@ The following constraints **must** be satisfied by `init-state.json`, otherwise 
 
 ### 1. Admin user must be registered
 
-Admin emails are configured in `config.yml` under `system.admin-emails` (validated at startup by `@NotEmpty` — the app will not start if the list is missing or empty):
+`AuthConfig` is configured with a hardcoded admin email:
 
-```yaml
-system:
-  admin-emails:
-    - systemadmin@demo.com
+```java
+// src/main/java/app/config/AuthConfig.java
+Set.of("systemadmin@demo.com")
 ```
 
-`init-state.json` **must** register a user whose email matches one of the entries in `system.admin-emails`. If the admin email is changed in `config.yml`, the corresponding `register` step in `init-state.json` must be updated to match.
+`init-state.json` **must** register a user with that exact email before startup completes. If the admin email is changed in `AuthConfig`, the corresponding `register` step in `init-state.json` must be updated to match.
 
 ### 2. Queue capacity must be positive
 
-`config.yml` must have `system.max-concurrent-users` set to a value greater than zero, or the WebQueue will fail to initialize.
+`config.yml` must have `system.max-concurrent-users` set to a value greater than zero, or the WebQueue will fail to initialize. In the current configuration this value is `50`.
 
 ### 3. Variables must be stored before use
 
@@ -79,21 +78,6 @@ java -jar app.jar --init-file=/home/user/custom-init.json
 java -jar app.jar --init-file=classpath:test-init.json
 ```
 
-### `--config=<path>`
-
-Overrides the config file (`config.yml`). The path is translated to `--spring.config.additional-location`, so values in the custom file take precedence over the defaults. If omitted, `classpath:config.yml` is used.
-
-| Value | Behaviour |
-|-------|-----------|
-| *(omitted)* | Uses the default `config.yml` |
-| `myconfig.yml` | Loads from the filesystem (relative or absolute path) |
-| `classpath:test-config.yml` | Loads from the classpath |
-
-```
-java -jar app.jar --config=/path/to/custom-config.yml
-java -jar app.jar --config=classpath:test-config.yml
-```
-
 ### Combined examples
 
 ```
@@ -102,9 +86,6 @@ java -jar app.jar --db=empty
 
 # Fresh start with custom seed data
 java -jar app.jar --db=empty --init-file=/path/to/demo-data.json
-
-# Fresh start using a custom config and custom init file
-java -jar app.jar --db=empty --config=/path/to/config.yml --init-file=/path/to/init.json
 
 # Keep existing DB, run a different init script
 java -jar app.jar --init-file=/path/to/extra-setup.json
@@ -118,12 +99,16 @@ Located at `src/main/resources/config.yml`.
 
 ```yaml
 system:
-  max-concurrent-users: 50           # WebQueue capacity — max simultaneous users in system
-  active-order-ttl-minutes: 10       # Minutes before an unpaid active order expires
-  init-state-file: classpath:init-state.json  # Path to the init operations file
-  init-enabled: true                 # Set to false to skip initialization (tests, etc.)
-  admin-emails:                      # At least one required — startup fails if missing
-    - systemadmin@demo.com
+  max-concurrent-users: 50
+  init-state-file: classpath:init-state.json
+  access-code-chars: "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+  access-code-length: 6
+
+active-order:
+  capacity: 20
+  selecting-timeout-minutes: 5
+  checkout-timeout-minutes: 10
+  warning-before-expiry-minutes: 1
 ```
 
 ---
@@ -158,10 +143,11 @@ Use `"store"` to capture a result, then reference it with `${varName}` in any la
 
 ```json
 { "type": "enter",        "store": "guest" },
-{ "type": "register",     "params": { "guestToken": "${guest}", "email": "..." } },
-{ "type": "login",        "params": { "email": "...", "password": "..." }, "store": "token" },
-{ "type": "open-company", "params": { "token": "${token}", ... }, "store": "companyId" },
-{ "type": "create-event", "params": { "token": "${token}", "companyId": "${companyId}", ... }, "store": "eventId" }
+{ "type": "register",     "params": { "guestToken": "${guest}", "email": "systemadmin@demo.com", ... } },
+{ "type": "register",     "params": { "guestToken": "${guest}", "email": "u1@demo.com", ... } },
+{ "type": "login",        "params": { "email": "u1@demo.com", "password": "U1user1!" }, "store": "u1Token" },
+{ "type": "open-company", "params": { "token": "${u1Token}", "companyId": "1", ... } },
+{ "type": "create-event", "params": { "token": "${u2Token}", "companyId": "1", ... }, "store": "e1Id" }
 ```
 
 ### Date Format (for `create-event`)
