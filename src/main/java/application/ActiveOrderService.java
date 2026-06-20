@@ -964,7 +964,7 @@ public class ActiveOrderService {
         // Step 2: call external systems outside the DB transaction.
         String paymentConfirmationId = null;
         boolean paymentCallFailed = false;
-        String paymentErrorMessage = "Failed to complete purchase";
+        String paymentErrorMessage = "Payment rejected";
         try {
             paymentConfirmationId = paymentSystem.pay(ctx.total(), paymentDetails);
         } catch (RuntimeException e) {
