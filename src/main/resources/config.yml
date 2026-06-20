@@ -5,6 +5,8 @@ system:
   access-code-chars : "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
   access-code-length : 6
   token-expiration-hours: 24
+  admin-emails:
+    - systemadmin@demo.com
 
 # ── Active order ──────────────────────────────────────────────────────────────
 active-order:
