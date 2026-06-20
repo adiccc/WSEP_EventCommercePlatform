@@ -1689,7 +1689,11 @@ public class ActiveOrderService {
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
                         throw e;
-                    } catch (Exception e) {
+                    } catch (TransientDataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                        throw e;
+                    }catch (Exception e) {
                         status.setRollbackOnly();
                         logger.warning("Failed to mark notification as delivered: " + e.getMessage());
                         return new Response<>(false, "Failed to mark notification as delivered");

@@ -123,6 +123,10 @@ public class EventCompanyManageService {
                 status.setRollbackOnly();
                 logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
@@ -194,6 +198,10 @@ public class EventCompanyManageService {
                 status.setRollbackOnly();
                 logger.log(Level.SEVERE, "company not found: " + e.getMessage());
                 return new Response<>(null, "Company not found");
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
@@ -262,8 +270,13 @@ public class EventCompanyManageService {
                             return new Response<>(identifierToMsgId, "Event updated successfully");
 
                         } catch (OptimisticLockingFailureException e) {
+                            status.setRollbackOnly();
                             throw e;
 
+                        } catch (TransientDataAccessException e) {
+                            status.setRollbackOnly();
+                            logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                            throw e;
                         } catch (Exception e) {
                             status.setRollbackOnly();
                             logger.log(Level.SEVERE, "failed updating event date: " + e.getMessage());
@@ -375,6 +388,10 @@ public class EventCompanyManageService {
                 logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
 
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
@@ -431,6 +448,10 @@ public class EventCompanyManageService {
                     logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                     return new Response<>(null, "Event not found");
 
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
@@ -512,9 +533,15 @@ public class EventCompanyManageService {
                     }
                     logger.log(Level.INFO, "Orders deleted successfully");
                     return new Response<>(identifierToMsgId, "Orders deleted successfully");
-                }catch (OptimisticLockingFailureException e) {
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
                     throw e;
                 } catch(Exception e){
+                    status.setRollbackOnly();
                     logger.log(Level.SEVERE, "failed delete event : " + e.getMessage());
                     return new Response<>(null, "failed to delete event : " + e.getMessage());
                 }
@@ -592,6 +619,10 @@ public class EventCompanyManageService {
                 status.setRollbackOnly();
                 logger.log(Level.SEVERE, "company not found: " + e.getMessage());
                 return new Response<>(null, "company not found");
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
@@ -654,6 +685,10 @@ public class EventCompanyManageService {
                 return new Response<>(companyDetailsDTO, "Company details found");
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                 throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
@@ -718,6 +753,10 @@ public class EventCompanyManageService {
         catch (OptimisticLockingFailureException e) {
             status.setRollbackOnly();
             throw e;
+        } catch (TransientDataAccessException e) {
+            status.setRollbackOnly();
+            logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+            throw e;
         } catch(Exception e){
             status.setRollbackOnly();
             logger.log(Level.SEVERE, "failed generate sales report : " + e.getMessage());
@@ -757,6 +796,10 @@ public class EventCompanyManageService {
                     }
                     logger.log(Level.INFO,"Order "+orderId+" conditions are valid, the refund init");
                     return new Response<>(order,"Order conditions are valid, the refund init");
+                }catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
                 }catch(Exception e) {
                     status.setRollbackOnly();
                     logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
@@ -834,6 +877,10 @@ public class EventCompanyManageService {
                     status.setRollbackOnly();
                     logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                     return new Response<>(false, "Event not found");
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
@@ -895,6 +942,10 @@ public class EventCompanyManageService {
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
                 logger.severe("Unexpected error in addRuleToEvent: " + e.getMessage());
@@ -949,6 +1000,10 @@ public class EventCompanyManageService {
                 return Response.error(e.getMessage());
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                 throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
@@ -1005,6 +1060,10 @@ public class EventCompanyManageService {
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
                 logger.severe("Unexpected error in addDiscountToEvent: " + e.getMessage());
@@ -1060,6 +1119,10 @@ public class EventCompanyManageService {
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
                 logger.severe("Unexpected error in removeDiscountFromEvent: " + e.getMessage());
@@ -1104,6 +1167,10 @@ public class EventCompanyManageService {
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
                 logger.severe("Unexpected error in changeEventPurchasePolicyType: " + e.getMessage());
@@ -1147,6 +1214,10 @@ public class EventCompanyManageService {
                 return Response.error(e.getMessage());
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                 throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
@@ -1194,6 +1265,10 @@ public class EventCompanyManageService {
 
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                 throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
@@ -1320,6 +1395,10 @@ public class EventCompanyManageService {
 
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
+                        throw e;
+                    } catch (TransientDataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                         throw e;
                     } catch (Exception e) {
                         status.setRollbackOnly();

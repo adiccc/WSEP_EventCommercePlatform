@@ -9,6 +9,7 @@ import domain.user.*;
 import Exception.OptimisticLockingFailureException;
 import domain.webQueue.WebQueue;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import java.time.DateTimeException;
@@ -168,6 +169,10 @@ public class UserService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
                     logger.severe("Registration failed due to unexpected server error for email " + dto.getEmail() + ". Error: " + e.getMessage());
@@ -198,6 +203,9 @@ public class UserService {
                 logger.info("Login successful for email: " + email);
                 return new Response<>(tokenResponse.getValue(), tokenResponse.getMessage());
             } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (TransientDataAccessException e) {
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                 throw e;
             } catch (Exception e){
                 logger.severe("Login attempt failed for " + email);
@@ -313,6 +321,10 @@ public class UserService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
                 } catch (Exception e) {
                     logger.severe("deliverDelayedNotifications failed: " + e.getMessage());
                     status.setRollbackOnly();
@@ -341,6 +353,10 @@ public class UserService {
                     return new Response<>(false, "User not found");
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
@@ -409,6 +425,9 @@ public class UserService {
                 } else {
                     return new Response<>(-1, "Member not found in database");
                 }
+            } catch (TransientDataAccessException e) {
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (Exception e) {
                 logger.severe("Failed to get user ID: " + e.getMessage());
                 return new Response<>(-1, "Server error while retrieving user ID");
