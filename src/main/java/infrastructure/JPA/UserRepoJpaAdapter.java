@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 @Repository
-@Profile("db")
+@Profile("user-db")
 public class UserRepoJpaAdapter implements IUserRepo {
 
     private final UserJpaRepository userJpaRepository;

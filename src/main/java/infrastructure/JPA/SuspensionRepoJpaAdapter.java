@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 @Repository
-@Profile("db")
+@Profile("suspension-db")
 public class SuspensionRepoJpaAdapter implements ISuspensionRepo {
 
     private final SuspensionJpaRepository suspensionJpaRepository;

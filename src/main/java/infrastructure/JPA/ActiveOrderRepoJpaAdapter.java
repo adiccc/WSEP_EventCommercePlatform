@@ -14,7 +14,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Repository
-@Profile("db")
+@Profile("activeorder-db")
 public class ActiveOrderRepoJpaAdapter implements IActiveOrderRepo {
 
     private final ActiveOrderJpaRepository activeOrderJpaRepository;
