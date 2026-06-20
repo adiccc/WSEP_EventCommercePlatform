@@ -18,12 +18,11 @@ import java.util.function.Function;
 public class TokenService {
 
    private final long expirationTime; // 24 hours
-
     private final SecretKey key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
 
     @Autowired
     public TokenService(SystemProperties systemProperties) {
-        this.expirationTime = systemProperties.getTokenExpirationHours() * 60 * 60 * 1000L;
+        this.expirationTime = systemProperties.getTokenExpirationHours() * 60L * 60L * 1000L;
     }
 
     public String generateToken(String username) {

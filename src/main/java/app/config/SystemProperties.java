@@ -27,11 +27,16 @@ public class SystemProperties {
     @Positive
     private Integer accessCodeLength;
 
-    @Value("${jwt.expiration-time-hours:24}")
-    private int tokenExpirationHours;
+    @NotNull
+    @Positive
+    private Integer tokenExpirationHours;
 
-    public int getTokenExpirationHours() {
+    public Integer getTokenExpirationHours() {
         return tokenExpirationHours;
+    }
+
+    public void setTokenExpirationHours(Integer tokenExpirationHours) {
+        this.tokenExpirationHours = tokenExpirationHours;
     }
 
     public Integer getMaxConcurrentUsers() { return maxConcurrentUsers; }

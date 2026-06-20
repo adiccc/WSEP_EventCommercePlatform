@@ -2,6 +2,7 @@ package application;
 
 import DTO.*;
 import Log.LoggerSetup;
+import app.config.SystemProperties;
 import com.vaadin.flow.shared.Registration;
 import app.config.ActiveOrderProperties;
 import domain.Suspension.ISuspensionRepo;
@@ -93,7 +94,7 @@ class AdminServiceTest {
         WebQueue.resetForTesting();
         WebQueue.getInstance(100);
 
-        tokenService = new TokenService();
+        tokenService = new TokenService(createTestSystemProperties());
         userRepo = new UserRepo();
         eventRepo = new EventRepoImpl();
         companyRepo = new CompanyRepoImpl();
@@ -154,7 +155,15 @@ class AdminServiceTest {
         Mockito.when(paymentSystem.refund(Mockito.any(), Mockito.anyDouble())).thenReturn(true);
         Mockito.when(ticketSupply.cancelTicket(Mockito.any())).thenReturn(true);
     }
-
+    private SystemProperties createTestSystemProperties() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setMaxConcurrentUsers(50);
+        systemProperties.setInitStateFile("classpath:init-state.json");
+        systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
+        systemProperties.setAccessCodeLength(6);
+        systemProperties.setTokenExpirationHours(24);
+        return systemProperties;
+    }
 
 
     // --- setMaxCapacity ---
@@ -1937,7 +1946,7 @@ class AdminServiceTest {
         ));
 
         // Arrange: Use the TokenService to generate a real JWT that has ALREADY EXPIRED.
-        TokenService testTokenService = new TokenService();
+        TokenService testTokenService = new TokenService(createTestSystemProperties());
         String expiredToken = testTokenService.generateExpiredTokenForTest(email);
 
         // Arrange: Set up the WebSocket listener for this specific token's tab
