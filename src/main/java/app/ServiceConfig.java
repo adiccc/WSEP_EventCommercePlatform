@@ -16,9 +16,8 @@ public class ServiceConfig {
     @Autowired
     private SystemProperties systemProperties;
 
-    // ── Queue ─────────────────────────────────────────────────────────────────
     @PostConstruct
-    public void initWebQueue() {
+    public void init() {
         int capacity = systemProperties.getMaxConcurrentUsers();
         WebQueue.getInstance(capacity);
         logger.info("WebQueue initialized with capacity: " + capacity);

@@ -10,6 +10,7 @@ import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
+
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -42,6 +43,10 @@ public class SystemInitializer implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) throws Exception {
         String path;
+        boolean emptyDb = args.containsOption("db") && args.getOptionValues("db").contains("empty");
+        if (!emptyDb) {
+            return;
+        }
         if (args.containsOption("init-file")) {
             String custom = args.getOptionValues("init-file").get(0);
             path = (custom.startsWith("classpath:") || custom.startsWith("file:"))
@@ -53,7 +58,6 @@ public class SystemInitializer implements ApplicationRunner {
         }
 
         logger.info("Loading init-state file: " + path);
-        validateSystemProperties();
 
         InitStateFile initState;
         try {
@@ -67,7 +71,7 @@ public class SystemInitializer implements ApplicationRunner {
 
         for (int i = 0; i < initState.getOperations().size(); i++) {
             InitOperation op = initState.getOperations().get(i);
-            // Every init operation must declare its type so it can be matched to a handler.
+            // Every init operation must declare its type, so it can be matched to a handler.
             if (op.getType() == null || op.getType().isBlank()) {
                 throw new InitializationException("Init operation type must not be blank");
             }
@@ -88,22 +92,4 @@ public class SystemInitializer implements ApplicationRunner {
         logger.info("System initialization completed successfully.");
     }
 
-    private void validateSystemProperties() {
-        if (systemProperties.getMaxConcurrentUsers() <= 0) {
-            throw new InitializationException("Invalid system configuration: maxConcurrentUsers must be positive");
-        }
-
-        if (systemProperties.getActiveOrderTtlMinutes() <= 0) {
-            throw new InitializationException("Invalid system configuration: activeOrderTtlMinutes must be positive");
-        }
-
-        // TODO: validation of admin
-
-        // The initialization file path must be configured before trying to load it.
-        if (systemProperties.getInitStateFile() == null ||
-                systemProperties.getInitStateFile().isBlank()) {
-            throw new InitializationException("initStateFile must be configured");
-        }
-
-    }
 }

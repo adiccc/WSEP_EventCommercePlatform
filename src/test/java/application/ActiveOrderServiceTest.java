@@ -2,6 +2,7 @@ package application;
 
 import DTO.*;
 import Log.LoggerSetup;
+import app.config.ActiveOrderProperties;
 
 import java.util.*;
 
@@ -79,6 +80,10 @@ class ActiveOrderServiceTest {
 
     private final int companyId = 1;
     private final int capacity = 20;
+    private static final int SELECTING_TIMEOUT_MINUTES = 5;
+    private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
+    private static final int WARNING_BEFORE_EXPIRY_MINUTES = 1;
+    private ActiveOrderProperties activeOrderProperties;
 
     @BeforeEach
     void setUp() {
@@ -173,8 +178,14 @@ class ActiveOrderServiceTest {
                 LocalDateTime.now().plusHours(1),     //registerWindow
                 5);
 
+        activeOrderProperties = new ActiveOrderProperties();
+        activeOrderProperties.setCapacity(capacity);
+        activeOrderProperties.setSelectingTimeoutMinutes(SELECTING_TIMEOUT_MINUTES);
+        activeOrderProperties.setCheckoutTimeoutMinutes(CHECKOUT_TIMEOUT_MINUTES);
+        activeOrderProperties.setWarningBeforeExpiryMinutes(WARNING_BEFORE_EXPIRY_MINUTES);
+
         preExpirationScheduler =
-                new PreExpirationNotificationScheduler(activeOrderRepo, notifier, auth);
+                new PreExpirationNotificationScheduler(activeOrderRepo, notifier, auth, activeOrderProperties);
 
         service = new ActiveOrderService(
                 auth,
@@ -189,7 +200,7 @@ class ActiveOrderServiceTest {
                 preExpirationScheduler,
                 userRepo,
                 transactionTemplate,
-                capacity
+                activeOrderProperties
         );
     }
     @Test
@@ -857,7 +868,7 @@ class ActiveOrderServiceTest {
 
     private void forceExpireOrder(int orderId) {
         ActiveOrder order = activeOrderRepo.findById(orderId);
-        order.forceExpireForTest(LocalDateTime.now());
+        order.forceExpireForTest(LocalDateTime.now(), CHECKOUT_TIMEOUT_MINUTES);
         activeOrderRepo.store(order);
     }
 
@@ -1383,7 +1394,7 @@ class ActiveOrderServiceTest {
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         int orderId = service.userSelectTickets(
                 validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
-        LocalDateTime warningBefore = activeOrderRepo.findById(orderId).getCheckoutWarningTime();
+        LocalDateTime warningBefore = activeOrderRepo.findById(orderId).getCheckoutWarningTime(CHECKOUT_TIMEOUT_MINUTES, WARNING_BEFORE_EXPIRY_MINUTES);
         assertTrue(preExpirationScheduler.hasPendingWarning(orderId));
 
         service.returnToEditSelection(validToken);
@@ -1396,7 +1407,7 @@ class ActiveOrderServiceTest {
         // must NOT change across the edit flow — the warning scheduled then is still valid,
         // so editTicketSelection must NOT call scheduleOrReschedule again.
         assertTrue(preExpirationScheduler.hasPendingWarning(orderId));
-        LocalDateTime warningAfter = activeOrderRepo.findById(orderId).getCheckoutWarningTime();
+        LocalDateTime warningAfter = activeOrderRepo.findById(orderId).getCheckoutWarningTime(CHECKOUT_TIMEOUT_MINUTES, WARNING_BEFORE_EXPIRY_MINUTES);
         assertEquals(warningBefore, warningAfter,
                 "edit must NOT change the pre-expiration warning instant (continuous timer)");
     }
@@ -4461,7 +4472,7 @@ class ActiveOrderServiceTest {
         )).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, notifierMock, auth);
+                new PreExpirationNotificationScheduler(activeOrderRepo, notifierMock, auth, activeOrderProperties);
 
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
@@ -4476,7 +4487,7 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                capacity
+                activeOrderProperties
         );
 
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
@@ -5054,7 +5065,7 @@ class ActiveOrderServiceTest {
         INotifier mockNotifier = Mockito.mock(INotifier.class);
         ActiveOrderService mockService = new ActiveOrderService(
                 auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo, paymentSystem,
-                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, capacity);
+                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, activeOrderProperties);
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class))).thenReturn("payment-123");
         TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
@@ -5118,7 +5129,7 @@ class ActiveOrderServiceTest {
         INotifier mockNotifier = Mockito.mock(INotifier.class);
         ActiveOrderService mockService = new ActiveOrderService(
                 auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo, paymentSystem,
-                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, capacity);
+                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, activeOrderProperties);
 
         int firstFillerOrderId = -1;
 
@@ -5176,7 +5187,7 @@ class ActiveOrderServiceTest {
         INotifier mockNotifier = Mockito.mock(INotifier.class);
         ActiveOrderService mockService = new ActiveOrderService(
                 auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo, paymentSystem,
-                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, capacity);
+                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, activeOrderProperties);
 
         Mockito.doThrow(new RuntimeException("Simulated Tab Notification Crash"))
                 .when(mockNotifier).notifyTab(Mockito.anyString(), Mockito.any(NotifyDTO.class));
