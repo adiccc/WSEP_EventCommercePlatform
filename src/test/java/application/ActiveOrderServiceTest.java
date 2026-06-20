@@ -5335,4 +5335,476 @@ class ActiveOrderServiceTest {
                 .issue(Mockito.any(TicketSupplyRequestDTO.class));
     }
 
+    @Test
+    void GivenValidActiveOrder_WhenCheckoutAndPayment_WithMockNotifier_ThenConfirmationNotifierInvoked() throws Exception {
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        Mockito.when(mockNotifier.notifyTab(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
+        Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
+
+        PreExpirationNotificationScheduler schedulerWithMockNotifier =
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
+        ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
+                auth,
+                activeOrderRepo,
+                eventRepo,
+                companyRepo,
+                lotteryRepo,
+                paymentSystem,
+                ticketSupply,
+                new SuspensionRepoImpl(),
+                mockNotifier,
+                schedulerWithMockNotifier,
+                userRepo,
+                transactionTemplate,
+                activeOrderProperties
+        );
+
+        Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        serviceWithMockNotifier.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+
+        Response<Integer> selectResponse =
+                serviceWithMockNotifier.userSelectTickets(validToken, concurrentEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+
+        ActiveOrder activeOrderBeforeCheckout = activeOrderRepo.findById(activeOrderId);
+        List<Integer> selectedTicketIds = new ArrayList<>(activeOrderBeforeCheckout.getTickets());
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.LOCKED);
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-123");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                serviceWithMockNotifier.prepareCheckout(validToken, activeOrderId);
+        assertNotNull(checkoutPriceResponse.getValue(), "Checkout price should be prepared before payment.");
+
+        Response<CheckoutSuccessDTO> checkoutResponse =
+                serviceWithMockNotifier.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNotNull(checkoutResponse.getValue(),
+                "Checkout should return created order id. Message: " + checkoutResponse.getMessage());
+        assertEquals("Purchase completed successfully", checkoutResponse.getMessage());
+        assertThrows(NoSuchElementException.class,
+                () -> activeOrderRepo.findById(activeOrderId),
+                "Active order should be deleted after successful checkout");
+        assertEquals(1, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Successful checkout should create exactly one order");
+        assertTicketStatuses(concurrentEventId, selectedTicketIds, TicketStatus.SOLD);
+        Mockito.verify(paymentSystem).pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+        Mockito.verify(ticketSupply).issue(Mockito.any(TicketSupplyRequestDTO.class));
+
+        Mockito.verify(mockNotifier).notifyTab(
+                Mockito.eq(validToken),
+                Mockito.any(NotifyDTO.class)
+        );
+    }
+
+    @Test
+    void GivenEventSoldOutAfterFinalPurchase_WhenCheckoutAndPayment_WithMockNotifier_ThenFounderNotifierInvoked() throws Exception {
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        Mockito.when(mockNotifier.notifyTab(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
+        Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
+
+        PreExpirationNotificationScheduler schedulerWithMockNotifier =
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
+        ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
+                auth,
+                activeOrderRepo,
+                eventRepo,
+                companyRepo,
+                lotteryRepo,
+                paymentSystem,
+                ticketSupply,
+                new SuspensionRepoImpl(),
+                mockNotifier,
+                schedulerWithMockNotifier,
+                userRepo,
+                transactionTemplate,
+                activeOrderProperties
+        );
+
+        int soldOutEventId = createSoldOutTestEvent("sold-out-mock-1");
+
+        serviceWithMockNotifier.enterEventPurchase(validToken, companyId, soldOutEventId, null);
+        Map<String, List<SeatingTicketDTO>> seating =
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        Response<Integer> selectResponse =
+                serviceWithMockNotifier.userSelectTickets(validToken, soldOutEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                serviceWithMockNotifier.prepareCheckout(validToken, activeOrderId);
+        assertNotNull(checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: " + checkoutPriceResponse.getMessage());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-soldout-mock");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        Response<CheckoutSuccessDTO> checkoutResponse =
+                serviceWithMockNotifier.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNotNull(checkoutResponse.getValue(),
+                "Checkout should succeed. Message: " + checkoutResponse.getMessage());
+        assertTrue(eventRepo.findById(soldOutEventId).isSoldOut(),
+                "Event should be sold out after final purchase");
+
+        Mockito.verify(mockNotifier, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq("testuser1@gmail.com"),
+                Mockito.any(NotifyDTO.class)
+        );
+    }
+
+    @Test
+    void GivenSoldOutEventWithExtraOwnerAndManager_WhenCheckoutAndPayment_WithMockNotifier_ThenAllOwnersAndManagersNotifierInvoked() throws Exception {
+        userService.registerUser("", new UserDTO(
+                "owner2@gmail.com", "Alice", "Owner", "pw2",
+                1, 1, 1990, "TLV", "050-000-0002"));
+        userService.registerUser("", new UserDTO(
+                "manager1@gmail.com", "Bob", "Manager", "pw3",
+                1, 1, 1990, "TLV", "050-000-0003"));
+
+        String owner2Token = userService.login("owner2@gmail.com", "pw2").getValue();
+        String manager1Token = userService.login("manager1@gmail.com", "pw3").getValue();
+        int owner2Id = userService.getUserId(owner2Token).getValue();
+        int manager1Id = userService.getUserId(manager1Token).getValue();
+
+        Response<Boolean> reqOwner = companyService.requestAppointOwner(validToken, companyId, owner2Id);
+        assertNotNull(reqOwner.getValue(), "request appoint owner setup failed: " + reqOwner.getMessage());
+        Response<Boolean> acceptOwner = companyService.respondToOwnerAppointment(owner2Token, companyId, true);
+        assertNotNull(acceptOwner.getValue(), "accept owner setup failed: " + acceptOwner.getMessage());
+
+        Response<Boolean> reqManager = companyService.requestAppointManager(
+                validToken, companyId, manager1Id,
+                Set.of(PermissionType.VIEW_PURCHASE_HISTORY));
+        assertNotNull(reqManager.getValue(), "request appoint manager setup failed: " + reqManager.getMessage());
+        Response<Boolean> acceptManager = companyService.respondToManagerAppointment(manager1Token, companyId, true);
+        assertNotNull(acceptManager.getValue(), "accept manager setup failed: " + acceptManager.getMessage());
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        Mockito.when(mockNotifier.notifyTab(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
+        Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
+
+        PreExpirationNotificationScheduler schedulerWithMockNotifier =
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
+        ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
+                auth,
+                activeOrderRepo,
+                eventRepo,
+                companyRepo,
+                lotteryRepo,
+                paymentSystem,
+                ticketSupply,
+                new SuspensionRepoImpl(),
+                mockNotifier,
+                schedulerWithMockNotifier,
+                userRepo,
+                transactionTemplate,
+                activeOrderProperties
+        );
+
+        int soldOutEventId = createSoldOutTestEvent("sold-out-mock-3");
+
+        serviceWithMockNotifier.enterEventPurchase(validToken, companyId, soldOutEventId, null);
+        Map<String, List<SeatingTicketDTO>> seating =
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 2);
+
+        Response<Integer> selectResponse =
+                serviceWithMockNotifier.userSelectTickets(validToken, soldOutEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                serviceWithMockNotifier.prepareCheckout(validToken, activeOrderId);
+        assertNotNull(checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: " + checkoutPriceResponse.getMessage());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-multi-mock");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        Response<CheckoutSuccessDTO> checkoutResponse =
+                serviceWithMockNotifier.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNotNull(checkoutResponse.getValue(),
+                "Checkout should succeed. Message: " + checkoutResponse.getMessage());
+
+        Mockito.verify(mockNotifier, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq("testuser1@gmail.com"), Mockito.any(NotifyDTO.class));
+        Mockito.verify(mockNotifier, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq("owner2@gmail.com"), Mockito.any(NotifyDTO.class));
+        Mockito.verify(mockNotifier, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq("manager1@gmail.com"), Mockito.any(NotifyDTO.class));
+    }
+
+    @Test
+    void GivenSoldOutEventAndManagerOnline_WhenCheckoutAndPayment_WithMockNotifier_ThenManagerNotifierInvoked() throws Exception {
+        userService.registerUser("", new UserDTO(
+                "manager1@gmail.com", "Bob", "Manager", "pw3",
+                1, 1, 1990, "TLV", "050-000-0003"));
+        String manager1Token = userService.login("manager1@gmail.com", "pw3").getValue();
+        int manager1Id = userService.getUserId(manager1Token).getValue();
+
+        Response<Boolean> reqManager = companyService.requestAppointManager(
+                validToken, companyId, manager1Id, Set.of(PermissionType.VIEW_PURCHASE_HISTORY));
+        assertNotNull(reqManager.getValue(), "request appoint manager setup failed: " + reqManager.getMessage());
+        Response<Boolean> acceptManager = companyService.respondToManagerAppointment(manager1Token, companyId, true);
+        assertNotNull(acceptManager.getValue(), "accept manager setup failed: " + acceptManager.getMessage());
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        Mockito.when(mockNotifier.notifyTab(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
+        Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
+
+        PreExpirationNotificationScheduler schedulerWithMockNotifier =
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
+        ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
+                auth,
+                activeOrderRepo,
+                eventRepo,
+                companyRepo,
+                lotteryRepo,
+                paymentSystem,
+                ticketSupply,
+                new SuspensionRepoImpl(),
+                mockNotifier,
+                schedulerWithMockNotifier,
+                userRepo,
+                transactionTemplate,
+                activeOrderProperties
+        );
+
+        int soldOutEventId = createSoldOutTestEvent("manager-online-mock");
+        serviceWithMockNotifier.enterEventPurchase(validToken, companyId, soldOutEventId, null);
+        Map<String, List<SeatingTicketDTO>> seating =
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 2);
+        Response<Integer> selectResponse =
+                serviceWithMockNotifier.userSelectTickets(validToken, soldOutEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                serviceWithMockNotifier.prepareCheckout(validToken, activeOrderId);
+        assertNotNull(checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: " + checkoutPriceResponse.getMessage());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-manager-online-mock");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        Response<CheckoutSuccessDTO> checkoutResponse =
+                serviceWithMockNotifier.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+        assertNotNull(checkoutResponse.getValue(),
+                "Checkout should succeed. Message: " + checkoutResponse.getMessage());
+
+        Mockito.verify(mockNotifier, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq("manager1@gmail.com"),
+                Mockito.any(NotifyDTO.class)
+        );
+    }
+
+    @Test
+    void GivenSoldOutEventWithOnlineAndOfflineManagers_WhenCheckoutAndPayment_WithMockNotifier_ThenBothManagersNotifierInvoked() throws Exception {
+        userService.registerUser("", new UserDTO(
+                "manager1@gmail.com", "Bob", "Manager", "pw3",
+                1, 1, 1990, "TLV", "050-000-0003"));
+        userService.registerUser("", new UserDTO(
+                "manager2@gmail.com", "Carol", "Manager", "pw4",
+                1, 1, 1990, "TLV", "050-000-0004"));
+
+        String manager1Token = userService.login("manager1@gmail.com", "pw3").getValue();
+        String manager2Token = userService.login("manager2@gmail.com", "pw4").getValue();
+        int manager1Id = userService.getUserId(manager1Token).getValue();
+        int manager2Id = userService.getUserId(manager2Token).getValue();
+
+        Response<Boolean> reqManager1 = companyService.requestAppointManager(
+                validToken, companyId, manager1Id, Set.of(PermissionType.VIEW_PURCHASE_HISTORY));
+        assertNotNull(reqManager1.getValue(), "request appoint manager1 setup failed: " + reqManager1.getMessage());
+        Response<Boolean> acceptManager1 = companyService.respondToManagerAppointment(manager1Token, companyId, true);
+        assertNotNull(acceptManager1.getValue(), "accept manager1 setup failed: " + acceptManager1.getMessage());
+
+        Response<Boolean> reqManager2 = companyService.requestAppointManager(
+                validToken, companyId, manager2Id, Set.of(PermissionType.VIEW_PURCHASE_HISTORY));
+        assertNotNull(reqManager2.getValue(), "request appoint manager2 setup failed: " + reqManager2.getMessage());
+        Response<Boolean> acceptManager2 = companyService.respondToManagerAppointment(manager2Token, companyId, true);
+        assertNotNull(acceptManager2.getValue(), "accept manager2 setup failed: " + acceptManager2.getMessage());
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        Mockito.when(mockNotifier.notifyTab(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
+        Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
+
+        PreExpirationNotificationScheduler schedulerWithMockNotifier =
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
+        ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
+                auth,
+                activeOrderRepo,
+                eventRepo,
+                companyRepo,
+                lotteryRepo,
+                paymentSystem,
+                ticketSupply,
+                new SuspensionRepoImpl(),
+                mockNotifier,
+                schedulerWithMockNotifier,
+                userRepo,
+                transactionTemplate,
+                activeOrderProperties
+        );
+
+        int soldOutEventId = createSoldOutTestEvent("mixed-managers-mock");
+        serviceWithMockNotifier.enterEventPurchase(validToken, companyId, soldOutEventId, null);
+        Map<String, List<SeatingTicketDTO>> seating =
+                Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 2);
+        Response<Integer> selectResponse =
+                serviceWithMockNotifier.userSelectTickets(validToken, soldOutEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                serviceWithMockNotifier.prepareCheckout(validToken, activeOrderId);
+        assertNotNull(checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: " + checkoutPriceResponse.getMessage());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-mixed-mock");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        Response<CheckoutSuccessDTO> checkoutResponse =
+                serviceWithMockNotifier.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+        assertNotNull(checkoutResponse.getValue(),
+                "Checkout should succeed. Message: " + checkoutResponse.getMessage());
+
+        Mockito.verify(mockNotifier, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq("manager1@gmail.com"), Mockito.any(NotifyDTO.class));
+        Mockito.verify(mockNotifier, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq("manager2@gmail.com"), Mockito.any(NotifyDTO.class));
+    }
+
+    @Test
+    void GivenManagersAppointedByDifferentOwners_WhenCheckoutAndPayment_WithMockNotifier_ThenAllManagersInTreeNotifierInvoked() throws Exception {
+        userService.registerUser("", new UserDTO(
+                "owner2@gmail.com", "Alice", "Owner", "pw2",
+                1, 1, 1990, "TLV", "050-000-0002"));
+        userService.registerUser("", new UserDTO(
+                "manager1@gmail.com", "Bob", "Manager", "pw3",
+                1, 1, 1990, "TLV", "050-000-0003"));
+        userService.registerUser("", new UserDTO(
+                "manager2@gmail.com", "Carol", "Manager", "pw4",
+                1, 1, 1990, "TLV", "050-000-0004"));
+
+        String owner2Token = userService.login("owner2@gmail.com", "pw2").getValue();
+        String manager1Token = userService.login("manager1@gmail.com", "pw3").getValue();
+        String manager2Token = userService.login("manager2@gmail.com", "pw4").getValue();
+        int owner2Id = userService.getUserId(owner2Token).getValue();
+        int manager1Id = userService.getUserId(manager1Token).getValue();
+        int manager2Id = userService.getUserId(manager2Token).getValue();
+
+        Response<Boolean> reqOwner = companyService.requestAppointOwner(validToken, companyId, owner2Id);
+        assertNotNull(reqOwner.getValue(), "request appoint owner setup failed");
+        Response<Boolean> acceptOwner = companyService.respondToOwnerAppointment(owner2Token, companyId, true);
+        assertNotNull(acceptOwner.getValue(), "accept owner setup failed");
+
+        Response<Boolean> reqManager1 = companyService.requestAppointManager(
+                validToken, companyId, manager1Id, Set.of(PermissionType.VIEW_PURCHASE_HISTORY));
+        assertNotNull(reqManager1.getValue(), "request appoint manager1 setup failed");
+        Response<Boolean> acceptManager1 = companyService.respondToManagerAppointment(manager1Token, companyId, true);
+        assertNotNull(acceptManager1.getValue(), "accept manager1 setup failed");
+
+        Response<Boolean> reqManager2 = companyService.requestAppointManager(
+                owner2Token, companyId, manager2Id, Set.of(PermissionType.MANAGE_POLICIES));
+        assertNotNull(reqManager2.getValue(), "request appoint manager2 setup failed");
+        Response<Boolean> acceptManager2 = companyService.respondToManagerAppointment(manager2Token, companyId, true);
+        assertNotNull(acceptManager2.getValue(), "accept manager2 setup failed");
+
+        INotifier mockNotifier = Mockito.mock(INotifier.class);
+        Mockito.when(mockNotifier.notifyTab(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
+        Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
+
+        PreExpirationNotificationScheduler schedulerWithMockNotifier =
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
+        ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
+                auth,
+                activeOrderRepo,
+                eventRepo,
+                companyRepo,
+                lotteryRepo,
+                paymentSystem,
+                ticketSupply,
+                new SuspensionRepoImpl(),
+                mockNotifier,
+                schedulerWithMockNotifier,
+                userRepo,
+                transactionTemplate,
+                activeOrderProperties
+        );
+
+        int soldOutEventId = createSoldOutTestEvent("sold-out-mock-5");
+        serviceWithMockNotifier.enterEventPurchase(validToken, companyId, soldOutEventId, null);
+        Map<String, List<SeatingTicketDTO>> seating = Map.of("tribune", List.of(new SeatingTicketDTO(0, 0)));
+        Map<String, Integer> standing = Map.of("floor", 2);
+        Response<Integer> selectResponse = serviceWithMockNotifier.userSelectTickets(validToken, soldOutEventId, seating, standing);
+        assertNotNull(selectResponse.getValue(), "setup failed");
+        int activeOrderId = selectResponse.getValue();
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                serviceWithMockNotifier.prepareCheckout(validToken, activeOrderId);
+        assertNotNull(checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: " + checkoutPriceResponse.getMessage());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-tree-mock");
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+        PaymentDetailsDTO paymentDetails = new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        Response<CheckoutSuccessDTO> checkoutResponse =
+                serviceWithMockNotifier.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+        assertNotNull(checkoutResponse.getValue(), "Checkout should succeed");
+
+        Mockito.verify(mockNotifier, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq("testuser1@gmail.com"), Mockito.any(NotifyDTO.class));
+        Mockito.verify(mockNotifier, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq("owner2@gmail.com"), Mockito.any(NotifyDTO.class));
+        Mockito.verify(mockNotifier, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq("manager1@gmail.com"), Mockito.any(NotifyDTO.class));
+        Mockito.verify(mockNotifier, Mockito.atLeastOnce()).notifyUser(
+                Mockito.eq("manager2@gmail.com"), Mockito.any(NotifyDTO.class));
+    }
+
 }
