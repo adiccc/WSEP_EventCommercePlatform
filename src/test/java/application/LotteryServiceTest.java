@@ -71,7 +71,7 @@ class LotteryServiceTest {
         private INotifier notifier;
         private UserService userService;
         private TransactionTemplate transactionTemplate;
-
+        private ITicketSupply ticketSupply;
         @BeforeEach
         void setUp() {
                 AccessCodeGenerator.configure(
@@ -86,6 +86,7 @@ class LotteryServiceTest {
                         TransactionCallback<?> callback = invocation.getArgument(0);
                         return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
                 });
+                ticketSupply = mock(ITicketSupply.class);
                 passwordEncoder = new PasswordEncoderUtil();
                 tokenService = new TokenService();
                 auth = new Auth(tokenService);
@@ -103,7 +104,7 @@ class LotteryServiceTest {
                 CompanyService companyService = new CompanyService(auth, companyRepo, userRepo, suspensionRepo,
                                 notifier,transactionTemplate);
                 eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,
-                                suspensionRepo, notifier, userRepo,transactionTemplate);
+                                suspensionRepo, notifier, userRepo,transactionTemplate,ticketSupply);
 
 
 

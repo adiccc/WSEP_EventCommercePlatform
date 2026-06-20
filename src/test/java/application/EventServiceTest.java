@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -61,6 +62,7 @@ class EventServiceTest {
     private List<SeatingZoneDTO> seatingZones;
     private String GUEST_TOKEN;
     private TransactionTemplate transactionTemplate;
+    private ITicketSupply ticketSupply;
 
     @BeforeEach
     void setUp() {
@@ -74,6 +76,7 @@ class EventServiceTest {
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
         auth = new Auth(tokenService);
+        ticketSupply = mock(ITicketSupply.class);
         CompanyRepoImpl companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         suspensionRepo=new SuspensionRepoImpl();
@@ -84,7 +87,7 @@ class EventServiceTest {
             TransactionCallback<?> callback = invocation.getArgument(0);
             return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
         });
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate,ticketSupply);
         service = new EventService(auth, eventRepo,notifier, transactionTemplate);
 
         userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier,transactionTemplate);

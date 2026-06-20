@@ -1,6 +1,6 @@
 package domain.policy;
 
-public abstract class DiscountElement extends DiscountNode {
+public abstract class DiscountElement extends Discount {
 
     protected DiscountElement() {}
 
