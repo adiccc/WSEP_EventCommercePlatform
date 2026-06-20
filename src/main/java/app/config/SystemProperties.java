@@ -36,6 +36,19 @@ public class SystemProperties {
     @Positive
     private Integer tokenExpirationHours;
 
+    @NotBlank
+    private String externalApiUrl;
+
+    @NotNull
+    @Positive
+    private Integer externalApiTimeoutMinutes;
+
+    public String getExternalApiUrl() { return externalApiUrl; }
+    public void setExternalApiUrl(String externalApiUrl) { this.externalApiUrl = externalApiUrl; }
+
+    public Integer getExternalApiTimeoutMinutes() { return externalApiTimeoutMinutes; }
+    public void setExternalApiTimeoutMinutes(Integer externalApiTimeoutMinutes) { this.externalApiTimeoutMinutes = externalApiTimeoutMinutes; }
+
     public Integer getTokenExpirationHours() {
         return tokenExpirationHours;
     }

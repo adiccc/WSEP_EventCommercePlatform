@@ -3,7 +3,9 @@ package infrastructure;
 import DTO.TicketSupplyRequestDTO;
 import DTO.TicketSupplyResultDTO;
 import DTO.PurchasedTicketDTO;
+import app.config.SystemProperties;
 import application.ITicketSupply;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -22,13 +24,17 @@ import java.util.logging.Logger;
 public class RealTicketSupply implements ITicketSupply {
 
     private static final Logger logger = Logger.getLogger(RealTicketSupply.class.getName());
-    private static final String API_URL = "https://damp-lynna-wsep-1984852e.koyeb.app/";
+    private final String API_URL;
     private final RestTemplate restTemplate;
 
-    public RealTicketSupply(RestTemplateBuilder restTemplateBuilder) {
+    @Autowired
+    public RealTicketSupply(RestTemplateBuilder restTemplateBuilder, SystemProperties systemProperties) {
+        this.API_URL = systemProperties.getExternalApiUrl();
+        int timeoutMinutes = systemProperties.getExternalApiTimeoutMinutes();
+
         this.restTemplate = restTemplateBuilder
-                .setConnectTimeout(Duration.ofMinutes(2))
-                .setReadTimeout(Duration.ofMinutes(2))
+                .setConnectTimeout(Duration.ofMinutes(timeoutMinutes))
+                .setReadTimeout(Duration.ofMinutes(timeoutMinutes))
                 .build();
     }
 

@@ -1,7 +1,9 @@
 package infrastructure;
 
 import DTO.PaymentDetailsDTO;
+import app.config.SystemProperties;
 import application.IPaymentSystem;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -18,13 +20,17 @@ import java.util.logging.Logger;
 public class RealPaymentSystem implements IPaymentSystem {
 
     private static final Logger logger = Logger.getLogger(RealPaymentSystem.class.getName());
-    private static final String API_URL = "https://damp-lynna-wsep-1984852e.koyeb.app/";
+    private final String API_URL;
     private final RestTemplate restTemplate;
 
-    public RealPaymentSystem(RestTemplateBuilder restTemplateBuilder) {
+    @Autowired
+    public RealPaymentSystem(RestTemplateBuilder restTemplateBuilder, SystemProperties systemProperties) {
+        this.API_URL = systemProperties.getExternalApiUrl();
+        int timeoutMinutes = systemProperties.getExternalApiTimeoutMinutes();
+
         this.restTemplate = restTemplateBuilder
-                .setConnectTimeout(Duration.ofMinutes(2))
-                .setReadTimeout(Duration.ofMinutes(2))
+                .setConnectTimeout(Duration.ofMinutes(timeoutMinutes))
+                .setReadTimeout(Duration.ofMinutes(timeoutMinutes))
                 .build();
     }
 
