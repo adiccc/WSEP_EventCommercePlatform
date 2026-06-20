@@ -2,6 +2,7 @@ package application;
 
 import DTO.*;
 import Log.LoggerSetup;
+import app.config.SystemProperties;
 import com.vaadin.flow.shared.Registration;
 import app.config.ActiveOrderProperties;
 import domain.Suspension.ISuspensionRepo;
@@ -102,7 +103,7 @@ class EventCompanyManageServiceTest {
         LoggerSetup.setup();
         userRepo=new UserRepo();
         passwordEncoder=new PasswordEncoderUtil();
-        tokenService = new TokenService();
+        tokenService = new TokenService(createTestSystemProperties());
         suspensionRepo = new SuspensionRepoImpl();
         auth=new Auth(tokenService);
         companyRepo=new CompanyRepoImpl();
@@ -231,6 +232,15 @@ class EventCompanyManageServiceTest {
                 "checkoutAndPayment failed: " + checkoutResponse.getMessage());
 
         return checkoutResponse.getValue().getOrderId();
+    }
+    private SystemProperties createTestSystemProperties() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setMaxConcurrentUsers(50);
+        systemProperties.setInitStateFile("classpath:init-state.json");
+        systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
+        systemProperties.setAccessCodeLength(6);
+        systemProperties.setTokenExpirationHours(24);
+        return systemProperties;
     }
 
 
@@ -2210,7 +2220,7 @@ class EventCompanyManageServiceTest {
         ));
 
         // Arrange: Generate a real JWT that has ALREADY EXPIRED
-        TokenService testTokenService = new TokenService();
+        TokenService testTokenService = new TokenService(createTestSystemProperties());
         String expiredToken = testTokenService.generateExpiredTokenForTest(email);
 
         CountDownLatch tabLatch = new CountDownLatch(1);
