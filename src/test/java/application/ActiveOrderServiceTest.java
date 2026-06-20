@@ -5342,7 +5342,7 @@ class ActiveOrderServiceTest {
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth);
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
                 activeOrderRepo,
@@ -5356,7 +5356,7 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                capacity
+                activeOrderProperties
         );
 
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
@@ -5415,7 +5415,7 @@ class ActiveOrderServiceTest {
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth);
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
                 activeOrderRepo,
@@ -5429,7 +5429,7 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                capacity
+                activeOrderProperties
         );
 
         int soldOutEventId = createSoldOutTestEvent("sold-out-mock-1");
@@ -5503,7 +5503,7 @@ class ActiveOrderServiceTest {
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth);
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
                 activeOrderRepo,
@@ -5517,7 +5517,7 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                capacity
+                activeOrderProperties
         );
 
         int soldOutEventId = createSoldOutTestEvent("sold-out-mock-3");
@@ -5579,7 +5579,7 @@ class ActiveOrderServiceTest {
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth);
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
                 activeOrderRepo,
@@ -5593,7 +5593,7 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                capacity
+                activeOrderProperties
         );
 
         int soldOutEventId = createSoldOutTestEvent("manager-online-mock");
@@ -5662,7 +5662,7 @@ class ActiveOrderServiceTest {
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth);
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
                 activeOrderRepo,
@@ -5676,7 +5676,7 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                capacity
+                activeOrderProperties
         );
 
         int soldOutEventId = createSoldOutTestEvent("mixed-managers-mock");
@@ -5755,7 +5755,7 @@ class ActiveOrderServiceTest {
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth);
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
                 activeOrderRepo,
@@ -5769,7 +5769,7 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                capacity
+                activeOrderProperties
         );
 
         int soldOutEventId = createSoldOutTestEvent("sold-out-mock-5");
