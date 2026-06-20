@@ -95,6 +95,10 @@ public class AdminService {
                 }catch(OptimisticLockingFailureException e){
                     status.setRollbackOnly();
                     throw e;
+                }catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
                 }catch(NoSuchElementException e){
                     status.setRollbackOnly();
                     logger.log(Level.INFO, "User not found");
@@ -141,6 +145,10 @@ public class AdminService {
                 }catch(OptimisticLockingFailureException e){
                     status.setRollbackOnly();
                     throw e;
+                }catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
                 }catch(NoSuchElementException e){
                     status.setRollbackOnly();
                     logger.log(Level.INFO, "User not found");
@@ -177,6 +185,10 @@ public class AdminService {
                     return new Response<>(true, "UnsuspendUser succeeded, user "+userId+" not suspended");
                 }catch(OptimisticLockingFailureException e){
                     status.setRollbackOnly();
+                    throw e;
+                }catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                     throw e;
                 }catch(NoSuchElementException e){
                     status.setRollbackOnly();
@@ -244,6 +256,10 @@ public class AdminService {
                 status.setRollbackOnly();
                 throw e;
 
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (NoSuchElementException e) {
                 status.setRollbackOnly();
                 logger.log(Level.INFO, "User not found");
@@ -432,7 +448,11 @@ public class AdminService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
-                } catch (Exception e) {
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
+                }catch (Exception e) {
                     status.setRollbackOnly();
                     logger.severe("removeUser failed for userId: " + userIdToRemove + ". Error: " + e.getMessage());
                     return Response.error("Unexpected error: " + e.getMessage());
@@ -527,7 +547,11 @@ public class AdminService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
-                } catch (Exception e) {
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
+                }catch (Exception e) {
                     status.setRollbackOnly();
                     logger.severe("closeCompanyByAdmin failed due to server error: " + e.getMessage());
                     return new Response<>(false, e.getMessage());
@@ -620,6 +644,7 @@ public class AdminService {
                     throw e;
                 } catch (TransientDataAccessException e) {
                     status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
@@ -728,6 +753,7 @@ public class AdminService {
                     throw e;
                 } catch (TransientDataAccessException e) {
                     status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
@@ -833,6 +859,10 @@ public class AdminService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
                     logger.log(Level.SEVERE, "Failed to retrieve history orders: " + e.getMessage());
@@ -861,6 +891,10 @@ public class AdminService {
                     return new Response<>(purchasers, "Retrieved purchasers successfully");
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
@@ -939,7 +973,7 @@ public class AdminService {
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
                         throw e;
-                    }catch (TransientDataAccessException e) {
+                    } catch (TransientDataAccessException e) {
                         status.setRollbackOnly();
                         logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                         throw e;
@@ -966,6 +1000,10 @@ public class AdminService {
 
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
+                        throw e;
+                    } catch (TransientDataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                         throw e;
                     } catch (Exception e) {
                         status.setRollbackOnly();
