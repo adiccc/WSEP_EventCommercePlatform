@@ -44,8 +44,6 @@ public class SystemProperties {
         this.tokenExpirationHours = tokenExpirationHours;
     }
 
-    @NotEmpty
-    private List<String> adminEmails;
 
     public Integer getMaxConcurrentUsers() { return maxConcurrentUsers; }
     public void setMaxConcurrentUsers(Integer maxConcurrentUsers) { this.maxConcurrentUsers = maxConcurrentUsers; }
