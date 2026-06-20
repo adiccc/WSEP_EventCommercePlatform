@@ -20,6 +20,7 @@ import domain.user.NotificationStatus;
 import domain.user.UserNotification;
 import domain.user.IUserRepo;
 import domain.user.Member;
+import app.config.ActiveOrderProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -57,6 +58,9 @@ public class ActiveOrderService {
     private final INotifier notifier;
     private final PreExpirationNotificationScheduler preExpirationScheduler;
     private final int capacity;
+    private final int selectingTimeoutMinutes;
+    private final int checkoutTimeoutMinutes;
+    private final int warningBeforeExpiryMinutes;
     private final ScheduledExecutorService cleanupScheduler;
     private final TransactionTemplate transactionTemplate;
     @Autowired
@@ -73,7 +77,7 @@ public class ActiveOrderService {
             PreExpirationNotificationScheduler preExpirationScheduler,
             IUserRepo userRepo,
             TransactionTemplate transactionTemplate,
-            @Value("${active-order.capacity:20}") int capacity) {
+            ActiveOrderProperties activeOrderProperties) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
@@ -84,7 +88,10 @@ public class ActiveOrderService {
         this.suspensionRepo=suspensionRepo;
         this.notifier = notifier;
         this.preExpirationScheduler = preExpirationScheduler;
-        this.capacity = capacity;
+        this.capacity = activeOrderProperties.getCapacity();
+        this.selectingTimeoutMinutes = activeOrderProperties.getSelectingTimeoutMinutes();
+        this.checkoutTimeoutMinutes = activeOrderProperties.getCheckoutTimeoutMinutes();
+        this.warningBeforeExpiryMinutes = activeOrderProperties.getWarningBeforeExpiryMinutes();
         this.userRepo = userRepo;
         this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "active-order-cleanup");
@@ -246,7 +253,7 @@ public class ActiveOrderService {
                         LocalDateTime now = LocalDateTime.now();
                         List<ActiveOrder> pending = activeOrderRepo.getAll().stream()
                                 .filter(o -> o.getStage() == STAGE.CHECKING_OUT || o.getStage() == STAGE.EDITING)
-                                .filter(o -> !o.isExpired(now))
+                                .filter(o -> !o.isExpired(now, selectingTimeoutMinutes, checkoutTimeoutMinutes))
                                 // Members only: guests are not recoverable after a restart.
                                 .filter(o -> userRepo.findUserByEmail(o.getUserIdentifier()) != null)
                                 .collect(Collectors.toList());
@@ -271,7 +278,7 @@ public class ActiveOrderService {
 
         for (ActiveOrder order : res.getValue()) {
             preExpirationScheduler.rescheduleOnStartup(
-                    order.getUserIdentifier(), order.getId(), order.getCheckoutWarningTime());
+                    order.getUserIdentifier(), order.getId(), order.getCheckoutWarningTime(checkoutTimeoutMinutes, warningBeforeExpiryMinutes));
         }
         logger.info("Pre-expiration warnings rebuilt for " + res.getValue().size() + " member order(s)");
     }
@@ -327,7 +334,7 @@ public class ActiveOrderService {
                     ActiveOrder existingOrder =
                             activeOrderRepo.findById(existingOrderDTO.getId());
 
-                    if (!existingOrder.isExpired(LocalDateTime.now())) {
+                    if (!existingOrder.isExpired(LocalDateTime.now(), selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
 
                         if (!existingOrder.getEventId().equals(eventId)) {
                             return new Response<>(
@@ -715,7 +722,7 @@ public class ActiveOrderService {
                 activeOrderRepo.store(newActiveOrder);
 
                 preExpirationScheduler.scheduleOrReschedule(identifier,
-                        newActiveOrder.getId(), newActiveOrder.getCheckoutWarningTime());
+                        newActiveOrder.getId(), newActiveOrder.getCheckoutWarningTime(checkoutTimeoutMinutes, warningBeforeExpiryMinutes));
 
                 logger.log(Level.INFO, "Tickets selected successfully");
                 return new Response<>(newActiveOrder.getId(), "Tickets selected successfully");
@@ -803,7 +810,7 @@ public class ActiveOrderService {
                     return new Response<>(null, "Active order has no selected tickets");
                 }
 
-                if (activeOrder.isExpired()) {
+                if (activeOrder.isExpired(LocalDateTime.now(), selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
                     return new Response<>(null, "Active order expired");
                 }
 
@@ -887,7 +894,7 @@ public class ActiveOrderService {
                         if (!activeOrder.hasTickets()) {
                             return new Response<>(null, "Active order has no selected tickets");
                         }
-                        if (activeOrder.isExpired()) {
+                        if (activeOrder.isExpired(LocalDateTime.now(), selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
                             releaseHeldOrder(activeOrderId);
                             return new Response<>(null, "Active order expired");
                         }
@@ -1213,7 +1220,7 @@ public class ActiveOrderService {
     // Releases the seats held by every order whose reservation window has lapsed.
     public void cleanupExpiredOrders() {
         logger.log(Level.INFO, "cleanupExpiredOrders running");
-        for (ActiveOrder expiredOrder : activeOrderRepo.findExpired(LocalDateTime.now())) {
+        for (ActiveOrder expiredOrder : activeOrderRepo.findExpired(LocalDateTime.now(), selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
             releaseHeldOrder(expiredOrder.getId());
         }
     }
@@ -1241,7 +1248,7 @@ public class ActiveOrderService {
                     return new Response<>(null, "Unauthorized access to active order");
                 }
                 ActiveOrder activeOrder = activeOrderRepo.findById(order.getId());
-                if (activeOrder.isExpired(LocalDateTime.now())) {
+                if (activeOrder.isExpired(LocalDateTime.now(), selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
                     logger.log(Level.SEVERE, "Active order has expired");
                     return new Response<>(null, "Active order has expired");
                 }
@@ -1287,7 +1294,7 @@ public class ActiveOrderService {
                 ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(userIdentifier);
                 ActiveOrder order = activeOrderRepo.findById(dto.getId());
 
-                if (order.isExpired(LocalDateTime.now())) {
+                if (order.isExpired(LocalDateTime.now(), selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
                     logger.log(Level.SEVERE, "Active order has expired");
                     return new Response<>(null, "Active order has expired");
                 }
@@ -1358,7 +1365,7 @@ public class ActiveOrderService {
                 ActiveOrderDTO dto = activeOrderRepo.findOrderByUserId(userIdentifier);
                 ActiveOrder order = activeOrderRepo.findById(dto.getId());
 
-                if (order.isExpired(LocalDateTime.now())) {
+                if (order.isExpired(LocalDateTime.now(), selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
                     logger.log(Level.SEVERE, "Active order has expired");
                     return new Response<>(null, "Active order has expired");
                 }
@@ -1794,7 +1801,7 @@ public class ActiveOrderService {
                 ActiveOrder activeOrder =
                         activeOrderRepo.findById(activeOrderDTO.getId());
 
-                if (activeOrder.isExpired(LocalDateTime.now())) {
+                if (activeOrder.isExpired(LocalDateTime.now(), selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
                     return new Response<>(null, "Active order has expired");
                 }
 
@@ -1844,13 +1851,13 @@ public class ActiveOrderService {
                     return new Response<>(null, "Active order does not belong to user");
                 }
 
-                if (activeOrder.isExpired(LocalDateTime.now())) {
+                if (activeOrder.isExpired(LocalDateTime.now(), selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
                     cleanupExpiredOrders();
                     return new Response<>(0L, "Active order expired");
                 }
 
                 long remainingSeconds =
-                        activeOrder.getRemainingCheckoutSeconds(LocalDateTime.now());
+                        activeOrder.getRemainingCheckoutSeconds(LocalDateTime.now(), checkoutTimeoutMinutes);
 
                 return new Response<>(
                         remainingSeconds,

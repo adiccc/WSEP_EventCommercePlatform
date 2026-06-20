@@ -3,6 +3,7 @@ package application;
 import DTO.*;
 import Log.LoggerSetup;
 import com.vaadin.flow.shared.Registration;
+import app.config.ActiveOrderProperties;
 import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
@@ -60,6 +61,9 @@ class AdminServiceTest {
     private EventCompanyManageService eventCompanyManageService;
     private CompanyService companyService;
     private ActiveOrderService activeOrderService;
+    private static final int SELECTING_TIMEOUT_MINUTES = 5;
+    private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
+    private static final int WARNING_BEFORE_EXPIRY_MINUTES = 1;
     private final int companyId = 900;
     private LocalDateTime eventDate;
     private Integer eventId;
@@ -111,7 +115,12 @@ class AdminServiceTest {
 
         IActiveOrderRepo activeOrderRepo =new ActiveOrderRepoImpl();
         ILotteryRepo lotteryRepo = new LotteryRepoImpl();
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth),userRepo,transactionTemplate,100);
+        ActiveOrderProperties activeOrderProperties=new ActiveOrderProperties();
+        activeOrderProperties.setCapacity(100);
+        activeOrderProperties.setSelectingTimeoutMinutes(SELECTING_TIMEOUT_MINUTES);
+        activeOrderProperties.setCheckoutTimeoutMinutes(CHECKOUT_TIMEOUT_MINUTES);
+        activeOrderProperties.setWarningBeforeExpiryMinutes(WARNING_BEFORE_EXPIRY_MINUTES);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth,activeOrderProperties),userRepo,transactionTemplate,activeOrderProperties);
 
         eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate,ticketSupply);
         companyService = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier,transactionTemplate);
