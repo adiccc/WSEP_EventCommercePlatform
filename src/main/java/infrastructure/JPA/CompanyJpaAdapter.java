@@ -17,7 +17,7 @@ import java.util.NoSuchElementException;
  * Otherwise the in-memory CompanyRepoImpl (with @Profile("memory")) handles requests.
  */
 @Repository
-@Profile("company-db")
+@Profile("db")
 public class CompanyJpaAdapter implements ICompanyRepo {
 
     private final CompanyJpaRepository jpaRepo;
