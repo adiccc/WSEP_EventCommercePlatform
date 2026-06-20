@@ -6,6 +6,7 @@ import app.config.ActiveOrderProperties;
 
 import java.util.*;
 
+import app.config.SystemProperties;
 import domain.lottery.AccessCodeGenerator;
 import domain.user.NotificationStatus;
 import domain.user.UserNotification;
@@ -92,7 +93,7 @@ class ActiveOrderServiceTest {
                 6
         );
         LoggerSetup.setup();
-        tokenService = new TokenService();
+        tokenService = new TokenService(createTestSystemProperties());
         userRepo = new UserRepo();
         transactionTemplate = mock(TransactionTemplate.class);
 
@@ -203,6 +204,17 @@ class ActiveOrderServiceTest {
                 activeOrderProperties
         );
     }
+
+    private SystemProperties createTestSystemProperties() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setMaxConcurrentUsers(50);
+        systemProperties.setInitStateFile("classpath:init-state.json");
+        systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
+        systemProperties.setAccessCodeLength(6);
+        systemProperties.setTokenExpirationHours(24);
+        return systemProperties;
+    }
+
     @Test
     void GivenInvalidToken_WhenEnterPurchase_ThenErrorReturned() {
         Response<EnterPurchaseDTO> response = service.enterEventPurchase("", companyId, eventId,null);

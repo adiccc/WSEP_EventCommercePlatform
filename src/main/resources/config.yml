@@ -4,6 +4,7 @@ system:
   init-state-file: classpath:init-state.json
   access-code-chars : "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
   access-code-length : 6
+  token-expiration-hours: 24
 
 # ── Active order ──────────────────────────────────────────────────────────────
 active-order:
