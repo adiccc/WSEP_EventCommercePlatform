@@ -4,6 +4,8 @@ system:
   init-state-file: classpath:init-state.json
   access-code-chars : "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
   access-code-length : 6
+  admin-emails:
+    - systemadmin@demo.com
 
 # ── Active order ──────────────────────────────────────────────────────────────
 active-order:
