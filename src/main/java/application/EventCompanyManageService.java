@@ -824,8 +824,10 @@ public class EventCompanyManageService {
                         } else {
                             logger.log(Level.WARNING, "Failed to cancel ticket " + ticketCode + " in external system.");
                         }
+                    } catch (RuntimeException e) {
+                        logger.log(Level.WARNING, "Ticket system rejected cancellation for " + ticketCode + ": " + e.getMessage());
                     } catch (Exception e) {
-                        logger.log(Level.SEVERE, "Exception cancelling ticket " + ticketCode, e);
+                        logger.log(Level.SEVERE, "Communication error cancelling ticket " + ticketCode + ": " + e.getMessage());
                     }
                 }
             }
@@ -844,8 +846,10 @@ public class EventCompanyManageService {
                         orderToRefund.getPaymentConfirmationId(),
                         orderToRefund.getTotalSum()
                 );
-            }catch(Exception e){
-                logger.log(Level.WARNING,"Failed to process refund");
+            } catch (RuntimeException e) {
+                logger.log(Level.WARNING, "Payment system rejected the refund: " + e.getMessage());
+            } catch(Exception e) {
+                logger.log(Level.WARNING, "Communication error while trying to refund: " + e.getMessage());
             }
             final boolean finalRefundApproved = refundApproved;
 

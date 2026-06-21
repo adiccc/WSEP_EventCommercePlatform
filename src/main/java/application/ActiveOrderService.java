@@ -964,23 +964,30 @@ public class ActiveOrderService {
         // Step 2: call external systems outside the DB transaction.
         String paymentConfirmationId = null;
         boolean paymentCallFailed = false;
+        String paymentErrorMessage = "Payment rejected";
         try {
             paymentConfirmationId = paymentSystem.pay(ctx.total(), paymentDetails);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             logger.log(Level.SEVERE, "Payment call failed: " + e.getMessage());
             paymentCallFailed = true;
+            paymentErrorMessage = e.getMessage();
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Payment call failed unexpectedly: " + e.getMessage());
+            paymentCallFailed = true;
+            paymentErrorMessage = "Payment system is unreachable. Please try again.";
         }
 
         if (paymentCallFailed) {
             resetOrderToCheckout(ctx.activeOrderId());
-            return new Response<>(null, "Failed to complete purchase");
+            return new Response<>(null, paymentErrorMessage);
         }
         if (paymentConfirmationId == null || paymentConfirmationId.isBlank()) {
             resetOrderToCheckout(ctx.activeOrderId());
-            return new Response<>(null, "Payment rejected");
+            return new Response<>(null, paymentErrorMessage);
         }
 
         boolean issuanceFailed = false;
+        String issuanceErrorMessage = "Ticket issuance failed";
         List<String> successfullyIssuedCodes = new ArrayList<>();
         Map<String, String> ticketIdToBarcodeMap = new HashMap<>();
 
@@ -998,12 +1005,18 @@ public class ActiveOrderService {
                     List<PurchasedTicketDTO> zoneTickets = batch.zoneTickets();
                     for (int i = 0; i < zoneTickets.size() && i < issuedCodes.size(); i++) {
                         String uniqueKey = zoneTickets.get(i).getZoneName() + "-" + zoneTickets.get(i).getTicketId();
-                        ticketIdToBarcodeMap.put(uniqueKey, issuedCodes.get(i));                    }
+                        ticketIdToBarcodeMap.put(uniqueKey, issuedCodes.get(i));
+                    }
                 }
             }
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             logger.log(Level.SEVERE, "Ticket issuance failed: " + e.getMessage());
             issuanceFailed = true;
+            issuanceErrorMessage = e.getMessage();
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Ticket issuance failed unexpectedly: " + e.getMessage());
+            issuanceFailed = true;
+            issuanceErrorMessage = "Ticket supply system error. Please contact support.";
         }
 
         List<String> orderedCodesForOrder = new ArrayList<>();
@@ -1047,6 +1060,7 @@ public class ActiveOrderService {
         final boolean finalRefundApproved = refundApproved;
         final List<String> finalOrderedCodesForOrder = new ArrayList<>(orderedCodesForOrder);
         final List<String> finalRemainingIssuedCodesAfterRollback = new ArrayList<>(remainingIssuedCodesAfterRollback);
+        final String finalIssuanceErrorMessage = issuanceErrorMessage;
 
         // Step 3: record the outcome in a transaction.
         Response<FinalizeResult> finalizeResponse = RetryHelper.executeWithRetry(() ->
@@ -1094,7 +1108,7 @@ public class ActiveOrderService {
                             eventRepo.store(event);
                             activeOrderRepo.delete(ctx.activeOrderId());
                             return new Response<>(
-                                    new FinalizeResult(null, "Ticket issuance failed", true, false, Collections.emptyList()),
+                                    new FinalizeResult(null, finalIssuanceErrorMessage, true, false, Collections.emptyList()),
                                     "Ticket issuance failed");
                         }
 

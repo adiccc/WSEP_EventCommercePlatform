@@ -1949,8 +1949,7 @@ class ActiveOrderServiceTest {
                     service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
 
             assertNull(checkoutResponse.getValue());
-            assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
-
+            assertEquals("Ticket supply unavailable", checkoutResponse.getMessage());
             assertThrows(NoSuchElementException.class,
                     () -> activeOrderRepo.findById(activeOrderId),
                     "Active order should be deleted after ticket issuance exception");
@@ -3029,7 +3028,7 @@ class ActiveOrderServiceTest {
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
 
         assertNull(response.getValue());
-        assertEquals("Failed to complete purchase", response.getMessage());
+        assertEquals("payment service unavailable", response.getMessage());
 
         assertNotNull(activeOrderRepo.findById(activeOrderId),
                 "Active order should remain when payment throws before order creation");

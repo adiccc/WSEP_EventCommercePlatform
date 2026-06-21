@@ -672,8 +672,10 @@ public class AdminService {
                         } else {
                             logger.log(Level.WARNING, "Failed to cancel ticket " + ticketCode + " in external system.");
                         }
+                    } catch (RuntimeException e) {
+                        logger.log(Level.WARNING, "Ticket system rejected cancellation for " + ticketCode + ": " + e.getMessage());
                     } catch (Exception e) {
-                        logger.log(Level.SEVERE, "Exception cancelling ticket " + ticketCode, e);
+                        logger.log(Level.SEVERE, "Communication error cancelling ticket " + ticketCode + ": " + e.getMessage());
                     }
                 }
             }
@@ -690,8 +692,10 @@ public class AdminService {
                 refundApproved = paymentSystem.refund(
                         orderToRefund.getPaymentConfirmationId(),
                         orderToRefund.getTotalSum());
+            } catch (RuntimeException e) {
+                logger.log(Level.WARNING, "Refund rejected by the payment system: " + e.getMessage());
             } catch (Exception e) {
-                logger.log(Level.WARNING, "Failed to process refund through payment system: " + e.getMessage());
+                logger.log(Level.WARNING, "Failed to process refund due to communication error: " + e.getMessage());
             }
 
             final boolean finalRefundApproved = refundApproved;
