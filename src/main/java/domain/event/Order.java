@@ -44,7 +44,7 @@ public class Order {
     @Column(name = "event_location", nullable = false)
     private String eventLocation;
 
-    @ElementCollection(fetch = FetchType.LAZY)
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "order_purchased_tickets",
             joinColumns = @JoinColumn(name = "order_id")
@@ -52,7 +52,7 @@ public class Order {
     @OrderColumn(name = "ticket_index")
     private List<PurchasedTicketSnapshot> purchasedTickets = new ArrayList<>();
 
-    @ElementCollection(fetch = FetchType.LAZY)
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "order_external_ticket_codes",
             joinColumns = @JoinColumn(name = "order_id")
