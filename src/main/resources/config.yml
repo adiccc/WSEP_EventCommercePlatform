@@ -8,7 +8,7 @@ system:
     - systemadmin@demo.com
   token-expiration-hours: 24
   external-api-url: "https://damp-lynna-wsep-1984852e.koyeb.app/"
-  external-api-timeout-minutes: 10
+  external-api-timeout-minutes: 2
 
 # ── Active order ──────────────────────────────────────────────────────────────
 active-order:

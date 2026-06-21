@@ -48,7 +48,7 @@ public class Suspension {
     }
 
     public void unsuspend(){
-        this.endTime= LocalDateTime.now().minusMinutes(1);
+        this.endTime= LocalDateTime.now();
     }
     public Long getSuspensionId() {
         return suspensionId;

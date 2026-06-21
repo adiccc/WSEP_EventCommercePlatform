@@ -47,19 +47,15 @@ public class SuspensionRepoJpaAdapter implements ISuspensionRepo {
 
     @Override
     public boolean haveActiveSuspension(Integer userId) {
-        return suspensionJpaRepository.findByUserIdOrderByStartTimeDesc(userId)
-                .stream()
-                .anyMatch(Suspension::isActive);
+        return suspensionJpaRepository.findFirstByUserIdOrderByStartTimeDesc(userId)
+                .map(Suspension::isActive)
+                .orElse(false);
     }
 
     @Override
     public Suspension findLastSuspensionByUserId(Integer userId) {
-        List<Suspension> userSuspensions = suspensionJpaRepository.findByUserIdOrderByStartTimeDesc(userId);
-        if (userSuspensions.isEmpty()) {
-            throw new NoSuchElementException("No suspension found with user id " + userId);
-        }
-        return userSuspensions.stream()
-                .findFirst()
-                .orElse(null);
+        return suspensionJpaRepository.findFirstByUserIdOrderByStartTimeDesc(userId)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "No suspension found with user id " + userId));
     }
 }
