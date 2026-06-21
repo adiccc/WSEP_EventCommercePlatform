@@ -1554,7 +1554,6 @@ public class ActiveOrderService {
                 }
 
                 String nextToken = eventQueueManager.dequeue(eventId);
-                eventRepo.store(event);
                 return new Response<>(nextToken, "Token dequeued successfully");
 
             } catch (OptimisticLockingFailureException e) {
