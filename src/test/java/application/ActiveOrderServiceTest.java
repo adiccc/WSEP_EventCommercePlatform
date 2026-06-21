@@ -7,6 +7,7 @@ import app.config.ActiveOrderProperties;
 import java.util.*;
 
 import app.config.SystemProperties;
+import domain.event.EventQueueManager;
 import domain.lottery.AccessCodeGenerator;
 import domain.user.NotificationStatus;
 import domain.user.UserNotification;
@@ -85,6 +86,7 @@ class ActiveOrderServiceTest {
     private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
     private static final int WARNING_BEFORE_EXPIRY_MINUTES = 1;
     private ActiveOrderProperties activeOrderProperties;
+    private EventQueueManager eventQueueManager;
 
     @BeforeEach
     void setUp() {
@@ -96,11 +98,11 @@ class ActiveOrderServiceTest {
         tokenService = new TokenService(createTestSystemProperties());
         userRepo = new UserRepo();
         transactionTemplate = mock(TransactionTemplate.class);
-
         when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
             TransactionCallback<?> callback = invocation.getArgument(0);
             return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
         });
+        eventQueueManager = new EventQueueManager();
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
         suspensionRepo = new SuspensionRepoImpl();
         auth = new Auth(tokenService);
@@ -125,7 +127,7 @@ class ActiveOrderServiceTest {
         eventRepo = new EventRepoImpl();
         activeOrderRepo = new ActiveOrderRepoImpl();
         companyRepo = new CompanyRepoImpl();
-        LotteryRepoImpl lotteryRepo = new LotteryRepoImpl();
+        lotteryRepo = new LotteryRepoImpl();
 
         paymentSystem = Mockito.mock(IPaymentSystem.class);
         ticketSupply = Mockito.mock(ITicketSupply.class);
@@ -201,7 +203,8 @@ class ActiveOrderServiceTest {
                 preExpirationScheduler,
                 userRepo,
                 transactionTemplate,
-                activeOrderProperties
+                activeOrderProperties,
+                eventQueueManager
         );
     }
 
@@ -4498,7 +4501,8 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                activeOrderProperties
+                activeOrderProperties,
+                eventQueueManager
         );
 
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
@@ -4858,7 +4862,7 @@ class ActiveOrderServiceTest {
 
         assertNotNull(enterResponse.getValue());
         assertTrue(enterResponse.getValue().isWaitingInQueue());
-        assertTrue(eventRepo.findById(concurrentEventId).getEventQueue().contains(waitingToken));
+        assertTrue(eventQueueManager.contains(concurrentEventId, waitingToken));
 
         Response<Boolean> cancelResponse =
                 service.cancelEventQueueEntry(waitingToken, concurrentEventId);
@@ -4867,7 +4871,7 @@ class ActiveOrderServiceTest {
         assertTrue(cancelResponse.getValue());
         assertEquals("Removed from event queue", cancelResponse.getMessage());
 
-        assertFalse(eventRepo.findById(concurrentEventId).getEventQueue().contains(waitingToken));
+        assertFalse(eventQueueManager.contains(concurrentEventId, waitingToken));
     }
      @Test
     void GivenPartialTicketIssuanceFailure_WhenCheckoutAndPayment_ThenIssuedTicketsAreCancelledAndRefunded() throws Exception {
@@ -5076,7 +5080,7 @@ class ActiveOrderServiceTest {
         INotifier mockNotifier = Mockito.mock(INotifier.class);
         ActiveOrderService mockService = new ActiveOrderService(
                 auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo, paymentSystem,
-                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, activeOrderProperties);
+                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, activeOrderProperties, eventQueueManager);
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class))).thenReturn("payment-123");
         TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
@@ -5140,7 +5144,7 @@ class ActiveOrderServiceTest {
         INotifier mockNotifier = Mockito.mock(INotifier.class);
         ActiveOrderService mockService = new ActiveOrderService(
                 auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo, paymentSystem,
-                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, activeOrderProperties);
+                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, activeOrderProperties, eventQueueManager);
 
         int firstFillerOrderId = -1;
 
@@ -5198,7 +5202,7 @@ class ActiveOrderServiceTest {
         INotifier mockNotifier = Mockito.mock(INotifier.class);
         ActiveOrderService mockService = new ActiveOrderService(
                 auth, activeOrderRepo, eventRepo, companyRepo, lotteryRepo, paymentSystem,
-                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, activeOrderProperties);
+                ticketSupply, suspensionRepo, mockNotifier, preExpirationScheduler, userRepo, transactionTemplate, activeOrderProperties, eventQueueManager);
 
         Mockito.doThrow(new RuntimeException("Simulated Tab Notification Crash"))
                 .when(mockNotifier).notifyTab(Mockito.anyString(), Mockito.any(NotifyDTO.class));
@@ -5231,7 +5235,7 @@ class ActiveOrderServiceTest {
 
         // Assert
         Mockito.verify(mockNotifier, Mockito.times(1)).notifyTab(Mockito.eq(waitingToken), Mockito.any(NotifyDTO.class));
-        assertFalse(eventRepo.findById(isolatedEventId).getEventQueue().contains(waitingToken));
+        assertFalse(eventQueueManager.contains(isolatedEventId, waitingToken));
     }
     @Test
     void GivenTicketsFromMultipleZones_WhenCheckoutAndPayment_ThenExternalCodesMatchPurchasedTicketsOrder() {
@@ -5367,7 +5371,8 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                activeOrderProperties
+                activeOrderProperties,
+                eventQueueManager
         );
 
         Map<String, List<SeatingTicketDTO>> seating = new HashMap<>();
@@ -5440,7 +5445,8 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                activeOrderProperties
+                activeOrderProperties,
+                eventQueueManager
         );
 
         int soldOutEventId = createSoldOutTestEvent("sold-out-mock-1");
@@ -5528,7 +5534,8 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                activeOrderProperties
+                activeOrderProperties,
+                eventQueueManager
         );
 
         int soldOutEventId = createSoldOutTestEvent("sold-out-mock-3");
@@ -5604,7 +5611,8 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                activeOrderProperties
+                activeOrderProperties,
+                eventQueueManager
         );
 
         int soldOutEventId = createSoldOutTestEvent("manager-online-mock");
@@ -5687,7 +5695,8 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                activeOrderProperties
+                activeOrderProperties,
+                eventQueueManager
         );
 
         int soldOutEventId = createSoldOutTestEvent("mixed-managers-mock");
@@ -5780,7 +5789,8 @@ class ActiveOrderServiceTest {
                 schedulerWithMockNotifier,
                 userRepo,
                 transactionTemplate,
-                activeOrderProperties
+                activeOrderProperties,
+                eventQueueManager
         );
 
         int soldOutEventId = createSoldOutTestEvent("sold-out-mock-5");

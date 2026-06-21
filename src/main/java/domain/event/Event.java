@@ -31,8 +31,6 @@ public class Event {
     @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @JoinColumn(name = "event_map_id")
     private EventMap eventMap;
-    @Transient
-    private EventQueue eventQueue;
     @Column(nullable = false)
     private LocalDateTime date;
     @Column(nullable = false)
@@ -65,7 +63,6 @@ public class Event {
     private long version;
 
     protected Event() {
-        this.eventQueue = new EventQueue();
         this.orders = new ArrayList<>();
         this.purchasePolicy = new AndPurchasePolicy();
         this.discountPolicy = new SumDiscountPolicy();
@@ -87,7 +84,6 @@ public class Event {
         active = false;
         this.location = location;
         this.categoryEvent = categoryEvent;
-        this.eventQueue = new EventQueue();
         this.orders = new ArrayList<>();
         this.version = 0;
     }
@@ -115,11 +111,6 @@ public class Event {
         this.discountPolicy = event.discountPolicy == null
                 ? new SumDiscountPolicy()
                 : event.discountPolicy.copyPolicy();
-
-        this.eventQueue = event.eventQueue == null
-                ? new EventQueue()
-                : new EventQueue(event.eventQueue);
-
         this.orders = new ArrayList<>();
         if (event.orders != null) {
             for (Order order : event.orders) {
@@ -219,13 +210,6 @@ public class Event {
 
     public GeographicalArea getLocation() {
         return location;
-    }
-
-    public EventQueue getEventQueue() {
-        if (eventQueue == null) {
-            eventQueue = new EventQueue();
-        }
-        return eventQueue;
     }
 
     public PurchasePolicy getPurchasePolicy() {
