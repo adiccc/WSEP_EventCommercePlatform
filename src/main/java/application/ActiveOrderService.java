@@ -424,8 +424,6 @@ public class ActiveOrderService {
                 }
 
                 ActiveOrder newActiveOrder = new ActiveOrder(userIdentifier, eventId, new ArrayList<>());
-
-                //eventRepo.store(e);
                 activeOrderRepo.store(newActiveOrder);
 
                 logger.log(Level.INFO,
