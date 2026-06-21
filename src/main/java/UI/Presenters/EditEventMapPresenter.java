@@ -9,11 +9,11 @@ import domain.dto.EventMapDTO;
 import java.util.Collections;
 import java.util.List;
 
-public class AddSeatingAreaPresenter {
+public class EditEventMapPresenter {
 
     private final EventCompanyManageService eventCompanyManageService;
 
-    public AddSeatingAreaPresenter(EventCompanyManageService eventCompanyManageService) {
+    public EditEventMapPresenter(EventCompanyManageService eventCompanyManageService) {
         this.eventCompanyManageService = eventCompanyManageService;
     }
 
@@ -32,6 +32,18 @@ public class AddSeatingAreaPresenter {
                 eventId,
                 standingZones != null ? standingZones : Collections.emptyList(),
                 seatingZones != null ? seatingZones : Collections.emptyList()
+        );
+    }
+
+    public Response<Boolean> removeZoneFromEventMap(
+            String token,
+            int eventId,
+            int zoneId
+    ) {
+        return eventCompanyManageService.removeZonesToEventMap(
+                token,
+                eventId,
+                zoneId
         );
     }
 }
