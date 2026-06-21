@@ -3,7 +3,7 @@ package UI.Views;
 import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
-import UI.Presenters.AddSeatingAreaPresenter;
+import UI.Presenters.EditEventMapPresenter;
 import application.EventCompanyManageService;
 import application.Response;
 import com.vaadin.flow.component.AbstractField;
@@ -28,12 +28,12 @@ import domain.dto.EventMapDTO;
 import java.util.ArrayList;
 import java.util.List;
 
-@Route(value = "manage/event/:eventId(\\d+)/add-seating-area", layout = MainLayout.class)
-@PageTitle("Add Areas")
+@Route(value = "manage/event/:eventId(\\d+)/edit-map", layout = MainLayout.class)
+@PageTitle("Edit Event Map")
 @AnonymousAllowed
-public class AddSeatingAreaView extends VerticalLayout implements BeforeEnterObserver {
+public class EditEventMapView extends VerticalLayout implements BeforeEnterObserver {
 
-    private final AddSeatingAreaPresenter presenter;
+    private final EditEventMapPresenter presenter;
     private int eventId;
     private EventMapDTO existingMap;
 
@@ -45,8 +45,8 @@ public class AddSeatingAreaView extends VerticalLayout implements BeforeEnterObs
     private final List<StandingZoneForm> standingZoneForms = new ArrayList<>();
     private final List<SeatingZoneForm> seatingZoneForms = new ArrayList<>();
 
-    public AddSeatingAreaView(EventCompanyManageService eventCompanyManageService) {
-        this.presenter = new AddSeatingAreaPresenter(eventCompanyManageService);
+    public EditEventMapView(EventCompanyManageService eventCompanyManageService) {
+        this.presenter = new EditEventMapPresenter(eventCompanyManageService);
         setPadding(true);
         setSpacing(true);
         setWidthFull();
@@ -75,14 +75,13 @@ public class AddSeatingAreaView extends VerticalLayout implements BeforeEnterObs
         Button backButton = new Button("← Back", e -> UI.getCurrent().getPage().getHistory().back());
         backButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
-        H2 title = new H2("Add Areas To Existing Event Map");
+        H2 title = new H2("Edit Event Map");
         title.getStyle()
                 .set("font-size", "2rem")
                 .set("font-weight", "800")
                 .set("margin-bottom", "0");
 
-        Paragraph subtitle = new Paragraph("View the current map and add new standing or seating zones.");
-        subtitle.getStyle()
+        Paragraph subtitle = new Paragraph("View the current map, add new areas, or remove existing available areas.");        subtitle.getStyle()
                 .set("color", "var(--lumo-secondary-text-color)")
                 .set("margin-top", "0");
 
@@ -174,8 +173,8 @@ public class AddSeatingAreaView extends VerticalLayout implements BeforeEnterObs
         actions.getStyle().set("flex-wrap", "wrap");
 
         section.add(
-                sectionTitle("🏟 New Areas"),
-                new Paragraph("Add only new standing or seating zones. Existing areas are shown in the preview and are not edited here."),
+                sectionTitle("🏟 Map Areas"),
+                new Paragraph("Add new standing or seating zones. Existing areas can be removed only if all their tickets are still available."),
                 actions,
                 new H3("Standing Zones"),
                 standingZonesContainer,
