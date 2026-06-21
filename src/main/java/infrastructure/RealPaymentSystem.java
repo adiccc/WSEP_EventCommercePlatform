@@ -1,7 +1,10 @@
 package infrastructure;
 
 import DTO.PaymentDetailsDTO;
+import app.config.SystemProperties;
 import application.IPaymentSystem;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -9,6 +12,7 @@ import org.springframework.http.*;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
+import java.time.Duration;
 import java.util.logging.Logger;
 
 @Component
@@ -16,8 +20,19 @@ import java.util.logging.Logger;
 public class RealPaymentSystem implements IPaymentSystem {
 
     private static final Logger logger = Logger.getLogger(RealPaymentSystem.class.getName());
-    private static final String API_URL = "https://damp-lynna-wsep-1984852e.koyeb.app/";
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final String API_URL;
+    private final RestTemplate restTemplate;
+
+    @Autowired
+    public RealPaymentSystem(RestTemplateBuilder restTemplateBuilder, SystemProperties systemProperties) {
+        this.API_URL = systemProperties.getExternalApiUrl();
+        int timeoutMinutes = systemProperties.getExternalApiTimeoutMinutes();
+
+        this.restTemplate = restTemplateBuilder
+                .setConnectTimeout(Duration.ofMinutes(timeoutMinutes))
+                .setReadTimeout(Duration.ofMinutes(timeoutMinutes))
+                .build();
+    }
 
     @Override
     public String pay(double total, PaymentDetailsDTO paymentDetails) {
@@ -43,14 +58,16 @@ public class RealPaymentSystem implements IPaymentSystem {
 
             if (transactionId == null || transactionId.trim().equals("-1")) {
                 logger.warning("External payment system rejected the payment.");
-                return null;
+                throw new RuntimeException("Payment rejected by the credit card company.");
             }
 
             return transactionId.trim();
 
+        } catch (RuntimeException e) {
+                throw e;
         } catch (Exception e) {
             logger.severe("Payment failed due to communication error: " + e.getMessage());
-            return null;
+            throw new RuntimeException("Payment gateway error: " + e.getMessage());
         }
     }
 
@@ -68,11 +85,20 @@ public class RealPaymentSystem implements IPaymentSystem {
             ResponseEntity<String> response = restTemplate.postForEntity(API_URL, request, String.class);
 
             String body = response.getBody();
-            return body != null && body.trim().equals("1");
-
+            if (body != null && body.trim().equals("-1")) {
+                logger.warning("External payment system explicitly rejected the refund (-1).");
+                throw new RuntimeException("Refund explicitly rejected by the payment gateway.");
+            }
+            if (body == null || !body.trim().equals("1")) {
+                logger.warning("External payment system returned unexpected response: " + body);
+                throw new RuntimeException("Unexpected response from payment gateway during refund.");
+            }
+            return true;
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             logger.severe("Refund failed due to communication error: " + e.getMessage());
-            return false;
+            throw new RuntimeException("Payment gateway error during refund: " + e.getMessage());
         }
     }
 

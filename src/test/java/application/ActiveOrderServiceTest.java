@@ -1949,8 +1949,7 @@ class ActiveOrderServiceTest {
                     service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
 
             assertNull(checkoutResponse.getValue());
-            assertEquals("Ticket issuance failed", checkoutResponse.getMessage());
-
+            assertEquals("Ticket supply unavailable", checkoutResponse.getMessage());
             assertThrows(NoSuchElementException.class,
                     () -> activeOrderRepo.findById(activeOrderId),
                     "Active order should be deleted after ticket issuance exception");
@@ -3029,7 +3028,7 @@ class ActiveOrderServiceTest {
                 service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
 
         assertNull(response.getValue());
-        assertEquals("Failed to complete purchase", response.getMessage());
+        assertEquals("payment service unavailable", response.getMessage());
 
         assertNotNull(activeOrderRepo.findById(activeOrderId),
                 "Active order should remain when payment throws before order creation");
@@ -5819,4 +5818,285 @@ class ActiveOrderServiceTest {
                 Mockito.eq("manager2@gmail.com"), Mockito.any(NotifyDTO.class));
     }
 
+
+    // ---------- applyCheckoutCoupon ----------
+
+    @Test
+    void GivenValidOrderInCheckout_WhenApplyCheckoutCoupon_ThenPriceReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+
+        Response<CheckoutPriceDTO> response = service.applyCheckoutCoupon(validToken, orderId, null);
+
+        assertNotNull(response.getValue(), "applyCheckoutCoupon should return a price DTO: " + response.getMessage());
+        assertTrue(response.getValue().getFinalPrice() > 0);
+    }
+
+    @Test
+    void GivenInvalidToken_WhenApplyCheckoutCoupon_ThenInvalidTokenReturned() {
+        Response<CheckoutPriceDTO> response = service.applyCheckoutCoupon("", 1, null);
+
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingActiveOrder_WhenApplyCheckoutCoupon_ThenNotFoundReturned() {
+        Response<CheckoutPriceDTO> response = service.applyCheckoutCoupon(validToken, -999, null);
+
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("not found"));
+    }
+
+    @Test
+    void GivenOrderBelongsToAnotherUser_WhenApplyCheckoutCoupon_ThenOwnershipErrorReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+        String otherToken = registerAndLoginTestUser("coupon_other@mail.com");
+
+        Response<CheckoutPriceDTO> response = service.applyCheckoutCoupon(otherToken, orderId, null);
+
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("does not belong"));
+    }
+
+    @Test
+    void GivenSuspendedMember_WhenApplyCheckoutCoupon_ThenSuspensionErrorReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+        int userId = userService.getUserId(validToken).getValue();
+        suspensionRepo.store(new domain.Suspension.Suspension(userId));
+
+        Response<CheckoutPriceDTO> response = service.applyCheckoutCoupon(validToken, orderId, null);
+
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    // ---------- getCompanyIdByActiveOrder ----------
+
+    @Test
+    void GivenValidOrder_WhenGetCompanyIdByActiveOrder_ThenCompanyIdReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+
+        Response<Integer> response = service.getCompanyIdByActiveOrder(validToken, orderId);
+
+        assertNotNull(response.getValue());
+        assertEquals(companyId, response.getValue().intValue());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenGetCompanyIdByActiveOrder_ThenInvalidTokenReturned() {
+        Response<Integer> response = service.getCompanyIdByActiveOrder("", 1);
+
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingActiveOrder_WhenGetCompanyIdByActiveOrder_ThenNotFoundReturned() {
+        Response<Integer> response = service.getCompanyIdByActiveOrder(validToken, -999);
+
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("not found"));
+    }
+
+    @Test
+    void GivenOrderBelongsToAnotherUser_WhenGetCompanyIdByActiveOrder_ThenUnauthorizedReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+        String otherToken = registerAndLoginTestUser("getco_other@mail.com");
+
+        Response<Integer> response = service.getCompanyIdByActiveOrder(otherToken, orderId);
+
+        assertNull(response.getValue());
+        assertEquals("Unauthorized active order access", response.getMessage());
+    }
+
+    // ---------- getCurrentActiveOrderSelection ----------
+
+    @Test
+    void GivenActiveOrderWithTickets_WhenGetCurrentActiveOrderSelection_ThenSelectionReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 3);
+
+        Response<domain.dto.ActiveOrderSelectionDTO> response =
+                service.getCurrentActiveOrderSelection(validToken);
+
+        assertNotNull(response.getValue(),
+                "getCurrentActiveOrderSelection should return selection: " + response.getMessage());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenGetCurrentActiveOrderSelection_ThenErrorReturned() {
+        Response<domain.dto.ActiveOrderSelectionDTO> response =
+                service.getCurrentActiveOrderSelection("");
+
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenNoActiveOrder_WhenGetCurrentActiveOrderSelection_ThenErrorReturned() {
+        String freshToken = registerAndLoginTestUser("noorder_sel@mail.com");
+
+        Response<domain.dto.ActiveOrderSelectionDTO> response =
+                service.getCurrentActiveOrderSelection(freshToken);
+
+        assertNull(response.getValue());
+        assertNotNull(response.getMessage());
+    }
+
+    @Test
+    void GivenExpiredActiveOrder_WhenGetCurrentActiveOrderSelection_ThenExpiredErrorReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+        forceExpireOrder(orderId);
+
+        Response<domain.dto.ActiveOrderSelectionDTO> response =
+                service.getCurrentActiveOrderSelection(validToken);
+
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().toLowerCase().contains("expir"));
+    }
+
+    @Test
+    void GivenSuspendedMember_WhenGetCurrentActiveOrderSelection_ThenSuspensionErrorReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+        int userId = userService.getUserId(validToken).getValue();
+        suspensionRepo.store(new domain.Suspension.Suspension(userId));
+
+        Response<domain.dto.ActiveOrderSelectionDTO> response =
+                service.getCurrentActiveOrderSelection(validToken);
+
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    // ---------- onStartupRecovery ----------
+
+    @Test
+    void GivenDanglingPaymentInProgressOrder_WhenOnStartupRecovery_ThenReturnedToCheckout() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+        ActiveOrder order = activeOrderRepo.findById(orderId);
+        order.startPayment(); // -> PAYMENT_IN_PROGRESS
+        activeOrderRepo.store(order);
+        assertEquals(domain.activeOrder.STAGE.PAYMENT_IN_PROGRESS,
+                activeOrderRepo.findById(orderId).getStage());
+
+        service.onStartupRecovery();
+
+        assertEquals(domain.activeOrder.STAGE.CHECKING_OUT,
+                activeOrderRepo.findById(orderId).getStage(),
+                "Interrupted payment must be returned to checkout on startup");
+    }
+
+    @Test
+    void GivenMemberCheckingOutOrder_WhenOnStartupRecovery_ThenOrderKeptAndWarningRebuilt() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+        assertEquals(domain.activeOrder.STAGE.CHECKING_OUT,
+                activeOrderRepo.findById(orderId).getStage());
+
+        service.onStartupRecovery();
+
+        // A non-expired member order survives recovery and gets its pre-expiration warning re-armed.
+        assertEquals(domain.activeOrder.STAGE.CHECKING_OUT,
+                activeOrderRepo.findById(orderId).getStage());
+        assertTrue(preExpirationScheduler.hasPendingWarning(orderId),
+                "Member order's pre-expiration warning must be rebuilt on startup");
+    }
+
+    @Test
+    void GivenOrphanedGuestOrder_WhenOnStartupRecovery_ThenReleased() {
+        String guestToken = userService.continueAsGuest().getValue();
+        service.enterEventPurchase(guestToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                guestToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+        assertNotNull(activeOrderRepo.findById(orderId));
+
+        service.onStartupRecovery();
+
+        assertThrows(NoSuchElementException.class,
+                () -> activeOrderRepo.findById(orderId),
+                "Orphaned guest order must be released on startup");
+    }
+
+    // ---------- memberProceedAnActiveOrder ----------
+
+    @Test
+    void GivenInvalidToken_WhenMemberProceedAnActiveOrder_ThenInvalidTokenReturned() {
+        Response<ActiveOrderDTO> r = service.memberProceedAnActiveOrder("");
+        assertNull(r.getValue());
+        assertEquals("Invalid token", r.getMessage());
+    }
+
+    @Test
+    void GivenGuestToken_WhenMemberProceedAnActiveOrder_ThenNotLoggedInReturned() {
+        String guestToken = userService.continueAsGuest().getValue();
+        Response<ActiveOrderDTO> r = service.memberProceedAnActiveOrder(guestToken);
+        assertNull(r.getValue());
+        assertEquals("user not logged in", r.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedMember_WhenMemberProceedAnActiveOrder_ThenSuspensionErrorReturned() {
+        int userId = userService.getUserId(validToken).getValue();
+        suspensionRepo.store(new domain.Suspension.Suspension(userId));
+        Response<ActiveOrderDTO> r = service.memberProceedAnActiveOrder(validToken);
+        assertNull(r.getValue());
+        assertTrue(r.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenNoActiveOrder_WhenMemberProceedAnActiveOrder_ThenNotFoundReturned() {
+        Response<ActiveOrderDTO> r = service.memberProceedAnActiveOrder(validToken);
+        assertNull(r.getValue());
+        assertEquals("Active order not found", r.getMessage());
+    }
+
+    @Test
+    void GivenActiveOrder_WhenMemberProceedAnActiveOrder_ThenOrderReturned() {
+        createCheckoutOrder(validToken, concurrentEventId, 2);
+        Response<ActiveOrderDTO> r = service.memberProceedAnActiveOrder(validToken);
+        assertNotNull(r.getValue(), r.getMessage());
+        assertEquals("Active order retrieved successfully", r.getMessage());
+    }
+
+    // ---------- returnToEditSelection: validation branches ----------
+
+    @Test
+    void GivenInvalidToken_WhenReturnToEditSelection_ThenInvalidTokenReturned() {
+        Response<ActiveOrderDTO> r = service.returnToEditSelection("");
+        assertNull(r.getValue());
+        assertEquals("Invalid token", r.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedMember_WhenReturnToEditSelection_ThenSuspensionErrorReturned() {
+        createCheckoutOrder(validToken, concurrentEventId, 2);
+        int userId = userService.getUserId(validToken).getValue();
+        suspensionRepo.store(new domain.Suspension.Suspension(userId));
+        Response<ActiveOrderDTO> r = service.returnToEditSelection(validToken);
+        assertNull(r.getValue());
+        assertTrue(r.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenNoActiveOrder_WhenReturnToEditSelection_ThenNotFoundReturned() {
+        Response<ActiveOrderDTO> r = service.returnToEditSelection(validToken);
+        assertNull(r.getValue());
+        assertEquals("Active order not found", r.getMessage());
+    }
+
+    @Test
+    void GivenExpiredOrder_WhenReturnToEditSelection_ThenExpiredReturned() {
+        int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
+        forceExpireOrder(orderId);
+        Response<ActiveOrderDTO> r = service.returnToEditSelection(validToken);
+        assertNull(r.getValue());
+        assertEquals("Active order has expired", r.getMessage());
+    }
+
+    @Test
+    void GivenOrderNotAtCheckout_WhenReturnToEditSelection_ThenNotAtCheckoutReturned() {
+        createCheckoutOrder(validToken, concurrentEventId, 2);
+        service.returnToEditSelection(validToken); // CHECKING_OUT -> EDITING
+        Response<ActiveOrderDTO> r = service.returnToEditSelection(validToken); // now EDITING
+        assertNull(r.getValue());
+        assertEquals("Order is not at checkout; cannot enter edit mode", r.getMessage());
+    }
 }

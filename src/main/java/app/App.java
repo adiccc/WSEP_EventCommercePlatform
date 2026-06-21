@@ -29,6 +29,16 @@ import java.util.Arrays;
 public class App implements AppShellConfigurator {
 
         public static void main(String[] args) {
+                for (int i = 0; i < args.length; i++) {
+                        if (args[i].startsWith("--config=")) {
+                                String path = args[i].substring("--config=".length());
+                                if (!path.startsWith("classpath:") && !path.startsWith("file:")) {
+                                        path = "file:" + path;
+                                }
+                                args[i] = "--spring.config.additional-location=" + path;
+                                break;
+                        }
+                }
                 boolean emptyDb = Arrays.stream(args).anyMatch("--db=empty"::equals);
                 if (emptyDb) {
                         args = Arrays.copyOf(args, args.length + 1);

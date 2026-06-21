@@ -2315,4 +2315,243 @@ class AdminServiceTest {
         assertEquals(OrderStatus.REFUND_REQUIRED, closedOrder.getStatus(), "Order must require refund because payment crashed");
 
     }
+
+    // ============================================================
+    // closeCompanyByAdmin - member closure notification persistence
+    // (PENDING-in-transaction then deliver-and-mark-DELIVERED flow)
+    // ============================================================
+
+    @Test
+    void GivenOfflineCompanyOwner_WhenCloseCompanyByAdmin_ThenClosureNotificationSavedAsPending() {
+        // Arrange: appoint a second owner so there is a company member besides the founder
+        assertTrue(companyService.requestAppointOwner(adminToken, companyId, userIdNotSuspened).getValue());
+        assertTrue(companyService.respondToOwnerAppointment(userNotSusToken, companyId, true).getValue());
+
+        // The owner goes offline before the admin closes the company
+        userService.logout(userNotSusToken);
+
+        // Act
+        Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
+
+        // Assert
+        assertTrue(response.getValue());
+        Member owner = userRepo.findById(userIdNotSuspened);
+        assertTrue(owner.getPendingNotifications().stream()
+                        .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                && n.getPayload() != null
+                                && n.getPayload().getMessage().contains("has been closed by admin")
+                                && n.getStatus() == NotificationStatus.PENDING),
+                "Offline owner should have the closure notification saved as PENDING");
+    }
+
+    @Test
+    void GivenOnlineCompanyOwner_WhenCloseCompanyByAdmin_ThenClosureNotificationPersistedAndDelivered()
+            throws InterruptedException {
+        // Arrange: appoint a second owner who stays online
+        assertTrue(companyService.requestAppointOwner(adminToken, companyId, userIdNotSuspened).getValue());
+        assertTrue(companyService.respondToOwnerAppointment(userNotSusToken, companyId, true).getValue());
+
+        String ownerIdentifier = auth.getUserEmail(userNotSusToken).getValue();
+        CountDownLatch latch = new CountDownLatch(1);
+        Registration reg = Broadcaster.registerUser(ownerIdentifier, dto -> latch.countDown());
+
+        try {
+            // Act
+            Response<Boolean> response = adminService.closeCompanyByAdmin(adminToken, companyId);
+
+            // Assert
+            assertTrue(response.getValue());
+            assertTrue(latch.await(2000, TimeUnit.MILLISECONDS), "Online owner should receive a live notification");
+
+            Member owner = userRepo.findById(userIdNotSuspened);
+            assertTrue(owner.getPendingNotifications().stream()
+                            .anyMatch(n -> n.getType() == NotifyType.GENERAL_POPUP
+                                    && n.getPayload() != null
+                                    && n.getPayload().getMessage().contains("has been closed by admin")
+                                    && n.getStatus() == NotificationStatus.DELIVERED),
+                    "Online owner's closure notification should be persisted and marked DELIVERED");
+        } finally {
+            reg.remove();
+        }
+    }
+
+    // ===================== UnsuspendUser =====================
+
+    @Test
+    void GivenNonAdminToken_WhenUnsuspendUser_ThenUserIsNotAdminErrorReturned() {
+        Response<Boolean> response = adminService.UnsuspendUser(nonAdminToken, userIdNotSuspened);
+
+        assertFalse(response.getValue());
+        assertEquals("UnsuspendUser failed : user is not admin", response.getMessage());
+    }
+
+    @Test
+    void GivenUserNotSuspended_WhenUnsuspendUser_ThenNotSuspendedErrorReturned() {
+        Response<Boolean> response = adminService.UnsuspendUser(adminToken, userIdNotSuspened);
+
+        assertFalse(response.getValue());
+        assertEquals("UnsuspendUser failed : user is not suspended", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedUser_WhenUnsuspendUser_ThenUserUnsuspendedSuccessfully() {
+        assertTrue(adminService.SuspendUser(adminToken, userIdNotSuspened).getValue());
+        assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
+
+        Response<Boolean> response = adminService.UnsuspendUser(adminToken, userIdNotSuspened);
+
+        assertTrue(response.getValue());
+        assertFalse(userRepo.findById(userIdNotSuspened).isSuspended());
+    }
+
+    @Test
+    void GivenNonExistingUser_WhenUnsuspendUser_ThenUserNotFoundErrorReturned() {
+        Response<Boolean> response = adminService.UnsuspendUser(adminToken, 999999);
+
+        assertFalse(response.getValue());
+        assertEquals("User not found", response.getMessage());
+    }
+
+    // ===================== getAllUsersSuspensions =====================
+
+    @Test
+    void GivenNonAdminToken_WhenGetAllUsersSuspensions_ThenUnauthorizedErrorReturned() {
+        Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(nonAdminToken);
+
+        assertNull(response.getValue());
+        assertEquals("getAllUsersSuspensions failed : user is not admin", response.getMessage());
+    }
+
+    @Test
+    void GivenAdminAndNoSuspensions_WhenGetAllUsersSuspensions_ThenEmptyListReturned() {
+        Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(adminToken);
+
+        assertNotNull(response.getValue());
+        assertTrue(response.getValue().isEmpty());
+    }
+
+    @Test
+    void GivenAdminAndExistingSuspension_WhenGetAllUsersSuspensions_ThenSuspensionsReturned() {
+        assertTrue(adminService.SuspendUser(adminToken, userIdNotSuspened).getValue());
+
+        Response<List<SuspensionDTO>> response = adminService.getAllUsersSuspensions(adminToken);
+
+        assertNotNull(response.getValue());
+        assertFalse(response.getValue().isEmpty());
+    }
+
+    // ===================== restoreSuspensionSchedulesOnStartup =====================
+
+    @Test
+    void GivenExpiredTemporarySuspension_WhenRestoreSuspensionSchedulesOnStartup_ThenUserActivated() {
+        Member member = userRepo.findById(userIdNotSuspened);
+        member.suspend();
+        userRepo.store(member);
+        suspensionRepo.store(new domain.Suspension.Suspension(userIdNotSuspened, -1L)); // already expired
+
+        adminService.restoreSuspensionSchedulesOnStartup();
+
+        assertFalse(userRepo.findById(userIdNotSuspened).isSuspended(),
+                "Expired temporary suspension should activate the user on startup");
+    }
+
+    @Test
+    void GivenPermanentSuspension_WhenRestoreSuspensionSchedulesOnStartup_ThenUserRemainsSuspended() {
+        Member member = userRepo.findById(userIdNotSuspened);
+        member.suspend();
+        userRepo.store(member);
+        suspensionRepo.store(new domain.Suspension.Suspension(userIdNotSuspened)); // permanent
+
+        adminService.restoreSuspensionSchedulesOnStartup();
+
+        assertTrue(userRepo.findById(userIdNotSuspened).isSuspended(),
+                "Permanent suspension must be skipped and the user kept suspended");
+    }
+
+    @Test
+    void GivenFutureTemporarySuspension_WhenRestoreSuspensionSchedulesOnStartup_ThenUserRemainsSuspended() {
+        Member member = userRepo.findById(userIdNotSuspened);
+        member.suspend();
+        userRepo.store(member);
+        suspensionRepo.store(new domain.Suspension.Suspension(userIdNotSuspened, 5L)); // expires in 5 days
+
+        adminService.restoreSuspensionSchedulesOnStartup();
+
+        assertTrue(userRepo.findById(userIdNotSuspened).isSuspended(),
+                "Future suspension is only scheduled, the user must still be suspended immediately after startup");
+    }
+
+    // ===================== removeUser: success cascade =====================
+
+    private String registerAndLogin(String email) {
+        userService.registerUser(null, new UserDTO(email, "First", "Last", PASSWORD, 1, 1, 1995, "City", "050-222-2222"));
+        return userService.login(email, PASSWORD).getValue();
+    }
+
+    @Test
+    void GivenPlainMember_WhenRemoveUser_ThenUserDeactivated() {
+        Response<Boolean> response = adminService.removeUser(adminToken, userIdNotSuspened);
+
+        assertTrue(response.getValue());
+        assertFalse(userRepo.findById(userIdNotSuspened).isActive());
+    }
+
+    @Test
+    void GivenOwnerWhoAppointedManager_WhenRemoveUser_ThenOwnerRemovedAndManagerReassignedToFounder() {
+        int founderId = userService.getUserId(adminToken).getValue();
+
+        // userNotSus becomes an owner of the company
+        assertTrue(companyService.requestAppointOwner(adminToken, companyId, userIdNotSuspened).getValue());
+        assertTrue(companyService.respondToOwnerAppointment(userNotSusToken, companyId, true).getValue());
+
+        // a third user is appointed as manager BY that owner
+        String managerToken = registerAndLogin("cascade_manager@mail.com");
+        int managerId = userService.getUserId(managerToken).getValue();
+        assertTrue(companyService.requestAppointManager(userNotSusToken, companyId, managerId,
+                Set.of(domain.dataType.PermissionType.CREATE_EVENT)).getValue());
+        assertTrue(companyService.respondToManagerAppointment(managerToken, companyId, true).getValue());
+
+        // Act: remove the owner
+        Response<Boolean> response = adminService.removeUser(adminToken, userIdNotSuspened);
+
+        // Assert: owner removed, manager kept but reassigned to the founder
+        assertTrue(response.getValue());
+        var perms = companyRepo.findById(companyId).getCompanyPermission();
+        assertFalse(perms.isOwner(userIdNotSuspened), "Removed user must no longer be an owner");
+        assertTrue(perms.isManager(managerId), "Manager appointed by the removed owner should be kept");
+        assertEquals(founderId, perms.getCompanyTree().get(managerId).getMyManager(),
+                "Manager should be reassigned to the founder");
+    }
+
+    @Test
+    void GivenManager_WhenRemoveUser_ThenManagerRemovedFromTree() {
+        String managerToken = registerAndLogin("cascade_manager2@mail.com");
+        int managerId = userService.getUserId(managerToken).getValue();
+        assertTrue(companyService.requestAppointManager(adminToken, companyId, managerId,
+                Set.of(domain.dataType.PermissionType.CREATE_EVENT)).getValue());
+        assertTrue(companyService.respondToManagerAppointment(managerToken, companyId, true).getValue());
+
+        Response<Boolean> response = adminService.removeUser(adminToken, managerId);
+
+        assertTrue(response.getValue());
+        assertFalse(companyRepo.findById(companyId).getCompanyPermission().isManager(managerId));
+    }
+
+    @Test
+    void GivenOwnerWhoCreatedEvents_WhenRemoveUser_ThenEventCreatorReassignedAwayFromUser() {
+        assertTrue(companyService.requestAppointOwner(adminToken, companyId, userIdNotSuspened).getValue());
+        assertTrue(companyService.respondToOwnerAppointment(userNotSusToken, companyId, true).getValue());
+
+        // the owner creates an event (so they are its creator)
+        int createdEventId = eventCompanyManageService.createEvent(
+                userNotSusToken, companyId, LocalDateTime.now().plusDays(15), "owner-event",
+                LocalDateTime.now().minusMinutes(5), false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL).getValue();
+        assertFalse(eventRepo.findByCreator(userIdNotSuspened).isEmpty());
+
+        Response<Boolean> response = adminService.removeUser(adminToken, userIdNotSuspened);
+
+        assertTrue(response.getValue());
+        assertTrue(eventRepo.findByCreator(userIdNotSuspened).isEmpty(),
+                "Removed user must no longer be the creator of any event");
+    }
 }

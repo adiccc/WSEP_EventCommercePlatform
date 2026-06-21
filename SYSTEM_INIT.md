@@ -20,14 +20,15 @@ The following constraints **must** be satisfied by `init-state.json`, otherwise 
 
 ### 1. Admin user must be registered
 
-`AuthConfig` is configured with a hardcoded admin email:
+Admin emails are configured in `config.yml` under `system.admin-emails` (validated at startup by `@NotEmpty` — the app will not start if the list is missing or empty):
 
-```java
-// src/main/java/app/config/AuthConfig.java
-Set.of("systemadmin@demo.com")
+```yaml
+system:
+  admin-emails:
+    - systemadmin@demo.com
 ```
 
-`init-state.json` **must** register a user with that exact email before startup completes. If the admin email is changed in `AuthConfig`, the corresponding `register` step in `init-state.json` must be updated to match.
+`init-state.json` **must** register a user whose email matches one of the entries in `system.admin-emails`. If the admin email is changed in `config.yml`, the corresponding `register` step in `init-state.json` must be updated to match.
 
 ### 2. Queue capacity must be positive
 
@@ -78,6 +79,21 @@ java -jar app.jar --init-file=/home/user/custom-init.json
 java -jar app.jar --init-file=classpath:test-init.json
 ```
 
+### `--config=<path>`
+
+Overrides the config file (`config.yml`). The path is translated to `--spring.config.additional-location`, so values in the custom file take precedence over the defaults. If omitted, `classpath:config.yml` is used.
+
+| Value | Behaviour |
+|-------|-----------|
+| *(omitted)* | Uses the default `config.yml` |
+| `myconfig.yml` | Loads from the filesystem (relative or absolute path) |
+| `classpath:test-config.yml` | Loads from the classpath |
+
+```
+java -jar app.jar --config=/path/to/custom-config.yml
+java -jar app.jar --config=classpath:test-config.yml
+```
+
 ### Combined examples
 
 ```
@@ -86,6 +102,9 @@ java -jar app.jar --db=empty
 
 # Fresh start with custom seed data
 java -jar app.jar --db=empty --init-file=/path/to/demo-data.json
+
+# Fresh start using a custom config and custom init file
+java -jar app.jar --db=empty --config=/path/to/config.yml --init-file=/path/to/init.json
 
 # Keep existing DB, run a different init script
 java -jar app.jar --init-file=/path/to/extra-setup.json
@@ -103,6 +122,8 @@ system:
   active-order-ttl-minutes: 10       # Minutes before an unpaid active order expires
   init-state-file: classpath:init-state.json  # Path to the init operations file
   init-enabled: true                 # Set to false to skip initialization (tests, etc.)
+  admin-emails:                      # At least one required — startup fails if missing
+    - systemadmin@demo.com
 ```
 
 ---

@@ -3,7 +3,10 @@ package infrastructure;
 import DTO.TicketSupplyRequestDTO;
 import DTO.TicketSupplyResultDTO;
 import DTO.PurchasedTicketDTO;
+import app.config.SystemProperties;
 import application.ITicketSupply;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -11,6 +14,7 @@ import org.springframework.http.*;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.logging.Logger;
@@ -20,8 +24,19 @@ import java.util.logging.Logger;
 public class RealTicketSupply implements ITicketSupply {
 
     private static final Logger logger = Logger.getLogger(RealTicketSupply.class.getName());
-    private static final String API_URL = "https://damp-lynna-wsep-1984852e.koyeb.app/";
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final String API_URL;
+    private final RestTemplate restTemplate;
+
+    @Autowired
+    public RealTicketSupply(RestTemplateBuilder restTemplateBuilder, SystemProperties systemProperties) {
+        this.API_URL = systemProperties.getExternalApiUrl();
+        int timeoutMinutes = systemProperties.getExternalApiTimeoutMinutes();
+
+        this.restTemplate = restTemplateBuilder
+                .setConnectTimeout(Duration.ofMinutes(timeoutMinutes))
+                .setReadTimeout(Duration.ofMinutes(timeoutMinutes))
+                .build();
+    }
 
     @Override
     public TicketSupplyResultDTO issue(TicketSupplyRequestDTO request) {
@@ -61,17 +76,18 @@ public class RealTicketSupply implements ITicketSupply {
 
             String ticketCode = response.getBody();
 
-            if (ticketCode == null || ticketCode.trim().equals("-1") || ticketCode.trim().equals("1") || ticketCode.trim().isEmpty()) {
+            if (ticketCode == null || ticketCode.trim().equals("-1") || ticketCode.trim().isEmpty()) {
                 logger.warning("External ticket system returned failure or empty code");
-                return new TicketSupplyResultDTO(false, List.of());
+                throw new RuntimeException("Ticket issuance was rejected by the external provider.");
             }
             List<String> duplicatedCodes = java.util.Collections.nCopies(quantityRequested, ticketCode.trim());
             return new TicketSupplyResultDTO(true, duplicatedCodes);
 
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             logger.severe("Ticket issue request failed: " + e.getMessage());
-            return new TicketSupplyResultDTO(false, List.of());
-        }
+            throw new RuntimeException("Ticket supply system error: " + e.getMessage());        }
     }
     @Override
     public boolean cancelTicket(String ticketCode) {
@@ -87,12 +103,22 @@ public class RealTicketSupply implements ITicketSupply {
             ResponseEntity<String> response = restTemplate.postForEntity(API_URL, httpRequest, String.class);
 
             String body = response.getBody();
-            return body != null && body.trim().equals("1");
 
+            if (body != null && body.trim().equals("-1")) {
+                logger.warning("External ticket supply system explicitly rejected canceling ticket (-1).");
+                throw new RuntimeException("Cancel ticket explicitly rejected by the ticket supply gateway.");
+            }
+            if (body == null || !body.trim().equals("1")) {
+                logger.warning("External ticket system failed to cancel ticket.");
+                throw new RuntimeException("Failed to cancel ticket in the external system.");
+            }
+
+            return true;
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             logger.severe("Ticket cancellation failed due to communication error: " + e.getMessage());
-            return false;
-        }
+            throw new RuntimeException("Ticket supply system error during cancellation: " + e.getMessage());        }
     }
 
     @Override
@@ -115,4 +141,5 @@ public class RealTicketSupply implements ITicketSupply {
             return false;
         }
     }
-}
+    }
+            
