@@ -407,7 +407,7 @@ public class ActiveOrderService {
                     }
 
                     eventQueueManager.enqueue(eventId, token);
-
+                    eventRepo.store(e);
                     int position = eventQueueManager.position(eventId, token);
 
                     return new Response<>(
@@ -424,6 +424,8 @@ public class ActiveOrderService {
                 }
 
                 ActiveOrder newActiveOrder = new ActiveOrder(userIdentifier, eventId, new ArrayList<>());
+
+                eventRepo.store(e);
                 activeOrderRepo.store(newActiveOrder);
 
                 logger.log(Level.INFO,
