@@ -6,8 +6,10 @@ import Log.LoggerSetup;
 import app.config.SystemProperties;
 import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
+import domain.Suspension.Suspension;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
+import domain.dto.LotteryDTO;
 import domain.dto.UserDTO;
 import domain.lottery.AccessCodeGenerator;
 import domain.lottery.Lottery;
@@ -1675,5 +1677,331 @@ class LotteryServiceTest {
                 } finally {
                         service.shutdown();
                 }
+        }
+
+        // ==========================================
+        // Additional createLottery branch coverage
+        // ==========================================
+
+        private void suspend(String token) {
+                int userId = userService.getUserId(token).getValue();
+                suspensionRepo.store(new Suspension(userId));
+        }
+
+        @Test
+        void GivenZeroCapacity_WhenCreateLottery_ThenCapacityError() {
+                LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+
+                Response<Boolean> response = lotteryService.createLottery(validToken, eventId, 0, lotteryDate_X, 24L);
+
+                assertFalse(response.getValue());
+                assertEquals("Capacity must be greater than 0", response.getMessage());
+        }
+
+        @Test
+        void GivenZeroExpirationTime_WhenCreateLottery_ThenExpirationError() {
+                LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+
+                Response<Boolean> response = lotteryService.createLottery(validToken, eventId, 5, lotteryDate_X, 0L);
+
+                assertFalse(response.getValue());
+                assertEquals("Expiration time must be greater than 0", response.getMessage());
+        }
+
+        @Test
+        void GivenUserWithoutPermission_WhenCreateLottery_ThenPermissionError() {
+                LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+
+                Response<Boolean> response = lotteryService.createLottery(notPermission, eventId, 5, lotteryDate_X, 24L);
+
+                assertFalse(response.getValue());
+                assertTrue(response.getMessage().contains("does not have permission to create lottery"));
+        }
+
+        @Test
+        void GivenSuspendedUser_WhenCreateLottery_ThenSuspensionError() {
+                suspend(validToken);
+                LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+
+                Response<Boolean> response = lotteryService.createLottery(validToken, eventId, 5, lotteryDate_X, 24L);
+
+                assertNull(response.getValue());
+                assertEquals("user does not have write access caused by suspension.", response.getMessage());
+        }
+
+        @Test
+        void GivenSuspendedUser_WhenRegisterUserToLottery_ThenSuspensionError() {
+                LocalDateTime lotteryDate_X = LocalDateTime.now().plusDays(7);
+                lotteryService.createLottery(validToken, eventId, 5, lotteryDate_X, 24L);
+                suspend(validToken);
+
+                Response<Boolean> response = lotteryService.registerUserToLottery(validToken, eventId);
+
+                assertNull(response.getValue());
+                assertEquals("user does not have write access caused by suspension.", response.getMessage());
+        }
+
+        // ==========================================
+        // updateLottery Use Case
+        // ==========================================
+
+        @Test
+        void GivenInvalidToken_WhenUpdateLottery_ThenInvalidTokenError() {
+                Response<Boolean> response = lotteryService.updateLottery(invalidToken, eventId, null);
+
+                assertFalse(response.getValue());
+                assertEquals("Invalid token", response.getMessage());
+        }
+
+        @Test
+        void GivenNonExistingEvent_WhenUpdateLottery_ThenEventDoesNotExist() {
+                Response<Boolean> response = lotteryService.updateLottery(validToken, -1, null);
+
+                assertFalse(response.getValue());
+                assertEquals("Event does not exist", response.getMessage());
+        }
+
+        @Test
+        void GivenInactiveEvent_WhenUpdateLottery_ThenEventNotActiveError() {
+                // Event is created inactive and never activated (no createLottery call here)
+                LotteryDTO dto = new LotteryDTO(eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, dto);
+
+                assertFalse(response.getValue());
+                assertEquals("Event is not active", response.getMessage());
+        }
+
+        @Test
+        void GivenUserNotOwner_WhenUpdateLottery_ThenNotAuthorizedError() {
+                // Owner creates the lottery first so the event becomes active
+                lotteryService.createLottery(validToken, eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+
+                Response<Boolean> response = lotteryService.updateLottery(notPermission, eventId, null);
+
+                assertFalse(response.getValue());
+                assertTrue(response.getMessage().contains("not authorized to change the sales method"));
+        }
+
+        @Test
+        void GivenExistingLotteryWithoutWinners_WhenUpdateLotteryToRegular_ThenLotteryCancelled() {
+                lotteryService.createLottery(validToken, eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+                assertEquals(1, lotteryRepo.getAll().size());
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, null);
+
+                assertTrue(response.getValue());
+                assertEquals("Sales method updated to regular purchase", response.getMessage());
+                assertTrue(lotteryRepo.getAll().isEmpty(), "Lottery should have been deleted");
+                assertFalse(eventRepo.findById(eventId).hasLottery());
+        }
+
+        @Test
+        void GivenLotteryWithDrawnWinners_WhenUpdateLotteryToRegular_ThenCannotCancelError() {
+                lotteryService.createLottery(validToken, eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+                lotteryService.registerUserToLottery(validToken, eventId);
+
+                // Force winners to be drawn so cancellation is blocked
+                Lottery lottery = lotteryRepo.findById(eventId);
+                lottery.drawWinners();
+                lotteryRepo.store(lottery);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, null);
+
+                assertFalse(response.getValue());
+                assertEquals("Lottery can't be cancelled, winners were already drawn", response.getMessage());
+        }
+
+        @Test
+        void GivenExistingLottery_WhenUpdateLotteryWithNewDetails_ThenLotteryUpdated() {
+                lotteryService.createLottery(validToken, eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+
+                LotteryDTO dto = new LotteryDTO(eventId, 10, LocalDateTime.now().plusDays(8), 48L);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, dto);
+
+                assertTrue(response.getValue());
+                assertEquals("Lottery updated successfully", response.getMessage());
+        }
+
+        @Test
+        void GivenRegisterWindowAfterSaleStart_WhenUpdateLottery_ThenInvalidUpdateError() {
+                lotteryService.createLottery(validToken, eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+
+                // Register window after the sale start date -> domain throws IllegalArgumentException
+                LotteryDTO dto = new LotteryDTO(eventId, 10, saleStartDate_Y.plusDays(2), 24L);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, dto);
+
+                assertFalse(response.getValue());
+                assertTrue(response.getMessage().contains("before sale start date"));
+        }
+
+        @Test
+        void GivenSuspendedUser_WhenUpdateLottery_ThenSuspensionError() {
+                lotteryService.createLottery(validToken, eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+                suspend(validToken);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, eventId, null);
+
+                assertNull(response.getValue());
+                assertEquals("user does not have write access caused by suspension.", response.getMessage());
+        }
+
+        // ==========================================
+        // canRegisterToLottery Use Case
+        // ==========================================
+
+        @Test
+        void GivenInvalidToken_WhenCanRegisterToLottery_ThenInvalidTokenError() {
+                Response<Boolean> response = lotteryService.canRegisterToLottery(invalidToken, eventId);
+
+                assertNull(response.getValue());
+                assertEquals("Invalid token", response.getMessage());
+        }
+
+        @Test
+        void GivenSuspendedUser_WhenCanRegisterToLottery_ThenSuspensionError() {
+                suspend(validToken);
+
+                Response<Boolean> response = lotteryService.canRegisterToLottery(validToken, eventId);
+
+                assertNull(response.getValue());
+                assertEquals("user does not have write access caused by suspension.", response.getMessage());
+        }
+
+        @Test
+        void GivenRegularEvent_WhenCanRegisterToLottery_ThenLotteryNotSupported() {
+                Integer noLotteryEventId = eventCompanyManageService.createEvent(
+                                validToken, companyId, LocalDateTime.now().plusDays(30),
+                                "No Lottery Event", saleStartDate_Y, false,
+                                GeographicalArea.CENTER, CategoryEvent.FESTIVAL).getValue();
+
+                Response<Boolean> response = lotteryService.canRegisterToLottery(validToken, noLotteryEventId);
+
+                assertFalse(response.getValue());
+                assertEquals("This event does not support lottery", response.getMessage());
+        }
+
+        @Test
+        void GivenEventWithLotteryPolicyButNoLottery_WhenCanRegisterToLottery_ThenLotteryNotFound() {
+                Response<Boolean> response = lotteryService.canRegisterToLottery(validToken, eventId);
+
+                assertNull(response.getValue());
+                assertEquals("Lottery not found", response.getMessage());
+        }
+
+        @Test
+        void GivenExpiredRegisterWindow_WhenCanRegisterToLottery_ThenRegistrationExpired() {
+                Lottery expiredLottery = new Lottery(eventId, 5, LocalDateTime.now().minusDays(1), 24L);
+                lotteryRepo.store(expiredLottery);
+
+                Response<Boolean> response = lotteryService.canRegisterToLottery(validToken, eventId);
+
+                assertFalse(response.getValue());
+                assertEquals("Lottery registration period has expired", response.getMessage());
+        }
+
+        @Test
+        void GivenAlreadyRegisteredUser_WhenCanRegisterToLottery_ThenAlreadyRegistered() {
+                lotteryService.createLottery(validToken, eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+                lotteryService.registerUserToLottery(validToken, eventId);
+
+                Response<Boolean> response = lotteryService.canRegisterToLottery(validToken, eventId);
+
+                assertFalse(response.getValue());
+                assertEquals("User is already registered to this lottery", response.getMessage());
+        }
+
+        @Test
+        void GivenEligibleUser_WhenCanRegisterToLottery_ThenCanRegister() {
+                lotteryService.createLottery(validToken, eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+
+                Response<Boolean> response = lotteryService.canRegisterToLottery(validToken2, eventId);
+
+                assertTrue(response.getValue());
+                assertEquals("User can register to lottery", response.getMessage());
+        }
+
+        // --- updateLottery: guest token → "Only members can update lottery" ---
+
+        @Test
+        void GivenGuestToken_WhenUpdateLottery_ThenOnlyMembersError() {
+                String guestToken = tokenService.generateGuestToken();
+                LotteryDTO dto = new LotteryDTO(eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+
+                Response<Boolean> response = lotteryService.updateLottery(guestToken, eventId, dto);
+
+                assertFalse(response.getValue());
+                assertEquals("Only members can update lottery", response.getMessage());
+        }
+
+        // --- updateLottery: lotteryDTO == null on a non-lottery event → "Sales method is already regular purchase" ---
+
+        @Test
+        void GivenRegularEventAndNullDto_WhenUpdateLottery_ThenAlreadyRegularPurchase() {
+                Response<Integer> regularEventResp = eventCompanyManageService.createEvent(
+                                validToken, companyId,
+                                LocalDateTime.now().plusDays(30), "Regular Event",
+                                saleStartDate_Y, false,
+                                GeographicalArea.CENTER, CategoryEvent.FESTIVAL);
+                int regularEventId = regularEventResp.getValue();
+                // activate the event manually (normally done when a map is added)
+                domain.event.Event e = eventRepo.findById(regularEventId);
+                e.setActive(true);
+                eventRepo.store(e);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, regularEventId, null);
+
+                assertTrue(response.getValue());
+                assertEquals("Sales method is already regular purchase", response.getMessage());
+        }
+
+        // --- updateLottery: valid DTO on a non-lottery event → creates new lottery (isNew = true) ---
+
+        @Test
+        void GivenRegularEventAndValidDto_WhenUpdateLottery_ThenNewLotteryCreated() {
+                Response<Integer> regularEventResp = eventCompanyManageService.createEvent(
+                                validToken, companyId,
+                                LocalDateTime.now().plusDays(30), "Regular Event For Lottery",
+                                saleStartDate_Y, false,
+                                GeographicalArea.CENTER, CategoryEvent.FESTIVAL);
+                int regularEventId = regularEventResp.getValue();
+                // activate the event manually (normally done when a map is added)
+                domain.event.Event e = eventRepo.findById(regularEventId);
+                e.setActive(true);
+                eventRepo.store(e);
+                LotteryDTO dto = new LotteryDTO(regularEventId, 5, LocalDateTime.now().plusDays(7), 24L);
+
+                Response<Boolean> response = lotteryService.updateLottery(validToken, regularEventId, dto);
+
+                assertTrue(response.getValue());
+                assertEquals("Sales method updated to lottery", response.getMessage());
+        }
+
+        // --- registerUserToLottery: guest token → "User is not logged in" ---
+
+        @Test
+        void GivenGuestToken_WhenRegisterUserToLottery_ThenNotLoggedInError() {
+                lotteryService.createLottery(validToken, eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+                String guestToken = tokenService.generateGuestToken();
+
+                Response<Boolean> response = lotteryService.registerUserToLottery(guestToken, eventId);
+
+                assertFalse(response.getValue());
+                assertEquals("User is not logged in", response.getMessage());
+        }
+
+        // --- canRegisterToLottery: guest token → "User is not logged in" ---
+
+        @Test
+        void GivenGuestToken_WhenCanRegisterToLottery_ThenNotLoggedInError() {
+                lotteryService.createLottery(validToken, eventId, 5, LocalDateTime.now().plusDays(7), 24L);
+                String guestToken = tokenService.generateGuestToken();
+
+                Response<Boolean> response = lotteryService.canRegisterToLottery(guestToken, eventId);
+
+                assertNull(response.getValue());
+                assertEquals("User is not logged in", response.getMessage());
         }
 }

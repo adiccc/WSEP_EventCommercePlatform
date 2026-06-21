@@ -991,6 +991,7 @@ class EventCompanyManageServiceTest {
                                 "TKT-2"
                         )
                 ),
+                List.of(1, 2),
                 100.0,
                 "pay123",
                 new ArrayList<>()
@@ -2742,6 +2743,268 @@ class EventCompanyManageServiceTest {
     }
 
 
+
+    // ===================== getEventMapForManagement =====================
+
+    @Test
+    void GivenOwnerAndMapDefined_WhenGetEventMapForManagement_ThenMapReturned() {
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        Response<?> response = eventCompanyManageService.getEventMapForManagement(validToken1, eventId);
+
+        assertNotNull(response.getValue(), "Should return event map DTO: " + response.getMessage());
+        assertEquals("Event map retrieved successfully", response.getMessage());
+    }
+
+    @Test
+    void GivenOwnerAndMapNotDefined_WhenGetEventMapForManagement_ThenMapNotDefinedError() {
+        int noMapEventId = eventCompanyManageService.createEvent(
+                validToken1, companyId, LocalDateTime.now().plusDays(20),
+                "no-map-event", LocalDateTime.now().minusMinutes(5),
+                false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL).getValue();
+
+        Response<?> response = eventCompanyManageService.getEventMapForManagement(validToken1, noMapEventId);
+
+        assertNull(response.getValue());
+        assertEquals("Event map not defined yet", response.getMessage());
+    }
+
+    @Test
+    void GivenInvalidToken_WhenGetEventMapForManagement_ThenInvalidTokenError() {
+        Response<?> response = eventCompanyManageService.getEventMapForManagement(null, eventId);
+
+        assertNull(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+    }
+
+    @Test
+    void GivenGuestToken_WhenGetEventMapForManagement_ThenOnlyMembersError() {
+        Response<?> response = eventCompanyManageService.getEventMapForManagement(GUEST_TOKEN, eventId);
+
+        assertNull(response.getValue());
+        assertEquals("Only members can view event map for management", response.getMessage());
+    }
+
+    @Test
+    void GivenUnauthorizedUser_WhenGetEventMapForManagement_ThenPermissionError() {
+        eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
+
+        Response<?> response = eventCompanyManageService.getEventMapForManagement(validToken2, eventId);
+
+        assertNull(response.getValue());
+        assertEquals("Permission required", response.getMessage());
+    }
+
+    @Test
+    void GivenNonExistingEvent_WhenGetEventMapForManagement_ThenEventNotFoundError() {
+        Response<?> response = eventCompanyManageService.getEventMapForManagement(validToken1, -999);
+
+        assertNull(response.getValue());
+        assertEquals("Event not found", response.getMessage());
+    }
+
+    // ===================== guest-token paths for getOrdersByCompany / getPurchaseHistoryByUser =====================
+
+    @Test
+    void GivenGuestToken_WhenGetOrdersByCompany_ThenOnlyMembersError() {
+        Response<List<OrderDTO>> response = eventCompanyManageService.getOrdersByCompany(GUEST_TOKEN, companyId);
+
+        assertNull(response.getValue());
+        assertEquals("Only members can get orders by company", response.getMessage());
+    }
+
+    @Test
+    void GivenGuestToken_WhenGetPurchaseHistoryByUser_ThenNotLoggedInError() {
+        Response<?> response = eventCompanyManageService.getPurchaseHistoryByUser(GUEST_TOKEN);
+
+        assertNull(response.getValue());
+        assertEquals("User is not logged in", response.getMessage());
+    }
+
+    // ===================== suspension + guest-token paths =====================
+
+    private int getOwnerId() {
+        return userRepo.findUserByEmail("user1@test.com").getUserId();
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenDefineVenueAndSeatingMap_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(getOwnerId()));
+        Response<Boolean> response = eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1, eventId, stage, entries, standingZones, seatingZones);
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenGuestToken_WhenDefineVenueAndSeatingMap_ThenOnlyMembersError() {
+        Response<Boolean> response = eventCompanyManageService.DefineVenueAndSeatingMap(
+                GUEST_TOKEN, eventId, stage, entries, standingZones, seatingZones);
+        assertEquals("Only members can define venue", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenCreateEvent_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(getOwnerId()));
+        Response<Integer> response = eventCompanyManageService.createEvent(
+                validToken1, companyId, LocalDateTime.now().plusDays(20), "sus-event",
+                LocalDateTime.now().minusMinutes(5), false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL);
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenGuestToken_WhenCreateEvent_ThenOnlyMembersError() {
+        Response<Integer> response = eventCompanyManageService.createEvent(
+                GUEST_TOKEN, companyId, LocalDateTime.now().plusDays(20), "guest-event",
+                LocalDateTime.now().minusMinutes(5), false, GeographicalArea.CENTER, CategoryEvent.FESTIVAL);
+        assertEquals("Only members can create events", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenUpdateEventDate_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(getOwnerId()));
+        Response<Boolean> response = eventCompanyManageService.UpdateEventDate(
+                validToken1, eventId, LocalDateTime.now().plusDays(30));
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenGuestToken_WhenUpdateEventDate_ThenOnlyMembersError() {
+        Response<Boolean> response = eventCompanyManageService.UpdateEventDate(
+                GUEST_TOKEN, eventId, LocalDateTime.now().plusDays(30));
+        assertEquals("Only members can update event's dates", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenAddZonesToEventMap_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(getOwnerId()));
+        Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
+                validToken1, eventId, standingZones, seatingZones);
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenGuestToken_WhenAddZonesToEventMap_ThenOnlyMembersError() {
+        Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
+                GUEST_TOKEN, eventId, standingZones, seatingZones);
+        assertEquals("Only members can add zones to events map", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenGetEventMapForManagement_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(getOwnerId()));
+        Response<?> response = eventCompanyManageService.getEventMapForManagement(validToken1, eventId);
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenDeleteEvent_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(getOwnerId()));
+        Response<Boolean> response = eventCompanyManageService.DeleteEvent(validToken1, eventId);
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenGuestToken_WhenDeleteEvent_ThenOnlyMembersError() {
+        Response<Boolean> response = eventCompanyManageService.DeleteEvent(GUEST_TOKEN, eventId);
+        assertEquals("Only members can delete events", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenAddRuleToEvent_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(getOwnerId()));
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        Response<Boolean> response = eventCompanyManageService.addRuleToEvent(validToken1, eventId, ruleDTO);
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenGuestToken_WhenAddRuleToEvent_ThenOnlyMembersError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        Response<Boolean> response = eventCompanyManageService.addRuleToEvent(GUEST_TOKEN, eventId, ruleDTO);
+        assertEquals("Only members can add rule to event", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenRemoveRuleFromEvent_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(getOwnerId()));
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        Response<Boolean> response = eventCompanyManageService.removeRuleFromEvent(validToken1, eventId, ruleDTO);
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenGuestToken_WhenRemoveRuleFromEvent_ThenOnlyMembersError() {
+        PurchaseRuleDTO ruleDTO = new PurchaseRuleDTO(PurchaseRuleDTO.Type.MIN_AGE, 18);
+        Response<Boolean> response = eventCompanyManageService.removeRuleFromEvent(GUEST_TOKEN, eventId, ruleDTO);
+        assertEquals("Only members can remove rule from event", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenAddDiscountToEvent_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(getOwnerId()));
+        DiscountDTO discountDTO = new DiscountDTO(10.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = eventCompanyManageService.addDiscountToEvent(validToken1, eventId, discountDTO);
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenGuestToken_WhenAddDiscountToEvent_ThenOnlyMembersError() {
+        DiscountDTO discountDTO = new DiscountDTO(10.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = eventCompanyManageService.addDiscountToEvent(GUEST_TOKEN, eventId, discountDTO);
+        assertEquals("Only members can add discount to event", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenRemoveDiscountFromEvent_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(getOwnerId()));
+        DiscountDTO discountDTO = new DiscountDTO(10.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = eventCompanyManageService.removeDiscountFromEvent(validToken1, eventId, discountDTO);
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenGuestToken_WhenRemoveDiscountFromEvent_ThenOnlyMembersError() {
+        DiscountDTO discountDTO = new DiscountDTO(10.0, LocalDate.now().plusDays(1));
+        Response<Boolean> response = eventCompanyManageService.removeDiscountFromEvent(GUEST_TOKEN, eventId, discountDTO);
+        assertEquals("Only members can remove discounts from event", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenChangeEventPurchasePolicyType_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(getOwnerId()));
+        Response<Void> response = eventCompanyManageService.changeEventPurchasePolicyType(
+                validToken1, eventId, PurchasePolicyType.OR);
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenGuestToken_WhenChangeEventPurchasePolicyType_ThenOnlyMembersError() {
+        Response<Void> response = eventCompanyManageService.changeEventPurchasePolicyType(
+                GUEST_TOKEN, eventId, PurchasePolicyType.OR);
+        assertEquals("Only members can change purpose policy types", response.getMessage());
+    }
+
+    @Test
+    void GivenSuspendedOwner_WhenChangeEventDiscountPolicyType_ThenSuspensionError() {
+        suspensionRepo.store(new domain.Suspension.Suspension(getOwnerId()));
+        Response<Void> response = eventCompanyManageService.changeEventDiscountPolicyType(
+                validToken1, eventId, DiscountPolicyType.SUM);
+        assertTrue(response.getMessage().contains("suspension"));
+    }
+
+    @Test
+    void GivenGuestToken_WhenChangeEventDiscountPolicyType_ThenOnlyMembersError() {
+        Response<Void> response = eventCompanyManageService.changeEventDiscountPolicyType(
+                GUEST_TOKEN, eventId, DiscountPolicyType.SUM);
+        assertEquals("Only members can change discount policies", response.getMessage());
+    }
+
+    @Test
+    void GivenGuestToken_WhenGenerateSalesReports_ThenNotPermittedError() {
+        Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, GUEST_TOKEN);
+        assertNull(response.getValue());
+        assertTrue(response.getMessage().contains("not permitted"));
+    }
 }
 
 
