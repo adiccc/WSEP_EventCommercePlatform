@@ -242,4 +242,24 @@ public class EventMap {
         return new ActiveOrderSelectionDTO(seats, standingTicketsByZone);
     }
 
+    public Zone getZoneById(Integer zoneId){
+        for(Zone zone: zones){
+            if(zone.getId()==zoneId){
+                return zone;
+            }
+        }
+        return null;
+    }
+
+    public boolean removeZone(Integer zoneId){
+        for(Zone zone: zones){
+            if(zone.getId()==zoneId){
+                zones.remove(zone);
+                return true;
+            }
+        }
+        return false;
+
+    }
+
 }

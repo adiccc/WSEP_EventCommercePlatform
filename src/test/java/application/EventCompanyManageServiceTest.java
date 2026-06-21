@@ -6,19 +6,18 @@ import app.config.SystemProperties;
 import com.vaadin.flow.shared.Registration;
 import app.config.ActiveOrderProperties;
 import domain.Suspension.ISuspensionRepo;
+import domain.Suspension.Suspension;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
+import domain.dataType.TicketStatus;
 import domain.dto.CompanyDetailsDTO;
 import domain.dto.EventDetailsDTO;
 import domain.dto.OrderDTO;
 import domain.dto.SalesReportDTO;
 import domain.dto.UserDTO;
-import domain.event.Event;
-import domain.event.IEventRepo;
-import domain.event.OrderStatus;
-import domain.event.Order;
+import domain.event.*;
 import domain.lottery.AccessCodeGenerator;
 import domain.lottery.ILotteryRepo;
 import domain.user.NotificationStatus;
@@ -991,7 +990,6 @@ class EventCompanyManageServiceTest {
                                 "TKT-2"
                         )
                 ),
-                List.of(1, 2),
                 100.0,
                 "pay123",
                 new ArrayList<>()
@@ -2742,6 +2740,177 @@ class EventCompanyManageServiceTest {
                 "Online buyer should have the refund failure notification marked as DELIVERED");
     }
 
+    @Test
+    void GivenValidInputs_WhenRemoveZoneFromEventMap_ThenZoneIsRemovedSuccessfully() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
+        Event eventBeforeRemove = eventRepo.findById(eventId);
+        Integer zoneId = eventBeforeRemove.getMap().getZones().get(0).getId();
+
+        assertNotNull(eventBeforeRemove.getMap().getZoneById(zoneId));
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.removeZonesToEventMap(
+                validToken1,
+                eventId,
+                zoneId
+        );
+
+        // Assert
+        assertTrue(response.getValue());
+        assertEquals("Zones removed to event map successfully", response.getMessage());
+
+        Event eventAfterRemove = eventRepo.findById(eventId);
+        assertNull(eventAfterRemove.getMap().getZoneById(zoneId));
+    }
+
+    @Test
+    void GivenInvalidToken_WhenRemoveZoneFromEventMap_ThenInvalidTokenErrorIsReturned() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
+
+        Event eventBeforeRemove = eventRepo.findById(eventId);
+
+        Integer zoneId = eventBeforeRemove.getMap().getZones().stream()
+                .findFirst()
+                .orElseThrow()
+                .getId();
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.removeZonesToEventMap(
+                invalidToken,
+                eventId,
+                zoneId
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Invalid token", response.getMessage());
+
+        Event eventAfterRemoveAttempt = eventRepo.findById(eventId);
+        assertNotNull(eventAfterRemoveAttempt.getMap().getZoneById(zoneId));
+    }
+
+
+    @Test
+    void GivenNonExistingEvent_WhenRemoveZoneFromEventMap_ThenEventNotFoundErrorIsReturned() {
+        // Arrange
+        Integer nonExistingEventId = -1;
+        Integer zoneId = 1;
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.removeZonesToEventMap(
+                validToken1,
+                nonExistingEventId,
+                zoneId
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Event not found", response.getMessage());
+    }
+
+    @Test
+    void GivenUserWithoutPermission_WhenRemoveZoneFromEventMap_ThenPermissionRequiredErrorIsReturned() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
+
+        Event eventBeforeRemove = eventRepo.findById(eventId);
+
+        Integer zoneId = eventBeforeRemove.getMap().getZones().stream()
+                .findFirst()
+                .orElseThrow()
+                .getId();
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.removeZonesToEventMap(
+                validToken2,
+                eventId,
+                zoneId
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Permission required", response.getMessage());
+
+        Event eventAfterRemoveAttempt = eventRepo.findById(eventId);
+        assertNotNull(eventAfterRemoveAttempt.getMap().getZoneById(zoneId));
+    }
+
+    @Test
+    void GivenEventWithoutMap_WhenRemoveZoneFromEventMap_ThenNoMapDefinedErrorIsReturned() {
+        // Arrange
+        Integer zoneId = 1;
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.removeZonesToEventMap(
+                validToken1,
+                eventId,
+                zoneId
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Event map not defined yet", response.getMessage());
+
+        Event eventAfterRemoveAttempt = eventRepo.findById(eventId);
+        assertNull(eventAfterRemoveAttempt.getMap());
+    }
+
+
+    @Test
+    void GivenInactiveEvent_WhenRemoveZoneFromEventMap_ThenEventNotActiveErrorIsReturned() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
+
+        Event event = eventRepo.findById(eventId);
+
+        Integer zoneId = event.getMap().getZones().stream()
+                .findFirst()
+                .orElseThrow()
+                .getId();
+
+        eventCompanyManageService.DeleteEvent(validToken1,eventId);
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.removeZonesToEventMap(
+                validToken1,
+                eventId,
+                zoneId
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Event is not active yet, cannot remove zones", response.getMessage());
+    }
 
 
     // ===================== getEventMapForManagement =====================
@@ -3004,6 +3173,74 @@ class EventCompanyManageServiceTest {
         Response<SalesReportDTO> response = eventCompanyManageService.generateSalesReports(companyId, GUEST_TOKEN);
         assertNull(response.getValue());
         assertTrue(response.getMessage().contains("not permitted"));
+    }
+    @Test
+    void GivenNonExistingZone_WhenRemoveZoneFromEventMap_ThenZoneNotFoundErrorIsReturned() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
+
+        Event event = eventRepo.findById(eventId);
+
+        Integer nonExistingZoneId = 999_999;
+        assertNull(event.getMap().getZoneById(nonExistingZoneId));
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.removeZonesToEventMap(
+                validToken1,
+                eventId,
+                nonExistingZoneId
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Zone that requested to remove does not exist in map", response.getMessage());
+    }
+
+    @Test
+    void GivenZoneWithNonAvailableTicket_WhenRemoveZoneFromEventMap_ThenTicketStatusErrorIsReturned() {
+        // Arrange
+        eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
+
+        Event event = eventRepo.findById(eventId);
+
+        Integer zoneId = event.getMap().getZones().stream()
+                .findFirst()
+                .orElseThrow()
+                .getId();
+
+
+        Zone zone = event.getMap().getZoneById(zoneId);
+
+        Ticket ticket = zone.getTickets().get(0);
+        createCompletedOrderThroughPurchaseFlow(validToken1,eventId,1);
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.removeZonesToEventMap(
+                validToken1,
+                eventId,
+                zoneId
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("Some of the tickets are already bought or held by an active order", response.getMessage());
+
+        Event eventAfterRemoveAttempt = eventRepo.findById(eventId);
+        assertNotNull(eventAfterRemoveAttempt.getMap().getZoneById(zoneId));
     }
 }
 

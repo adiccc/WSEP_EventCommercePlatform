@@ -316,7 +316,7 @@ public class EventCompanyManageService {
 
     // adding new zones to an existing map of an event
     public Response<Boolean> AddZonesToEventMap(String token, Integer eventId, List<StandingZoneDTO> standingZone,
-            List<SeatingZoneDTO> seatingZone) {
+                                                List<SeatingZoneDTO> seatingZone) {
         return RetryHelper.executeWithRetry(() ->
         {
             logger.log(Level.INFO, "AddZonesToEventMap called");
@@ -336,70 +336,147 @@ public class EventCompanyManageService {
                 return new Response<>(null, "user does not have write access caused by suspension.");
             }
             return  transactionTemplate.execute(status -> {
-            try {
-                Event event = eventRepo.findById(eventId);
-                int eventCreator = event.getCreatorId();
+                try {
+                    Event event = eventRepo.findById(eventId);
+                    int eventCreator = event.getCreatorId();
 
-                // check appropriate permission
-                Company company = companyRepo.findById(event.getCompanyId());
-                if (!company.checkPermission(userId, CREATE_EVENT)) {
-                    logger.severe("User does not have permission to add zones to event map");
-                    return new Response<>(false, "Permission required");
-                }
-
-                EventMap map = event.getMap();
-                if (map == null) {
-                    logger.severe("Event map not defined yet");
-                    return new Response<>(false, "Event map not defined yet");
-                }
-
-                if (!event.isActive()) {
-                    logger.severe("Event is not active yet, cannot add zones");
-                    return new Response<>(false, "Event is not active yet, cannot add zones");
-                }
-
-                boolean hasStanding = standingZone != null && !standingZone.isEmpty();
-                boolean hasSeating = seatingZone != null && !seatingZone.isEmpty();
-
-                if (!hasStanding && !hasSeating) {
-                    logger.severe("No zones provided to add");
-                    return new Response<>(false, "No zones provided to add");
-                }
-
-                List<Zone> zones = map.getZones();
-                if (hasStanding) {
-                    for (StandingZoneDTO standingZoneDTO : standingZone) {
-                        zones.add(new StandingZone(standingZoneDTO));
+                    // check appropriate permission
+                    Company company = companyRepo.findById(event.getCompanyId());
+                    if (!company.checkPermission(userId, CREATE_EVENT)) {
+                        logger.severe("User does not have permission to add zones to event map");
+                        return new Response<>(false, "Permission required");
                     }
-                }
 
-                if (hasSeating) {
-                    for (SeatingZoneDTO seatingZoneDTO : seatingZone) {
-                        zones.add(new SeatingZone(seatingZoneDTO));
+                    EventMap map = event.getMap();
+                    if (map == null) {
+                        logger.severe("Event map not defined yet");
+                        return new Response<>(false, "Event map not defined yet");
                     }
-                }
 
-                eventRepo.store(event);
-                logger.log(Level.INFO, "Zones added to event map successfully");
-                return new Response<>(true, "Zones added to event map successfully");
+                    if (!event.isActive()) {
+                        logger.severe("Event is not active yet, cannot add zones");
+                        return new Response<>(false, "Event is not active yet, cannot add zones");
+                    }
 
-            } catch (NoSuchElementException e) {
-                status.setRollbackOnly();
-                logger.log(Level.SEVERE, "event not found: " + e.getMessage());
-                return new Response<>(false, "Event not found");
+                    boolean hasStanding = standingZone != null && !standingZone.isEmpty();
+                    boolean hasSeating = seatingZone != null && !seatingZone.isEmpty();
 
-            } catch (TransientDataAccessException e) {
-                status.setRollbackOnly();
-                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
-                throw e;
-            } catch (OptimisticLockingFailureException e) {
-                status.setRollbackOnly();
-                throw e;
-            } catch (Exception e) {
-                status.setRollbackOnly();
-                logger.log(Level.SEVERE, "failed adding zones to event map : " + e.getMessage());
-                return new Response<>(false, "failed to add zones to event map : " + e.getMessage());
-            }});
+                    if (!hasStanding && !hasSeating) {
+                        logger.severe("No zones provided to add");
+                        return new Response<>(false, "No zones provided to add");
+                    }
+
+                    List<Zone> zones = map.getZones();
+                    if (hasStanding) {
+                        for (StandingZoneDTO standingZoneDTO : standingZone) {
+                            zones.add(new StandingZone(standingZoneDTO));
+                        }
+                    }
+
+                    if (hasSeating) {
+                        for (SeatingZoneDTO seatingZoneDTO : seatingZone) {
+                            zones.add(new SeatingZone(seatingZoneDTO));
+                        }
+                    }
+
+                    eventRepo.store(event);
+                    logger.log(Level.INFO, "Zones added to event map successfully");
+                    return new Response<>(true, "Zones added to event map successfully");
+
+                } catch (NoSuchElementException e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "event not found: " + e.getMessage());
+                    return new Response<>(false, "Event not found");
+
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "failed adding zones to event map : " + e.getMessage());
+                    return new Response<>(false, "failed to add zones to event map : " + e.getMessage());
+                }});
+        });
+    }
+    public Response<Boolean> removeZonesToEventMap(String token, Integer eventId, Integer zoneId) {
+        return RetryHelper.executeWithRetry(() ->
+        {
+            logger.log(Level.INFO, "removeZonesToEventMap called");
+            String role = getValidatedRole(token);
+            if (role == null) {
+                logger.log(Level.SEVERE, "Invalid token");
+                return new Response<>(false, "Invalid token");
+            }
+            // check valid token
+            int userId = getUserIdFromToken(token);
+            if (userId == -1) {
+                logger.severe("Only members can remove zones to events map");
+                return new Response<>(false, "Only members can remove zones to events map");
+            }
+            if (suspensionRepo.haveActiveSuspension(userId)) {
+                logger.severe("User does not have write access caused by suspension");
+                return new Response<>(null, "user does not have write access caused by suspension.");
+            }
+            return  transactionTemplate.execute(status -> {
+                try {
+                    Event event = eventRepo.findById(eventId);
+
+                    // check appropriate permission
+                    Company company = companyRepo.findById(event.getCompanyId());
+                    if (!company.checkPermission(userId, CREATE_EVENT)) {
+                        logger.severe("User does not have permission to remove zones to event map");
+                        return new Response<>(false, "Permission required");
+                    }
+
+                    EventMap map = event.getMap();
+                    if (map == null) {
+                        logger.severe("Event map not defined yet");
+                        return new Response<>(false, "Event map not defined yet");
+                    }
+
+                    if (!event.isActive()) {
+                        logger.severe("Event is not active yet, cannot remove zones");
+                        return new Response<>(false, "Event is not active yet, cannot remove zones");
+                    }
+                    Zone zoneToRemove=map.getZoneById(zoneId);
+                    if(zoneToRemove==null){
+                        logger.severe("Zone that requested to remove does not exist in map");
+                        return new Response<>(false,"Zone that requested to remove does not exist in map");
+                    }
+
+                    for(Ticket ticket:zoneToRemove.getTickets()){
+                        if(ticket.getStatus()!=TicketStatus.AVAILABLE){
+                            logger.severe("Some of the tickets are already bought or held by an active order");
+                            return new Response<>(false,"Some of the tickets are already bought or held by an active order");
+                        }
+                    }
+                    map.removeZone(zoneId);
+                    event.setMap(map);
+                    eventRepo.store(event);
+                    logger.log(Level.INFO, "Zones removed to event map successfully");
+                    return new Response<>(true, "Zones removed to event map successfully");
+
+                } catch (NoSuchElementException e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "event not found: " + e.getMessage());
+                    return new Response<>(false, "Event not found");
+
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "failed removing zones to event map : " + e.getMessage());
+                    return new Response<>(false, "failed to remove zones to event map : " + e.getMessage());
+                }});
         });
     }
 

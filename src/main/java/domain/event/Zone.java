@@ -33,6 +33,7 @@ public abstract class Zone {
         // for JPA
     }
 
+
     public Zone(String name, double price, ElementPosition elementPosition) {
         this.name = name;
         this.price = price;
