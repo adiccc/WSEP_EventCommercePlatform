@@ -12,7 +12,7 @@ system:
 
 # ── Active order ──────────────────────────────────────────────────────────────
 active-order:
-  capacity: 1
+  capacity: 20
   selecting-timeout-minutes: 5
   checkout-timeout-minutes: 10
   warning-before-expiry-minutes: 1
