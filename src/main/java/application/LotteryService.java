@@ -531,23 +531,22 @@ public class LotteryService {
 
     public Response<Boolean> canRegisterToLottery(String token, int eventId) {
         return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
-
-            logger.log(Level.INFO, "canRegisterToLottery called");
-
-            if (getValidatedRole(token) == null) {
-                return new Response<>(null, "Invalid token");
-            }
-
-            int userId = getUserIdFromToken(token);
-            if (userId == -1) {
-                return new Response<>(null, "User is not logged in");
-            }
-
-            if (suspensionRepo.haveActiveSuspension(userId)) {
-                return new Response<>(null, "user does not have write access caused by suspension.");
-            }
-
             try {
+                logger.log(Level.INFO, "canRegisterToLottery called");
+
+                if (getValidatedRole(token) == null) {
+                    return new Response<>(null, "Invalid token");
+                }
+
+                int userId = getUserIdFromToken(token);
+                if (userId == -1) {
+                    return new Response<>(null, "User is not logged in");
+                }
+
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    return new Response<>(null, "user does not have write access caused by suspension.");
+                }
+
                 Event event = eventRepo.findById(eventId);
 
                 if (!event.hasLottery()) {
