@@ -1,5 +1,6 @@
 package infrastructure.inMemory;
 
+import UI.Views.CreateEventView;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.event.*;
@@ -19,6 +20,7 @@ public class EventRepoImpl implements IEventRepo {
     Map<Integer,Event> events; // key: eventId, value: event
     private final AtomicInteger eventIdGenerator = new AtomicInteger(1);
     private final AtomicInteger ticketIdGenerator = new AtomicInteger(1);
+    private final AtomicInteger zoneIdGenerator=new AtomicInteger(1);
 
 
     public EventRepoImpl() {
@@ -57,6 +59,7 @@ public class EventRepoImpl implements IEventRepo {
             entity.setId(id);
             if(entity.getEventMap()!=null) {
                 for (Zone z : entity.getEventMap().getZones()) {
+                    z.setId(zoneIdGenerator.getAndIncrement());
                     for (Ticket t : z.getTickets()) {
                         t.setId(ticketIdGenerator.getAndIncrement());
                     }
@@ -67,6 +70,8 @@ public class EventRepoImpl implements IEventRepo {
             return;
         }else if(entity.getEventMap()!=null) {
             for(Zone z: entity.getEventMap().getZones()){
+                if(z.getId()==null)
+                    z.setId(zoneIdGenerator.getAndIncrement());
                 for(Ticket t : z.getTickets()){
                     if (t.getId() == null) {
                         t.setId(ticketIdGenerator.getAndIncrement());

@@ -455,6 +455,7 @@ public class EventCompanyManageService {
                         }
                     }
                     map.removeZone(zoneId);
+                    event.setMap(map);
                     eventRepo.store(event);
                     logger.log(Level.INFO, "Zones removed to event map successfully");
                     return new Response<>(true, "Zones removed to event map successfully");
