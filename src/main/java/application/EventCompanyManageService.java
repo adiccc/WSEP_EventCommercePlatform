@@ -414,8 +414,8 @@ public class EventCompanyManageService {
             // check valid token
             int userId = getUserIdFromToken(token);
             if (userId == -1) {
-                logger.severe("Only members can add zones to events map");
-                return new Response<>(false, "Only members can add zones to events map");
+                logger.severe("Only members can remove zones to events map");
+                return new Response<>(false, "Only members can remove zones to events map");
             }
             if (suspensionRepo.haveActiveSuspension(userId)) {
                 logger.severe("User does not have write access caused by suspension");
@@ -473,8 +473,8 @@ public class EventCompanyManageService {
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
-                    logger.log(Level.SEVERE, "failed adding zones to event map : " + e.getMessage());
-                    return new Response<>(false, "failed to add zones to event map : " + e.getMessage());
+                    logger.log(Level.SEVERE, "failed removing zones to event map : " + e.getMessage());
+                    return new Response<>(false, "failed to remove zones to event map : " + e.getMessage());
                 }});
         });
     }
