@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @DiscriminatorValue("SEATING")
 public class SeatingZone extends Zone {
     //for JPA, we need to store tickets in a list, but we will maintain a transient map for efficient access
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @JoinColumn(name = "zone_id")
     private List<SeatingTicket> tickets = new ArrayList<>();
     @Transient

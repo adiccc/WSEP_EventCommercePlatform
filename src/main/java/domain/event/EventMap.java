@@ -19,7 +19,7 @@ public class EventMap {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "event_map_id")
     private Integer id;
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @JoinColumn(name = "event_map_id")
     private List<Zone> zones = new ArrayList<>();
     @Embedded
@@ -28,7 +28,7 @@ public class EventMap {
             @AttributeOverride(name = "y", column = @Column(name = "stage_y", nullable = false))
     })
     private ElementPosition stage;
-    @ElementCollection(fetch = FetchType.LAZY)
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "event_map_entries",
             joinColumns = @JoinColumn(name = "event_map_id")

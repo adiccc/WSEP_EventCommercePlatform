@@ -511,24 +511,17 @@ public class EventCompanyManageService {
                     orders = event.getOrders();
                     HashMap<String,Long> identifierToMsgId=new HashMap<>();
                     for(Order order : orders){
-                        try {
-                            String purchaserIdentifier = order.getUserIdentifier();
-                            NotifyPayload payload = new NotifyPayload("Event " + event.getName() + "cancelled", eventId, null);
-                            NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP,payload);
-                            // check if it is a user
-                            Member member = userRepo.findUserByEmail(purchaserIdentifier);
-                            boolean isGuest = (member == null);
-                            // save the message as delayed for members
-                            if (!isGuest) {
-                                Response<Long> msgIdRes=saveDelayedNotificationAsPending(purchaserIdentifier, notifyDTO);
-                                if(msgIdRes!=null && msgIdRes.getValue()!=null)
-                                    identifierToMsgId.put(purchaserIdentifier,msgIdRes.getValue());
-                            }
-                            // make the refund (for members and guests)
-                            processRefund(token, event.getId(), order.getOrderId());
-                        } catch (Exception e) {
-                            logger.log(Level.SEVERE, "Failed to process automatic refund for order " +
-                                    order.getOrderId() + " in event " + event.getId() + ": " + e.getMessage());
+                        String purchaserIdentifier = order.getUserIdentifier();
+                        NotifyPayload payload = new NotifyPayload("Event " + event.getName() + "cancelled", eventId, null);
+                        NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP,payload);
+                        // check if it is a user
+                        Member member = userRepo.findUserByEmail(purchaserIdentifier);
+                        boolean isGuest = (member == null);
+                        // save the message as delayed for members
+                        if (!isGuest) {
+                            Response<Long> msgIdRes=saveDelayedNotificationAsPending(purchaserIdentifier, notifyDTO);
+                            if(msgIdRes!=null && msgIdRes.getValue()!=null)
+                                identifierToMsgId.put(purchaserIdentifier,msgIdRes.getValue());
                         }
                     }
                     logger.log(Level.INFO, "Orders deleted successfully");
@@ -555,6 +548,17 @@ public class EventCompanyManageService {
             //transaction succeed - send pending message for all purchasers
             // keep in mind that if the res was not null then the logic action succeed there for there is an event with this eventId
             Event event = eventRepo.findById(eventId);
+            Response<List<Order>> relevantOrder=transactionTemplate.execute(status -> new Response<>(event.getOrders(),"event orders"));
+            for(Order order:relevantOrder.getValue()){
+                try{
+                // make the refund (for members and guests)
+                processRefund(token, event.getId(), order.getOrderId());
+                } catch (Exception e) {
+                            logger.log(Level.SEVERE, "Failed to process automatic refund for order " +
+                                    order.getOrderId() + " in event " + event.getId() + ": " + e.getMessage());
+                }
+            }
+
             NotifyPayload payload = new NotifyPayload("Event " + event.getName() + "cancelled", eventId, null);
             NotifyDTO notifyDTO = new NotifyDTO(GENERAL_POPUP, payload);
             List<String> purchasers = eventRepo.getAllEventPurchasers(eventId);

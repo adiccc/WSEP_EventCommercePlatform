@@ -16,7 +16,7 @@ public class Lottery {
     // lottery
     @Column(nullable = false)
     private int capacity;
-    @ElementCollection(fetch = FetchType.LAZY)
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "lottery_registered_users",
             joinColumns = @JoinColumn(
@@ -29,7 +29,7 @@ public class Lottery {
     )
     @Column(name = "user_id", nullable = false)
     private List<Integer> registered;
-    @ElementCollection(fetch = FetchType.LAZY)
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "lottery_winners",
             joinColumns = @JoinColumn(
