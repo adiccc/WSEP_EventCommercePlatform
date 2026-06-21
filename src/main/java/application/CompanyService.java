@@ -1246,12 +1246,16 @@ public class CompanyService {
                 return Response.ok(result);
             } catch (OptimisticLockingFailureException e) {
                 throw e;
+            } catch (TransientDataAccessException e) {
+                logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
+                throw e;
             } catch (Exception e) {
                 logger.severe("getMyCompanies failed: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
         });
     }
+
     public Response<Boolean> deactivateCompany(String ownerToken, int companyId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("deactivateCompany called");
