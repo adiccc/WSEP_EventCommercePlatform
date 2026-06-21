@@ -103,8 +103,8 @@ class EventServiceTest {
         activeEvent1Id = eventCompanyManageService.createEvent(validToken, company1 ,LocalDateTime.now().plusDays(10),"active event",LocalDateTime.now().plusDays(5),false, GeographicalArea.JERUSALEM, CategoryEvent.SPORTS).getValue();
         stage = new ElementPositionDTO(10, 20);
         entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
-        standingZones = List.of(new StandingZoneDTO(50, "VIP", 300.0, new ElementPositionDTO(1, 1)));
-        seatingZones = List.of(new SeatingZoneDTO(10, 20, "Regular", 100.0, new ElementPositionDTO(5, 5)));
+        standingZones = List.of(new StandingZoneDTO(-1,50, "VIP", 300.0, new ElementPositionDTO(1, 1)));
+        seatingZones = List.of(new SeatingZoneDTO(-1,10, 20, "Regular", 100.0, new ElementPositionDTO(5, 5)));
         eventCompanyManageService.DefineVenueAndSeatingMap(validToken, activeEvent1Id, stage, entries, standingZones, seatingZones);
 
         // Inactive event (company1) - since we havent define map for this event, it will be inactive

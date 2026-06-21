@@ -159,8 +159,8 @@ class EventCompanyManageServiceTest {
         eventDate=LocalDateTime.now().plusDays(10);
         stage = new ElementPositionDTO(10, 20);
         entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
-        standingZones = List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1)));
-        seatingZones = List.of(new SeatingZoneDTO(10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
+        standingZones = List.of(new StandingZoneDTO(-1,200, "floor", 100.0, new ElementPositionDTO(1, 1)));
+        seatingZones = List.of(new SeatingZoneDTO(-1,10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
 
         UserDTO managerDTO = new UserDTO("manager_event@test.com", "Manager", "Test", "Password123!", 1, 1, 2000, "City", "050-555-9999");
         userService.registerUser(null, managerDTO);
@@ -655,8 +655,8 @@ class EventCompanyManageServiceTest {
         eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
 
         // Create new zones to add
-        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
-        List<SeatingZoneDTO> newSeatingZones = List.of(new SeatingZoneDTO(5, 10, "VIP", 500.0, new ElementPositionDTO(10, 10)));
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(-1,500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+        List<SeatingZoneDTO> newSeatingZones = List.of(new SeatingZoneDTO(-1,5, 10, "VIP", 500.0, new ElementPositionDTO(10, 10)));
 
         // Act
         Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
@@ -681,7 +681,7 @@ class EventCompanyManageServiceTest {
         // Arrange: Define the map with the authorized user
         eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
 
-        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(-1,500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
 
         // Act: Try to add zones with an unauthorized user (validToken2)
         Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
@@ -702,7 +702,7 @@ class EventCompanyManageServiceTest {
         eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, eventId, stage, entries, standingZones, seatingZones);
 
         // Prepare the new zones we want to add
-        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(-1,500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
 
         // Act: Attempt to add the new zones to the existing map without being logged in (using invalidToken)
         Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
@@ -720,7 +720,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenNonExistingEvent_WhenAddZonesToEventMap_ThenEventNotFoundErrorIsReturned() {
         // Arrange
-        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(-1,500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
 
         // Act
         Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
@@ -756,7 +756,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenEventWithoutMap_WhenAddZonesToEventMap_ThenNoMapDefinedErrorIsReturned() {
         // Arrange: Use the event from setUp() that doesn't have a map yet
-        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(-1,500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
 
         // Act
         Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
@@ -782,7 +782,7 @@ class EventCompanyManageServiceTest {
         // Define map for the lottery event
         eventCompanyManageService.DefineVenueAndSeatingMap(validToken1, lotteryEventId, stage, entries, standingZones, seatingZones);
 
-        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(-1,500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
 
         // Act
         Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
@@ -1278,7 +1278,7 @@ class EventCompanyManageServiceTest {
     @Test
     void GivenHighLoad_WhenManagerDeletesEventAndAddsZoneSimultaneously_ThenEventIsSafelyDeleted() throws InterruptedException {
         // Arrange: Prepare new zones to add
-        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(-1,500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
 
         // Setup concurrency tools
         ExecutorService executor = Executors.newFixedThreadPool(2);
@@ -2445,7 +2445,7 @@ class EventCompanyManageServiceTest {
                 newEventId,
                 new ElementPositionDTO(10, 20),
                 List.of(new ElementPositionDTO(0, 0)),
-                List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1))),
+                List.of(new StandingZoneDTO(-1,200, "floor", 100.0, new ElementPositionDTO(1, 1))),
                 new ArrayList<>()
         );
 
