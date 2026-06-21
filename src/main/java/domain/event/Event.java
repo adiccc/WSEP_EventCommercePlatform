@@ -28,7 +28,7 @@ public class Event {
     private int companyId;
     @Column(nullable = false)
     private int creatorId;
-    @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @JoinColumn(name = "event_map_id")
     private EventMap eventMap;
     @Transient
@@ -57,7 +57,7 @@ public class Event {
     private CategoryEvent categoryEvent;
     @OneToMany(
             cascade = {CascadeType.PERSIST, CascadeType.MERGE},
-            fetch = FetchType.LAZY
+            fetch = FetchType.EAGER
     )
     @JoinColumn(name = "event_id")
     private List<Order> orders;

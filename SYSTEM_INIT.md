@@ -1,38 +1,49 @@
 # System Initialization Guide
 
-This document explains how the system seeds its initial state on startup, how to configure it, and how to extend it with new operations.
+This project is a Spring Boot + Vaadin event-commerce system. It boots from `app.App`, reads runtime config from `src/main/resources/config.yml`, and can seed initial data from `src/main/resources/init-state.json` when started with `--db=empty`.
 
 ---
 
 ## How It Works
 
-On every startup, `SystemInitializer` reads `src/main/resources/init-state.json` and executes each operation in order. Each operation is handled by a dedicated handler bean in `app/init/handlers/`. Results can be stored and referenced by later steps using `${varName}` substitution.
+Configuration is loaded through Spring Boot properties:
 
-**Fail-fast:** if any operation fails, startup is aborted immediately with an `InitializationException`. The system will not start in a broken state.
+- `system.*` is bound by [`SystemProperties`](src/main/java/app/config/SystemProperties.java)
+- `active-order.*` is bound by [`ActiveOrderProperties`](src/main/java/app/config/ActiveOrderProperties.java)
 
-To disable initialization entirely (e.g. in tests), set `system.init-enabled=false`.
+Both [`src/main/resources/application.properties`](src/main/resources/application.properties) and [`src/test/resources/application.properties`](src/test/resources/application.properties) import `classpath:config.yml`.
+
+Startup seeding is handled by [`SystemInitializer`](src/main/java/app/init/SystemInitializer.java):
+
+- it only runs when `system.init-enabled=true` or the property is absent
+- it only loads the init file when the app is started with `--db=empty`
+- it uses `system.init-state-file` unless `--init-file=...` is provided
+- it parses the file as JSON into [`InitStateFile`](src/main/java/app/init/InitStateFile.java)
+- each object in the `operations` array is dispatched to a matching handler in `src/main/java/app/init/handlers/`
+- values stored with `"store"` can be reused later via `${name}`
+
+**Fail-fast:** if any operation fails, startup aborts with an `InitializationException`.
 
 ---
 
 ## Correctness Requirements
 
-The following constraints **must** be satisfied by `init-state.json`, otherwise the system will either fail to start or start in a broken state.
+The following constraints **must** be satisfied by `init-state.json`, otherwise the system will either fail to start
 
 ### 1. Admin user must be registered
 
-Admin emails are configured in `config.yml` under `system.admin-emails` (validated at startup by `@NotEmpty` — the app will not start if the list is missing or empty):
+`AuthConfig` is configured with a hardcoded admin email:
 
-```yaml
-system:
-  admin-emails:
-    - systemadmin@demo.com
+```java
+// src/main/java/app/config/AuthConfig.java
+Set.of("systemadmin@demo.com")
 ```
 
-`init-state.json` **must** register a user whose email matches one of the entries in `system.admin-emails`. If the admin email is changed in `config.yml`, the corresponding `register` step in `init-state.json` must be updated to match.
+`init-state.json` **must** register a user with that exact email before startup completes. If the admin email is changed in `AuthConfig`, the corresponding `register` step in `init-state.json` must be updated to match.
 
 ### 2. Queue capacity must be positive
 
-`config.yml` must have `system.max-concurrent-users` set to a value greater than zero, or the WebQueue will fail to initialize.
+`config.yml` must have `system.max-concurrent-users` set to a value greater than zero, or the WebQueue will fail to initialize. In the current configuration this value is `50`.
 
 ### 3. Variables must be stored before use
 
@@ -40,9 +51,63 @@ If a step references `${varName}`, an earlier step must have used `"store": "var
 
 ### 4. All operations must succeed
 
-Every handler throws `InitializationException` on failure. There is no partial initialization — either all steps succeed or the app does not start. Wrap risky operations in a separate optional file if needed.
+Every handler throws `InitializationException` on failure. There is no partial initialization — either all steps succeed or the app does not start. 
 
 ---
+
+## Prerequisites
+
+- Java 17
+- Maven 3.x
+- No external DB is required for the default local setup
+- A local `.env` file for environment-specific configuration. To run the system locally, create a `.env` file based on the provided `.env.example` file and fill in the required values.
+
+## Run Locally
+
+The standard Maven commands are:
+
+```bash
+mvn clean install
+mvn spring-boot:run
+```
+
+The default application profile list in [`src/main/resources/application.properties`](src/main/resources/application.properties) is:
+
+- `memory`
+- `user-db`
+- `suspension-db`
+- `lottery-db`
+- `company-db`
+- `event-db`
+- `prod`
+- `activeorder-db`
+
+That means the default local run enables the production payment/ticket integrations. To seed data, start with `--db=empty`:
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.arguments="--db=empty"
+```
+
+To seed from a custom file:
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.arguments="--db=empty --init-file=/absolute/path/to/init-state.json"
+```
+
+## Run Tests
+
+Tests use [`src/test/resources/application.properties`](src/test/resources/application.properties), which:
+
+- imports `classpath:config.yml`
+- enables `system.init-enabled=false`
+- uses H2 in-memory DB
+- enables the `test` profile
+
+Run them with:
+
+```bash
+mvn test
+```
 
 ## Startup Arguments
 
@@ -79,21 +144,6 @@ java -jar app.jar --init-file=/home/user/custom-init.json
 java -jar app.jar --init-file=classpath:test-init.json
 ```
 
-### `--config=<path>`
-
-Overrides the config file (`config.yml`). The path is translated to `--spring.config.additional-location`, so values in the custom file take precedence over the defaults. If omitted, `classpath:config.yml` is used.
-
-| Value | Behaviour |
-|-------|-----------|
-| *(omitted)* | Uses the default `config.yml` |
-| `myconfig.yml` | Loads from the filesystem (relative or absolute path) |
-| `classpath:test-config.yml` | Loads from the classpath |
-
-```
-java -jar app.jar --config=/path/to/custom-config.yml
-java -jar app.jar --config=classpath:test-config.yml
-```
-
 ### Combined examples
 
 ```
@@ -103,34 +153,76 @@ java -jar app.jar --db=empty
 # Fresh start with custom seed data
 java -jar app.jar --db=empty --init-file=/path/to/demo-data.json
 
-# Fresh start using a custom config and custom init file
-java -jar app.jar --db=empty --config=/path/to/config.yml --init-file=/path/to/init.json
-
 # Keep existing DB, run a different init script
 java -jar app.jar --init-file=/path/to/extra-setup.json
 ```
 
 ---
 
-## Configuration: `config.yml`
+## Configuration File
 
-Located at `src/main/resources/config.yml`.
+The runtime configuration file is [`src/main/resources/config.yml`](src/main/resources/config.yml). It is imported through `spring.config.import=classpath:config.yml`.
 
 ```yaml
 system:
-  max-concurrent-users: 50           # WebQueue capacity — max simultaneous users in system
-  active-order-ttl-minutes: 10       # Minutes before an unpaid active order expires
-  init-state-file: classpath:init-state.json  # Path to the init operations file
-  init-enabled: true                 # Set to false to skip initialization (tests, etc.)
-  admin-emails:                      # At least one required — startup fails if missing
-    - systemadmin@demo.com
+  max-concurrent-users: 50
+  init-state-file: classpath:init-state.json
+  access-code-chars: "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+  access-code-length: 6
+
+active-order:
+  capacity: 20
+  selecting-timeout-minutes: 5
+  checkout-timeout-minutes: 10
+  warning-before-expiry-minutes: 1
 ```
+
+### `system.*`
+
+- `max-concurrent-users` required, positive integer
+- `init-state-file` required, classpath or file path
+- `access-code-chars` required, non-blank string
+- `access-code-length` required, positive integer
+
+### `active-order.*`
+
+- `capacity` required, positive integer
+- `selecting-timeout-minutes` required, positive integer
+- `checkout-timeout-minutes` required, positive integer
+- `warning-before-expiry-minutes` required, positive integer and must be less than `checkout-timeout-minutes`
 
 ---
 
-## Init State File: `init-state.json`
+## Initial-State File
 
-Located at `src/main/resources/init-state.json`.
+The default init file is [`src/main/resources/init-state.json`](src/main/resources/init-state.json).
+
+Format:
+
+- root object with a single required field `operations`
+- `operations`: array of operation objects
+- each operation supports:
+  - `type` required, string
+  - `params` optional, object of string values
+  - `store` optional, string
+
+Variable substitution is exact-match only. A value like `"${guest}"` resolves to a stored value; partial interpolation is not supported.
+
+Supported operation types in the current code:
+
+- `enter`
+- `register`
+- `login`
+- `get-user-id`
+- `open-company`
+- `appoint-owner`
+- `appoint-manager`
+- `add-company-rule`
+- `create-event`
+- `define-venue`
+- `add-event-discount`
+- `create-lottery`
+- `add-company-discount`
 
 ### Structure
 
@@ -158,10 +250,17 @@ Use `"store"` to capture a result, then reference it with `${varName}` in any la
 
 ```json
 { "type": "enter",        "store": "guest" },
-{ "type": "register",     "params": { "guestToken": "${guest}", "email": "..." } },
-{ "type": "login",        "params": { "email": "...", "password": "..." }, "store": "token" },
-{ "type": "open-company", "params": { "token": "${token}", ... }, "store": "companyId" },
-{ "type": "create-event", "params": { "token": "${token}", "companyId": "${companyId}", ... }, "store": "eventId" }
+{ "type": "register",     "params": { "guestToken": "${guest}", "email": "systemadmin@demo.com", "firstName": "System", "lastName": "Admin", "password": "Admin123!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "1 Admin St", "phone": "050-000-0000" } },
+{ "type": "register",     "params": { "guestToken": "${guest}", "email": "u1@demo.com", "firstName": "U1", "lastName": "User", "password": "U1user1!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "1 First St", "phone": "050-001-0001" } },
+{ "type": "register",     "params": { "guestToken": "${guest}", "email": "u2@demo.com", "firstName": "U2", "lastName": "User", "password": "U2user1!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "2 Second St", "phone": "050-002-0002" } },
+{ "type": "register",     "params": { "guestToken": "${guest}", "email": "u3@demo.com", "firstName": "U3", "lastName": "User", "password": "U3user1!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "3 Third St", "phone": "050-003-0003" } },
+{ "type": "register",     "params": { "guestToken": "${guest}", "email": "u4@demo.com", "firstName": "U4", "lastName": "User", "password": "U4user1!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "4 Fourth St", "phone": "050-004-0004" } },
+{ "type": "login",        "params": { "email": "u1@demo.com", "password": "U1user1!" }, "store": "u1Token" },
+{ "type": "open-company", "params": { "token": "${u1Token}", "companyId": "1", "companyName": "p1", "email": "p1@company.com", "phone": "050-100-0001", "bankAccount": "IL-1111-0001" } },
+{ "type": "login",        "params": { "email": "u2@demo.com", "password": "U2user1!" }, "store": "u2Token" },
+{ "type": "get-user-id",  "params": { "token": "${u2Token}" }, "store": "u2Id" },
+{ "type": "appoint-owner","params": { "ownerToken": "${u1Token}", "appointeeToken": "${u2Token}", "companyId": "1", "appointeeId": "${u2Id}" } },
+{ "type": "create-event", "params": { "token": "${u2Token}", "companyId": "1", "name": "e1", "date": "+1M", "saleStart": "-1D", "area": "CENTER", "category": "LIVEMUSIC" }, "store": "e1Id" }
 ```
 
 ### Date Format (for `create-event`)
@@ -176,6 +275,18 @@ Relative dates are specified as sign + number + unit:
 | `+3m`  | now + 3 minutes  |
 | `-1D`  | now − 1 day      |
 | `-55m` | now − 55 minutes |
+
+### Current Seed Data
+
+The bundled `init-state.json` seeds:
+
+- `systemadmin@demo.com` as the admin user
+- `u1@demo.com`, `u2@demo.com`, `u3@demo.com`, and `u4@demo.com` as additional users
+- company `1`
+- company `1` owner and manager appointments
+- event `e1`
+- a default venue for `e1`
+- company discount `sale123`
 
 ---
 
@@ -209,7 +320,7 @@ Registers a new user account.
 | `phone`      | Yes      |
 
 ```json
-{ "type": "register", "params": { "guestToken": "${guest}", "email": "alice@demo.com", "firstName": "Alice", "lastName": "Cohen", "password": "Alice123!", "birthDay": "1", "birthMonth": "1", "birthYear": "1995", "address": "123 Main St", "phone": "050-123-4567" } }
+{ "type": "register", "params": { "guestToken": "${guest}", "email": "u1@demo.com", "firstName": "U1", "lastName": "User", "password": "U1user1!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "1 First St", "phone": "050-001-0001" } }
 ```
 
 ---
@@ -225,7 +336,7 @@ Logs in and returns a session token.
 **Returns:** session token
 
 ```json
-{ "type": "login", "params": { "email": "alice@demo.com", "password": "Alice123!" }, "store": "aliceToken" }
+{ "type": "login", "params": { "email": "u1@demo.com", "password": "U1user1!" }, "store": "u1Token" }
 ```
 
 ---
@@ -240,7 +351,7 @@ Returns the integer user ID for a logged-in token. Needed before `appoint-owner`
 **Returns:** user ID (integer)
 
 ```json
-{ "type": "get-user-id", "params": { "token": "${aliceToken}" }, "store": "aliceId" }
+{ "type": "get-user-id", "params": { "token": "${u2Token}" }, "store": "u2Id" }
 ```
 
 ---
@@ -260,7 +371,7 @@ Creates a production company.
 **Returns:** company ID (integer)
 
 ```json
-{ "type": "open-company", "params": { "token": "${aliceToken}", "companyId": "1", "companyName": "SoundWave Events", "email": "info@sw.com", "phone": "050-111-0001", "bankAccount": "IL-1234-001" } }
+{ "type": "open-company", "params": { "token": "${u1Token}", "companyId": "1", "companyName": "p1", "email": "p1@company.com", "phone": "050-100-0001", "bankAccount": "IL-1111-0001" } }
 ```
 
 ---
@@ -276,7 +387,7 @@ Requests and auto-accepts an owner appointment (both steps handled atomically).
 | `appointeeId`    | Yes — integer, use `get-user-id` first |
 
 ```json
-{ "type": "appoint-owner", "params": { "ownerToken": "${aliceToken}", "appointeeToken": "${daveToken}", "companyId": "1", "appointeeId": "${daveId}" } }
+{ "type": "appoint-owner", "params": { "ownerToken": "${u1Token}", "appointeeToken": "${u2Token}", "companyId": "1", "appointeeId": "${u2Id}" } }
 ```
 
 ---
@@ -295,7 +406,7 @@ Requests and auto-accepts a manager appointment with specific permissions.
 Available permissions: `VIEW_ORDERS_HISTORY`, `CREATE_EVENT`, `MANAGE_STAFF`, `VIEW_INCOME_REPORTS`
 
 ```json
-{ "type": "appoint-manager", "params": { "ownerToken": "${aliceToken}", "appointeeToken": "${eveToken}", "companyId": "1", "appointeeId": "${eveId}", "permissions": "CREATE_EVENT" } }
+{ "type": "appoint-manager", "params": { "ownerToken": "${u2Token}", "appointeeToken": "${u3Token}", "companyId": "1", "appointeeId": "${u3Id}", "permissions": "CREATE_EVENT,DELETE_EVENT" } }
 ```
 
 ---
@@ -311,7 +422,7 @@ Adds a purchase policy rule to a company.
 | `value`     | Yes      |
 
 ```json
-{ "type": "add-company-rule", "params": { "token": "${aliceToken}", "companyId": "1", "ruleType": "MIN_AGE", "value": "18" } }
+{ "type": "add-company-rule", "params": { "token": "${u2Token}", "companyId": "1", "ruleType": "MIN_AGE", "value": "18" } }
 ```
 
 ---
@@ -333,7 +444,7 @@ Creates an event under a company. The event is inactive until `define-venue` is 
 **Returns:** event ID (integer)
 
 ```json
-{ "type": "create-event", "params": { "token": "${aliceToken}", "companyId": "1", "name": "Rock Night", "date": "+1M", "saleStart": "-1D", "area": "CENTER", "category": "LIVEMUSIC" }, "store": "rockEventId" }
+{ "type": "create-event", "params": { "token": "${u2Token}", "companyId": "1", "name": "e1", "date": "+1M", "saleStart": "-1D", "area": "CENTER", "category": "LIVEMUSIC" }, "store": "e1Id" }
 ```
 
 ---
@@ -347,7 +458,7 @@ Activates an event by attaching a default seating map. **Must be called after `c
 | `eventId` | Yes      |
 
 ```json
-{ "type": "define-venue", "params": { "token": "${aliceToken}", "eventId": "${rockEventId}" } }
+{ "type": "define-venue", "params": { "token": "${u2Token}", "eventId": "${e1Id}", "standingCapacity": "30", "standingPrice": "50.0", "standingName": "Standing", "seatingRows": "10", "seatingCols": "10", "seatingPrice": "100.0", "seatingName": "Seating" } }
 ```
 
 ---
@@ -364,7 +475,7 @@ Adds a coupon code discount to an event.
 | `expiryDaysFromNow` | Yes      |
 
 ```json
-{ "type": "add-event-discount", "params": { "token": "${aliceToken}", "eventId": "${rockEventId}", "couponCode": "ROCK50", "percent": "50.0", "expiryDaysFromNow": "30" } }
+{ "type": "add-event-discount", "params": { "token": "${u2Token}", "eventId": "${e1Id}", "couponCode": "sale123", "percent": "20.0", "expiryDaysFromNow": "365" } }
 ```
 
 ---
@@ -381,7 +492,7 @@ Creates a scheduled lottery for an event. Requires `hasLottery: true` on the eve
 | `expirationHours`| Yes      |
 
 ```json
-{ "type": "create-lottery", "params": { "token": "${aliceToken}", "eventId": "${lotteryEventId}", "capacity": "1", "minutesFromNow": "2", "expirationHours": "24" } }
+{ "type": "create-lottery", "params": { "token": "${u2Token}", "eventId": "${e1Id}", "capacity": "1", "minutesFromNow": "2", "expirationHours": "24" } }
 ```
 
 ---
@@ -419,14 +530,3 @@ public class MyOperationHandler implements InitOperationHandler {
 No other changes needed — Spring auto-discovers the handler on next startup.
 
 ---
-
-## Demo Users (seeded by `init-state.json`)
-
-| Email                  | Password    | Role                        |
-|------------------------|-------------|-----------------------------|
-| `systemadmin@demo.com` | `Admin123!` | System admin (**required**) |
-| `alice@demo.com`       | `Alice123!` | Owner of companies 1–4      |
-| `bob@demo.com`         | `Bob1234!`  | Owner of companies 5–7      |
-| `charlie@demo.com`     | `Charlie1!` | Owner of companies 8–10     |
-| `dave@demo.com`        | `Dave123!`  | Co-owner of company 1       |
-| `eve@demo.com`         | `Eve1234!`  | Manager of company 1        |

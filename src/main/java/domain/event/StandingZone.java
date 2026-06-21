@@ -13,7 +13,7 @@ import java.util.*;
 public class StandingZone extends Zone {
     @Column(name = "capacity")
     private int capacity;
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @JoinColumn(name = "zone_id")
     private List<StandingTicket> tickets = new ArrayList<>();
     @Transient

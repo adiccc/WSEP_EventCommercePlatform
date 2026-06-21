@@ -19,7 +19,7 @@ public class EventMap {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "event_map_id")
     private Integer id;
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @JoinColumn(name = "event_map_id")
     private List<Zone> zones = new ArrayList<>();
     @Embedded
@@ -28,7 +28,7 @@ public class EventMap {
             @AttributeOverride(name = "y", column = @Column(name = "stage_y", nullable = false))
     })
     private ElementPosition stage;
-    @ElementCollection(fetch = FetchType.LAZY)
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "event_map_entries",
             joinColumns = @JoinColumn(name = "event_map_id")
@@ -240,6 +240,26 @@ public class EventMap {
         }
 
         return new ActiveOrderSelectionDTO(seats, standingTicketsByZone);
+    }
+
+    public Zone getZoneById(Integer zoneId){
+        for(Zone zone: zones){
+            if(zone.getId()==zoneId){
+                return zone;
+            }
+        }
+        return null;
+    }
+
+    public boolean removeZone(Integer zoneId){
+        for(Zone zone: zones){
+            if(zone.getId()==zoneId){
+                zones.remove(zone);
+                return true;
+            }
+        }
+        return false;
+
     }
 
 }
