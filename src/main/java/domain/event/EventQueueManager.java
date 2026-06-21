@@ -37,4 +37,8 @@ public class EventQueueManager {
     public boolean isEmpty(int eventId) {
         return getQueue(eventId).isEmpty();
     }
+
+    public boolean isFirst(int eventId, String s) {
+        return getQueue(eventId).isFirst(s);
+    }
 }
