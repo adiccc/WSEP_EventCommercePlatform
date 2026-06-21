@@ -3,6 +3,8 @@
 
     { "type": "enter", "store": "guest" },
 
+    { "type": "register", "params": { "guestToken": "${guest}", "email": "systemadmin@demo.com", "firstName": "System", "lastName": "Admin", "password": "Admin123!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "1 Admin St", "phone": "050-000-0000" } },
+
     { "type": "register", "params": { "guestToken": "${guest}", "email": "u1@demo.com", "firstName": "U1", "lastName": "User", "password": "U1user1!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "1 First St",  "phone": "050-001-0001" } },
     { "type": "register", "params": { "guestToken": "${guest}", "email": "u2@demo.com", "firstName": "U2", "lastName": "User", "password": "U2user1!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "2 Second St", "phone": "050-002-0002" } },
     { "type": "register", "params": { "guestToken": "${guest}", "email": "u3@demo.com", "firstName": "U3", "lastName": "User", "password": "U3user1!", "birthDay": "1", "birthMonth": "1", "birthYear": "1990", "address": "3 Third St",  "phone": "050-003-0003" } },
@@ -20,7 +22,7 @@
     { "type": "login",       "params": { "email": "u3@demo.com", "password": "U3user1!" }, "store": "u3Token" },
     { "type": "get-user-id", "params": { "token": "${u3Token}" },                          "store": "u3Id"    },
 
-    { "type": "appoint-manager", "params": { "ownerToken": "${u2Token}", "appointeeToken": "${u3Token}", "companyId": "1", "appointeeId": "${u3Id}", "permissions": "MANAGE_EVENTS_INVENTORY,CREATE_EVENT,DELETE_EVENT" } },
+    { "type": "appoint-manager", "params": { "ownerToken": "${u2Token}", "appointeeToken": "${u3Token}", "companyId": "1", "appointeeId": "${u3Id}", "permissions": "CREATE_EVENT,DELETE_EVENT" } },
 
     { "type": "create-event", "params": { "token": "${u2Token}", "companyId": "1", "name": "e1", "date": "+1M", "saleStart": "-1D", "area": "CENTER", "category": "LIVEMUSIC" }, "store": "e1Id" },
     { "type": "define-venue", "params": { "token": "${u2Token}", "eventId": "${e1Id}", "standingCapacity": "30", "standingPrice": "50.0", "standingName": "Standing", "seatingRows": "10", "seatingCols": "10", "seatingPrice": "100.0", "seatingName": "Seating" } },

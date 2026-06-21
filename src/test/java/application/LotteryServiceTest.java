@@ -3,6 +3,7 @@ package application;
 import DTO.NotifyDTO;
 import DTO.NotifyType;
 import Log.LoggerSetup;
+import app.config.SystemProperties;
 import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.dataType.CategoryEvent;
@@ -71,6 +72,7 @@ class LotteryServiceTest {
         private INotifier notifier;
         private UserService userService;
         private TransactionTemplate transactionTemplate;
+        private ITicketSupply ticketSupply;
 
         @BeforeEach
         void setUp() {
@@ -86,9 +88,11 @@ class LotteryServiceTest {
                         TransactionCallback<?> callback = invocation.getArgument(0);
                         return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
                 });
+                ticketSupply = mock(ITicketSupply.class);
                 passwordEncoder = new PasswordEncoderUtil();
-                tokenService = new TokenService();
-                auth = new Auth(tokenService);
+
+
+                tokenService = new TokenService(createTestSystemProperties());                auth = new Auth(tokenService);
                 userService = new UserService(tokenService, auth, userRepo, passwordEncoder, notifier,transactionTemplate);
                 suspensionRepo = new SuspensionRepoImpl();
 
@@ -103,7 +107,7 @@ class LotteryServiceTest {
                 CompanyService companyService = new CompanyService(auth, companyRepo, userRepo, suspensionRepo,
                                 notifier,transactionTemplate);
                 eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,
-                                suspensionRepo, notifier, userRepo,transactionTemplate);
+                                suspensionRepo, notifier, userRepo,transactionTemplate,ticketSupply);
 
 
 
@@ -251,8 +255,15 @@ class LotteryServiceTest {
                         && notification.getPayload().getMessage() != null
                         && notification.getPayload().getMessage().contains("Your code is: ");
         }
-
-
+        private SystemProperties createTestSystemProperties() {
+                SystemProperties systemProperties = new SystemProperties();
+                systemProperties.setMaxConcurrentUsers(50);
+                systemProperties.setInitStateFile("classpath:init-state.json");
+                systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
+                systemProperties.setAccessCodeLength(6);
+                systemProperties.setTokenExpirationHours(24);
+                return systemProperties;
+        }
 
         @AfterEach
         void tearDown() {
@@ -928,7 +939,7 @@ class LotteryServiceTest {
                                 email, "Expired", "User", "pass", 1, 1, 1990, "Israel", "050-111-2233"));
 
                 // Arrange: Generate a real token that has ALREADY EXPIRED
-                TokenService testTokenService = new TokenService();
+                TokenService testTokenService = new TokenService(createTestSystemProperties());
                 String expiredToken = testTokenService.generateExpiredTokenForTest(email);
 
                 CountDownLatch tabLatch = new CountDownLatch(1);

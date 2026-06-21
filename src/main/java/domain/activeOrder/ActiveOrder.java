@@ -22,9 +22,6 @@ public class ActiveOrder {
     @Column(name = "event_id")
     private Integer eventId;
 
-    // tickets is a small collection that is read in almost every ActiveOrder code
-    // path (including the detached copies the repository hands back), so EAGER is a
-    // justified exception to the LAZY-collections default.
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "active_order_tickets",
@@ -39,8 +36,6 @@ public class ActiveOrder {
     @Column(name = "checkout_started_at")
     private LocalDateTime checkoutStartedAt;
 
-    // Optimistic locking. Kept as a primitive long to stay consistent with the rest
-    // of the domain (Lottery/Suspension) and the existing DTO/equals/in-memory repo.
     @Version
     @Column(name = "version")
     private long version;
@@ -52,21 +47,14 @@ public class ActiveOrder {
     @Column(name = "approved_checkout_price")
     private Double approvedCheckoutPrice;
 
-    private static final int SELECTING_TICKETS_TIMEOUT_MINUTES = 5;
-    private static final int CHECKOUT_TIMEOUT_MINUTES = 10;
-    private static final int WARNING_BEFORE_CHECKOUT_EXPIRY_MINUTES = 1;
-
-    // Required by JPA.
     protected ActiveOrder() {
     }
 
-    // Application constructor: the primary key is assigned by the persistence layer
-    // (DB IDENTITY column, or the in-memory repo), so it is intentionally left null.
     public ActiveOrder(String userIdentifier, Integer eventId, List<Integer> tickets) {
         this.orderId = null;
         this.userIdentifier = userIdentifier;
         this.eventId = eventId;
-        this.tickets = tickets;
+        this.tickets = tickets == null ? new ArrayList<>() : new ArrayList<>(tickets);
         this.version = 0;
         this.createdAt = LocalDateTime.now();
         this.checkoutStartedAt = null;
@@ -74,7 +62,6 @@ public class ActiveOrder {
         this.approvedCheckoutPrice = null;
     }
 
-    // Explicit-id constructor, used by unit tests that need a deterministic id.
     public ActiveOrder(int orderId, String userIdentifier, Integer eventId, List<Integer> tickets) {
         this(userIdentifier, eventId, tickets);
         this.orderId = orderId;
@@ -84,18 +71,18 @@ public class ActiveOrder {
         this.orderId = activeOrder.orderId;
         this.userIdentifier = activeOrder.userIdentifier;
         this.eventId = activeOrder.eventId;
-        this.tickets = new ArrayList<>(activeOrder.tickets);
+        this.tickets = activeOrder.tickets == null ? new ArrayList<>() : new ArrayList<>(activeOrder.tickets);
         this.createdAt = activeOrder.createdAt;
         this.checkoutStartedAt = activeOrder.checkoutStartedAt;
         this.version = activeOrder.version;
         this.stage = activeOrder.stage;
         this.approvedCheckoutPrice = activeOrder.approvedCheckoutPrice;
-
     }
 
     public long getVersion() {
         return version;
     }
+
     public void setVersion(long version) {
         this.version = version;
     }
@@ -104,7 +91,6 @@ public class ActiveOrder {
         return orderId;
     }
 
-    // Used by the in-memory repository to assign a generated id on insert.
     public void setId(Integer orderId) {
         this.orderId = orderId;
     }
@@ -120,6 +106,7 @@ public class ActiveOrder {
     public boolean hasTickets() {
         return tickets != null && !tickets.isEmpty();
     }
+
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
@@ -128,8 +115,10 @@ public class ActiveOrder {
         ActiveOrder other = (ActiveOrder) obj;
         return Objects.equals(orderId, other.orderId) && version == other.getVersion();
     }
-    public boolean isExpired() {
-        return isExpired(LocalDateTime.now());
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(orderId, version);
     }
 
     public STAGE getStage() {
@@ -147,32 +136,27 @@ public class ActiveOrder {
         if (stage == STAGE.CHECKING_OUT) {
             stage = STAGE.EDITING;
         }
-        // checkoutStartedAt is deliberately NOT touched: the 10-minute seat-hold deadline
-        // is continuous from the original lock and must not be extended by entering edit mode.
     }
 
     public void confirmEdit() {
         if (stage == STAGE.EDITING) {
             stage = STAGE.CHECKING_OUT;
         }
-        // checkoutStartedAt is deliberately NOT touched: the timer keeps running against the
-        // original lock instant, enforcing the hard 10-minute deadline "in any case".
     }
 
-    public LocalDateTime getCheckoutWarningTime() {
+    public LocalDateTime getCheckoutWarningTime(int checkoutTimeoutMinutes, int warningBeforeExpiryMinutes) {
         if ((stage == STAGE.CHECKING_OUT || stage == STAGE.EDITING) && checkoutStartedAt != null) {
-            return checkoutStartedAt.plusMinutes(
-                    CHECKOUT_TIMEOUT_MINUTES - WARNING_BEFORE_CHECKOUT_EXPIRY_MINUTES);
+            return checkoutStartedAt.plusMinutes(checkoutTimeoutMinutes - warningBeforeExpiryMinutes);
         }
         return null;
     }
 
-    public boolean isExpired(LocalDateTime now) {
+    public boolean isExpired(LocalDateTime now, int selectingTimeoutMinutes, int checkoutTimeoutMinutes) {
         if (stage == STAGE.SELECTING_TICKETS) {
-            return createdAt.plusMinutes(SELECTING_TICKETS_TIMEOUT_MINUTES).isBefore(now);
+            return createdAt.plusMinutes(selectingTimeoutMinutes).isBefore(now);
         }
         if (stage == STAGE.CHECKING_OUT || stage == STAGE.EDITING) {
-            return checkoutStartedAt.plusMinutes(CHECKOUT_TIMEOUT_MINUTES).isBefore(now);
+            return checkoutStartedAt.plusMinutes(checkoutTimeoutMinutes).isBefore(now);
         }
         return false;
     }
@@ -190,14 +174,15 @@ public class ActiveOrder {
         return createdAt;
     }
 
-    public void forceExpireForTest(LocalDateTime now) {
+    public void forceExpireForTest(LocalDateTime now, int checkoutTimeoutMinutes) {
         if (stage == STAGE.SELECTING_TICKETS) {
             this.createdAt = now.minusMinutes(6);
         } else if (stage == STAGE.CHECKING_OUT || stage == STAGE.EDITING) {
-            this.checkoutStartedAt = now.minusMinutes(CHECKOUT_TIMEOUT_MINUTES + 1);
+            this.checkoutStartedAt = now.minusMinutes(checkoutTimeoutMinutes + 1);
         }
     }
-        public void startPayment() {
+
+    public void startPayment() {
         if (stage == STAGE.PAYMENT_IN_PROGRESS) {
             throw new IllegalStateException("Payment already in progress");
         }
@@ -243,7 +228,7 @@ public class ActiveOrder {
         this.approvedCheckoutPrice = null;
     }
 
-    public long getRemainingCheckoutSeconds(LocalDateTime now) {
+    public long getRemainingCheckoutSeconds(LocalDateTime now, int checkoutTimeoutMinutes) {
         if (checkoutStartedAt == null) {
             return 0;
         }
@@ -252,8 +237,7 @@ public class ActiveOrder {
             return 0;
         }
 
-        LocalDateTime expiresAt =
-                checkoutStartedAt.plusMinutes(CHECKOUT_TIMEOUT_MINUTES);
+        LocalDateTime expiresAt = checkoutStartedAt.plusMinutes(checkoutTimeoutMinutes);
 
         return Math.max(0, Duration.between(now, expiresAt).getSeconds());
     }

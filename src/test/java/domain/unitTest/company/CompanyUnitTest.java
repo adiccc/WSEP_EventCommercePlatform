@@ -44,15 +44,15 @@ class CompanyUnitTest {
     @Test
     void GivenManagerWithPermission_WhenCheckPermission_ThenTrue() {
         permissions.addToTree(MANAGER_ID, FOUNDER_ID,
-                EnumSet.of(PermissionType.MANAGE_EVENTS_INVENTORY)
+                EnumSet.of(PermissionType.MANAGE_POLICIES)
         );
-        assertTrue(permissions.checkPermission(MANAGER_ID, PermissionType.MANAGE_EVENTS_INVENTORY));
+        assertTrue(permissions.checkPermission(MANAGER_ID, PermissionType.MANAGE_POLICIES));
     }
 
     @Test
     void GivenManagerWithoutPermission_WhenCheckPermission_ThenFalse() {
         permissions.addToTree(MANAGER_ID, FOUNDER_ID,
-                EnumSet.of(PermissionType.MANAGE_EVENTS_INVENTORY));
+                EnumSet.of(PermissionType.MANAGE_POLICIES));
         assertFalse(permissions.checkPermission(MANAGER_ID, PermissionType.VIEW_PURCHASE_HISTORY));
     }
 

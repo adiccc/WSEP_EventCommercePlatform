@@ -43,6 +43,56 @@ Every handler throws `InitializationException` on failure. There is no partial i
 
 ---
 
+## Startup Arguments
+
+The following command-line arguments can be passed when launching the application to control database state and initialization file.
+
+### `--db=<mode>`
+
+Controls the database state at startup.
+
+| Value | Behaviour |
+|-------|-----------|
+| `keep` | Keep existing data — schema is updated if needed (default) |
+| `empty` | Drop all tables and recreate them — starts with a completely empty database |
+
+```
+java -jar app.jar --db=empty
+java -jar app.jar --db=keep
+```
+
+In IntelliJ: **Run → Edit Configurations → Program arguments**.
+
+### `--init-file=<path>`
+
+Overrides the init-state file defined in `config.yml` (`system.init-state-file`).
+
+| Value | Behaviour |
+|-------|-----------|
+| *(omitted)* | Uses the file from `config.yml` (default) |
+| `classpath:my-init.json` | Loads a file from the classpath |
+| `/absolute/path/to/init.json` | Loads a file from the filesystem |
+
+```
+java -jar app.jar --init-file=/home/user/custom-init.json
+java -jar app.jar --init-file=classpath:test-init.json
+```
+
+### Combined examples
+
+```
+# Fresh start with default init data
+java -jar app.jar --db=empty
+
+# Fresh start with custom seed data
+java -jar app.jar --db=empty --init-file=/path/to/demo-data.json
+
+# Keep existing DB, run a different init script
+java -jar app.jar --init-file=/path/to/extra-setup.json
+```
+
+---
+
 ## Configuration: `config.yml`
 
 Located at `src/main/resources/config.yml`.
@@ -221,10 +271,10 @@ Requests and auto-accepts a manager appointment with specific permissions.
 | `appointeeId`    | Yes — integer, use `get-user-id` first |
 | `permissions`    | Yes — comma-separated list |
 
-Available permissions: `MANAGE_EVENTS_INVENTORY`, `VIEW_ORDERS_HISTORY`, `CREATE_EVENT`, `MANAGE_STAFF`, `VIEW_INCOME_REPORTS`
+Available permissions: `VIEW_ORDERS_HISTORY`, `CREATE_EVENT`, `MANAGE_STAFF`, `VIEW_INCOME_REPORTS`
 
 ```json
-{ "type": "appoint-manager", "params": { "ownerToken": "${aliceToken}", "appointeeToken": "${eveToken}", "companyId": "1", "appointeeId": "${eveId}", "permissions": "MANAGE_EVENTS_INVENTORY,CREATE_EVENT" } }
+{ "type": "appoint-manager", "params": { "ownerToken": "${aliceToken}", "appointeeToken": "${eveToken}", "companyId": "1", "appointeeId": "${eveId}", "permissions": "CREATE_EVENT" } }
 ```
 
 ---

@@ -8,6 +8,7 @@ import domain.company.Permissions;
 import domain.dto.SuspensionDTO;
 import domain.event.Event;
 import domain.event.IEventRepo;
+import domain.event.OrderStatus;
 import domain.user.NotificationStatus;
 import domain.user.UserNotification;
 import domain.user.IUserRepo;
@@ -17,11 +18,16 @@ import domain.Suspension.Suspension;
 import domain.webQueue.WebQueue;
 import Exception.OptimisticLockingFailureException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.context.event.EventListener;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -44,11 +50,12 @@ public class AdminService {
     private final ScheduledExecutorService scheduler;
     private final INotifier notifier;
     private final TransactionTemplate transactionTemplate;
+    private final ITicketSupply ticketSupply;
 
 
 
     @Autowired
-    public AdminService(IAuth auth, IUserRepo userRepo, ICompanyRepo companyRepo, IEventRepo eventRepo, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo, INotifier notifier,TransactionTemplate transactionTemplate) {
+    public AdminService(IAuth auth, IUserRepo userRepo, ICompanyRepo companyRepo, IEventRepo eventRepo, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo, INotifier notifier, TransactionTemplate transactionTemplate, ITicketSupply ticketSupply) {
         this.auth = auth;
         this.userRepo = userRepo;
         this.eventRepo = eventRepo;
@@ -58,6 +65,7 @@ public class AdminService {
         this.scheduler = Executors.newScheduledThreadPool(1);
         this.notifier = notifier;
         this.transactionTemplate = transactionTemplate;
+        this.ticketSupply = ticketSupply;
     }
 
     //permanent suspension
@@ -86,6 +94,10 @@ public class AdminService {
                     return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
                 }catch(OptimisticLockingFailureException e){
                     status.setRollbackOnly();
+                    throw e;
+                }catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                     throw e;
                 }catch(NoSuchElementException e){
                     status.setRollbackOnly();
@@ -124,13 +136,18 @@ public class AdminService {
                         return new Response<>(false, "SuspendUser failed : duration must be greater than 0");
                     }
                     member.suspend();
-                    suspensionRepo.store(new Suspension(userId, duration));
+                    Suspension s=new Suspension(userId, duration);
+                    suspensionRepo.store(s);
                     userRepo.store(member);
-                    scheduleActivateAfterSuspension(userId, duration);
+                    scheduleActivateAfterSuspension(userId, s.getEndDate());
                     logger.log(Level.INFO, "SuspendUser succeeded, user "+userId+" suspended");
                     return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
                 }catch(OptimisticLockingFailureException e){
                     status.setRollbackOnly();
+                    throw e;
+                }catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                     throw e;
                 }catch(NoSuchElementException e){
                     status.setRollbackOnly();
@@ -169,6 +186,10 @@ public class AdminService {
                 }catch(OptimisticLockingFailureException e){
                     status.setRollbackOnly();
                     throw e;
+                }catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
                 }catch(NoSuchElementException e){
                     status.setRollbackOnly();
                     logger.log(Level.INFO, "User not found");
@@ -199,31 +220,85 @@ public class AdminService {
         });
     }
 
-    private void scheduleActivateAfterSuspension(int userId, int duration) {
-        scheduler.schedule( ()-> RetryHelper.executeWithRetry(()->{
-                logger.log(Level.INFO, "ScheduleActivateAfterSuspension called");
-                return transactionTemplate.execute(status -> {
-                    try {
-                        Member member = userRepo.findById(userId);
-                        member.unsuspend();
-                        userRepo.store(member);
-                        logger.log(Level.INFO, "activate after suspension succeeded, user "+userId+" not suspended");
-                        return new Response<>(true, "Suspension succeeded, user "+userId+" suspended");
-                    }catch (OptimisticLockingFailureException e) {
-                        status.setRollbackOnly();
-                        throw e;
-                    }catch (NoSuchElementException e){
-                        status.setRollbackOnly();
-                        logger.log(Level.INFO, "User not found");
-                        return new Response<>(false,"User not found");
-                    }catch (Exception e){
-                        status.setRollbackOnly();
-                        logger.log(Level.SEVERE, "SuspendUser faild due to serer error: ", e.getMessage());
-                        return new Response<>(false,"SuspendUser faild due to serer error: "+e.getMessage());
-                    }
-                });
-            })
-        , duration, TimeUnit.DAYS);
+    private void scheduleActivateAfterSuspension(int userId, LocalDateTime endTime) {
+        long delayMillis = Duration.between(LocalDateTime.now(), endTime).toMillis();
+
+        if (delayMillis <= 0) {
+            activateAfterSuspensionIfNeeded(userId);
+            return;
+        }
+
+        scheduler.schedule(
+                () -> RetryHelper.executeWithRetry(() -> activateAfterSuspensionIfNeeded(userId)),
+                delayMillis,
+                TimeUnit.MILLISECONDS
+        );
+    }
+
+    private Response<Boolean> activateAfterSuspensionIfNeeded(int userId) {
+        logger.log(Level.INFO, "ActivateAfterSuspensionIfNeeded called for user " + userId);
+
+        return transactionTemplate.execute(status -> {
+            try {
+                if (suspensionRepo.haveActiveSuspension(userId)) {
+                    logger.log(Level.INFO, "User " + userId + " still has an active suspension");
+                    return new Response<>(true, "User still has an active suspension");
+                }
+
+                Member member = userRepo.findById(userId);
+                member.unsuspend();
+                userRepo.store(member);
+
+                logger.log(Level.INFO, "User " + userId + " activated after suspension");
+                return new Response<>(true, "User " + userId + " activated after suspension");
+
+            } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                throw e;
+
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
+            } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
+                logger.log(Level.INFO, "User not found");
+                return new Response<>(false, "User not found");
+
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.log(Level.SEVERE, "ActivateAfterSuspension failed due to server error", e);
+                return new Response<>(false, "ActivateAfterSuspension failed due to server error: " + e.getMessage());
+            }
+        });
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void restoreSuspensionSchedulesOnStartup() {
+        logger.log(Level.INFO, "Restoring suspension schedules on startup");
+
+        List<Suspension> suspensions = suspensionRepo.getAll();
+
+        LocalDateTime now = LocalDateTime.now();
+
+        for (Suspension suspension : suspensions) {
+            LocalDateTime endTime = suspension.getEndDate();
+
+            // permanent suspension
+            if (endTime == null) {
+                continue;
+            }
+
+            // temporary suspension
+            if (!endTime.isAfter(now)) {
+                activateAfterSuspensionIfNeeded(suspension.getUserId());
+            }
+
+            // temporary suspension
+            else {
+                scheduleActivateAfterSuspension(suspension.getUserId(), endTime);
+            }
+        }
     }
 
     public Response<Boolean> setMaxCapacity(String token, int capacity) {
@@ -282,115 +357,106 @@ public class AdminService {
         });
     }
 
-    /**
-     * Removes a member from the platform entirely.
-     * Effects:
-     * - Member account is deactivated (isActive = false)
-     * - If the user is the founder of a company → removal is blocked (return error)
-     * - If the user is an owner (non-founder) → removed from ownerIds;
-     * all managers they appointed cascade to the founder
-     * - If the user is a manager → removed from companyTree;
-     * all sub-managers they appointed cascade to the founder
-     * - If the user is the creator of any event → creator is reassigned to that
-     * company's founder
-     */
     public Response<Boolean> removeUser(String adminToken, int userIdToRemove) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("removeUser attempt for userId: " + userIdToRemove);
             return transactionTemplate.execute(status -> {
-            try {
-                if (!isVerifiedAdmin(adminToken)) {
-                    logger.warning("removeUser failed: unauthorized");
-                    return Response.error("Unauthorized: admin access required");
-                }
-
-                Member member = userRepo.findById(userIdToRemove);
-                if (member == null) {
-                    logger.warning("removeUser failed: userId " + userIdToRemove + " not found");
-                    return Response.error("User not found");
-                }
-                if (!member.isActive()) {
-                    logger.warning("removeUser: userId " + userIdToRemove + " already inactive");
-                    return Response.error("User is already removed");
-                }
-                int currentId = getUserIdFromToken(adminToken);
-                if(currentId == userIdToRemove) {
-                    logger.warning("removeUser: Can't remove userId " + userIdToRemove + " because it is admin");
-                    return Response.error("Can't remove user admin");
-                }
-
-                // Step 1: cascade company permissions
-                for (Company company : companyRepo.getAll()) {
-                    Permissions perms = company.getCompanyPermission();
-                    boolean changed = false;
-
-                    if (perms.getFounderId() == userIdToRemove) {
-                        logger.warning("removeUser blocked: userId " + userIdToRemove + " is the founder of company "
-                                + company.getCompanyId());
-                        // abort: undo any company changes already made earlier in this loop
-                        status.setRollbackOnly();
-                        return Response.error("Cannot remove user: they are the founder of company \""
-                                + company.getCompanyName() + "\"");
-
-                    } else if (perms.isOwner(userIdToRemove)) {
-                        // Owner removed → reassign any managers they appointed to the founder
-                        perms.removeOwner(userIdToRemove);
-                        for (Integer managerId : perms.getCompanyTree().keySet()) {
-                            if (perms.getCompanyTree().get(managerId).getMyManager() == userIdToRemove)
-                                perms.changeAppointer(managerId, perms.getFounderId());
-                        }
-                        changed = true;
-
-                    } else if (perms.isManager(userIdToRemove)) {
-                        // Manager removed → clean up appointer's list + reassign sub-managers to founder
-                        perms.removeManagerFromTree(userIdToRemove);
-                        changed = true;
-                    }
-
-                    if (changed)
-                        companyRepo.store(company);
-                }
-
-                // Step 2: reassign event creator to that company's founder
-                List<Event> ownedEvents = eventRepo.findByCreator(userIdToRemove);
-                for (Event event : ownedEvents) {
-                    try {
-                        Company eventCompany = companyRepo.findById(event.getCompanyId());
-                        event.setCreatorId(eventCompany.getFounderId());
-                        eventRepo.store(event);
-                        logger.info("removeUser: reassigned event " + event.getId() + " creator to founder "
-                                + eventCompany.getFounderId());
-                    } catch (NoSuchElementException e) {
-                        logger.warning("removeUser: company not found for event " + event.getId()
-                                + ", skipping creator reassignment");
-                    }
-                }
-
-                // Step 3: deactivate the user
-                member.deactivate();
-                userRepo.store(member);
-                //sending notification so the user is removed he can't do anything on the website
                 try {
-                    NotifyPayload payload = new NotifyPayload("Your account has been removed by the administrator.");
-                    NotifyDTO kickoutNotify = new NotifyDTO(NotifyType.ACCOUNT_REMOVED, payload);
+                    if (!isVerifiedAdmin(adminToken)) {
+                        logger.warning("removeUser failed: unauthorized");
+                        return Response.error("Unauthorized: admin access required");
+                    }
 
-                    notifier.notifyUser(member.getIdentifier(), kickoutNotify); //notify for all tabs just in realtime
-                    logger.info("Sent real-time kickout notification to removed user: " + member.getIdentifier());
-                } catch (Exception ex) {
-                    logger.warning("Failed to send kickout notification to user: " + member.getIdentifier());
+                    Member member = userRepo.findById(userIdToRemove);
+                    if (member == null) {
+                        logger.warning("removeUser failed: userId " + userIdToRemove + " not found");
+                        return Response.error("User not found");
+                    }
+                    if (!member.isActive()) {
+                        logger.warning("removeUser: userId " + userIdToRemove + " already inactive");
+                        return Response.error("User is already removed");
+                    }
+                    int currentId = getUserIdFromToken(adminToken);
+                    if(currentId == userIdToRemove) {
+                        logger.warning("removeUser: Can't remove userId " + userIdToRemove + " because it is admin");
+                        return Response.error("Can't remove user admin");
+                    }
+
+                    // Step 1: cascade company permissions
+                    for (Company company : companyRepo.getAll()) {
+                        Permissions perms = company.getCompanyPermission();
+                        boolean changed = false;
+
+                        if (perms.getFounderId() == userIdToRemove) {
+                            logger.warning("removeUser blocked: userId " + userIdToRemove + " is the founder of company "
+                                    + company.getCompanyId());
+                            // abort: undo any company changes already made earlier in this loop
+                            status.setRollbackOnly();
+                            return Response.error("Cannot remove user: they are the founder of company \""
+                                    + company.getCompanyName() + "\"");
+
+                        } else if (perms.isOwner(userIdToRemove)) {
+                            // Owner removed → reassign any managers they appointed to the founder
+                            perms.removeOwner(userIdToRemove);
+                            for (Integer managerId : perms.getCompanyTree().keySet()) {
+                                if (perms.getCompanyTree().get(managerId).getMyManager() == userIdToRemove)
+                                    perms.changeAppointer(managerId, perms.getFounderId());
+                            }
+                            changed = true;
+
+                        } else if (perms.isManager(userIdToRemove)) {
+                            // Manager removed → clean up appointer's list + reassign sub-managers to founder
+                            perms.removeManagerFromTree(userIdToRemove);
+                            changed = true;
+                        }
+
+                        if (changed)
+                            companyRepo.store(company);
+                    }
+
+                    // Step 2: reassign event creator to that company's founder
+                    List<Event> ownedEvents = eventRepo.findByCreator(userIdToRemove);
+                    for (Event event : ownedEvents) {
+                        try {
+                            Company eventCompany = companyRepo.findById(event.getCompanyId());
+                            event.setCreatorId(eventCompany.getFounderId());
+                            eventRepo.store(event);
+                            logger.info("removeUser: reassigned event " + event.getId() + " creator to founder "
+                                    + eventCompany.getFounderId());
+                        } catch (NoSuchElementException e) {
+                            logger.warning("removeUser: company not found for event " + event.getId()
+                                    + ", skipping creator reassignment");
+                        }
+                    }
+
+                    // Step 3: deactivate the user
+                    member.deactivate();
+                    userRepo.store(member);
+                    //sending notification so the user is removed he can't do anything on the website
+                    try {
+                        NotifyPayload payload = new NotifyPayload("Your account has been removed by the administrator.");
+                        NotifyDTO kickoutNotify = new NotifyDTO(NotifyType.ACCOUNT_REMOVED, payload);
+                        sendOrSaveNotification(member.getIdentifier(), kickoutNotify);
+                        logger.info("Sent real-time kickout notification to removed user: " + member.getIdentifier());
+                    } catch (Exception ex) {
+                        logger.warning("Failed to send kickout notification to user: " + member.getIdentifier());
+                    }
+
+                    logger.info("removeUser succeeded for userId: " + userIdToRemove);
+                    return Response.ok(true);
+
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
+                }catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("removeUser failed for userId: " + userIdToRemove + ". Error: " + e.getMessage());
+                    return Response.error("Unexpected error: " + e.getMessage());
                 }
-
-                logger.info("removeUser succeeded for userId: " + userIdToRemove);
-                return Response.ok(true);
-
-            } catch (OptimisticLockingFailureException e) {
-                status.setRollbackOnly();
-                throw e;
-            } catch (Exception e) {
-                status.setRollbackOnly();
-                logger.severe("removeUser failed for userId: " + userIdToRemove + ". Error: " + e.getMessage());
-                return Response.error("Unexpected error: " + e.getMessage());
-            }
             });
         });
     }
@@ -481,7 +547,11 @@ public class AdminService {
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
-                } catch (Exception e) {
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
+                }catch (Exception e) {
                     status.setRollbackOnly();
                     logger.severe("closeCompanyByAdmin failed due to server error: " + e.getMessage());
                     return new Response<>(false, e.getMessage());
@@ -490,7 +560,7 @@ public class AdminService {
 
             // txn 1 rolled back -> nothing committed, stop
             if (closeRes == null || !closeRes.getValue()) {
-                return closeRes == null ? new Response<>(false, "Failed to close company") : closeRes;
+                return closeRes == null ? new Response<>(false, closeRes.getMessage()) : closeRes;
             }
 
             // Refunds (outside the closure txn). A failed refund does not undo the closure.
@@ -542,7 +612,8 @@ public class AdminService {
                 return new Response<>(false, "Invalid token");
             }
 
-            // ---- Phase 1 (transaction): validate that the order can be refunded ----
+            // Phase 1 (transaction): validate that the order can be refunded and take a snapshot
+            // of the external ticket codes that must be cancelled outside the DB transaction.
             Response<Order> orderResponse = transactionTemplate.execute(status -> {
                 try {
                     Event event = eventRepo.findById(eventId);
@@ -552,17 +623,28 @@ public class AdminService {
                         logger.log(Level.SEVERE, "Order not found for refund");
                         return new Response<>(null, "No matching order found for refund");
                     }
+
+                    if (order.getStatus() == OrderStatus.REFUNDED) {
+                        logger.log(Level.INFO, "Order is already refunded");
+                        return new Response<>(order, "Already refunded");
+                    }
+
                     if (!order.canBeRefunded()) {
                         logger.log(Level.SEVERE, "Order cannot be refunded");
                         return new Response<>(null, "Order cannot be refunded");
                     }
-                    return new Response<>(order, "Order conditions are valid, the refund init");
+
+                    return new Response<>(order, "Order conditions are valid, the refund can start");
                 } catch (NoSuchElementException e) {
                     status.setRollbackOnly();
                     logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                     return new Response<>(null, "Event not found");
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
@@ -571,13 +653,38 @@ public class AdminService {
                 }
             });
 
-            // validation failed -> nothing to refund
             if (orderResponse == null || orderResponse.getValue() == null) {
                 return new Response<>(false, orderResponse == null ? "Failed to process refund" : orderResponse.getMessage());
             }
 
-            // ---- External payment call (outside any transaction) ----
             Order orderToRefund = orderResponse.getValue();
+            if (orderToRefund.getStatus() == OrderStatus.REFUNDED) {
+                return new Response<>(true, "Already refunded");
+            }
+
+            List<String> cancelledCodes = new ArrayList<>();
+            if (orderToRefund.getExternalTicketCodes() != null && !orderToRefund.getExternalTicketCodes().isEmpty()) {
+                for (String ticketCode : new ArrayList<>(orderToRefund.getExternalTicketCodes())) {
+                    try {
+                        boolean cancelled = ticketSupply.cancelTicket(ticketCode);
+                        if (cancelled) {
+                            cancelledCodes.add(ticketCode);
+                        } else {
+                            logger.log(Level.WARNING, "Failed to cancel ticket " + ticketCode + " in external system.");
+                        }
+                    } catch (Exception e) {
+                        logger.log(Level.SEVERE, "Exception cancelling ticket " + ticketCode, e);
+                    }
+                }
+            }
+            if(cancelledCodes.size()!=orderToRefund.getExternalTicketCodes().size()){
+                logger.log(Level.SEVERE,"Only part of the ticket canceled");
+                String userIdentifier = orderToRefund.getUserIdentifier();
+                NotifyPayload payload = new NotifyPayload("Refund process failed for " + orderToRefund.getOrderId() + "in event " + eventId + "because of ticket system failure", eventId, null);
+                sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
+                return new Response<>(false,"Failed to process refund to order "+orderId+" due to failed ticket cancellation,  please contact support ");
+            }
+
             boolean refundApproved = false;
             try {
                 refundApproved = paymentSystem.refund(
@@ -586,30 +693,56 @@ public class AdminService {
             } catch (Exception e) {
                 logger.log(Level.WARNING, "Failed to process refund through payment system: " + e.getMessage());
             }
+
             final boolean finalRefundApproved = refundApproved;
 
-            // ---- Phase 2 (transaction): record the result of the refund ----
+            // Phase 2 (transaction): persist cancellation/refund outcome and notify the purchaser.
             return transactionTemplate.execute(status -> {
                 try {
                     Event event = eventRepo.findById(eventId);
                     Order order = event.findOrderById(orderId);
+
+                    if (order == null) {
+                        logger.log(Level.SEVERE, "Order not found while finalizing refund");
+                        return new Response<>(false, "No matching order found for refund");
+                    }
+
                     String userIdentifier = order.getUserIdentifier();
 
                     if (finalRefundApproved) {
                         order.markRefunded();
                         eventRepo.store(event);
+
                         logger.log(Level.INFO, "Refund completed successfully");
-                        NotifyPayload payload = new NotifyPayload("Refund processed for order " + order.getOrderId() + " in event " + event.getId() + " because of closing the company", event.getId(), null);
+
+                        NotifyPayload payload = new NotifyPayload(
+                                "Refund processed for order " + order.getOrderId()
+                                        + " in event " + event.getId()
+                                        + " because of closing the company",
+                                event.getId(),
+                                null
+                        );
+
                         sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
+
                         return new Response<>(true, "Refund completed successfully");
                     }
 
                     order.markRefundRequired();
                     eventRepo.store(event);
-                    NotifyPayload payload = new NotifyPayload("Refund failed for order " + order.getOrderId() + " in event " + event.getId() + " because of closing the company, please contact support", event.getId(), null);
+
+                    NotifyPayload payload = new NotifyPayload(
+                            "Refund failed for order " + order.getOrderId()
+                                    + " in event " + event.getId()
+                                    + " because of closing the company, please contact support",
+                            event.getId(),
+                            null
+                    );
+
                     sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
-                    logger.log(Level.SEVERE, "Refund rejected by external payment service");
-                    return new Response<>(false, "Refund rejected by external payment service");
+
+                    logger.log(Level.SEVERE, "Refund rejected by external payment service, while tickets are currently canceled");
+                    return new Response<>(false, "Refund rejected by external payment service, while tickets are currently canceled");
 
                 } catch (NoSuchElementException e) {
                     status.setRollbackOnly();
@@ -617,6 +750,10 @@ public class AdminService {
                     return new Response<>(false, "Event not found");
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
@@ -630,104 +767,108 @@ public class AdminService {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("getGlobalOrders attempt for admin");
             return transactionTemplate.execute(status -> {
-            try {
-                if (!isVerifiedAdmin(token)) {
-                    logger.warning("getGlobalOrders failed: unauthorized");
-                    return new Response<>(null, "Unauthorized: admin access required");
-                }
-                boolean hasUsers = (usersFilter != null && !usersFilter.isEmpty());
-                boolean hasCompanies = (companiesFilter != null && !companiesFilter.isEmpty());
-                boolean hasEvents = (eventsFilter != null && !eventsFilter.isEmpty());
+                try {
+                    if (!isVerifiedAdmin(token)) {
+                        logger.warning("getGlobalOrders failed: unauthorized");
+                        return new Response<>(null, "Unauthorized: admin access required");
+                    }
+                    boolean hasUsers = (usersFilter != null && !usersFilter.isEmpty());
+                    boolean hasCompanies = (companiesFilter != null && !companiesFilter.isEmpty());
+                    boolean hasEvents = (eventsFilter != null && !eventsFilter.isEmpty());
 
-                if(hasUsers && (hasCompanies || hasEvents)) {
-                    logger.warning("getGlobalOrders failed: cannot filter both users and companies");
-                    return new Response<>(null, "Cannot filter both users and companies");
-                }
-                List<Event> allEvents = eventRepo.getAll();
-                List<AdminPurchaseHistoryDTO> historyOrders = new ArrayList<>();
-                if(hasUsers){
-                   for (Event event : allEvents) {
-                       String companyName = "";
-                       try {
-                           Company company = companyRepo.findById(event.getCompanyId());
-                           companyName = company.getCompanyName();
-                       } catch (Exception ignored) {}
-
-                       List<Order> orders = event.getOrders();
-                       for (Order order : orders) {
-                           if(usersFilter.contains(order.getUserIdentifier()))
-                               historyOrders.add(new AdminPurchaseHistoryDTO(
-                                       order.getOrderId(),
-                                       order.getUserIdentifier(),
-                                       event.getCompanyId(),
-                                       companyName,
-                                       event.getId(),
-                                       event.getName(),
-                                       String.valueOf(event.getDate()),
-                                       event.getLocation().toString(),
-                                       order.getStatus(),
-                                       order.getTickets(),
-                                       order.getTotalSum()
-                               ));
-                       }
-                   }
-                }
-                else { // in case we have filter on companies or events
-                    for (Event event : allEvents) {
-                        boolean toAdd = !hasUsers && !hasCompanies && !hasEvents;
-                        if (hasCompanies && !hasEvents) {
-                            if (companiesFilter.contains(event.getCompanyId())){
-                                toAdd = true;
-                        }
-                        } else if (!hasCompanies && hasEvents) {
-                            if (eventsFilter.contains(event.getId())){
-                                toAdd = true;
-                            }
-                        }
-                        else if (hasCompanies && hasEvents) {
-                            if (companiesFilter.contains(event.getCompanyId()) && eventsFilter.contains(event.getId())){
-                                toAdd = true;
-                            }
-                        }
-                        if (toAdd) {
+                    if(hasUsers && (hasCompanies || hasEvents)) {
+                        logger.warning("getGlobalOrders failed: cannot filter both users and companies");
+                        return new Response<>(null, "Cannot filter both users and companies");
+                    }
+                    List<Event> allEvents = eventRepo.getAll();
+                    List<AdminPurchaseHistoryDTO> historyOrders = new ArrayList<>();
+                    if(hasUsers){
+                        for (Event event : allEvents) {
                             String companyName = "";
                             try {
                                 Company company = companyRepo.findById(event.getCompanyId());
                                 companyName = company.getCompanyName();
                             } catch (Exception ignored) {}
+
                             List<Order> orders = event.getOrders();
                             for (Order order : orders) {
-                                historyOrders.add(new AdminPurchaseHistoryDTO(
-                                        order.getOrderId(),
-                                        order.getUserIdentifier(),
-                                        event.getCompanyId(),
-                                        companyName,
-                                        event.getId(),
-                                        event.getName(),
-                                        String.valueOf(event.getDate()),
-                                        event.getLocation().toString(),
-                                        order.getStatus(),
-                                        order.getTickets(), 
-                                        order.getTotalSum()
-                                ));                            }
+                                if(usersFilter.contains(order.getUserIdentifier()))
+                                    historyOrders.add(new AdminPurchaseHistoryDTO(
+                                            order.getOrderId(),
+                                            order.getUserIdentifier(),
+                                            event.getCompanyId(),
+                                            companyName,
+                                            event.getId(),
+                                            event.getName(),
+                                            String.valueOf(event.getDate()),
+                                            event.getLocation().toString(),
+                                            order.getStatus(),
+                                            order.getTickets(),
+                                            order.getTotalSum()
+                                    ));
+                            }
                         }
                     }
+                    else { // in case we have filter on companies or events
+                        for (Event event : allEvents) {
+                            boolean toAdd = !hasUsers && !hasCompanies && !hasEvents;
+                            if (hasCompanies && !hasEvents) {
+                                if (companiesFilter.contains(event.getCompanyId())){
+                                    toAdd = true;
+                                }
+                            } else if (!hasCompanies && hasEvents) {
+                                if (eventsFilter.contains(event.getId())){
+                                    toAdd = true;
+                                }
+                            }
+                            else if (hasCompanies && hasEvents) {
+                                if (companiesFilter.contains(event.getCompanyId()) && eventsFilter.contains(event.getId())){
+                                    toAdd = true;
+                                }
+                            }
+                            if (toAdd) {
+                                String companyName = "";
+                                try {
+                                    Company company = companyRepo.findById(event.getCompanyId());
+                                    companyName = company.getCompanyName();
+                                } catch (Exception ignored) {}
+                                List<Order> orders = event.getOrders();
+                                for (Order order : orders) {
+                                    historyOrders.add(new AdminPurchaseHistoryDTO(
+                                            order.getOrderId(),
+                                            order.getUserIdentifier(),
+                                            event.getCompanyId(),
+                                            companyName,
+                                            event.getId(),
+                                            event.getName(),
+                                            String.valueOf(event.getDate()),
+                                            event.getLocation().toString(),
+                                            order.getStatus(),
+                                            order.getTickets(),
+                                            order.getTotalSum()
+                                    ));                            }
+                            }
+                        }
+                    }
+                    if(historyOrders.isEmpty()){
+                        logger.warning("getGlobalOrders failed: no history orders found");
+                        return new Response<>(new ArrayList<>(), "No history orders found");
+                    }
+                    logger.info("Retrieved history orders successfully for filter");
+                    return new Response<>(historyOrders,"Retrieved history orders successfully for filter");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.log(Level.SEVERE, "Failed to retrieve history orders: " + e.getMessage());
+                    return new Response<>(null, "Failed to retrieve history orders: " + e.getMessage());
                 }
-                if(historyOrders.isEmpty()){
-                    logger.warning("getGlobalOrders failed: no history orders found");
-                    return new Response<>(new ArrayList<>(), "No history orders found");
-                   }
-                logger.info("Retrieved history orders successfully for filter");
-                return new Response<>(historyOrders,"Retrieved history orders successfully for filter");
-            } catch (OptimisticLockingFailureException e) {
-                status.setRollbackOnly();
-                throw e;
-        } catch (Exception e) {
-            status.setRollbackOnly();
-            logger.log(Level.SEVERE, "Failed to retrieve history orders: " + e.getMessage());
-            return new Response<>(null, "Failed to retrieve history orders: " + e.getMessage());
-        }
-        });
+            });
         });
     }
 
@@ -735,31 +876,35 @@ public class AdminService {
     public Response<List<String>> getAllPurchasers(String token) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("getAllPurchasers attempt for admin");
-                if (!isVerifiedAdmin(token)) {
-                    logger.warning("getAllPurchasers failed: unauthorized");
-                    return new Response<>(null, "Unauthorized: Only admin can access");
-                }
-                return transactionTemplate.execute(status -> {
-                try{
-                List<String> purchasers = eventRepo.getAllPurchasers();
-                if (purchasers.isEmpty()) {
-                    logger.info("No purchasers found in the system");
-                    return new Response<>(new ArrayList<>(), "No purchasers found");
-                }
-                logger.info("Retrieved all unique purchasers successfully. Total: " + purchasers.size());
-                return new Response<>(purchasers, "Retrieved purchasers successfully");
-            } catch (OptimisticLockingFailureException e) {
-                status.setRollbackOnly();
-                throw e;
-            } catch (Exception e) {
-                status.setRollbackOnly();
-                logger.severe("Failed to retrieve purchasers: " + e.getMessage());
-                return new Response<>(null, "Failed to retrieve purchasers: " + e.getMessage());
+            if (!isVerifiedAdmin(token)) {
+                logger.warning("getAllPurchasers failed: unauthorized");
+                return new Response<>(null, "Unauthorized: Only admin can access");
             }
-        });
+            return transactionTemplate.execute(status -> {
+                try{
+                    List<String> purchasers = eventRepo.getAllPurchasers();
+                    if (purchasers.isEmpty()) {
+                        logger.info("No purchasers found in the system");
+                        return new Response<>(new ArrayList<>(), "No purchasers found");
+                    }
+                    logger.info("Retrieved all unique purchasers successfully. Total: " + purchasers.size());
+                    return new Response<>(purchasers, "Retrieved purchasers successfully");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Failed to retrieve purchasers: " + e.getMessage());
+                    return new Response<>(null, "Failed to retrieve purchasers: " + e.getMessage());
+                }
+            });
         });
     }
-       private int getUserIdFromToken(String token) {
+    private int getUserIdFromToken(String token) {
         String email = auth.getUserEmail(token).getValue();
         if (email != null) {
             Member m = userRepo.findUserByEmail(email);
@@ -769,42 +914,42 @@ public class AdminService {
     }
     // Helper method to send a real-time notification or save it as pending if the
     // user is offline.
-        private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
-            Member member = userRepo.findUserByEmail(userIdentifier);
-            boolean isGuest = (member == null);
-            if (isGuest) {
-                boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
-                if (isDelivered) {
-                    return new Response<>(null, "Notification sent successfully to guest");
-                } else {
-                    logger.warning("Guest is offline. Notification dropped for: " + userIdentifier);
-                    return new Response<>(null, "Guest offline, notification dropped");
-                }
+    private Response<Void> sendOrSaveNotification(String userIdentifier, NotifyDTO notifyDTO) {
+        Member member = userRepo.findUserByEmail(userIdentifier);
+        boolean isGuest = (member == null);
+        if (isGuest) {
+            boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
+            if (isDelivered) {
+                return new Response<>(null, "Notification sent successfully to guest");
+            } else {
+                logger.warning("Guest is offline. Notification dropped for: " + userIdentifier);
+                return new Response<>(null, "Guest offline, notification dropped");
             }
-            Long savedNotificationId = null;
-            boolean dbSaveFailed = false;
-            try{
-                Response<Long> savedNotificationIdRes = saveDelayedNotificationAsPending(userIdentifier, notifyDTO);
-                savedNotificationId = (savedNotificationIdRes != null) ? savedNotificationIdRes.getValue() : null;
-                if(savedNotificationId != null && savedNotificationId == -1L){
-                    dbSaveFailed = true;
-                }
-            } catch (Exception e){
-                logger.severe("Database connection/commit failed outside lambda: " + e.getMessage());
+        }
+        Long savedNotificationId = null;
+        boolean dbSaveFailed = false;
+        try{
+            Response<Long> savedNotificationIdRes = saveDelayedNotificationAsPending(userIdentifier, notifyDTO);
+            savedNotificationId = (savedNotificationIdRes != null) ? savedNotificationIdRes.getValue() : null;
+            if(savedNotificationId != null && savedNotificationId == -1L){
                 dbSaveFailed = true;
             }
-            boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
-            if (dbSaveFailed && !isDelivered) {
-                logger.severe("CRITICAL: DB transaction failed. Notification lost for: " + userIdentifier);
-                return new Response<>(null, "Failed to handle notification due to DB error");
-            }
-        if (isDelivered) {
-                markNotificationAsDelivered(userIdentifier, savedNotificationId); //if we succeed sending in real time we need to mark as delivered
-                return new Response<>(null, "Notification sent successfully as DELIVERED");
-            }
-                logger.info("Member is offline. Notification remains PENDING for: " + userIdentifier);
-                return new Response<>(null, "Notification saved as PENDING");
+        } catch (Exception e){
+            logger.severe("Database connection/commit failed outside lambda: " + e.getMessage());
+            dbSaveFailed = true;
         }
+        boolean isDelivered = notifier.notifyUser(userIdentifier, notifyDTO);
+        if (dbSaveFailed && !isDelivered) {
+            logger.severe("CRITICAL: DB transaction failed. Notification lost for: " + userIdentifier);
+            return new Response<>(null, "Failed to handle notification due to DB error");
+        }
+        if (isDelivered) {
+            markNotificationAsDelivered(userIdentifier, savedNotificationId); //if we succeed sending in real time we need to mark as delivered
+            return new Response<>(null, "Notification sent successfully as DELIVERED");
+        }
+        logger.info("Member is offline. Notification remains PENDING for: " + userIdentifier);
+        return new Response<>(null, "Notification saved as PENDING");
+    }
     //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
     private Response<Long> saveDelayedNotificationAsPending(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() ->
@@ -828,7 +973,7 @@ public class AdminService {
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
                         throw e;
-                    }catch (TransientDataAccessException e) {
+                    } catch (TransientDataAccessException e) {
                         status.setRollbackOnly();
                         logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                         throw e;
@@ -856,6 +1001,10 @@ public class AdminService {
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
                         throw e;
+                    } catch (TransientDataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                        throw e;
                     } catch (Exception e) {
                         status.setRollbackOnly();
                         logger.warning("Failed to mark notification as delivered: " + e.getMessage());
@@ -866,23 +1015,23 @@ public class AdminService {
     }
 
 
-private void notifyTokenExpired(String token) {
-    try {
-        NotifyPayload payload = new NotifyPayload("Your session has expired");
-        NotifyDTO expiredNotify = new NotifyDTO(NotifyType.TOKEN_EXPIRED, payload);
-        notifier.notifyTab(token, expiredNotify);
-        logger.info("Sent TOKEN_EXPIRED notification to tab: " + token);
-    } catch (Exception e) {
-        logger.warning("Failed to send TOKEN_EXPIRED notification: " + e.getMessage());
+    private void notifyTokenExpired(String token) {
+        try {
+            NotifyPayload payload = new NotifyPayload("Your session has expired");
+            NotifyDTO expiredNotify = new NotifyDTO(NotifyType.TOKEN_EXPIRED, payload);
+            notifier.notifyTab(token, expiredNotify);
+            logger.info("Sent TOKEN_EXPIRED notification to tab: " + token);
+        } catch (Exception e) {
+            logger.warning("Failed to send TOKEN_EXPIRED notification: " + e.getMessage());
+        }
     }
-}
 
-private boolean isVerifiedAdmin(String token) {
-    Response<String> roleRes = auth.getRole(token);
-    if (roleRes.getValue() == null) {
-        notifyTokenExpired(token);
-        return false;
-    }
-    return auth.isAdmin(token).getValue();
+    private boolean isVerifiedAdmin(String token) {
+        Response<String> roleRes = auth.getRole(token);
+        if (roleRes.getValue() == null) {
+            notifyTokenExpired(token);
+            return false;
+        }
+        return auth.isAdmin(token).getValue();
     }
 }

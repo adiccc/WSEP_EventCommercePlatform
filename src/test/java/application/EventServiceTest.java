@@ -2,6 +2,7 @@ package application;
 
 import DTO.*;
 import Log.LoggerSetup;
+import app.config.SystemProperties;
 import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
@@ -34,6 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -61,6 +63,7 @@ class EventServiceTest {
     private List<SeatingZoneDTO> seatingZones;
     private String GUEST_TOKEN;
     private TransactionTemplate transactionTemplate;
+    private ITicketSupply ticketSupply;
 
     @BeforeEach
     void setUp() {
@@ -70,10 +73,11 @@ class EventServiceTest {
         );
         LoggerSetup.setup();
         eventRepo = new EventRepoImpl();
-        tokenService = new TokenService();
+        tokenService = new TokenService(createTestSystemProperties());
         userRepo = new UserRepo();
         passwordEncoder = new PasswordEncoderUtil();
         auth = new Auth(tokenService);
+        ticketSupply = mock(ITicketSupply.class);
         CompanyRepoImpl companyRepo = new CompanyRepoImpl();
         IPaymentSystem paymentSystem = Mockito.mock(IPaymentSystem.class);
         suspensionRepo=new SuspensionRepoImpl();
@@ -84,7 +88,7 @@ class EventServiceTest {
             TransactionCallback<?> callback = invocation.getArgument(0);
             return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
         });
-        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate);
+        eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate,ticketSupply);
         service = new EventService(auth, eventRepo,notifier, transactionTemplate);
 
         userService=new UserService(tokenService,auth,userRepo,passwordEncoder,notifier,transactionTemplate);
@@ -106,6 +110,15 @@ class EventServiceTest {
         // Inactive event (company1) - since we havent define map for this event, it will be inactive
         inactiveEventId = eventCompanyManageService.createEvent(validToken, company1 ,LocalDateTime.now().plusDays(10),"inactive event",LocalDateTime.now().plusDays(5),false, GeographicalArea.SOUTH, CategoryEvent.CONFERENCE).getValue();
        }
+    private SystemProperties createTestSystemProperties() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setMaxConcurrentUsers(50);
+        systemProperties.setInitStateFile("classpath:init-state.json");
+        systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
+        systemProperties.setAccessCodeLength(6);
+        systemProperties.setTokenExpirationHours(24);
+        return systemProperties;
+    }
 
     @Test
     void GivenValidEvent_WhenViewEventDetails_ThenEventDetailsAreReturned() {

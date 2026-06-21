@@ -74,7 +74,6 @@ public class EventRepoImpl implements IEventRepo {
                 }
             }
         }
-
         if (currentEvent.getVersion() != entity.getVersion()) {
             throw new OptimisticLockingFailureException(
                     "Event " + entity.getId() + " version mismatch. Expected: " +

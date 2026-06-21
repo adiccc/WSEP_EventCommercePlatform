@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import Exception.OptimisticLockingFailureException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -76,6 +77,11 @@ public class EventService {
                     status.setRollbackOnly();
                     throw e;
 
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
+
                 } catch (Exception e) {
                     status.setRollbackOnly();
                     logger.log(Level.SEVERE, "Failed to return event details : " + e.getMessage());
@@ -117,6 +123,11 @@ public class EventService {
 
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
+                    throw e;
+
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                     throw e;
 
                 } catch (Exception e) {
@@ -161,6 +172,11 @@ public class EventService {
 
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
+                    throw e;
+
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                     throw e;
 
                 } catch (Exception e) {

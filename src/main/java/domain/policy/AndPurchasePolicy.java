@@ -12,7 +12,7 @@ public class AndPurchasePolicy extends PurchasePolicy {
 
     public AndPurchasePolicy() { super(); }
 
-    private AndPurchasePolicy(List<PurchaseNode> rules) { super(rules); }
+    private AndPurchasePolicy(List<Purchase> rules) { super(rules); }
 
     @Override
     public boolean isSatisfied(UserDTO user, int quantity, int ticketsBoughtForEvent) {

@@ -39,11 +39,12 @@ public class EventCompanyManageService {
     private final INotifier notifier;
     private final IUserRepo userRepo;
     private final TransactionTemplate transactionTemplate;
+    private final ITicketSupply ticketSupply;
 
 
 
     @Autowired
-    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo,INotifier notifier, IUserRepo userRepo,TransactionTemplate transactionTemplate) {
+    public EventCompanyManageService(ICompanyRepo companyRepo, IEventRepo eventRepo, IAuth auth, IPaymentSystem paymentSystem, ISuspensionRepo suspensionRepo,INotifier notifier, IUserRepo userRepo,TransactionTemplate transactionTemplate, ITicketSupply ticketSupply) {
         this.companyRepo = companyRepo;
         this.eventRepo = eventRepo;
         this.auth = auth;
@@ -53,6 +54,7 @@ public class EventCompanyManageService {
         this.notifier = notifier;
         this.userRepo = userRepo;
         this.transactionTemplate = transactionTemplate;
+        this.ticketSupply = ticketSupply;
     }
 
     public Response<Boolean> DefineVenueAndSeatingMap(String token, Integer eventId, ElementPositionDTO stage,
@@ -121,6 +123,10 @@ public class EventCompanyManageService {
                 status.setRollbackOnly();
                 logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
@@ -192,6 +198,10 @@ public class EventCompanyManageService {
                 status.setRollbackOnly();
                 logger.log(Level.SEVERE, "company not found: " + e.getMessage());
                 return new Response<>(null, "Company not found");
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
@@ -260,8 +270,13 @@ public class EventCompanyManageService {
                             return new Response<>(identifierToMsgId, "Event updated successfully");
 
                         } catch (OptimisticLockingFailureException e) {
+                            status.setRollbackOnly();
                             throw e;
 
+                        } catch (TransientDataAccessException e) {
+                            status.setRollbackOnly();
+                            logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                            throw e;
                         } catch (Exception e) {
                             status.setRollbackOnly();
                             logger.log(Level.SEVERE, "failed updating event date: " + e.getMessage());
@@ -373,6 +388,10 @@ public class EventCompanyManageService {
                 logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                 return new Response<>(false, "Event not found");
 
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
@@ -429,6 +448,10 @@ public class EventCompanyManageService {
                     logger.log(Level.SEVERE, "event not found: " + e.getMessage());
                     return new Response<>(null, "Event not found");
 
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
@@ -510,9 +533,15 @@ public class EventCompanyManageService {
                     }
                     logger.log(Level.INFO, "Orders deleted successfully");
                     return new Response<>(identifierToMsgId, "Orders deleted successfully");
-                }catch (OptimisticLockingFailureException e) {
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
                     throw e;
                 } catch(Exception e){
+                    status.setRollbackOnly();
                     logger.log(Level.SEVERE, "failed delete event : " + e.getMessage());
                     return new Response<>(null, "failed to delete event : " + e.getMessage());
                 }
@@ -590,6 +619,10 @@ public class EventCompanyManageService {
                 status.setRollbackOnly();
                 logger.log(Level.SEVERE, "company not found: " + e.getMessage());
                 return new Response<>(null, "company not found");
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
@@ -652,6 +685,10 @@ public class EventCompanyManageService {
                 return new Response<>(companyDetailsDTO, "Company details found");
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                 throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
@@ -716,6 +753,10 @@ public class EventCompanyManageService {
         catch (OptimisticLockingFailureException e) {
             status.setRollbackOnly();
             throw e;
+        } catch (TransientDataAccessException e) {
+            status.setRollbackOnly();
+            logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+            throw e;
         } catch(Exception e){
             status.setRollbackOnly();
             logger.log(Level.SEVERE, "failed generate sales report : " + e.getMessage());
@@ -745,13 +786,20 @@ public class EventCompanyManageService {
                         logger.log(Level.SEVERE, "Order not found for refund");
                         return new Response<>(null, "No matching order found for refund");
                     }
-
-                    if (!order.canBeRefunded()) {
+                    if (order.getStatus() == OrderStatus.REFUNDED) {
+                        logger.log(Level.SEVERE, "Already refunded");
+                        return new Response<>(null, "Already refunded");
+                    }
+                    if (order.getStatus() != OrderStatus.REFUND_REQUIRED) {
                         logger.log(Level.SEVERE, "Order cannot be refunded");
                         return new Response<>(null, "Order cannot be refunded");
                     }
                     logger.log(Level.INFO,"Order "+orderId+" conditions are valid, the refund init");
                     return new Response<>(order,"Order conditions are valid, the refund init");
+                }catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
                 }catch(Exception e) {
                     status.setRollbackOnly();
                     logger.log(Level.SEVERE, "Failed to process refund: " + e.getMessage());
@@ -763,9 +811,33 @@ public class EventCompanyManageService {
             if(orderResponse==null || orderResponse.getValue()==null) {
                 return new Response<>(false,orderResponse.getMessage());
             }
-
             // use external system to refund
-            Order orderToRefund=orderResponse.getValue();
+            Event event = eventRepo.findById(eventId);
+            Order orderToRefund = event.findOrderById(orderId);
+            List<String> cancelledCodes = new ArrayList<>();
+            if (orderToRefund.getExternalTicketCodes() != null  && !orderToRefund.getExternalTicketCodes().isEmpty()) {
+                for (String ticketCode : orderToRefund.getExternalTicketCodes()) {
+                    try {
+                        boolean cancelled = ticketSupply.cancelTicket(ticketCode);
+                        if (cancelled) {
+                            cancelledCodes.add(ticketCode);
+                        } else {
+                            logger.log(Level.WARNING, "Failed to cancel ticket " + ticketCode + " in external system.");
+                        }
+                    } catch (Exception e) {
+                        logger.log(Level.SEVERE, "Exception cancelling ticket " + ticketCode, e);
+                    }
+                }
+            }
+
+            if(cancelledCodes.size()!=orderToRefund.getExternalTicketCodes().size()){
+                logger.log(Level.SEVERE,"Only part of the ticket canceled");
+                String userIdentifier = orderToRefund.getUserIdentifier();
+                NotifyPayload payload = new NotifyPayload("Refund process failed for " + orderToRefund.getOrderId() + "in event " + eventId + "because of ticket system failure", eventId, null);
+                sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
+                return new Response<>(false,"Failed to process refund to order "+orderId+" due to failed ticket cancellation,  please contact support ");
+            }
+
             boolean refundApproved=false;
             try{
                 refundApproved=paymentSystem.refund(
@@ -780,28 +852,35 @@ public class EventCompanyManageService {
             //update system state according the refund status
             return transactionTemplate.execute(status -> {
                 try {
-                    Event event = eventRepo.findById(eventId);
-                    Order order = event.findOrderById(orderId);
+                    Event currentEvent = eventRepo.findById(eventId);
+                    Order currentOrder = currentEvent.findOrderById(orderId);
+
                     if (finalRefundApproved) {
-                        order.markRefunded();
-                        eventRepo.store(event);
+                        currentOrder.markRefunded();
+                        eventRepo.store(currentEvent);
                         logger.log(Level.INFO, "Refund completed successfully");
 
-                        String userIdentifier = order.getUserIdentifier();
-                        NotifyPayload payload = new NotifyPayload("Refund process for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId, null);
+                        String userIdentifier = currentOrder.getUserIdentifier();
+                        NotifyPayload payload = new NotifyPayload("Refund process for " + currentOrder.getOrderId() + "in event " + eventId + "because of event closed", eventId, null);
                         sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
                         return new Response<>(true, "Refund completed successfully");
                     }
+                    currentOrder.markRefundRequired();
+                    eventRepo.store(currentEvent);
 
-                    String userIdentifier = order.getUserIdentifier();
-                    NotifyPayload payload = new NotifyPayload("Refund process failed for " + order.getOrderId() + "in event " + eventId + "because of event closed", eventId, null);
+                    String userIdentifier = currentOrder.getUserIdentifier();
+                    NotifyPayload payload = new NotifyPayload("Refund process failed for " + currentOrder.getOrderId() + "in event " + eventId + "because of event closed", eventId, null);
                     sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
-                    logger.log(Level.SEVERE, "Refund rejected by external payment service");
-                    return new Response<>(false, "Refund rejected by external payment service");
+                    logger.log(Level.SEVERE, "Refund rejected by external payment service, while tickets are currently canceled");
+                    return new Response<>(false, "Refund rejected by external payment service, while tickets are currently canceled");
                 } catch (NoSuchElementException e) {
                     status.setRollbackOnly();
                     logger.log(Level.SEVERE, "Event not found: " + e.getMessage());
                     return new Response<>(false, "Event not found");
+                } catch (TransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                    throw e;
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
                     throw e;
@@ -863,6 +942,10 @@ public class EventCompanyManageService {
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
                 logger.severe("Unexpected error in addRuleToEvent: " + e.getMessage());
@@ -917,6 +1000,10 @@ public class EventCompanyManageService {
                 return Response.error(e.getMessage());
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                 throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
@@ -973,6 +1060,10 @@ public class EventCompanyManageService {
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
                 logger.severe("Unexpected error in addDiscountToEvent: " + e.getMessage());
@@ -1028,6 +1119,10 @@ public class EventCompanyManageService {
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
                 logger.severe("Unexpected error in removeDiscountFromEvent: " + e.getMessage());
@@ -1072,6 +1167,10 @@ public class EventCompanyManageService {
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
+                throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
                 logger.severe("Unexpected error in changeEventPurchasePolicyType: " + e.getMessage());
@@ -1115,6 +1214,10 @@ public class EventCompanyManageService {
                 return Response.error(e.getMessage());
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                 throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
@@ -1162,6 +1265,10 @@ public class EventCompanyManageService {
 
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                 throw e;
             } catch (Exception e) {
                 status.setRollbackOnly();
@@ -1288,6 +1395,10 @@ public class EventCompanyManageService {
 
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
+                        throw e;
+                    } catch (TransientDataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                         throw e;
                     } catch (Exception e) {
                         status.setRollbackOnly();

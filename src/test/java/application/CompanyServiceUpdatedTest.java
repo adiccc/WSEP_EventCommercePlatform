@@ -5,6 +5,7 @@ import DTO.NotifyDTO;
 import DTO.NotifyType;
 import DTO.PurchaseRuleDTO;
 import Log.LoggerSetup;
+import app.config.SystemProperties;
 import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
@@ -76,6 +77,7 @@ class CompanyServiceUpdatedTest {
     private INotifier notifier;
     private TokenService tokenService;
     private TransactionTemplate transactionTemplate;
+    private ITicketSupply ticketSupply;
 
 
     @BeforeEach
@@ -88,12 +90,14 @@ class CompanyServiceUpdatedTest {
         suspensionRepo=new SuspensionRepoImpl();
         userRepo = new UserRepo();
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
-        tokenService = new TokenService();
+        tokenService = new TokenService(createTestSystemProperties());
         String adminEmail = "admin@admin.com";
         auth = new Auth(tokenService, Set.of(adminEmail));
         companyRepo = new CompanyRepoImpl();
         notifier = new VaadinNotifier();
         transactionTemplate = mock(TransactionTemplate.class);
+        ticketSupply = Mockito.mock(ITicketSupply.class);
+
 
         when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
             TransactionCallback<?> callback = invocation.getArgument(0);
@@ -132,10 +136,19 @@ class CompanyServiceUpdatedTest {
         companyRepo.store(company);
         paymentSystem = Mockito.mock(PaymentSystemProxy.class);
         eventRepo = new EventRepoImpl();
-        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo,notifier, transactionTemplate);
+        adminService = new AdminService(auth,userRepo,companyRepo,eventRepo,paymentSystem,suspensionRepo,notifier, transactionTemplate,ticketSupply);
         userService.registerUser(null, new UserDTO(adminEmail, "Admin", "System", "Pass123!", 1, 1, 2000, "Israel", "050-000-0000"));
         ADMIN_TOKEN = userService.login(adminEmail, "Pass123!").getValue();
 
+    }
+    private SystemProperties createTestSystemProperties() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setMaxConcurrentUsers(50);
+        systemProperties.setInitStateFile("classpath:init-state.json");
+        systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
+        systemProperties.setAccessCodeLength(6);
+        systemProperties.setTokenExpirationHours(24);
+        return systemProperties;
     }
 
 
@@ -2213,7 +2226,7 @@ class CompanyServiceUpdatedTest {
         ));
 
         // Arrange: Generate a real JWT that has ALREADY EXPIRED using the test hook
-        TokenService testTokenService = new TokenService();
+        TokenService testTokenService = new TokenService(createTestSystemProperties());
         String expiredToken = testTokenService.generateExpiredTokenForTest(email);
 
         // Arrange: Set up the WebSocket listener for this specific token's tab

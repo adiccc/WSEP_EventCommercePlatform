@@ -41,7 +41,7 @@ public class RealPaymentSystem implements IPaymentSystem {
 
             String transactionId = response.getBody();
 
-            if (transactionId == null || transactionId.trim().equals("1")) {
+            if (transactionId == null || transactionId.trim().equals("-1")) {
                 logger.warning("External payment system rejected the payment.");
                 return null;
             }

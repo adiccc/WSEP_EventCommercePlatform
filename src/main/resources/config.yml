@@ -1,7 +1,16 @@
 # ── System ────────────────────────────────────────────────────────────────────
 system:
   max-concurrent-users: 50
-  active-order-ttl-minutes: 10
   init-state-file: classpath:init-state.json
   access-code-chars : "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
   access-code-length : 6
+  admin-emails:
+    - systemadmin@demo.com
+  token-expiration-hours: 24
+
+# ── Active order ──────────────────────────────────────────────────────────────
+active-order:
+  capacity: 20
+  selecting-timeout-minutes: 5
+  checkout-timeout-minutes: 10
+  warning-before-expiry-minutes: 1
