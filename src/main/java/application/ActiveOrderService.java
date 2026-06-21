@@ -1496,8 +1496,13 @@ public class ActiveOrderService {
             }
 
             try {
-                eventRepo.findById(eventId);
+                Event event = eventRepo.findById(eventId);
+
                 boolean removed = eventQueueManager.remove(eventId, token);
+
+                if (removed) {
+                    eventRepo.store(event);
+                }
 
                 return new Response<>(
                         removed,
@@ -1542,13 +1547,14 @@ public class ActiveOrderService {
     private String dequeueNextToken(int eventId) {
         return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             try {
+                Event event = eventRepo.findById(eventId);
                 if (eventQueueManager.isEmpty(eventId)
                         || activeOrderRepo.countActiveOrdersForEvent(eventId) >= capacity) {
                     return new Response<>(null, "Queue empty or event at capacity");
                 }
 
                 String nextToken = eventQueueManager.dequeue(eventId);
-
+                eventRepo.store(event);
                 return new Response<>(nextToken, "Token dequeued successfully");
 
             } catch (OptimisticLockingFailureException e) {
