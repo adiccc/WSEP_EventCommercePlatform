@@ -384,8 +384,8 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
         addEntry("Entry 1", 50, 100);
         addEntry("Entry 2", 750, 100);
 
-        addStandingZone("Standing Zone 1", 40, 80.0, 70, 450);
-        addSeatingZone("Seating Zone 1", 8, 10, 150.0, 270, 400);
+        addStandingZone("Standing Zone 1", 6, 80.0, 400, 150);
+        addSeatingZone("Seating Zone 1", 4, 3, 150.0, 430, 400);
     }
 
     private void addEntry(String label, int x, int y) {
@@ -826,6 +826,7 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
 
         for (StandingZoneForm form : standingZoneForms) {
             zones.add(new StandingZoneDTO(
+                    -1,
                     form.capacityField.getValue(),
                     form.nameField.getValue().trim(),
                     form.priceField.getValue(),
@@ -841,6 +842,7 @@ public class CreateEventView extends VerticalLayout implements BeforeEnterObserv
 
         for (SeatingZoneForm form : seatingZoneForms) {
             zones.add(new SeatingZoneDTO(
+                    -1,
                     form.rowsField.getValue(),
                     form.columnsField.getValue(),
                     form.nameField.getValue().trim(),

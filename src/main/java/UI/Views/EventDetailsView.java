@@ -210,10 +210,10 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                 .set("padding", "0.8rem 1.4rem")
                 .set("border-radius", "12px");
 
-        Button addSeatingAreasButton =
-                new Button("🪑 Add Zones");
+        Button editEventMapButton =
+                new Button("🗺 Edit Event Map");
 
-        addSeatingAreasButton.getStyle()
+        editEventMapButton.getStyle()
                 .set("margin-top", "1rem")
                 .set("font-weight", "600")
                 .set("background", "#0f766e")
@@ -246,9 +246,9 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
             );
             updateSalesMethodButton.setText("🎲 Update Sales Method");
         }
-        addSeatingAreasButton.addClickListener(e ->
+        editEventMapButton.addClickListener(e ->
                 UI.getCurrent().navigate(
-                        "manage/event/" + eventId + "/add-seating-area"
+                        "manage/event/" + eventId + "/edit-map"
                 )
         );
 
@@ -332,7 +332,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         if (presenter.canUpdateEventDate(token, companyId)) {
             managementActions.add(updateDateButton);
-            managementActions.add(addSeatingAreasButton);
+            managementActions.add(editEventMapButton);
         }
 
         if (presenter.canManageEventDiscounts(token, companyId)) {

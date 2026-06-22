@@ -3,11 +3,12 @@ package UI.Views;
 import DTO.ElementPositionDTO;
 import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
-import UI.Presenters.AddSeatingAreaPresenter;
+import UI.Presenters.EditEventMapPresenter;
 import application.EventCompanyManageService;
 import application.Response;
 import com.vaadin.flow.component.AbstractField;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -28,25 +29,29 @@ import domain.dto.EventMapDTO;
 import java.util.ArrayList;
 import java.util.List;
 
-@Route(value = "manage/event/:eventId(\\d+)/add-seating-area", layout = MainLayout.class)
-@PageTitle("Add Areas")
+@Route(value = "manage/event/:eventId(\\d+)/edit-map", layout = MainLayout.class)
+@PageTitle("Edit Event Map")
 @AnonymousAllowed
-public class AddSeatingAreaView extends VerticalLayout implements BeforeEnterObserver {
+public class EditEventMapView extends VerticalLayout implements BeforeEnterObserver {
 
-    private final AddSeatingAreaPresenter presenter;
+    private final EditEventMapPresenter presenter;
     private int eventId;
     private EventMapDTO existingMap;
 
     private final VerticalLayout standingZonesContainer = new VerticalLayout();
     private final VerticalLayout seatingZonesContainer = new VerticalLayout();
     private final Div mapPreview = new Div();
-    private final Button saveButton = new Button("Save New Areas");
+    private final Button saveButton = new Button("Add New Areas");
 
     private final List<StandingZoneForm> standingZoneForms = new ArrayList<>();
     private final List<SeatingZoneForm> seatingZoneForms = new ArrayList<>();
 
-    public AddSeatingAreaView(EventCompanyManageService eventCompanyManageService) {
-        this.presenter = new AddSeatingAreaPresenter(eventCompanyManageService);
+
+    public EditEventMapView(EventCompanyManageService eventCompanyManageService) {
+        this.presenter = new EditEventMapPresenter(eventCompanyManageService);
+
+        saveButton.addClickListener(e -> submit());
+
         setPadding(true);
         setSpacing(true);
         setWidthFull();
@@ -75,14 +80,13 @@ public class AddSeatingAreaView extends VerticalLayout implements BeforeEnterObs
         Button backButton = new Button("← Back", e -> UI.getCurrent().getPage().getHistory().back());
         backButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
 
-        H2 title = new H2("Add Areas To Existing Event Map");
+        H2 title = new H2("Edit Event Map");
         title.getStyle()
                 .set("font-size", "2rem")
                 .set("font-weight", "800")
                 .set("margin-bottom", "0");
 
-        Paragraph subtitle = new Paragraph("View the current map and add new standing or seating zones.");
-        subtitle.getStyle()
+        Paragraph subtitle = new Paragraph("View the current map, add new areas, or remove existing available areas.");        subtitle.getStyle()
                 .set("color", "var(--lumo-secondary-text-color)")
                 .set("margin-top", "0");
 
@@ -91,7 +95,6 @@ public class AddSeatingAreaView extends VerticalLayout implements BeforeEnterObs
 
         saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         saveButton.setEnabled(false);
-        saveButton.addClickListener(e -> submit());
         saveButton.getStyle()
                 .set("height", "48px")
                 .set("font-weight", "800")
@@ -106,6 +109,7 @@ public class AddSeatingAreaView extends VerticalLayout implements BeforeEnterObs
                 title,
                 subtitle,
                 buildVenueSetupWithPreview(),
+                buildExistingZonesSection(),
                 saveButton
         );
 
@@ -174,8 +178,8 @@ public class AddSeatingAreaView extends VerticalLayout implements BeforeEnterObs
         actions.getStyle().set("flex-wrap", "wrap");
 
         section.add(
-                sectionTitle("🏟 New Areas"),
-                new Paragraph("Add only new standing or seating zones. Existing areas are shown in the preview and are not edited here."),
+                sectionTitle("🏟 Map Areas"),
+                new Paragraph("Add new standing or seating zones. Existing areas can be removed only if all their tickets are still available."),
                 actions,
                 new H3("Standing Zones"),
                 standingZonesContainer,
@@ -186,13 +190,147 @@ public class AddSeatingAreaView extends VerticalLayout implements BeforeEnterObs
         return section;
     }
 
+    private VerticalLayout buildExistingZonesSection() {
+        VerticalLayout section = cardSection();
+
+        section.add(
+                sectionTitle("🗑 Existing Areas"),
+                new Paragraph("Removing an existing area is applied immediately after confirmation. Adding new areas is saved with the button below."),
+                new H3("Existing Standing Zones")
+        );
+
+        if (existingMap.getStandingZones().isEmpty()) {
+            section.add(new Paragraph("No existing standing zones."));
+        } else {
+            for (StandingZoneDTO zone : existingMap.getStandingZones()) {
+                section.add(buildExistingStandingZoneRow(zone));
+            }
+        }
+
+        section.add(new H3("Existing Seating Zones"));
+
+        if (existingMap.getSeatingZones().isEmpty()) {
+            section.add(new Paragraph("No existing seating zones."));
+        } else {
+            for (SeatingZoneDTO zone : existingMap.getSeatingZones()) {
+                section.add(buildExistingSeatingZoneRow(zone));
+            }
+        }
+
+        return section;
+    }
+
+    private HorizontalLayout buildExistingStandingZoneRow(StandingZoneDTO zone) {
+        Span details = new Span(
+                zone.getName()
+                        + " | Available: "
+                        + zone.getAvailable()
+                        + "/"
+                        + zone.getCapacty()
+        );
+
+        details.getStyle()
+                .set("font-weight", "700");
+
+        Button removeButton = new Button("Remove", e -> removeExistingZone(zone.getZoneId()));
+        removeButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+
+        HorizontalLayout row = new HorizontalLayout(details, removeButton);
+        row.setWidthFull();
+        row.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+        row.getStyle()
+                .set("justify-content", "space-between")
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "12px")
+                .set("padding", "0.75rem 1rem")
+                .set("background", "var(--lumo-contrast-5pct)");
+
+        return row;
+    }
+
+    private HorizontalLayout buildExistingSeatingZoneRow(SeatingZoneDTO zone) {
+        Span details = new Span(
+                zone.getName()
+                        + " | "
+                        + zone.getRows()
+                        + " x "
+                        + zone.getCols()
+                        + " seats"
+        );
+
+        details.getStyle()
+                .set("font-weight", "700");
+
+        Button removeButton = new Button("Remove", e -> removeExistingZone(zone.getZoneId()));
+        removeButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+
+        HorizontalLayout row = new HorizontalLayout(details, removeButton);
+        row.setWidthFull();
+        row.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+        row.getStyle()
+                .set("justify-content", "space-between")
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "12px")
+                .set("padding", "0.75rem 1rem")
+                .set("background", "var(--lumo-contrast-5pct)");
+
+        return row;
+    }
+
+    private void removeExistingZone(int zoneId) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Remove Area");
+
+        Paragraph warning = new Paragraph(
+                "This will remove the area immediately if all tickets in it are still available. This action is saved right away."
+        );
+
+        warning.getStyle()
+                .set("color", "var(--lumo-error-text-color)")
+                .set("font-weight", "500");
+
+        Button cancelButton = new Button("Cancel", e -> dialog.close());
+        cancelButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        Button removeButton = new Button("Remove", e -> {
+            Response<Boolean> response = presenter.removeZoneFromEventMap(
+                    getToken(),
+                    eventId,
+                    zoneId
+            );
+
+            if (Boolean.TRUE.equals(response.getValue())) {
+                dialog.close();
+                showSuccess("Zone removed successfully.");
+                standingZoneForms.clear();
+                seatingZoneForms.clear();
+                buildPage();
+                return;
+            }
+
+            showError(safeMessage(response.getMessage()));
+        });
+
+        removeButton.addThemeVariants(
+                ButtonVariant.LUMO_ERROR,
+                ButtonVariant.LUMO_PRIMARY
+        );
+
+        dialog.add(warning);
+        dialog.getFooter().add(cancelButton, removeButton);
+        dialog.open();
+    }
+
+
     private VerticalLayout buildPreviewColumn() {
         VerticalLayout preview = cardSection();
         preview.setPadding(true);
         preview.setSpacing(true);
 
-        H3 title = sectionTitle("🗺 Existing Map + New Areas Preview");
-        Paragraph helper = new Paragraph("Existing areas are faded. New areas are shown clearly.");
+        H3 title = sectionTitle("🗺 Event Map Preview");
+        Paragraph helper = new Paragraph(
+                "Existing areas are faded and new areas are highlighted."
+        );
         helper.getStyle()
                 .set("color", "var(--lumo-secondary-text-color)")
                 .set("margin-top", "0");
@@ -482,6 +620,7 @@ public class AddSeatingAreaView extends VerticalLayout implements BeforeEnterObs
 
         for (StandingZoneForm form : standingZoneForms) {
             zones.add(new StandingZoneDTO(
+                    -1,
                     form.capacityField.getValue(),
                     form.nameField.getValue().trim(),
                     form.priceField.getValue(),
@@ -497,6 +636,7 @@ public class AddSeatingAreaView extends VerticalLayout implements BeforeEnterObs
 
         for (SeatingZoneForm form : seatingZoneForms) {
             zones.add(new SeatingZoneDTO(
+                    -1,
                     form.rowsField.getValue(),
                     form.columnsField.getValue(),
                     form.nameField.getValue().trim(),

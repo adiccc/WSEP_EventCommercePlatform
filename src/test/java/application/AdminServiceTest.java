@@ -141,8 +141,8 @@ class AdminServiceTest {
         eventDate = LocalDateTime.now().plusDays(10);
         stage = new ElementPositionDTO(10, 20);
         entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
-        standingZones = List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1)));
-        seatingZones = List.of(new SeatingZoneDTO(10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
+        standingZones = List.of(new StandingZoneDTO(-1,200, "floor", 100.0, new ElementPositionDTO(1, 1)));
+        seatingZones = List.of(new SeatingZoneDTO(-1,10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
         eventCompanyManageService.DefineVenueAndSeatingMap(adminToken, eventId, stage, entries, standingZones,
                 seatingZones);
 
@@ -969,7 +969,7 @@ class AdminServiceTest {
     @Test
     void GivenHighLoad_WhenAdminClosesCompanyAndManagerAddsZoneSimultaneously_ThenSystemRemainsConsistent() throws InterruptedException {
         // Arrange: Prepare new zones for the manager to add
-        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
+        List<StandingZoneDTO> newStandingZones = List.of(new StandingZoneDTO(-1,500, "Golden Ring", 300.0, new ElementPositionDTO(2, 2)));
 
         // Setup concurrency tools
         ExecutorService executor = Executors.newFixedThreadPool(2);

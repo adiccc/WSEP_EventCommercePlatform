@@ -29,6 +29,7 @@ public class EventMapDTO {
         for (Zone zone : eventMap.getZones()) {
             if (zone instanceof StandingZone standingZone) {
                 standingZones.add(new StandingZoneDTO(
+                        standingZone.getId(),
                         standingZone.getCapacity(),
                         standingZone.getAvailable(),
                         standingZone.getName(),
@@ -53,6 +54,7 @@ public class EventMapDTO {
                 }
 
                 seatingZones.add(new SeatingZoneDTO(
+                        seatingZone.getId(),
                         seatingZone.getRows(),
                         seatingZone.getCols(),
                         seatingZone.getName(),

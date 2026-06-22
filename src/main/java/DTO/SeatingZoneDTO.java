@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class SeatingZoneDTO {
-
+    private int zoneId;
     private String name;
     private double price;
     private ElementPositionDTO elementPosition;
@@ -16,16 +16,18 @@ public class SeatingZoneDTO {
     private Map<String, TicketStatus> ticketStatuses;
 
     public SeatingZoneDTO(
+            int zoneId,
             int rows,
             int cols,
             String name,
             double price,
             ElementPositionDTO elementPosition
     ) {
-        this(rows, cols, name, price, elementPosition, new HashMap<>());
+        this(zoneId, rows, cols, name, price, elementPosition, new HashMap<>());
     }
 
     public SeatingZoneDTO(
+            int zoneId,
             int rows,
             int cols,
             String name,
@@ -33,6 +35,7 @@ public class SeatingZoneDTO {
             ElementPositionDTO elementPosition,
             Map<String, TicketStatus> ticketStatuses
     ) {
+        this.zoneId = zoneId;
         this.rows = rows;
         this.cols = cols;
         this.name = name;
@@ -40,6 +43,8 @@ public class SeatingZoneDTO {
         this.elementPosition = elementPosition;
         this.ticketStatuses = ticketStatuses;
     }
+
+    public int getZoneId() {return zoneId;}
 
     public String getName() {
         return name;

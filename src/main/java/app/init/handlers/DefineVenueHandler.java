@@ -41,6 +41,7 @@ public class DefineVenueHandler implements InitOperationHandler {
         if (params.containsKey("standingCapacity") || params.containsKey("seatingRows")) {
             standingZones = params.containsKey("standingCapacity")
                     ? List.of(new StandingZoneDTO(
+                            -1,
                             Integer.parseInt(params.get("standingCapacity")),
                             params.getOrDefault("standingName", "General Standing"),
                             Double.parseDouble(params.get("standingPrice")),
@@ -49,6 +50,7 @@ public class DefineVenueHandler implements InitOperationHandler {
 
             seatingZones = params.containsKey("seatingRows")
                     ? List.of(new SeatingZoneDTO(
+                            -1,
                             Integer.parseInt(params.get("seatingRows")),
                             Integer.parseInt(params.get("seatingCols")),
                             params.getOrDefault("seatingName", "Seating"),
@@ -58,11 +60,11 @@ public class DefineVenueHandler implements InitOperationHandler {
         } else {
             // Default demo venue (used by older init files / unspecified events)
             standingZones = List.of(
-                    new StandingZoneDTO(40, "General Standing", 80.0, new ElementPositionDTO(70, 450)));
+                    new StandingZoneDTO(-1,40, "General Standing", 80.0, new ElementPositionDTO(70, 450)));
             seatingZones = List.of(
-                    new SeatingZoneDTO(3, 10, "VIP",     300.0, new ElementPositionDTO(270, 150)),
-                    new SeatingZoneDTO(8, 10, "Regular", 150.0, new ElementPositionDTO(270, 400)),
-                    new SeatingZoneDTO(5,  3, "Balcony", 180.0, new ElementPositionDTO(700, 300)));
+                    new SeatingZoneDTO(-1,3, 10, "VIP",     300.0, new ElementPositionDTO(270, 150)),
+                    new SeatingZoneDTO(-1,8, 10, "Regular", 150.0, new ElementPositionDTO(270, 400)),
+                    new SeatingZoneDTO(-1,5,  3, "Balcony", 180.0, new ElementPositionDTO(700, 300)));
         }
 
         Response<Boolean> response = eventService.DefineVenueAndSeatingMap(

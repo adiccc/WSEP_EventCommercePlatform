@@ -167,8 +167,8 @@ class ActiveOrderServiceTest {
 
         ElementPositionDTO stage = new ElementPositionDTO(10, 20);
         List<ElementPositionDTO> entries = List.of(new ElementPositionDTO(0, 0), new ElementPositionDTO(50, 10));
-        List<StandingZoneDTO> standingZones = List.of(new StandingZoneDTO(200, "floor", 100.0, new ElementPositionDTO(1, 1)));
-        List<SeatingZoneDTO> seatingZones = List.of(new SeatingZoneDTO(10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
+        List<StandingZoneDTO> standingZones = List.of(new StandingZoneDTO(-1,200, "floor", 100.0, new ElementPositionDTO(1, 1)));
+        List<SeatingZoneDTO> seatingZones = List.of(new SeatingZoneDTO(-1,10, 20, "tribune", 150.0, new ElementPositionDTO(5, 5)));
 
         companyEventService.DefineVenueAndSeatingMap(validToken, eventId, stage, entries, standingZones, seatingZones);
         companyEventService.DefineVenueAndSeatingMap(validToken, concurrentEventId, stage, entries, standingZones, seatingZones);
@@ -3359,9 +3359,9 @@ class ActiveOrderServiceTest {
         ElementPositionDTO stage = new ElementPositionDTO(10, 20);
         List<ElementPositionDTO> entries = List.of(new ElementPositionDTO(0, 0));
         List<StandingZoneDTO> standingZones = List.of(
-                new StandingZoneDTO(2, "floor", 100.0, new ElementPositionDTO(1, 1)));
+                new StandingZoneDTO(-1,2, "floor", 100.0, new ElementPositionDTO(1, 1)));
         List<SeatingZoneDTO> seatingZones = List.of(
-                new SeatingZoneDTO(1, 1, "tribune", 150.0, new ElementPositionDTO(5, 5)));
+                new SeatingZoneDTO(-1,1, 1, "tribune", 150.0, new ElementPositionDTO(5, 5)));
 
         companyEventService.DefineVenueAndSeatingMap(validToken, id, stage, entries, standingZones, seatingZones);
         return id;
@@ -3975,9 +3975,9 @@ class ActiveOrderServiceTest {
         ElementPositionDTO stage = new ElementPositionDTO(10, 20);
         List<ElementPositionDTO> entries = List.of(new ElementPositionDTO(0, 0));
         List<StandingZoneDTO> standingZones = List.of(
-                new StandingZoneDTO(2, "floor", 100.0, new ElementPositionDTO(1, 1)));
+                new StandingZoneDTO(-1,2, "floor", 100.0, new ElementPositionDTO(1, 1)));
         List<SeatingZoneDTO> seatingZones = List.of(
-                new SeatingZoneDTO(1, 2, "tribune", 150.0, new ElementPositionDTO(5, 5)));
+                new SeatingZoneDTO(-1,1, 2, "tribune", 150.0, new ElementPositionDTO(5, 5)));
         companyEventService.DefineVenueAndSeatingMap(
                 validToken, boundaryEventId, stage, entries, standingZones, seatingZones);
 
@@ -4146,7 +4146,7 @@ class ActiveOrderServiceTest {
 
         companyEventService.DefineVenueAndSeatingMap(validToken, isolatedEventId,
                 new ElementPositionDTO(10, 20), List.of(new ElementPositionDTO(0,0)),
-                List.of(new StandingZoneDTO(capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
+                List.of(new StandingZoneDTO(-1,capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-123");
@@ -4237,7 +4237,7 @@ class ActiveOrderServiceTest {
 
         companyEventService.DefineVenueAndSeatingMap(validToken, isolatedEventId,
                 new ElementPositionDTO(10, 20), List.of(new ElementPositionDTO(0,0)),
-                List.of(new StandingZoneDTO(capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
+                List.of(new StandingZoneDTO(-1,capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
 
         String firstFillerToken = null;
         int firstFillerOrderId = -1;
@@ -5075,7 +5075,7 @@ class ActiveOrderServiceTest {
 
         companyEventService.DefineVenueAndSeatingMap(validToken, isolatedEventId,
                 new ElementPositionDTO(10, 20), List.of(new ElementPositionDTO(0,0)),
-                List.of(new StandingZoneDTO(capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
+                List.of(new StandingZoneDTO(-1,capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
 
         INotifier mockNotifier = Mockito.mock(INotifier.class);
         ActiveOrderService mockService = new ActiveOrderService(
@@ -5139,7 +5139,7 @@ class ActiveOrderServiceTest {
 
         companyEventService.DefineVenueAndSeatingMap(validToken, isolatedEventId,
                 new ElementPositionDTO(10, 20), List.of(new ElementPositionDTO(0,0)),
-                List.of(new StandingZoneDTO(capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
+                List.of(new StandingZoneDTO(-1,capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
 
         INotifier mockNotifier = Mockito.mock(INotifier.class);
         ActiveOrderService mockService = new ActiveOrderService(
@@ -5197,7 +5197,7 @@ class ActiveOrderServiceTest {
 
         companyEventService.DefineVenueAndSeatingMap(validToken, isolatedEventId,
                 new ElementPositionDTO(10, 20), List.of(new ElementPositionDTO(0,0)),
-                List.of(new StandingZoneDTO(capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
+                List.of(new StandingZoneDTO(-1,capacity, "floor", 100.0, new ElementPositionDTO(1, 1))), new ArrayList<>());
 
         INotifier mockNotifier = Mockito.mock(INotifier.class);
         ActiveOrderService mockService = new ActiveOrderService(
@@ -5256,8 +5256,8 @@ class ActiveOrderServiceTest {
                 new ElementPositionDTO(10, 20),
                 List.of(new ElementPositionDTO(0, 0)),
                 List.of(
-                        new StandingZoneDTO(10, "zzz", 100.0, new ElementPositionDTO(1, 1)),
-                        new StandingZoneDTO(10, "aaa", 120.0, new ElementPositionDTO(2, 2))
+                        new StandingZoneDTO(-1,10, "zzz", 100.0, new ElementPositionDTO(1, 1)),
+                        new StandingZoneDTO(-1,10, "aaa", 120.0, new ElementPositionDTO(2, 2))
                 ),
                 new ArrayList<>()
         );
