@@ -4,7 +4,7 @@ import application.CompanyService;
 import application.Response;
 import application.UserService;
 import domain.dataType.PermissionType;
-import domain.dto.RolesPermissionsTreeDTO;
+import DTO.RolesPermissionsTreeDTO;
 
 import java.util.Set;
 

@@ -5,7 +5,7 @@ import app.init.InitOperationHandler;
 import app.init.InitializationException;
 import application.Response;
 import application.UserService;
-import domain.dto.UserDTO;
+import DTO.UserDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 

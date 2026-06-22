@@ -1,7 +1,7 @@
 package domain.company;
 
 import domain.dataType.PermissionType;
-import domain.dto.HierarchyDTO;
+import DTO.HierarchyDTO;
 import domain.user.Founder;
 import domain.user.Manager;
 import domain.user.Owner;

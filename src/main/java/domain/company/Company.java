@@ -3,9 +3,9 @@ package domain.company;
 import DTO.DiscountDTO;
 import DTO.PurchaseRuleDTO;
 import domain.dataType.PermissionType;
-import domain.dto.UserDTO;
+import DTO.UserDTO;
 import domain.policy.*;
-import domain.dto.HierarchyDTO;
+import DTO.HierarchyDTO;
 import jakarta.persistence.*;
 
 import java.util.List;

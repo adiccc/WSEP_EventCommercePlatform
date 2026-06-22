@@ -6,10 +6,10 @@ import DTO.PurchaseRuleDTO;
 import domain.dataType.CategoryEvent;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
-import domain.dto.ActiveOrderSeatDTO;
-import domain.dto.ActiveOrderSelectionDTO;
-import domain.dto.SeatingTicketDTO;
-import domain.dto.UserDTO;
+import DTO.ActiveOrderSeatDTO;
+import DTO.ActiveOrderSelectionDTO;
+import DTO.SeatingTicketDTO;
+import DTO.UserDTO;
 import domain.policy.*;
 import jakarta.persistence.*;
 

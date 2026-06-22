@@ -1,7 +1,7 @@
 package UI.Presenters;
 
 import application.CompanyService;
-import domain.dto.CompanyDTO;
+import DTO.CompanyDTO;
 
 import java.util.List;
 

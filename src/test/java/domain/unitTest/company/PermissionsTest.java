@@ -2,7 +2,7 @@ package domain.unitTest.company;
 
 import domain.company.Permissions;
 import domain.dataType.PermissionType;
-import domain.dto.HierarchyDTO;
+import DTO.HierarchyDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

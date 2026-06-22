@@ -4,19 +4,21 @@ import DTO.DiscountDTO;
 import DTO.NotifyDTO;
 import DTO.NotifyType;
 import DTO.PurchaseRuleDTO;
+import DTO.CompanyDetailsDTO;
+import DTO.RolesPermissionsTreeDTO;
 import Log.LoggerSetup;
 import app.config.SystemProperties;
 import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
-import domain.dto.UserDTO;
+import DTO.UserDTO;
 
 import domain.event.IEventRepo;
 import domain.lottery.AccessCodeGenerator;
 import domain.policy.*;
 import domain.user.IUserRepo;
-import domain.dto.CompanyDTO;
+import DTO.CompanyDTO;
 import domain.user.Manager;
 import domain.user.Member;
 import domain.user.NotificationStatus;
@@ -82,6 +84,11 @@ class CompanyServiceUpdatedTest {
 
     @BeforeEach
     void setUp() {
+        SystemProperties systemProperties = createTestSystemProperties();
+
+        tokenService = new TokenService(systemProperties);
+        new RetryHelper(systemProperties);
+
         AccessCodeGenerator.configure(
                 "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
                 6
@@ -148,6 +155,7 @@ class CompanyServiceUpdatedTest {
         systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
         systemProperties.setAccessCodeLength(6);
         systemProperties.setTokenExpirationHours(24);
+        systemProperties.setRetryCount(50);
         return systemProperties;
     }
 
@@ -589,7 +597,7 @@ class CompanyServiceUpdatedTest {
 
     @Test
     void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenReturnsTree() {
-        Response<domain.dto.RolesPermissionsTreeDTO> response =
+        Response<RolesPermissionsTreeDTO> response =
                 service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID);
 
         assertFalse(response.isError(), "Expected success but got: " + response.getMessage());
@@ -598,7 +606,7 @@ class CompanyServiceUpdatedTest {
 
     @Test
     void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenFounderIdIsCorrect() {
-        domain.dto.RolesPermissionsTreeDTO tree =
+        RolesPermissionsTreeDTO tree =
                 service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID).getValue();
 
         assertEquals(OWNER_ID, tree.getFounderId(),
@@ -607,7 +615,7 @@ class CompanyServiceUpdatedTest {
 
     @Test
     void GivenOwnerAndValidCompany_WhenViewRolesTree_ThenOwnerSetContainsFounder() {
-        domain.dto.RolesPermissionsTreeDTO tree =
+        RolesPermissionsTreeDTO tree =
                 service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID).getValue();
 
         assertTrue(tree.getOwnerIds().contains(OWNER_ID));
@@ -618,7 +626,7 @@ class CompanyServiceUpdatedTest {
         int freshCompanyId = 99;
         service.createProductionCompany(OWNER_TOKEN, freshCompanyId, "Fresh Co", "fresh@co.com", "050-999-9999", "bank-99");
 
-        domain.dto.RolesPermissionsTreeDTO tree =
+        RolesPermissionsTreeDTO tree =
                 service.viewRolesAndPermissionsTree(OWNER_TOKEN, freshCompanyId).getValue();
 
         assertTrue(tree.getManagersPermissions().isEmpty(),
@@ -627,7 +635,7 @@ class CompanyServiceUpdatedTest {
 
     @Test
     void GivenNonOwner_WhenViewRolesTree_ThenError() {
-        Response<domain.dto.RolesPermissionsTreeDTO> response =
+        Response<RolesPermissionsTreeDTO> response =
                 service.viewRolesAndPermissionsTree(OTHER_TOKEN, COMPANY_ID);
 
         assertTrue(response.isError());
@@ -636,7 +644,7 @@ class CompanyServiceUpdatedTest {
 
     @Test
     void GivenUnknownCompanyId_WhenViewRolesTree_ThenError() {
-        Response<domain.dto.RolesPermissionsTreeDTO> response =
+        Response<RolesPermissionsTreeDTO> response =
                 service.viewRolesAndPermissionsTree(OWNER_TOKEN, 9999);
 
         assertTrue(response.isError());
@@ -645,7 +653,7 @@ class CompanyServiceUpdatedTest {
 
     @Test
     void GivenInvalidToken_WhenViewRolesTree_ThenError() {
-        Response<domain.dto.RolesPermissionsTreeDTO> response =
+        Response<RolesPermissionsTreeDTO> response =
                 service.viewRolesAndPermissionsTree("not-a-real-token", COMPANY_ID);
 
         assertTrue(response.isError());
@@ -656,7 +664,7 @@ class CompanyServiceUpdatedTest {
     void GivenLoggedOutUser_WhenViewRolesTree_ThenError() {
         auth.logout(OWNER_TOKEN);
 
-        Response<domain.dto.RolesPermissionsTreeDTO> response =
+        Response<RolesPermissionsTreeDTO> response =
                 service.viewRolesAndPermissionsTree(OWNER_TOKEN, COMPANY_ID);
 
         assertTrue(response.isError());
@@ -2691,26 +2699,26 @@ class CompanyServiceUpdatedTest {
 
     @Test
     void GivenInvalidToken_WhenGetProductionCompany_ThenError() {
-        Response<domain.dto.CompanyDetailsDTO> response = service.getProductionCompany("invalid-token", COMPANY_ID);
+        Response<CompanyDetailsDTO> response = service.getProductionCompany("invalid-token", COMPANY_ID);
         assertNull(response.getValue());
         assertEquals("Invalid or expired token", response.getMessage());
     }
 
     @Test
     void GivenOwnerMember_WhenGetProductionCompany_ThenReturnsDetails() {
-        Response<domain.dto.CompanyDetailsDTO> response = service.getProductionCompany(OWNER_TOKEN, COMPANY_ID);
+        Response<CompanyDetailsDTO> response = service.getProductionCompany(OWNER_TOKEN, COMPANY_ID);
         assertNotNull(response.getValue());
     }
 
     @Test
     void GivenGuest_WhenGetProductionCompany_ThenReturnsDetails() {
-        Response<domain.dto.CompanyDetailsDTO> response = service.getProductionCompany(GUEST_TOKEN, COMPANY_ID);
+        Response<CompanyDetailsDTO> response = service.getProductionCompany(GUEST_TOKEN, COMPANY_ID);
         assertNotNull(response.getValue());
     }
 
     @Test
     void GivenNonExistingCompany_WhenGetProductionCompany_ThenError() {
-        Response<domain.dto.CompanyDetailsDTO> response = service.getProductionCompany(OWNER_TOKEN, 9999);
+        Response<CompanyDetailsDTO> response = service.getProductionCompany(OWNER_TOKEN, 9999);
         assertNull(response.getValue());
         assertTrue(response.getMessage().contains("System error"));
     }

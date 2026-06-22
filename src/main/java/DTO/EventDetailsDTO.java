@@ -1,13 +1,6 @@
-package domain.dto;
+package DTO;
 
-import domain.dataType.CategoryEvent;
-import domain.dataType.GeographicalArea;
 import domain.event.Event;
-import domain.event.EventMap;
-import domain.policy.DiscountPolicy;
-import domain.policy.PurchasePolicy;
-
-import java.time.LocalDateTime;
 
 public class EventDetailsDTO {
     private Integer eventID;

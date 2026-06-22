@@ -4,7 +4,7 @@ import DTO.ElementPositionDTO;
 import DTO.PurchasedTicketDTO;
 import domain.dataType.ElementPosition;
 import domain.dataType.TicketStatus;
-import domain.dto.ActiveOrderSeatDTO;
+import DTO.ActiveOrderSeatDTO;
 import jakarta.persistence.*;
 
 import java.util.List;

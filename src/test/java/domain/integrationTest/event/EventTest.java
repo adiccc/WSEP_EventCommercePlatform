@@ -3,7 +3,7 @@ package domain.integrationTest.event;
 import domain.dataType.CategoryEvent;
 import domain.dataType.ElementPosition;
 import domain.dataType.GeographicalArea;
-import domain.dto.SeatingTicketDTO;
+import DTO.SeatingTicketDTO;
 import domain.event.*;
 import domain.dataType.EventSearchFilter;
 import org.junit.jupiter.api.BeforeEach;

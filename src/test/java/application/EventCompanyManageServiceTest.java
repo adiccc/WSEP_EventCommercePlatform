@@ -6,17 +6,15 @@ import app.config.SystemProperties;
 import com.vaadin.flow.shared.Registration;
 import app.config.ActiveOrderProperties;
 import domain.Suspension.ISuspensionRepo;
-import domain.Suspension.Suspension;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
-import domain.dataType.TicketStatus;
-import domain.dto.CompanyDetailsDTO;
-import domain.dto.EventDetailsDTO;
-import domain.dto.OrderDTO;
-import domain.dto.SalesReportDTO;
-import domain.dto.UserDTO;
+import DTO.CompanyDetailsDTO;
+import DTO.EventDetailsDTO;
+import DTO.OrderDTO;
+import DTO.SalesReportDTO;
+import DTO.UserDTO;
 import domain.event.*;
 import domain.lottery.AccessCodeGenerator;
 import domain.lottery.ILotteryRepo;
@@ -95,6 +93,11 @@ class EventCompanyManageServiceTest {
 
     @BeforeEach
     void setUp() {
+        SystemProperties systemProperties = createTestSystemProperties();
+
+        tokenService = new TokenService(systemProperties);
+        new RetryHelper(systemProperties);
+
         AccessCodeGenerator.configure(
                 "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
                 6
@@ -239,6 +242,7 @@ class EventCompanyManageServiceTest {
         systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
         systemProperties.setAccessCodeLength(6);
         systemProperties.setTokenExpirationHours(24);
+        systemProperties.setRetryCount(50);
         return systemProperties;
     }
 

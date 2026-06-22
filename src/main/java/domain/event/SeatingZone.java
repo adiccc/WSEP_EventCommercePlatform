@@ -4,13 +4,13 @@ import DTO.PurchasedTicketDTO;
 import DTO.SeatingZoneDTO;
 import domain.dataType.ElementPosition;
 import domain.dataType.TicketStatus;
-import domain.dto.ActiveOrderSeatDTO;
-import domain.dto.SeatingTicketDTO;
+import DTO.ActiveOrderSeatDTO;
+import DTO.SeatingTicketDTO;
 import jakarta.persistence.*;
 
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
+
 @Entity
 @DiscriminatorValue("SEATING")
 public class SeatingZone extends Zone {

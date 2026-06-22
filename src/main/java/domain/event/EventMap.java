@@ -2,9 +2,9 @@ package domain.event;
 import DTO.PurchasedTicketDTO;
 import domain.dataType.ElementPosition;
 import domain.dataType.TicketStatus;
-import domain.dto.ActiveOrderSeatDTO;
-import domain.dto.ActiveOrderSelectionDTO;
-import domain.dto.SeatingTicketDTO;
+import DTO.ActiveOrderSeatDTO;
+import DTO.ActiveOrderSelectionDTO;
+import DTO.SeatingTicketDTO;
 import jakarta.persistence.*;
 
 import java.util.ArrayList;

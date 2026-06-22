@@ -1,7 +1,5 @@
 package application;
 
-import domain.dto.UserDTO;
-
 public interface IAuth {
     Response<String> login(String username); //email
 

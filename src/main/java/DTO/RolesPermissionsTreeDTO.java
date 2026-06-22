@@ -1,4 +1,4 @@
-package domain.dto;
+package DTO;
 
 import domain.dataType.PermissionType;
 

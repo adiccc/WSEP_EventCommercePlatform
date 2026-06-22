@@ -1,6 +1,6 @@
 package domain.policy;
 
-import domain.dto.UserDTO;
+import DTO.UserDTO;
 import jakarta.persistence.*;
 
 import java.util.List;

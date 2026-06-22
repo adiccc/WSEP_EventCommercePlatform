@@ -2,14 +2,15 @@ package application.dbFailure;
 
 import DTO.EnterPurchaseDTO;
 import app.config.ActiveOrderProperties;
+import app.config.SystemProperties;
 import application.*;
 import domain.Suspension.ISuspensionRepo;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
-import domain.dto.ActiveOrderDTO;
-import domain.dto.SeatingTicketDTO;
+import DTO.ActiveOrderDTO;
+import DTO.SeatingTicketDTO;
 import domain.event.Event;
 import domain.event.EventQueueManager;
 import domain.event.IEventRepo;
@@ -117,6 +118,13 @@ class ActiveOrderServiceDbFailureTest {
                 activeOrderProperties,
                 eventQueueManager
         );
+    }
+
+    @BeforeEach
+    void resetRetryHelperConfig() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setRetryCount(50);
+        new RetryHelper(systemProperties);
     }
 
     @AfterEach
