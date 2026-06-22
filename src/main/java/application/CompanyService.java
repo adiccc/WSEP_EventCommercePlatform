@@ -796,7 +796,7 @@ public class CompanyService {
 
                     // Save notification as PENDING — internal transaction handles persistence.
                     // Real-time delivery is done AFTER this transaction commits.
-                    NotifyPayload payload = new NotifyPayload("You have been invited to be a owner at company " + company.getCompanyName(), null, companyId);
+                    NotifyPayload payload = new NotifyPayload("You have been invited to be a owner at company " + company.getCompanyName(), null, companyId, "OWNER");
                     NotifyDTO notifyDTO = new NotifyDTO(NotifyType.ROLE_APPOINTMENT_REQUEST, payload);
                     notifyDTOHolder[0] = notifyDTO;
                     appointeeIdentifierHolder[0] = appointee.getIdentifier();
@@ -893,7 +893,7 @@ public class CompanyService {
                     }
                     companyRepo.store(company);
                     // Clear appointment notifications: ALL on accept, only owner's on reject
-                    markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId, "owner", accept);
+                    markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId, "OWNER", accept);
                     // Only notify if accepted — holders stay null on reject, post-tx block skips gracefully
                     if (accept) {
                         NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
@@ -986,7 +986,7 @@ public class CompanyService {
                     companyRepo.store(company);
 
                     // Save notification as PENDING — real-time delivery happens after transaction commits
-                    NotifyPayload payload = new NotifyPayload("You have been invited to be a manager at company " + company.getCompanyName(), null, companyId);
+                    NotifyPayload payload = new NotifyPayload("You have been invited to be a manager at company " + company.getCompanyName(), null, companyId, "MANAGER");
                     NotifyDTO notifyDTO = new NotifyDTO(NotifyType.ROLE_APPOINTMENT_REQUEST, payload);
                     notifyDTOHolder[0]           = notifyDTO;
                     appointeeIdentifierHolder[0] = member.getIdentifier();
@@ -1087,7 +1087,7 @@ public class CompanyService {
                     }
                     companyRepo.store(company);
                     // Clear appointment notifications: ALL on accept, only manager's on reject
-                    markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId, "manager", accept);
+                    markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId, "MANAGER", accept);
                     // Only notify if accepted — holders stay null on reject, post-tx block skips gracefully
                     if (accept) {
                         NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
@@ -1420,27 +1420,19 @@ public class CompanyService {
             return new Response<>(null, "Notification saved as PENDING");
     }
     //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
-    // Marks the PENDING ROLE_APPOINTMENT_REQUEST notification for a given user+company as delivered.
-    // Called inside respondToOwnerAppointment / respondToManagerAppointment after the user responds,
-    // so the notification disappears from their list regardless of accept or reject.
-    // On ACCEPT → clear ALL pending appointment notifications for this company (a user can hold
-    //              only one role per company, so the other invite is no longer actionable).
-    // On REJECT → clear ONLY the notification matching roleKeyword ("owner"/"manager"), leaving
-    //              the other role's invite visible so the user can still accept it.
-    private void markAppointmentRequestAsDelivered(String userIdentifier, int companyId, String roleKeyword, boolean accepted) {
+    // Resolves the user's pending appointment notifications after they accept/reject:
+    //  - accept  → clears ALL appointment invites for this company (user can hold only one role)
+    //  - reject  → clears only the invite whose actionData matches ("OWNER"/"MANAGER")
+    private void markAppointmentRequestAsDelivered(String userIdentifier, int companyId, String actionData, boolean accepted) {
         RetryHelper.executeWithRetry(() ->
             transactionTemplate.execute(status -> {
                 try {
                     Member member = userRepo.findUserByEmail(userIdentifier);
                     if (member != null) {
-                        if (accepted) {
-                            member.markAllAppointmentRequestsDelivered(companyId);
-                        } else {
-                            member.markAppointmentRequestDelivered(companyId, roleKeyword);
-                        }
+                        member.resolveAppointmentRequests(companyId, actionData, accepted);
                         userRepo.store(member);
-                        logger.info("Appointment request notifications updated for: " + userIdentifier
-                                + ", companyId: " + companyId + ", role: " + roleKeyword + ", accepted: " + accepted);
+                        logger.info("Appointment request resolved for: " + userIdentifier
+                                + ", companyId: " + companyId + ", role: " + actionData + ", accepted: " + accepted);
                     }
                     return new Response<>(true, "ok");
                 } catch (OptimisticLockingFailureException e) {
@@ -1448,7 +1440,7 @@ public class CompanyService {
                     throw e;
                 } catch (Exception e) {
                     status.setRollbackOnly();
-                    logger.warning("Failed to mark appointment request notification as delivered: " + e.getMessage());
+                    logger.warning("Failed to resolve appointment notification: " + e.getMessage());
                     return new Response<>(false, "failed");
                 }
             })
