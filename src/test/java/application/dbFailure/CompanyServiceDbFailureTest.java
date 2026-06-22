@@ -2,6 +2,7 @@ package application.dbFailure;
 
 import DTO.DiscountDTO;
 import DTO.PurchaseRuleDTO;
+import app.config.SystemProperties;
 import application.*;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
@@ -83,6 +84,12 @@ class CompanyServiceDbFailureTest {
                 notifier,
                 transactionTemplate
         );
+    }
+    @BeforeEach
+    void resetRetryHelperConfig() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setRetryCount(50);
+        new RetryHelper(systemProperties);
     }
 
     // ============================================================================

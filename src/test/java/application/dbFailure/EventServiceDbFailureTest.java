@@ -1,9 +1,7 @@
 package application.dbFailure;
 
-import application.EventService;
-import application.IAuth;
-import application.INotifier;
-import application.Response;
+import app.config.SystemProperties;
+import application.*;
 import domain.dataType.EventSearchFilter;
 import domain.dto.EventDTO;
 import domain.dto.EventDetailsDTO;
@@ -63,6 +61,12 @@ class EventServiceDbFailureTest {
                 notifier,
                 transactionTemplate
         );
+    }
+    @BeforeEach
+    void resetRetryHelperConfig() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setRetryCount(50);
+        new RetryHelper(systemProperties);
     }
 
     // ============================================================================

@@ -1,6 +1,7 @@
 package application.dbFailure;
 
 import DTO.NotifyDTO;
+import app.config.SystemProperties;
 import application.*;
 import domain.dto.UserDTO;
 import domain.user.IUserRepo;
@@ -69,6 +70,13 @@ class UserServiceDbFailureTest {
                 notifier,
                 transactionTemplate
         );
+    }
+
+    @BeforeEach
+    void resetRetryHelperConfig() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setRetryCount(50);
+        new RetryHelper(systemProperties);
     }
 
     // ============================================================================

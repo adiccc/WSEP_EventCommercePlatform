@@ -57,6 +57,10 @@ class UserServiceTest {
 
     @BeforeEach
     void setUp() {
+        SystemProperties systemProperties = createTestSystemProperties();
+        realTokenService = new TokenService(systemProperties);
+        new RetryHelper(systemProperties);
+
         AccessCodeGenerator.configure(
                 "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
                 6
@@ -94,6 +98,7 @@ class UserServiceTest {
         systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
         systemProperties.setAccessCodeLength(6);
         systemProperties.setTokenExpirationHours(24);
+        systemProperties.setRetryCount(50);
         return systemProperties;
     }
 

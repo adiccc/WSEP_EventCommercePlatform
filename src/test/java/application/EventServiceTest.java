@@ -67,6 +67,11 @@ class EventServiceTest {
 
     @BeforeEach
     void setUp() {
+        SystemProperties systemProperties = createTestSystemProperties();
+
+        tokenService = new TokenService(systemProperties);
+        new RetryHelper(systemProperties);
+
         AccessCodeGenerator.configure(
                 "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
                 6
@@ -117,6 +122,7 @@ class EventServiceTest {
         systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
         systemProperties.setAccessCodeLength(6);
         systemProperties.setTokenExpirationHours(24);
+        systemProperties.setRetryCount(50);
         return systemProperties;
     }
 
