@@ -1,6 +1,8 @@
 package app.init;
 
 import app.config.SystemProperties;
+import application.IPaymentSystem;
+import application.ITicketSupply;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
@@ -34,6 +36,12 @@ public class SystemInitializer implements ApplicationRunner {
     private List<InitOperationHandler> handlers;
 
     private Map<String, InitOperationHandler> handlerMap;
+
+    @Autowired
+    private IPaymentSystem paymentSystem;
+
+    @Autowired
+    private ITicketSupply ticketSupply;
 
     @PostConstruct
     public void buildHandlerMap() {
@@ -105,6 +113,19 @@ public class SystemInitializer implements ApplicationRunner {
                 logger.info("Stored result as '${" + op.getStore() + "}'");
             }
         }
+        logger.info("Performing handshake with external systems...");
+
+        boolean isPaymentSystemUp = paymentSystem.handshake();
+        if (!isPaymentSystemUp) {
+            throw new InitializationException("Failed to initialize: Payment system is unreachable.");
+        }
+
+        boolean isTicketSystemUp = ticketSupply.handshake();
+        if (!isTicketSystemUp) {
+            throw new InitializationException("Failed to initialize: Ticket supply system is unreachable.");
+        }
+
+        logger.info("External systems handshake successful!");
         logger.info("System initialization completed successfully.");
     }
 

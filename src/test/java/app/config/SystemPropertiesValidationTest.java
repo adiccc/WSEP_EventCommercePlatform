@@ -20,8 +20,8 @@ class SystemPropertiesValidationTest {
             "system.admin-emails=admin@test.com",
             "system.token-expiration-hours=24",
 
-            "external-api-url=https://damp-lynna-wsep-1984852e.koyeb.app/",
-            "external-api-timeout-minutes=10"
+            "system.external-api-url=https://damp-lynna-wsep-1984852e.koyeb.app/",
+            "system.external-api-timeout-minutes=10"
     };
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
@@ -30,11 +30,11 @@ class SystemPropertiesValidationTest {
     @EnableConfigurationProperties(SystemProperties.class)
     static class EnableProps {}
 
-//    @Test
-//    void GivenAllValidProperties_WhenContextLoads_ThenSucceeds() {
-//        runner.withPropertyValues(VALID_PROPS)
-//                .run(ctx -> assertThat(ctx).hasNotFailed());
-//    }
+    @Test
+    void GivenAllValidProperties_WhenContextLoads_ThenSucceeds() {
+        runner.withPropertyValues(VALID_PROPS)
+                .run(ctx -> assertThat(ctx).hasNotFailed());
+    }
 
     @Test
     void GivenMissingAdminEmails_WhenContextLoads_ThenFails() {
@@ -44,8 +44,8 @@ class SystemPropertiesValidationTest {
                 "system.access-code-chars=ABCDE",
                 "system.access-code-length=6",
                 "system.token-expiration-hours=24",
-                "external-api-url=https://damp-lynna-wsep-1984852e.koyeb.app/",
-                "external-api-timeout-minutes=10"
+                "system.external-api-url=https://damp-lynna-wsep-1984852e.koyeb.app/",
+                "system.external-api-timeout-minutes=10"
         ).run(ctx -> assertThat(ctx).hasFailed());
     }
 
@@ -64,8 +64,8 @@ class SystemPropertiesValidationTest {
                 "system.access-code-length=6",
                 "system.admin-emails=admin@test.com",
                 "system.token-expiration-hours=24",
-                "external-api-url=https://damp-lynna-wsep-1984852e.koyeb.app/",
-                "external-api-timeout-minutes=10"
+                "system.external-api-url=https://damp-lynna-wsep-1984852e.koyeb.app/",
+                "system.external-api-timeout-minutes=10"
         ).run(ctx -> assertThat(ctx).hasFailed());
     }
 
@@ -77,8 +77,8 @@ class SystemPropertiesValidationTest {
                 "system.access-code-length=6",
                 "system.admin-emails=admin@test.com",
                 "system.token-expiration-hours=24",
-                "external-api-url=https://damp-lynna-wsep-1984852e.koyeb.app/",
-                "external-api-timeout-minutes=10"
+                "system.external-api-url=https://damp-lynna-wsep-1984852e.koyeb.app/",
+                "system.external-api-timeout-minutes=10"
         ).run(ctx -> assertThat(ctx).hasFailed());
     }
 
