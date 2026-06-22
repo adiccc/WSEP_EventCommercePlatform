@@ -45,7 +45,8 @@ class SystemPropertiesValidationTest {
                 "system.access-code-length=6",
                 "system.token-expiration-hours=24",
                 "system.external-api-url=https://damp-lynna-wsep-1984852e.koyeb.app/",
-                "system.external-api-timeout-minutes=10"
+                "system.external-api-timeout-minutes=2",
+                "system.retry-count=3"
         ).run(ctx -> assertThat(ctx).hasFailed());
     }
 
@@ -65,7 +66,9 @@ class SystemPropertiesValidationTest {
                 "system.admin-emails=admin@test.com",
                 "system.token-expiration-hours=24",
                 "system.external-api-url=https://damp-lynna-wsep-1984852e.koyeb.app/",
-                "system.external-api-timeout-minutes=10"
+                "system.external-api-timeout-minutes=2",
+                "system.retry-count=3"
+
         ).run(ctx -> assertThat(ctx).hasFailed());
     }
 
@@ -78,7 +81,8 @@ class SystemPropertiesValidationTest {
                 "system.admin-emails=admin@test.com",
                 "system.token-expiration-hours=24",
                 "system.external-api-url=https://damp-lynna-wsep-1984852e.koyeb.app/",
-                "system.external-api-timeout-minutes=10"
+                "system.external-api-timeout-minutes=2",
+                "system.retry-count=3"
         ).run(ctx -> assertThat(ctx).hasFailed());
     }
 
