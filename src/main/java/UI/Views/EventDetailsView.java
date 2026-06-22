@@ -211,7 +211,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                 .set("border-radius", "12px");
 
         Button addSeatingAreasButton =
-                new Button("🪑 Add Seating Areas");
+                new Button("🪑 Add Zones");
 
         addSeatingAreasButton.getStyle()
                 .set("margin-top", "1rem")

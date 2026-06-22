@@ -11,6 +11,7 @@ import domain.company.ICompanyRepo;
 import domain.dto.*;
 import domain.dto.ActiveOrderSelectionDTO;
 import domain.event.Event;
+import domain.event.EventQueueManager;
 import domain.event.IEventRepo;
 import domain.event.Order;
 import domain.lottery.ILotteryRepo;
@@ -63,6 +64,7 @@ public class ActiveOrderService {
     private final int warningBeforeExpiryMinutes;
     private final ScheduledExecutorService cleanupScheduler;
     private final TransactionTemplate transactionTemplate;
+    private final EventQueueManager eventQueueManager;
     @Autowired
     public ActiveOrderService(
             IAuth auth,
@@ -77,7 +79,7 @@ public class ActiveOrderService {
             PreExpirationNotificationScheduler preExpirationScheduler,
             IUserRepo userRepo,
             TransactionTemplate transactionTemplate,
-            ActiveOrderProperties activeOrderProperties) {
+            ActiveOrderProperties activeOrderProperties, EventQueueManager eventQueueManager) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
@@ -93,6 +95,7 @@ public class ActiveOrderService {
         this.checkoutTimeoutMinutes = activeOrderProperties.getCheckoutTimeoutMinutes();
         this.warningBeforeExpiryMinutes = activeOrderProperties.getWarningBeforeExpiryMinutes();
         this.userRepo = userRepo;
+        this.eventQueueManager = eventQueueManager;
         this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "active-order-cleanup");
             t.setDaemon(true);
@@ -388,8 +391,8 @@ public class ActiveOrderService {
                 }
 
                 if (capacity <= activeOrderRepo.countActiveOrdersForEvent(eventId)) {
-                    if (e.getEventQueue().contains(token)) {
-                        int position = e.getEventQueue().position(token);
+                    if (eventQueueManager.contains(eventId, token)) {
+                        int position = eventQueueManager.position(eventId, token);
 
                         return new Response<>(
                                 new EnterPurchaseDTO(
@@ -403,10 +406,9 @@ public class ActiveOrderService {
                                 "User is still waiting in queue. Position: " + position);
                     }
 
-                    e.getEventQueue().enqueue(token);
+                    eventQueueManager.enqueue(eventId, token);
                     eventRepo.store(e);
-
-                    int position = e.getEventQueue().position(token);
+                    int position = eventQueueManager.position(eventId, token);
 
                     return new Response<>(
                             new EnterPurchaseDTO(
@@ -418,6 +420,7 @@ public class ActiveOrderService {
                                     companyPurchasePolicy,
                                     eventPurchasePolicy),
                             "Event is full, user added to waiting queue. Position: " + position);
+
                 }
 
                 ActiveOrder newActiveOrder = new ActiveOrder(userIdentifier, eventId, new ArrayList<>());
@@ -1495,7 +1498,7 @@ public class ActiveOrderService {
             try {
                 Event event = eventRepo.findById(eventId);
 
-                boolean removed = event.getEventQueue().remove(token);
+                boolean removed = eventQueueManager.remove(eventId, token);
 
                 if (removed) {
                     eventRepo.store(event);
@@ -1545,13 +1548,14 @@ public class ActiveOrderService {
         return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             try {
                 Event event = eventRepo.findById(eventId);
-                if (event.getEventQueue().isEmpty()
+                if (eventQueueManager.isEmpty(eventId)
                         || activeOrderRepo.countActiveOrdersForEvent(eventId) >= capacity) {
                     return new Response<>(null, "Queue empty or event at capacity");
                 }
-                String nextToken = event.getEventQueue().dequeue();
-                eventRepo.store(event);
+
+                String nextToken = eventQueueManager.dequeue(eventId);
                 return new Response<>(nextToken, "Token dequeued successfully");
+
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
@@ -1561,7 +1565,6 @@ public class ActiveOrderService {
             }
         })).getValue();
     }
-
     private boolean createActiveOrderForToken(String token, int eventId) {
         boolean skipped = RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             try {
