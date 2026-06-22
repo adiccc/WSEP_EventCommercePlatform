@@ -47,6 +47,7 @@ import com.vaadin.flow.shared.Registration;
 import static org.junit.jupiter.api.Assertions.*;
 
 import org.mockito.Mockito;
+import org.springframework.dao.TransientDataAccessResourceException;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -6108,5 +6109,320 @@ class ActiveOrderServiceTest {
         Response<ActiveOrderDTO> r = service.returnToEditSelection(validToken); // now EDITING
         assertNull(r.getValue());
         assertEquals("Order is not at checkout; cannot enter edit mode", r.getMessage());
+    }
+
+    @Test
+    void GivenPaymentRejectedFirstTime_WhenCheckoutAndPaymentRetriedByUser_ThenSecondPaymentSucceedsAndOrderCreated() {
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+
+        Response<Integer> selectResponse = service.userSelectTickets(
+                validToken,
+                concurrentEventId,
+                new HashMap<>(),
+                Map.of("floor", 2)
+        );
+
+        assertNotNull(selectResponse.getValue(), "setup select failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: " + checkoutPriceResponse.getMessage());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn(null)
+                .thenReturn("payment-second-attempt");
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        Response<CheckoutSuccessDTO> firstResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(firstResponse.getValue());
+        assertEquals("Payment rejected", firstResponse.getMessage());
+
+        assertNotNull(activeOrderRepo.findById(activeOrderId),
+                "Active order should remain after rejected payment");
+
+        assertEquals(0, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Rejected payment should not create an order");
+
+        Response<CheckoutSuccessDTO> secondResponse =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNotNull(secondResponse.getValue(),
+                "Second checkout should succeed: " + secondResponse.getMessage());
+
+        assertThrows(NoSuchElementException.class,
+                () -> activeOrderRepo.findById(activeOrderId),
+                "Active order should be deleted after successful checkout");
+
+        assertEquals(1, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Successful second checkout should create exactly one order");
+
+        Mockito.verify(paymentSystem, Mockito.times(2))
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.times(1))
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .refund(Mockito.anyString(), Mockito.anyDouble());
+    }
+
+    @Test
+    void GivenTransientDbFailureAfterPayment_WhenCheckoutAndPaymentRetries_ThenCustomerShouldNotBeChargedTwice() {
+        EventRepoImpl originalEventRepo = eventRepo;
+        EventRepoImpl spyEventRepo = Mockito.spy(originalEventRepo);
+
+        AtomicInteger storeCalls = new AtomicInteger(0);
+
+        Mockito.doAnswer(invocation -> {
+            Event eventToStore = invocation.getArgument(0);
+
+            if (eventToStore.getId() == concurrentEventId
+                    && !eventToStore.getOrders().isEmpty()
+                    && storeCalls.getAndIncrement() == 0) {
+                throw new TransientDataAccessResourceException("temporary repo failure after payment");
+            }
+
+            return invocation.callRealMethod();
+        }).when(spyEventRepo).store(Mockito.any(Event.class));
+
+        service = new ActiveOrderService(
+                auth,
+                activeOrderRepo,
+                spyEventRepo,
+                companyRepo,
+                lotteryRepo,
+                paymentSystem,
+                ticketSupply,
+                suspensionRepo,
+                notifier,
+                preExpirationScheduler,
+                userRepo,
+                transactionTemplate,
+                activeOrderProperties,
+                eventQueueManager
+        );
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+
+        Response<Integer> selectResponse = service.userSelectTickets(
+                validToken,
+                concurrentEventId,
+                new HashMap<>(),
+                Map.of("floor", 2)
+        );
+
+        assertNotNull(selectResponse.getValue(), "setup select failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: " + checkoutPriceResponse.getMessage());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-first")
+                .thenReturn("payment-second");
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        Response<CheckoutSuccessDTO> response =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNotNull(response.getValue(),
+                "Checkout should eventually succeed after transient DB failure: " + response.getMessage());
+
+        assertEquals(1, originalEventRepo.findById(concurrentEventId).getOrders().size(),
+                "Exactly one order should exist after retry");
+
+        Mockito.verify(paymentSystem, Mockito.times(1))
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .refund(Mockito.anyString(), Mockito.anyDouble());
+    }
+
+    @Test
+    void GivenTransientDbFailureDuringFinalizeAfterPayment_WhenCheckoutRetries_ThenPaymentAndTicketSupplyAreNotCalledTwice() {
+        EventRepoImpl spyEventRepo = Mockito.spy(eventRepo);
+        AtomicInteger failingStoreCalls = new AtomicInteger(0);
+
+        Mockito.doAnswer(invocation -> {
+            Event eventToStore = invocation.getArgument(0);
+
+            if (eventToStore.getId() == concurrentEventId
+                    && !eventToStore.getOrders().isEmpty()
+                    && failingStoreCalls.getAndIncrement() == 0) {
+                throw new TransientDataAccessResourceException("temporary finalize failure after payment");
+            }
+
+            return invocation.callRealMethod();
+        }).when(spyEventRepo).store(Mockito.any(Event.class));
+
+        service = new ActiveOrderService(
+                auth,
+                activeOrderRepo,
+                spyEventRepo,
+                companyRepo,
+                lotteryRepo,
+                paymentSystem,
+                ticketSupply,
+                suspensionRepo,
+                notifier,
+                preExpirationScheduler,
+                userRepo,
+                transactionTemplate,
+                activeOrderProperties,
+                eventQueueManager
+        );
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+
+        Response<Integer> selectResponse = service.userSelectTickets(
+                validToken,
+                concurrentEventId,
+                new HashMap<>(),
+                Map.of("floor", 2)
+        );
+
+        assertNotNull(selectResponse.getValue(), "setup select failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: " + checkoutPriceResponse.getMessage());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-123");
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        Response<CheckoutSuccessDTO> response =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNotNull(response.getValue(),
+                "Checkout should succeed after retrying only the finalize phase: " + response.getMessage());
+
+        assertEquals(1, eventRepo.findById(concurrentEventId).getOrders().size(),
+                "Retry should end with exactly one order");
+
+        Mockito.verify(paymentSystem, Mockito.times(1))
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.times(1))
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .refund(Mockito.anyString(), Mockito.anyDouble());
+    }
+
+    @Test
+    void GivenPersistentDbFailureDuringFinalizeAfterPaymentAndTicketSupply_WhenCheckoutFails_ThenPaymentIsNotRefundedAndActiveOrderRemains() {
+        EventRepoImpl spyEventRepo = Mockito.spy(eventRepo);
+
+        Mockito.doAnswer(invocation -> {
+            Event eventToStore = invocation.getArgument(0);
+
+            if (eventToStore.getId() == concurrentEventId
+                    && !eventToStore.getOrders().isEmpty()) {
+                throw new TransientDataAccessResourceException("persistent finalize failure after payment");
+            }
+
+            return invocation.callRealMethod();
+        }).when(spyEventRepo).store(Mockito.any(Event.class));
+
+        service = new ActiveOrderService(
+                auth,
+                activeOrderRepo,
+                spyEventRepo,
+                companyRepo,
+                lotteryRepo,
+                paymentSystem,
+                ticketSupply,
+                suspensionRepo,
+                notifier,
+                preExpirationScheduler,
+                userRepo,
+                transactionTemplate,
+                activeOrderProperties,
+                eventQueueManager
+        );
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+
+        Response<Integer> selectResponse = service.userSelectTickets(
+                validToken,
+                concurrentEventId,
+                new HashMap<>(),
+                Map.of("floor", 2)
+        );
+
+        assertNotNull(selectResponse.getValue(), "setup select failed: " + selectResponse.getMessage());
+        int activeOrderId = selectResponse.getValue();
+
+        Response<CheckoutPriceDTO> checkoutPriceResponse =
+                service.prepareCheckout(validToken, activeOrderId);
+
+        assertNotNull(checkoutPriceResponse.getValue(),
+                "Checkout price should be prepared before payment: " + checkoutPriceResponse.getMessage());
+
+        Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
+                .thenReturn("payment-123");
+
+        TicketSupplyResultDTO supplyResult = Mockito.mock(TicketSupplyResultDTO.class);
+        Mockito.when(supplyResult.isSuccess()).thenReturn(true);
+
+        Mockito.when(ticketSupply.issue(Mockito.any(TicketSupplyRequestDTO.class)))
+                .thenReturn(supplyResult);
+
+        PaymentDetailsDTO paymentDetails =
+                new PaymentDetailsDTO("1234", "12/30", "123", "111", "Yarin Shemer", 1, null);
+
+        Response<CheckoutSuccessDTO> response =
+                service.checkoutAndPayment(validToken, activeOrderId, paymentDetails);
+
+        assertNull(response.getValue());
+        assertEquals("Failed to complete purchase", response.getMessage());
+
+        assertNotNull(activeOrderRepo.findById(activeOrderId),
+                "Active order remains because finalization failed before deleting it");
+
+        Mockito.verify(paymentSystem, Mockito.times(1))
+                .pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class));
+
+        Mockito.verify(ticketSupply, Mockito.times(1))
+                .issue(Mockito.any(TicketSupplyRequestDTO.class));
+
+        Mockito.verify(paymentSystem, Mockito.never())
+                .refund(Mockito.anyString(), Mockito.anyDouble());
     }
 }
