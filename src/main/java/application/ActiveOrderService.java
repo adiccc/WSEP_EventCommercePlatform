@@ -1237,11 +1237,33 @@ public class ActiveOrderService {
 
     // Releases the seats held by every order whose reservation window has lapsed.
     public void cleanupExpiredOrders() {
-        logger.log(Level.INFO, "cleanupExpiredOrders running");
-        for (ActiveOrder expiredOrder : activeOrderRepo.findExpired(LocalDateTime.now(), selectingTimeoutMinutes, checkoutTimeoutMinutes)) {
-            releaseHeldOrder(expiredOrder.getId());
-        }
+        RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
+            try {
+                logger.log(Level.INFO, "cleanupExpiredOrders running");
+
+                for (ActiveOrder expiredOrder : activeOrderRepo.findExpired(
+                        LocalDateTime.now(),
+                        selectingTimeoutMinutes,
+                        checkoutTimeoutMinutes)) {
+                    releaseHeldOrder(expiredOrder.getId());
+                }
+
+                return new Response<>(true, "Expired active orders cleaned successfully");
+
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient DB error during cleanupExpiredOrders: " + e.getMessage());
+                throw e;
+
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.warning("Failed to cleanup expired orders: " + e.getMessage());
+                return new Response<>(false, "Failed to cleanup expired orders");
+            }
+        }));
     }
+
+
     public Response<ActiveOrderDTO> memberProceedAnActiveOrder(String token) {
         return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             logger.log(Level.INFO, "memberProceedActiveOrder called");
