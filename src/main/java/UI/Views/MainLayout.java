@@ -449,7 +449,7 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         HorizontalLayout badge = new HorizontalLayout(avatar, textBlock);
 
         if (guest) {
-            Button signInButton = new Button("Sign in", e -> UI.getCurrent().navigate("login"));
+            Button signInButton = new Button("Sign in", e -> UI.getCurrent().navigate(""));
             signInButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SMALL);
             badge.add(signInButton);
         }
