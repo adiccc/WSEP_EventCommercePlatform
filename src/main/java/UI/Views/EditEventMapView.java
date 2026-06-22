@@ -8,6 +8,7 @@ import application.EventCompanyManageService;
 import application.Response;
 import com.vaadin.flow.component.AbstractField;
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -40,13 +41,17 @@ public class EditEventMapView extends VerticalLayout implements BeforeEnterObser
     private final VerticalLayout standingZonesContainer = new VerticalLayout();
     private final VerticalLayout seatingZonesContainer = new VerticalLayout();
     private final Div mapPreview = new Div();
-    private final Button saveButton = new Button("Save New Areas");
+    private final Button saveButton = new Button("Add New Areas");
 
     private final List<StandingZoneForm> standingZoneForms = new ArrayList<>();
     private final List<SeatingZoneForm> seatingZoneForms = new ArrayList<>();
 
+
     public EditEventMapView(EventCompanyManageService eventCompanyManageService) {
         this.presenter = new EditEventMapPresenter(eventCompanyManageService);
+
+        saveButton.addClickListener(e -> submit());
+
         setPadding(true);
         setSpacing(true);
         setWidthFull();
@@ -90,7 +95,6 @@ public class EditEventMapView extends VerticalLayout implements BeforeEnterObser
 
         saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         saveButton.setEnabled(false);
-        saveButton.addClickListener(e -> submit());
         saveButton.getStyle()
                 .set("height", "48px")
                 .set("font-weight", "800")
@@ -105,6 +109,7 @@ public class EditEventMapView extends VerticalLayout implements BeforeEnterObser
                 title,
                 subtitle,
                 buildVenueSetupWithPreview(),
+                buildExistingZonesSection(),
                 saveButton
         );
 
@@ -185,13 +190,147 @@ public class EditEventMapView extends VerticalLayout implements BeforeEnterObser
         return section;
     }
 
+    private VerticalLayout buildExistingZonesSection() {
+        VerticalLayout section = cardSection();
+
+        section.add(
+                sectionTitle("🗑 Existing Areas"),
+                new Paragraph("Removing an existing area is applied immediately after confirmation. Adding new areas is saved with the button below."),
+                new H3("Existing Standing Zones")
+        );
+
+        if (existingMap.getStandingZones().isEmpty()) {
+            section.add(new Paragraph("No existing standing zones."));
+        } else {
+            for (StandingZoneDTO zone : existingMap.getStandingZones()) {
+                section.add(buildExistingStandingZoneRow(zone));
+            }
+        }
+
+        section.add(new H3("Existing Seating Zones"));
+
+        if (existingMap.getSeatingZones().isEmpty()) {
+            section.add(new Paragraph("No existing seating zones."));
+        } else {
+            for (SeatingZoneDTO zone : existingMap.getSeatingZones()) {
+                section.add(buildExistingSeatingZoneRow(zone));
+            }
+        }
+
+        return section;
+    }
+
+    private HorizontalLayout buildExistingStandingZoneRow(StandingZoneDTO zone) {
+        Span details = new Span(
+                zone.getName()
+                        + " | Available: "
+                        + zone.getAvailable()
+                        + "/"
+                        + zone.getCapacty()
+        );
+
+        details.getStyle()
+                .set("font-weight", "700");
+
+        Button removeButton = new Button("Remove", e -> removeExistingZone(zone.getZoneId()));
+        removeButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+
+        HorizontalLayout row = new HorizontalLayout(details, removeButton);
+        row.setWidthFull();
+        row.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+        row.getStyle()
+                .set("justify-content", "space-between")
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "12px")
+                .set("padding", "0.75rem 1rem")
+                .set("background", "var(--lumo-contrast-5pct)");
+
+        return row;
+    }
+
+    private HorizontalLayout buildExistingSeatingZoneRow(SeatingZoneDTO zone) {
+        Span details = new Span(
+                zone.getName()
+                        + " | "
+                        + zone.getRows()
+                        + " x "
+                        + zone.getCols()
+                        + " seats"
+        );
+
+        details.getStyle()
+                .set("font-weight", "700");
+
+        Button removeButton = new Button("Remove", e -> removeExistingZone(zone.getZoneId()));
+        removeButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+
+        HorizontalLayout row = new HorizontalLayout(details, removeButton);
+        row.setWidthFull();
+        row.setDefaultVerticalComponentAlignment(Alignment.CENTER);
+        row.getStyle()
+                .set("justify-content", "space-between")
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("border-radius", "12px")
+                .set("padding", "0.75rem 1rem")
+                .set("background", "var(--lumo-contrast-5pct)");
+
+        return row;
+    }
+
+    private void removeExistingZone(int zoneId) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Remove Area");
+
+        Paragraph warning = new Paragraph(
+                "This will remove the area immediately if all tickets in it are still available. This action is saved right away."
+        );
+
+        warning.getStyle()
+                .set("color", "var(--lumo-error-text-color)")
+                .set("font-weight", "500");
+
+        Button cancelButton = new Button("Cancel", e -> dialog.close());
+        cancelButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        Button removeButton = new Button("Remove", e -> {
+            Response<Boolean> response = presenter.removeZoneFromEventMap(
+                    getToken(),
+                    eventId,
+                    zoneId
+            );
+
+            if (Boolean.TRUE.equals(response.getValue())) {
+                dialog.close();
+                showSuccess("Zone removed successfully.");
+                standingZoneForms.clear();
+                seatingZoneForms.clear();
+                buildPage();
+                return;
+            }
+
+            showError(safeMessage(response.getMessage()));
+        });
+
+        removeButton.addThemeVariants(
+                ButtonVariant.LUMO_ERROR,
+                ButtonVariant.LUMO_PRIMARY
+        );
+
+        dialog.add(warning);
+        dialog.getFooter().add(cancelButton, removeButton);
+        dialog.open();
+    }
+
+
     private VerticalLayout buildPreviewColumn() {
         VerticalLayout preview = cardSection();
         preview.setPadding(true);
         preview.setSpacing(true);
 
-        H3 title = sectionTitle("🗺 Existing Map + New Areas Preview");
-        Paragraph helper = new Paragraph("Existing areas are faded. New areas are shown clearly.");
+        H3 title = sectionTitle("🗺 Event Map Preview");
+        Paragraph helper = new Paragraph(
+                "Existing areas are faded and new areas are highlighted."
+        );
         helper.getStyle()
                 .set("color", "var(--lumo-secondary-text-color)")
                 .set("margin-top", "0");
@@ -481,6 +620,7 @@ public class EditEventMapView extends VerticalLayout implements BeforeEnterObser
 
         for (StandingZoneForm form : standingZoneForms) {
             zones.add(new StandingZoneDTO(
+                    -1,
                     form.capacityField.getValue(),
                     form.nameField.getValue().trim(),
                     form.priceField.getValue(),
@@ -496,6 +636,7 @@ public class EditEventMapView extends VerticalLayout implements BeforeEnterObser
 
         for (SeatingZoneForm form : seatingZoneForms) {
             zones.add(new SeatingZoneDTO(
+                    -1,
                     form.rowsField.getValue(),
                     form.columnsField.getValue(),
                     form.nameField.getValue().trim(),
