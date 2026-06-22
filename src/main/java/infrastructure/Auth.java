@@ -1,12 +1,8 @@
 package infrastructure;
 
 import application.IAuth;
-import application.IPasswordEncoder;
 import application.Response;
 import application.TokenService;
-import domain.dto.UserDTO;
-import domain.user.IUserRepo;
-import domain.user.Member;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 

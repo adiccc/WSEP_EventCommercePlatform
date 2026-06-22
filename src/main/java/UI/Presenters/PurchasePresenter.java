@@ -3,9 +3,9 @@ package UI.Presenters;
 import DTO.EnterPurchaseDTO;
 import application.ActiveOrderService;
 import application.Response;
-import domain.dto.ActiveOrderDTO;
-import domain.dto.ActiveOrderSelectionDTO;
-import domain.dto.SeatingTicketDTO;
+import DTO.ActiveOrderDTO;
+import DTO.ActiveOrderSelectionDTO;
+import DTO.SeatingTicketDTO;
 
 import java.util.HashMap;
 import java.util.List;

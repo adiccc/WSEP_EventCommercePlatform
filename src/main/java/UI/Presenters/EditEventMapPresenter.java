@@ -4,7 +4,7 @@ import DTO.SeatingZoneDTO;
 import DTO.StandingZoneDTO;
 import application.EventCompanyManageService;
 import application.Response;
-import domain.dto.EventMapDTO;
+import DTO.EventMapDTO;
 
 import java.util.Collections;
 import java.util.List;

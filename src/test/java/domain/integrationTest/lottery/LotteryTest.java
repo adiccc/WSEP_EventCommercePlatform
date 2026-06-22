@@ -1,6 +1,6 @@
 package domain.integrationTest.lottery;
 
-import domain.dto.LotteryDTO;
+import DTO.LotteryDTO;
 import domain.lottery.AccessCodeGenerator;
 import domain.lottery.Lottery;
 import org.junit.jupiter.api.BeforeEach;

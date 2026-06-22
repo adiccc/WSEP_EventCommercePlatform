@@ -9,8 +9,8 @@ import domain.Suspension.ISuspensionRepo;
 import domain.Suspension.Suspension;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
-import domain.dto.LotteryDTO;
-import domain.dto.UserDTO;
+import DTO.LotteryDTO;
+import DTO.UserDTO;
 import domain.lottery.AccessCodeGenerator;
 import domain.lottery.Lottery;
 import domain.user.IUserRepo;
@@ -21,7 +21,6 @@ import infrastructure.Auth;
 import infrastructure.Broadcaster;
 import infrastructure.PasswordEncoderUtil;
 import infrastructure.VaadinNotifier;
-import infrastructure.inMemory.*;
 import infrastructure.inMemory.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,6 +77,11 @@ class LotteryServiceTest {
 
         @BeforeEach
         void setUp() {
+                SystemProperties systemProperties = createTestSystemProperties();
+
+                tokenService = new TokenService(systemProperties);
+                new RetryHelper(systemProperties);
+
                 AccessCodeGenerator.configure(
                         "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
                         6
@@ -264,6 +268,7 @@ class LotteryServiceTest {
                 systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
                 systemProperties.setAccessCodeLength(6);
                 systemProperties.setTokenExpirationHours(24);
+                systemProperties.setRetryCount(50);
                 return systemProperties;
         }
 

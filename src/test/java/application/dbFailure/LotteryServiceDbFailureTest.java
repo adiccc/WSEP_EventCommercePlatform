@@ -1,9 +1,7 @@
 package application.dbFailure;
 
-import application.IAuth;
-import application.INotifier;
-import application.LotteryService;
-import application.Response;
+import app.config.SystemProperties;
+import application.*;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
@@ -94,6 +92,13 @@ class LotteryServiceDbFailureTest {
                 userRepo,
                 transactionTemplate
         );
+    }
+
+    @BeforeEach
+    void resetRetryHelperConfig() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setRetryCount(50);
+        new RetryHelper(systemProperties);
     }
 
     @AfterEach

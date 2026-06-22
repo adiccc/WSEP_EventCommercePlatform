@@ -1,11 +1,8 @@
 package UI.Views;
-import domain.dto.ActiveOrderSeatDTO;
+import DTO.*;
+
 import java.util.Optional;
-import DTO.ElementPositionDTO;
-import DTO.EnterPurchaseDTO;
-import DTO.SeatingZoneDTO;
-import DTO.StandingZoneDTO;
-import com.vaadin.flow.shared.Registration;
+
 import domain.activeOrder.STAGE;
 import UI.Presenters.PurchasePresenter;
 import application.ActiveOrderService;
@@ -21,8 +18,6 @@ import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.router.*;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
-import domain.dto.*;
-import domain.dto.ActiveOrderSelectionDTO;
 
 import java.util.*;
 
@@ -605,10 +600,17 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
             amount.addValueChangeListener(e -> {
                 Integer value = e.getValue();
 
-                if (value == null || value <= 0) {
-                    selectedStanding.remove(zone.getName());
+                if (editingMode) {
+                    selectedStanding.put(
+                            zone.getName(),
+                            value == null ? 0 : value
+                    );
                 } else {
-                    selectedStanding.put(zone.getName(), value);
+                    if (value == null || value <= 0) {
+                        selectedStanding.remove(zone.getName());
+                    } else {
+                        selectedStanding.put(zone.getName(), value);
+                    }
                 }
 
                 refreshSummary();

@@ -1,8 +1,5 @@
 package DTO;
 
-import domain.dto.ActiveOrderDTO;
-import domain.dto.EventMapDTO;
-
 public class EnterPurchaseDTO {
 
     private final EventMapDTO eventMap;

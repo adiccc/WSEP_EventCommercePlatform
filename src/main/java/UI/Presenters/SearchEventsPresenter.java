@@ -3,7 +3,7 @@ package UI.Presenters;
 import application.EventService;
 import application.Response;
 import domain.dataType.EventSearchFilter;
-import domain.dto.EventDTO;
+import DTO.EventDTO;
 
 import java.util.List;
 

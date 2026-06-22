@@ -1,8 +1,9 @@
 package application.dbFailure;
 
 import DTO.AdminPurchaseHistoryDTO;
-import domain.dto.HierarchyDTO;
-import domain.dto.SuspensionDTO;
+import app.config.SystemProperties;
+import DTO.HierarchyDTO;
+import DTO.SuspensionDTO;
 import application.*;
 import domain.Suspension.ISuspensionRepo;
 import domain.Suspension.Suspension;
@@ -88,6 +89,14 @@ class AdminServiceDbFailureTest {
                 ticketSupply
         );
     }
+
+    @BeforeEach
+    void resetRetryHelperConfig() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setRetryCount(50);
+        new RetryHelper(systemProperties);
+    }
+
 
     // ============================================================================
     // Coverage note

@@ -1,4 +1,4 @@
-package domain.dto;
+package DTO;
 
 public class SeatingTicketDTO {
     private int row;

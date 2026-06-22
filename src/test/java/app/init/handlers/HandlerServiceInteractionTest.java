@@ -15,7 +15,7 @@ import domain.company.Company;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dataType.PermissionType;
-import domain.dto.UserDTO;
+import DTO.UserDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

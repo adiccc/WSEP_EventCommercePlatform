@@ -8,8 +8,6 @@ import domain.activeOrder.IActiveOrderRepo;
 import domain.activeOrder.STAGE;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
-import domain.dto.*;
-import domain.dto.ActiveOrderSelectionDTO;
 import domain.event.Event;
 import domain.event.EventQueueManager;
 import domain.event.IEventRepo;
@@ -23,14 +21,11 @@ import domain.user.IUserRepo;
 import domain.user.Member;
 import app.config.ActiveOrderProperties;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.dao.DataAccessException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
-import jakarta.annotation.PostConstruct;
 
 import java.time.LocalDateTime;
 

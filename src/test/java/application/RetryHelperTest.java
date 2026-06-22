@@ -1,6 +1,8 @@
 package application;
 
 import Exception.OptimisticLockingFailureException;
+import app.config.SystemProperties;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.TransientDataAccessException;
 
@@ -9,6 +11,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RetryHelperTest {
+
+    @BeforeEach
+    void resetRetryHelperConfig() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setRetryCount(50);
+        new RetryHelper(systemProperties);
+    }
 
     @Test
     void GivenActionSucceeds_WhenExecuteWithRetry_ThenReturnsValue() {

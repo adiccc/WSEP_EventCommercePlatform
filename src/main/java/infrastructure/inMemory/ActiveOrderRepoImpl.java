@@ -3,7 +3,7 @@ package infrastructure.inMemory;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import Exception.OptimisticLockingFailureException;
-import domain.dto.ActiveOrderDTO;
+import DTO.ActiveOrderDTO;
 import java.util.Optional;
 
 import org.springframework.context.annotation.Profile;

@@ -1,11 +1,10 @@
 package domain.lottery;
 
-import domain.dto.LotteryDTO;
+import DTO.LotteryDTO;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Entity
 @Table(name = "lotteries")

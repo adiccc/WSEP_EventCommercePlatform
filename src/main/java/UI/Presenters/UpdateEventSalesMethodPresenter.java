@@ -4,8 +4,8 @@ import application.CompanyService;
 import application.EventService;
 import application.LotteryService;
 import application.Response;
-import domain.dto.EventDetailsDTO;
-import domain.dto.LotteryDTO;
+import DTO.EventDetailsDTO;
+import DTO.LotteryDTO;
 
 public class UpdateEventSalesMethodPresenter {
 

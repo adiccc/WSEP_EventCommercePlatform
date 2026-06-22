@@ -1,11 +1,9 @@
-package domain.dto;
+package DTO;
 
 import domain.company.Company;
-import domain.policy.PurchasePolicy;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public class CompanyDetailsDTO {
     private int companyId;

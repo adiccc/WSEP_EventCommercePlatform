@@ -21,7 +21,7 @@ import com.vaadin.flow.router.*;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dataType.PermissionType;
-import domain.dto.RolesPermissionsTreeDTO;
+import DTO.RolesPermissionsTreeDTO;
 
 import java.util.*;
 

@@ -3,11 +3,11 @@ package UI.Views;
 import DTO.CheckoutPriceDTO;
 import DTO.CheckoutSuccessDTO;
 import DTO.PaymentDetailsDTO;
+import DTO.ActiveOrderDTO;
 import UI.Presenters.CheckoutPresenter;
 import application.ActiveOrderService;
 import application.Response;
 import application.IAuth;
-import com.vaadin.flow.shared.Registration;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -257,7 +257,7 @@ public class CheckoutView extends VerticalLayout implements BeforeEnterObserver 
     }
 
     private void returnToEditSelection() {
-        Response<domain.dto.ActiveOrderDTO> editResponse =
+        Response<ActiveOrderDTO> editResponse =
                 presenter.returnToEditSelection(token);
 
         if (editResponse.getValue() == null) {

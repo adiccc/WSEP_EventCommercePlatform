@@ -2,7 +2,7 @@ package infrastructure.JPA;
 
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
-import domain.dto.ActiveOrderDTO;
+import DTO.ActiveOrderDTO;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;

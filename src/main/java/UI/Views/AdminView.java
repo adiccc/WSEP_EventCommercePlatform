@@ -25,11 +25,10 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
-import domain.dto.SuspensionDTO;
+import DTO.SuspensionDTO;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 
 @Route(value = "admin", layout = MainLayout.class)
 @PageTitle("Admin Panel — EventCommerce")

@@ -24,7 +24,7 @@ import com.vaadin.flow.router.*;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
 import domain.dataType.TicketStatus;
-import domain.dto.EventMapDTO;
+import DTO.EventMapDTO;
 
 import java.util.ArrayList;
 import java.util.List;

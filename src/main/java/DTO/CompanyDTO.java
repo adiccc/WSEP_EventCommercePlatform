@@ -1,9 +1,4 @@
-package domain.dto;
-
-import domain.company.Company;
-
-import java.util.Map;
-import java.util.Set;
+package DTO;
 
 public class CompanyDTO {
     private int companyId;

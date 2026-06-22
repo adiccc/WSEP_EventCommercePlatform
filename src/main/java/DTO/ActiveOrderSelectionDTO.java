@@ -1,15 +1,15 @@
-package domain.dto;
+package DTO;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class ActiveOrderSelectionDTO {
-    private final List<domain.dto.ActiveOrderSeatDTO> seats;
+    private final List<ActiveOrderSeatDTO> seats;
     private final Map<String, Integer> standingTicketsByZone;
 
     public ActiveOrderSelectionDTO(
-            List<domain.dto.ActiveOrderSeatDTO> seats,
+            List<ActiveOrderSeatDTO> seats,
             Map<String, Integer> standingTicketsByZone
     ) {
         this.seats = seats;
@@ -18,7 +18,7 @@ public class ActiveOrderSelectionDTO {
                 : new HashMap<>(standingTicketsByZone);
     }
 
-    public List<domain.dto.ActiveOrderSeatDTO> getSeats() {
+    public List<ActiveOrderSeatDTO> getSeats() {
         return seats;
     }
 

@@ -1,6 +1,9 @@
 package application.dbFailure;
 
 import DTO.PurchaseHistoryDTO;
+import DTO.EventMapDTO;
+import DTO.OrderDTO;
+import app.config.SystemProperties;
 import application.*;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
@@ -8,7 +11,6 @@ import domain.company.ICompanyRepo;
 import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dataType.PermissionType;
-import domain.dto.*;
 import domain.event.Event;
 import domain.event.IEventRepo;
 import domain.user.IUserRepo;
@@ -90,6 +92,12 @@ class EventCompanyManageServiceDbFailureTest {
                 transactionTemplate,
                 ticketSupply
         );
+    }
+    @BeforeEach
+    void resetRetryHelperConfig() {
+        SystemProperties systemProperties = new SystemProperties();
+        systemProperties.setRetryCount(50);
+        new RetryHelper(systemProperties);
     }
 
     // ============================================================================

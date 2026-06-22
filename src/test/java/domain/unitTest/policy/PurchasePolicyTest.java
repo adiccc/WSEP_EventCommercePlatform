@@ -1,6 +1,6 @@
 package domain.unitTest.policy;
 
-import domain.dto.UserDTO;
+import DTO.UserDTO;
 import domain.policy.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

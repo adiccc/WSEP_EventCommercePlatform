@@ -23,8 +23,8 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
 import com.vaadin.flow.server.auth.AnonymousAllowed;
-import domain.dto.EventDetailsDTO;
-import domain.dto.LotteryDTO;
+import DTO.EventDetailsDTO;
+import DTO.LotteryDTO;
 
 @Route(value = "manage/company/:companyId(\\d+)/event/:eventId(\\d+)/sales-method", layout = MainLayout.class)
 @PageTitle("Update Sales Method")

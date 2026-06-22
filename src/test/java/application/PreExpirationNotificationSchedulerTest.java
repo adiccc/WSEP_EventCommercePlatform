@@ -45,12 +45,17 @@ class PreExpirationNotificationSchedulerTest {
 
     @BeforeEach
     void setUp() {
+        TokenService tokenService = new TokenService(createTestSystemProperties());
+
+        SystemProperties systemProperties = createTestSystemProperties();
+        tokenService = new TokenService(systemProperties);
+        new RetryHelper(systemProperties);
+
         AccessCodeGenerator.configure(
                 "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
                 6
         );
         activeOrderRepo = new ActiveOrderRepoImpl();
-        TokenService tokenService = new TokenService(createTestSystemProperties());
         IAuth auth = new Auth(tokenService);
         ActiveOrderProperties activeOrderProperties = new ActiveOrderProperties();
         activeOrderProperties.setCapacity(20);
@@ -73,6 +78,7 @@ class PreExpirationNotificationSchedulerTest {
         systemProperties.setAccessCodeChars("ABCDEFGHJKMNPQRSTUVWXYZ23456789");
         systemProperties.setAccessCodeLength(6);
         systemProperties.setTokenExpirationHours(24);
+        systemProperties.setRetryCount(50);
         return systemProperties;
     }
 

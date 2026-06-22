@@ -1,9 +1,8 @@
-package domain.dto;
+package DTO;
 
 
 import domain.Suspension.Suspension;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public class SuspensionDTO {

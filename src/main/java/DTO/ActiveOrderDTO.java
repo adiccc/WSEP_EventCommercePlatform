@@ -1,11 +1,10 @@
-package domain.dto;
+package DTO;
 
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.STAGE;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 public class ActiveOrderDTO {
     private final int orderId;

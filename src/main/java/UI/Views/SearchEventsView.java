@@ -21,7 +21,7 @@ import domain.dataType.CategoryEvent;
 import domain.dataType.EventSearchFilter;
 import domain.dataType.GeographicalArea;
 import com.vaadin.flow.component.UI;
-import domain.dto.EventDTO;
+import DTO.EventDTO;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.timepicker.TimePicker;
 import java.time.LocalDate;
