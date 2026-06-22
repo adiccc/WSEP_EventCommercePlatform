@@ -21,7 +21,9 @@ class SystemPropertiesValidationTest {
             "system.token-expiration-hours=24",
 
             "system.external-api-url=https://damp-lynna-wsep-1984852e.koyeb.app/",
-            "system.external-api-timeout-minutes=10"
+            "system.external-api-timeout-minutes=10",
+            "system.retry-count=3"
+
     };
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
