@@ -1,6 +1,7 @@
 package domain.user;
 
 import DTO.NotifyDTO;
+import DTO.NotifyType;
 import domain.dto.UserDTO;
 import jakarta.persistence.*;
 import java.time.LocalDate;
@@ -163,7 +164,11 @@ public class Member extends User {
         for (UserNotification notification : this.userNotifications) {
             if (notification.getStatus() == NotificationStatus.PENDING) {
                 pendingNotifications.add(new NotifyDTO(notification.getType(), notification.getPayload()));
-                notification.setStatus(NotificationStatus.DELIVERED);
+                // ROLE_APPOINTMENT_REQUEST requires explicit accept/reject — keep PENDING
+                // so it remains visible in the notification list until the user responds.
+                if (notification.getType() != NotifyType.ROLE_APPOINTMENT_REQUEST) {
+                    notification.setStatus(NotificationStatus.DELIVERED);
+                }
             }
         }
         return pendingNotifications;
@@ -186,5 +191,36 @@ public class Member extends User {
                 return un.getNotificationId();
         }
         return null;
+    }
+
+    // Marks ONE PENDING ROLE_APPOINTMENT_REQUEST notification matching companyId + role keyword
+    // (e.g. "owner" or "manager") as delivered. Used on REJECT so only the rejected invite is
+    // cleared and the other role's invite stays visible.
+    public void markAppointmentRequestDelivered(int companyId, String roleKeyword) {
+        for (UserNotification un : this.userNotifications) {
+            if (un.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST
+                    && un.getStatus() == NotificationStatus.PENDING
+                    && un.getPayload() != null
+                    && Integer.valueOf(companyId).equals(un.getPayload().getCompanyId())
+                    && un.getPayload().getMessage() != null
+                    && un.getPayload().getMessage().contains(roleKeyword)) {
+                un.setStatus(NotificationStatus.DELIVERED);
+                return;
+            }
+        }
+    }
+
+    // Marks ALL PENDING ROLE_APPOINTMENT_REQUEST notifications for a given company as delivered.
+    // Used on ACCEPT — a user can only hold one role per company, so accepting either owner or
+    // manager invalidates any other pending invite for the same company.
+    public void markAllAppointmentRequestsDelivered(int companyId) {
+        for (UserNotification un : this.userNotifications) {
+            if (un.getType() == NotifyType.ROLE_APPOINTMENT_REQUEST
+                    && un.getStatus() == NotificationStatus.PENDING
+                    && un.getPayload() != null
+                    && Integer.valueOf(companyId).equals(un.getPayload().getCompanyId())) {
+                un.setStatus(NotificationStatus.DELIVERED);
+            }
+        }
     }
 }
