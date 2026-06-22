@@ -600,10 +600,17 @@ public class PurchaseView extends VerticalLayout implements BeforeEnterObserver 
             amount.addValueChangeListener(e -> {
                 Integer value = e.getValue();
 
-                if (value == null || value <= 0) {
-                    selectedStanding.remove(zone.getName());
+                if (editingMode) {
+                    selectedStanding.put(
+                            zone.getName(),
+                            value == null ? 0 : value
+                    );
                 } else {
-                    selectedStanding.put(zone.getName(), value);
+                    if (value == null || value <= 0) {
+                        selectedStanding.remove(zone.getName());
+                    } else {
+                        selectedStanding.put(zone.getName(), value);
+                    }
                 }
 
                 refreshSummary();
