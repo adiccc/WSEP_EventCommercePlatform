@@ -13,9 +13,7 @@ import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dto.SuspensionDTO;
 import domain.dto.UserDTO;
-import domain.event.Event;
-import domain.event.IEventRepo;
-import domain.event.OrderStatus;
+import domain.event.*;
 import domain.lottery.AccessCodeGenerator;
 import domain.lottery.ILotteryRepo;
 import domain.user.NotificationStatus;
@@ -31,7 +29,6 @@ import infrastructure.inMemory.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import domain.event.Order;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -121,7 +118,7 @@ class AdminServiceTest {
         activeOrderProperties.setSelectingTimeoutMinutes(SELECTING_TIMEOUT_MINUTES);
         activeOrderProperties.setCheckoutTimeoutMinutes(CHECKOUT_TIMEOUT_MINUTES);
         activeOrderProperties.setWarningBeforeExpiryMinutes(WARNING_BEFORE_EXPIRY_MINUTES);
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth,activeOrderProperties),userRepo,transactionTemplate,activeOrderProperties);
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth,activeOrderProperties),userRepo,transactionTemplate,activeOrderProperties, new EventQueueManager());
 
         eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate,ticketSupply);
         companyService = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier,transactionTemplate);

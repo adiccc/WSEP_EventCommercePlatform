@@ -143,6 +143,9 @@ public class Permissions {
             if (isManager(ownerId)) {
                 removeManagerFromTree(ownerId);
             }
+            // A user can hold only one role per company — accepting owner cancels any
+            // pending manager invite so a later re-invite isn't blocked by stale state.
+            pendingManagers.remove(ownerId);
         }
     }
 
@@ -270,6 +273,9 @@ public class Permissions {
             if (companyTree.containsKey(pending.getMyManager())) {
                 companyTree.get(pending.getMyManager()).addAppointee(managerId);
             }
+            // A user can hold only one role per company — accepting manager cancels any
+            // pending owner invite so a later re-invite isn't blocked by stale state.
+            pandingOwners.remove(Integer.valueOf(managerId));
         }
     }
     public Set<Integer> getManagers() {

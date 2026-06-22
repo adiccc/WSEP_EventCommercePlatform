@@ -893,6 +893,8 @@ public class CompanyService {
                         logger.info("respondToOwnerAppointment: user " + userId + " rejected appointment for company " + companyId);
                     }
                     companyRepo.store(company);
+                    // Clear appointment notifications: ALL on accept, only owner's on reject
+                    markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId, "owner", accept);
                     // Only notify if accepted — holders stay null on reject, post-tx block skips gracefully
                     if (accept) {
                         NotifyPayload payload = new NotifyPayload("You are now officially a Owner of company " + company.getCompanyName(), null, companyId);
@@ -1085,6 +1087,8 @@ public class CompanyService {
                         userRepo.store(member);
                     }
                     companyRepo.store(company);
+                    // Clear appointment notifications: ALL on accept, only manager's on reject
+                    markAppointmentRequestAsDelivered(userRepo.getUserEmail(userId), companyId, "manager", accept);
                     // Only notify if accepted — holders stay null on reject, post-tx block skips gracefully
                     if (accept) {
                         NotifyPayload payload = new NotifyPayload("You are now officially a Manager of company " + company.getCompanyName(), null, companyId);
@@ -1246,12 +1250,16 @@ public class CompanyService {
                 return Response.ok(result);
             } catch (OptimisticLockingFailureException e) {
                 throw e;
+            } catch (TransientDataAccessException e) {
+                logger.warning("Transient DB error, will be retried by RetryHelper: " + e.getMessage());
+                throw e;
             } catch (Exception e) {
                 logger.severe("getMyCompanies failed: " + e.getMessage());
                 return Response.error("Unexpected error: " + e.getMessage());
             }
         });
     }
+
     public Response<Boolean> deactivateCompany(String ownerToken, int companyId) {
         return RetryHelper.executeWithRetry(() -> {
             logger.info("deactivateCompany called");
@@ -1413,6 +1421,41 @@ public class CompanyService {
             return new Response<>(null, "Notification saved as PENDING");
     }
     //for saving the notifications as pending in order to handle Persistence before trying to send in real-time
+    // Marks the PENDING ROLE_APPOINTMENT_REQUEST notification for a given user+company as delivered.
+    // Called inside respondToOwnerAppointment / respondToManagerAppointment after the user responds,
+    // so the notification disappears from their list regardless of accept or reject.
+    // On ACCEPT → clear ALL pending appointment notifications for this company (a user can hold
+    //              only one role per company, so the other invite is no longer actionable).
+    // On REJECT → clear ONLY the notification matching roleKeyword ("owner"/"manager"), leaving
+    //              the other role's invite visible so the user can still accept it.
+    private void markAppointmentRequestAsDelivered(String userIdentifier, int companyId, String roleKeyword, boolean accepted) {
+        RetryHelper.executeWithRetry(() ->
+            transactionTemplate.execute(status -> {
+                try {
+                    Member member = userRepo.findUserByEmail(userIdentifier);
+                    if (member != null) {
+                        if (accepted) {
+                            member.markAllAppointmentRequestsDelivered(companyId);
+                        } else {
+                            member.markAppointmentRequestDelivered(companyId, roleKeyword);
+                        }
+                        userRepo.store(member);
+                        logger.info("Appointment request notifications updated for: " + userIdentifier
+                                + ", companyId: " + companyId + ", role: " + roleKeyword + ", accepted: " + accepted);
+                    }
+                    return new Response<>(true, "ok");
+                } catch (OptimisticLockingFailureException e) {
+                    status.setRollbackOnly();
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.warning("Failed to mark appointment request notification as delivered: " + e.getMessage());
+                    return new Response<>(false, "failed");
+                }
+            })
+        );
+    }
+
     private Response<Long> saveDelayedNotificationAsPending(String userIdentifier, NotifyDTO notifyDTO) {
         return RetryHelper.executeWithRetry(() ->
                 transactionTemplate.execute(status -> {

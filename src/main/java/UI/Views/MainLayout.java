@@ -331,13 +331,17 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         String tabId2 = UI.getCurrent().getElement().getProperty("currentTabId");
         String userEmail = (String) VaadinSession.getCurrent().getAttribute("notificationUserIdentifier_" + tabId2);
 
+        // Detect role from the invite message so we call the right endpoint — otherwise a user
+        // with BOTH pending invites would always trigger the owner path and get the wrong role.
+        boolean isManagerInvite = message != null && message.toLowerCase().contains("manager");
+
+        // The respond endpoints already mark the matching appointment notification as DELIVERED —
+        // do NOT call cleanDelayedNotifications, it would wipe the user's entire notification history.
         Button acceptBtn = new Button("Accept", e -> {
-            var ownerRes = companyService.respondToOwnerAppointment(token, resolvedCompanyId, true);
-            if (ownerRes.getValue() == null) {
+            if (isManagerInvite) {
                 companyService.respondToManagerAppointment(token, resolvedCompanyId, true);
-            }
-            if (userEmail != null && !userEmail.isBlank()) {
-                userService.cleanDelayedNotifications(userEmail);
+            } else {
+                companyService.respondToOwnerAppointment(token, resolvedCompanyId, true);
             }
             dialog.close();
             showSuccess("You have accepted the appointment.");
@@ -345,12 +349,10 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
         acceptBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);
 
         Button rejectBtn = new Button("Reject", e -> {
-            var ownerRes = companyService.respondToOwnerAppointment(token, resolvedCompanyId, false);
-            if (ownerRes.getValue() == null) {
+            if (isManagerInvite) {
                 companyService.respondToManagerAppointment(token, resolvedCompanyId, false);
-            }
-            if (userEmail != null && !userEmail.isBlank()) {
-                userService.cleanDelayedNotifications(userEmail);
+            } else {
+                companyService.respondToOwnerAppointment(token, resolvedCompanyId, false);
             }
             dialog.close();
             showError("You have rejected the appointment.");
