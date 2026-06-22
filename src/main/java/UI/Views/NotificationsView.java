@@ -163,12 +163,8 @@ public class NotificationsView extends VerticalLayout {
                 && notification.getPayload().getCompanyId() != null) {
 
             int companyId = notification.getPayload().getCompanyId();
-            // Detect which role this invite is for so we call the right endpoint — otherwise
-            // a user who has BOTH pending invites would always trigger the owner path.
-            String msg = notification.getPayload().getMessage() != null
-                    ? notification.getPayload().getMessage().toLowerCase()
-                    : "";
-            boolean isManagerInvite = msg.contains("manager");
+            // Role comes from the structured actionData field — no fragile message parsing.
+            boolean isManagerInvite = "MANAGER".equals(notification.getPayload().getActionData());
 
             Button acceptBtn = new Button("Accept", e -> respondToAppointment(card, companyId, true, isManagerInvite));
             acceptBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);

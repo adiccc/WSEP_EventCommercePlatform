@@ -333,7 +333,9 @@ public class MainLayout extends AppLayout implements RouterLayout, BeforeEnterOb
 
         // Detect role from the invite message so we call the right endpoint — otherwise a user
         // with BOTH pending invites would always trigger the owner path and get the wrong role.
-        boolean isManagerInvite = message != null && message.toLowerCase().contains("manager");
+        // Role comes from the structured actionData field — no fragile message parsing.
+        boolean isManagerInvite = notification.getPayload() != null
+                && "MANAGER".equals(notification.getPayload().getActionData());
 
         // The respond endpoints already mark the matching appointment notification as DELIVERED —
         // do NOT call cleanDelayedNotifications, it would wipe the user's entire notification history.
