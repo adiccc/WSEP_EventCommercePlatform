@@ -11,6 +11,7 @@ import domain.company.ICompanyRepo;
 import domain.dto.ActiveOrderDTO;
 import domain.dto.SeatingTicketDTO;
 import domain.event.Event;
+import domain.event.EventQueueManager;
 import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.user.IUserRepo;
@@ -56,6 +57,7 @@ class ActiveOrderServiceDbFailureTest {
     private ISuspensionRepo suspensionRepo;
     private TransactionTemplate transactionTemplate;
     private TransactionStatus transactionStatus;
+    private EventQueueManager eventQueueManager;
     private ActiveOrderService activeOrderService;
 
     @BeforeAll
@@ -87,6 +89,8 @@ class ActiveOrderServiceDbFailureTest {
             return callback.doInTransaction(transactionStatus);
         });
 
+        eventQueueManager = mock(EventQueueManager.class);
+
         ActiveOrderProperties activeOrderProperties = mock(ActiveOrderProperties.class);
         when(activeOrderProperties.getCapacity()).thenReturn(1);
         when(activeOrderProperties.getSelectingTimeoutMinutes()).thenReturn(10);
@@ -110,7 +114,8 @@ class ActiveOrderServiceDbFailureTest {
                 preExpirationScheduler,
                 userRepo,
                 transactionTemplate,
-                activeOrderProperties
+                activeOrderProperties,
+                eventQueueManager
         );
     }
 
@@ -319,8 +324,8 @@ class ActiveOrderServiceDbFailureTest {
         when(activeOrderRepo.findById(ACTIVE_ORDER_ID)).thenReturn(expiredOrder);
         when(eventRepo.findById(EVENT_ID)).thenReturn(event);
 
-        when(event.getEventQueue().isEmpty()).thenReturn(false);
-        when(event.getEventQueue().dequeue()).thenReturn(NEXT_TOKEN);
+        when(eventQueueManager.isEmpty(EVENT_ID)).thenReturn(false);
+        when(eventQueueManager.dequeue(EVENT_ID)).thenReturn(NEXT_TOKEN);
         when(activeOrderRepo.countActiveOrdersForEvent(EVENT_ID)).thenReturn(0);
 
         doThrow(new TransientDataAccessResourceException("DB is down"))
