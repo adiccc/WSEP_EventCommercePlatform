@@ -1,6 +1,7 @@
 package application;
 
 import DTO.*;
+import DTO.ActiveOrderSelectionDTO;
 import Log.LoggerSetup;
 import app.config.ActiveOrderProperties;
 
@@ -23,9 +24,9 @@ import domain.dataType.CategoryEvent;
 import domain.dataType.GeographicalArea;
 import domain.dataType.TicketStatus;
 import domain.dataType.PermissionType;
-import domain.dto.ActiveOrderDTO;
-import domain.dto.SeatingTicketDTO;
-import domain.dto.UserDTO;
+import DTO.ActiveOrderDTO;
+import DTO.SeatingTicketDTO;
+import DTO.UserDTO;
 import domain.event.Event;
 import domain.event.Order;
 import domain.event.OrderStatus;
@@ -5932,7 +5933,7 @@ class ActiveOrderServiceTest {
     void GivenActiveOrderWithTickets_WhenGetCurrentActiveOrderSelection_ThenSelectionReturned() {
         int orderId = createCheckoutOrder(validToken, concurrentEventId, 3);
 
-        Response<domain.dto.ActiveOrderSelectionDTO> response =
+        Response<ActiveOrderSelectionDTO> response =
                 service.getCurrentActiveOrderSelection(validToken);
 
         assertNotNull(response.getValue(),
@@ -5941,7 +5942,7 @@ class ActiveOrderServiceTest {
 
     @Test
     void GivenInvalidToken_WhenGetCurrentActiveOrderSelection_ThenErrorReturned() {
-        Response<domain.dto.ActiveOrderSelectionDTO> response =
+        Response<ActiveOrderSelectionDTO> response =
                 service.getCurrentActiveOrderSelection("");
 
         assertNull(response.getValue());
@@ -5952,7 +5953,7 @@ class ActiveOrderServiceTest {
     void GivenNoActiveOrder_WhenGetCurrentActiveOrderSelection_ThenErrorReturned() {
         String freshToken = registerAndLoginTestUser("noorder_sel@mail.com");
 
-        Response<domain.dto.ActiveOrderSelectionDTO> response =
+        Response<ActiveOrderSelectionDTO> response =
                 service.getCurrentActiveOrderSelection(freshToken);
 
         assertNull(response.getValue());
@@ -5964,7 +5965,7 @@ class ActiveOrderServiceTest {
         int orderId = createCheckoutOrder(validToken, concurrentEventId, 2);
         forceExpireOrder(orderId);
 
-        Response<domain.dto.ActiveOrderSelectionDTO> response =
+        Response<ActiveOrderSelectionDTO> response =
                 service.getCurrentActiveOrderSelection(validToken);
 
         assertNull(response.getValue());
@@ -5977,7 +5978,7 @@ class ActiveOrderServiceTest {
         int userId = userService.getUserId(validToken).getValue();
         suspensionRepo.store(new domain.Suspension.Suspension(userId));
 
-        Response<domain.dto.ActiveOrderSelectionDTO> response =
+        Response<ActiveOrderSelectionDTO> response =
                 service.getCurrentActiveOrderSelection(validToken);
 
         assertNull(response.getValue());

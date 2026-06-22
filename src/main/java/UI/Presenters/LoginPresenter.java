@@ -2,7 +2,6 @@ package UI.Presenters;
 
 import application.Response;
 import application.UserService;
-import domain.dto.UserDTO;
 
 /**
  * Presenter for LoginView — follows the lecture pattern:

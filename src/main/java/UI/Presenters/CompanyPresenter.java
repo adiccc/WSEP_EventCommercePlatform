@@ -10,10 +10,10 @@ import domain.dataType.EventSearchFilter;
 import domain.dataType.PermissionType;
 import domain.policy.DiscountPolicyType;
 import domain.policy.PurchasePolicyType;
-import domain.dto.CompanyDetailsDTO;
-import domain.dto.EventDTO;
-import domain.dto.OrderDTO;
-import domain.dto.SalesReportDTO;
+import DTO.CompanyDetailsDTO;
+import DTO.EventDTO;
+import DTO.OrderDTO;
+import DTO.SalesReportDTO;
 
 import java.util.List;
 import java.util.Set;

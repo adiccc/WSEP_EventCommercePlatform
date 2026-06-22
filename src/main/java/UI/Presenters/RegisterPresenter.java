@@ -1,7 +1,7 @@
 package UI.Presenters;
 
 import application.UserService;
-import domain.dto.UserDTO;
+import DTO.UserDTO;
 import application.Response;
 
 public class RegisterPresenter {

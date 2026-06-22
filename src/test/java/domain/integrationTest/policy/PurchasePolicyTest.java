@@ -1,11 +1,9 @@
 package domain.integrationTest.policy;
 
-import domain.dto.UserDTO;
+import DTO.UserDTO;
 import domain.policy.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 

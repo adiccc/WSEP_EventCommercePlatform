@@ -1,7 +1,6 @@
 package application.dbFailure;
 
 import DTO.DiscountDTO;
-import DTO.PurchaseRuleDTO;
 import app.config.SystemProperties;
 import application.*;
 import domain.Suspension.ISuspensionRepo;
@@ -9,10 +8,10 @@ import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.company.Permissions;
 import domain.dataType.PermissionType;
-import domain.dto.CompanyDTO;
-import domain.dto.CompanyDetailsDTO;
-import domain.dto.HierarchyDTO;
-import domain.dto.RolesPermissionsTreeDTO;
+import DTO.CompanyDTO;
+import DTO.CompanyDetailsDTO;
+import DTO.HierarchyDTO;
+import DTO.RolesPermissionsTreeDTO;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import org.junit.jupiter.api.BeforeAll;

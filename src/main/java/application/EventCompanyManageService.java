@@ -5,7 +5,6 @@ import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.dataType.*;
-import domain.dto.*;
 import domain.policy.DiscountPolicyType;
 import domain.policy.PurchasePolicyType;
 import domain.event.*;
@@ -13,16 +12,13 @@ import Exception.OptimisticLockingFailureException;
 import domain.user.*;
 import domain.user.IUserRepo;
 import domain.user.Member;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataAccessException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.*;
 
 import static DTO.NotifyType.GENERAL_POPUP;

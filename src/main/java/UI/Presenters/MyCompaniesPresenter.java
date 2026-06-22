@@ -3,7 +3,7 @@ package UI.Presenters;
 import application.CompanyService;
 import application.Response;
 import domain.company.Company;
-import domain.dto.CompanyDTO;
+import DTO.CompanyDTO;
 
 import java.util.List;
 

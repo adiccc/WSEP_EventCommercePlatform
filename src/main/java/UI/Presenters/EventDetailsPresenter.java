@@ -8,7 +8,7 @@ import application.IAuth;
 import application.LotteryService;
 import application.Response;
 import domain.dataType.PermissionType;
-import domain.dto.EventDetailsDTO;
+import DTO.EventDetailsDTO;
 import domain.policy.DiscountPolicyType;
 
 import java.time.LocalDateTime;

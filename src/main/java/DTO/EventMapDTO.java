@@ -1,10 +1,8 @@
-package domain.dto;
+package DTO;
 
-import DTO.StandingZoneDTO;
-import DTO.SeatingZoneDTO;
 import java.util.HashMap;
 import java.util.Map;
-import DTO.ElementPositionDTO;
+
 import domain.dataType.*;
 import domain.event.EventMap;
 import domain.event.SeatingZone;

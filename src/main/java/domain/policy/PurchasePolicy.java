@@ -1,7 +1,7 @@
 package domain.policy;
 
 import DTO.PurchaseRuleDTO;
-import domain.dto.UserDTO;
+import DTO.UserDTO;
 import jakarta.persistence.*;
 
 import java.util.ArrayList;

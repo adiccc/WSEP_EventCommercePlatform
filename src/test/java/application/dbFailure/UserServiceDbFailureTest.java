@@ -3,7 +3,7 @@ package application.dbFailure;
 import DTO.NotifyDTO;
 import app.config.SystemProperties;
 import application.*;
-import domain.dto.UserDTO;
+import DTO.UserDTO;
 import domain.user.IUserRepo;
 import domain.user.Member;
 import org.junit.jupiter.api.BeforeAll;

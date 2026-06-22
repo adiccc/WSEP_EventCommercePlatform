@@ -1,4 +1,4 @@
-package domain.dto;
+package DTO;
 
 public class EventSalesRecordDTO {
     private Integer eventId;

@@ -1,20 +1,20 @@
 package UI.Views;
 
 import DTO.PurchaseRuleDTO;
+import DTO.EventSalesRecordDTO;
 import UI.Presenters.CompanyPresenter;
 import application.CompanyService;
 import application.EventCompanyManageService;
 import application.EventService;
 import application.IAuth;
 import com.vaadin.flow.component.timepicker.TimePicker;
-import domain.dto.OrderDTO;
-import domain.dto.SalesReportDTO;
+import DTO.OrderDTO;
+import DTO.SalesReportDTO;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.combobox.ComboBox;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
-import com.vaadin.flow.component.datetimepicker.DateTimePicker;
 import com.vaadin.flow.component.html.*;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.notification.NotificationVariant;
@@ -32,8 +32,8 @@ import domain.dataType.GeographicalArea;
 import domain.dataType.PermissionType;
 import domain.policy.PurchasePolicyType;
 import com.vaadin.flow.component.UI;
-import domain.dto.CompanyDetailsDTO;
-import domain.dto.EventDTO;
+import DTO.CompanyDetailsDTO;
+import DTO.EventDTO;
 import DTO.DiscountDTO;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import domain.policy.DiscountPolicyType;
@@ -1032,11 +1032,11 @@ public class CompanyView extends VerticalLayout implements BeforeEnterObserver {
 
             if (report.getEventRecords() != null && !report.getEventRecords().isEmpty()) {
                 content.add(new H4("Breakdown by Event"));
-                Grid<domain.dto.EventSalesRecordDTO> grid = new Grid<>(domain.dto.EventSalesRecordDTO.class, false);
-                grid.addColumn(domain.dto.EventSalesRecordDTO::getEventId).setHeader("Event ID").setSortable(true).setFlexGrow(0).setWidth("100px");
-                grid.addColumn(domain.dto.EventSalesRecordDTO::getEventName).setHeader("Event Name").setSortable(true).setFlexGrow(2);
-                grid.addColumn(domain.dto.EventSalesRecordDTO::getCreatorId).setHeader("Creator ID").setSortable(true).setFlexGrow(0).setWidth("110px");
-                grid.addColumn(domain.dto.EventSalesRecordDTO::getNumTicketsSold).setHeader("Tickets Sold").setSortable(true).setFlexGrow(1);
+                Grid<EventSalesRecordDTO> grid = new Grid<>(EventSalesRecordDTO.class, false);
+                grid.addColumn(EventSalesRecordDTO::getEventId).setHeader("Event ID").setSortable(true).setFlexGrow(0).setWidth("100px");
+                grid.addColumn(EventSalesRecordDTO::getEventName).setHeader("Event Name").setSortable(true).setFlexGrow(2);
+                grid.addColumn(EventSalesRecordDTO::getCreatorId).setHeader("Creator ID").setSortable(true).setFlexGrow(0).setWidth("110px");
+                grid.addColumn(EventSalesRecordDTO::getNumTicketsSold).setHeader("Tickets Sold").setSortable(true).setFlexGrow(1);
                 grid.addColumn(r -> String.format("₪%.2f", r.getRevenue())).setHeader("Revenue").setSortable(true).setFlexGrow(1);
                 grid.setItems(report.getEventRecords());
                 grid.setWidthFull();

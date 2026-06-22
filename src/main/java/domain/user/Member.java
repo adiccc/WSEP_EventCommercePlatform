@@ -2,7 +2,7 @@ package domain.user;
 
 import DTO.NotifyDTO;
 import DTO.NotifyType;
-import domain.dto.UserDTO;
+import DTO.UserDTO;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.util.ArrayList;

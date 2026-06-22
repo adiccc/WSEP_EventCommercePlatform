@@ -7,16 +7,15 @@ import com.vaadin.flow.shared.Registration;
 import domain.Suspension.ISuspensionRepo;
 import domain.company.Company;
 import domain.dataType.*;
-import domain.dto.EventDTO;
-import domain.dto.EventDetailsDTO;
-import domain.dto.UserDTO;
+import DTO.EventDTO;
+import DTO.EventDetailsDTO;
+import DTO.UserDTO;
 import domain.lottery.AccessCodeGenerator;
 import domain.user.IUserRepo;
 import infrastructure.Auth;
 import infrastructure.Broadcaster;
 import infrastructure.PasswordEncoderUtil;
 import infrastructure.VaadinNotifier;
-import infrastructure.inMemory.*;
 import infrastructure.inMemory.CompanyRepoImpl;
 import infrastructure.inMemory.EventRepoImpl;
 import infrastructure.inMemory.SuspensionRepoImpl;
@@ -35,7 +34,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 

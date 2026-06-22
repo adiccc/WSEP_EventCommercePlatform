@@ -2,8 +2,8 @@ package application.dbFailure;
 
 import DTO.AdminPurchaseHistoryDTO;
 import app.config.SystemProperties;
-import domain.dto.HierarchyDTO;
-import domain.dto.SuspensionDTO;
+import DTO.HierarchyDTO;
+import DTO.SuspensionDTO;
 import application.*;
 import domain.Suspension.ISuspensionRepo;
 import domain.Suspension.Suspension;

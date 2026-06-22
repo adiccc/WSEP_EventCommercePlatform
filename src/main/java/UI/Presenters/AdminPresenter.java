@@ -2,7 +2,7 @@ package UI.Presenters;
 
 import application.AdminService;
 import application.Response;
-import domain.dto.SuspensionDTO;
+import DTO.SuspensionDTO;
 
 import java.util.List;
 

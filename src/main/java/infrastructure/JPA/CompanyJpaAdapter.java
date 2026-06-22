@@ -2,7 +2,7 @@ package infrastructure.JPA;
 
 import domain.company.Company;
 import domain.company.ICompanyRepo;
-import domain.dto.CompanyDTO;
+import DTO.CompanyDTO;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
