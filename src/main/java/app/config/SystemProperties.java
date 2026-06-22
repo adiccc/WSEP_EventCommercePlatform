@@ -43,6 +43,10 @@ public class SystemProperties {
     @Positive
     private Integer externalApiTimeoutMinutes;
 
+    @NotNull
+    @Positive
+    private Integer retryCount;
+
     public String getExternalApiUrl() { return externalApiUrl; }
     public void setExternalApiUrl(String externalApiUrl) { this.externalApiUrl = externalApiUrl; }
 
@@ -72,4 +76,11 @@ public class SystemProperties {
 
     public List<String> getAdminEmails() { return adminEmails; }
     public void setAdminEmails(List<String> adminEmails) { this.adminEmails = adminEmails; }
+
+    public Integer getRetryCount() {
+        return retryCount;
+    }
+    public void setRetryCount(Integer retryCount) {
+        this.retryCount = retryCount;
+    }
 }
