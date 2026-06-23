@@ -1,0 +1,43 @@
+# Test configuration. NOTE: a test-scoped application.yml shadows (does not merge
+# with) src/main/resources/application.yml on the classpath, so the system / active-order
+# blocks must be repeated here for the @ConfigurationProperties beans to validate.
+
+spring:
+  main:
+    allow-bean-definition-overriding: true
+  profiles:
+    active: memory,test,db
+  # ── H2 (in-memory, tests) ─────────────────────────────────────────────────
+  h2:
+    console:
+      enabled: true
+  datasource:
+    url: jdbc:h2:mem:wsepdb
+    driver-class-name: org.h2.Driver
+    username: a
+    password: a
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+# ── System ────────────────────────────────────────────────────────────────────
+system:
+  # Disable system initializer during tests
+  init-enabled: false
+  max-concurrent-users: 50
+  init-state-file: classpath:init-state.json
+  access-code-chars: "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+  access-code-length: 6
+  admin-emails:
+    - systemadmin@demo.com
+  token-expiration-hours: 24
+  external-api-url: "https://damp-lynna-wsep-1984852e.koyeb.app/"
+  external-api-timeout-minutes: 2
+  retry-count: 50
+
+# ── Active order ──────────────────────────────────────────────────────────────
+active-order:
+  capacity: 20
+  selecting-timeout-minutes: 5
+  checkout-timeout-minutes: 10
+  warning-before-expiry-minutes: 1

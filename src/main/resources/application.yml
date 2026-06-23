@@ -1,0 +1,57 @@
+# ── Server ──────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+spring:
+  main:
+    # Allow ServiceConfig beans to override auto-detected beans from infrastructure package
+    allow-bean-definition-overriding: true
+  profiles:
+    active: memory,user-db,suspension-db,lottery-db,company-db,event-db,prod,activeorder-db
+  # Optional local secrets file (DB_URL / DB_USERNAME / DB_PASSWORD, etc.)
+  config:
+    import: optional:file:.env[.properties]
+  # ── PostgreSQL (GCP) ──────────────────────────────────────────────────────
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+# ── Vaadin ──────────────────────────────────────────────────────────────────
+vaadin:
+  # Development mode: shows component tree, live reload, etc.
+  # Switch to "production" before final submission (mvn vaadin:build-frontend)
+  launch-browser: false
+  # Push (real-time notifications): enables @Push on MainLayout for server-side push
+  heartbeat-interval: 300
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level:
+    root: INFO
+    com.vaadin: INFO
+
+# ── System ────────────────────────────────────────────────────────────────────
+system:
+  max-concurrent-users: 50
+  init-state-file: classpath:init-state.json
+  access-code-chars: "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+  access-code-length: 6
+  admin-emails:
+    - systemadmin@demo.com
+  token-expiration-hours: 24
+  external-api-url: "https://damp-lynna-wsep-1984852e.koyeb.app/"
+  external-api-timeout-minutes: 2
+  retry-count: 50
+
+# ── Active order ──────────────────────────────────────────────────────────────
+active-order:
+  capacity: 20
+  selecting-timeout-minutes: 5
+  checkout-timeout-minutes: 10
+  warning-before-expiry-minutes: 1
