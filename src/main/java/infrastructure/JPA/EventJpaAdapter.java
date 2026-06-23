@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 @Repository
-@Profile("event-db")
+@Profile("db")
 public class EventJpaAdapter implements IEventRepo {
 
     private final EventJpaRepository eventJpaRepository;

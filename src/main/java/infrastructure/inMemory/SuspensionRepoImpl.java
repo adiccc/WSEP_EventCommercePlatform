@@ -16,7 +16,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-@Profile("memory & !suspension-db")
+@Profile("memory & !db")
 public class SuspensionRepoImpl implements ISuspensionRepo {
     ConcurrentHashMap<Integer, List<Long>> suspensionsIdByUserID = new ConcurrentHashMap<>(); // <User id,
                                                                                               // List<Susoensions id>>
