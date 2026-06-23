@@ -15,5 +15,5 @@ system:
 active-order:
   capacity: 20
   selecting-timeout-minutes: 5
-  checkout-timeout-minutes: 2
+  checkout-timeout-minutes: 10
   warning-before-expiry-minutes: 1
