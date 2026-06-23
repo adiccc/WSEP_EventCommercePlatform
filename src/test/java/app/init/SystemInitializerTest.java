@@ -1,6 +1,8 @@
 package app.init;
 
 import app.config.SystemProperties;
+import application.IPaymentSystem;
+import application.ITicketSupply;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,8 @@ class SystemInitializerTest {
 
     private SystemInitializer initializer;
     private SystemProperties systemProperties;
+    private IPaymentSystem paymentSystem;
+    private ITicketSupply ticketSupply;
 
     @BeforeEach
     void setUp() {
@@ -39,6 +43,16 @@ class SystemInitializerTest {
         ReflectionTestUtils.setField(initializer, "resourceLoader", new DefaultResourceLoader());
         ReflectionTestUtils.setField(initializer, "objectMapper", new ObjectMapper());
         ReflectionTestUtils.setField(initializer, "handlers", List.of());
+
+        paymentSystem = mock(IPaymentSystem.class);
+        ticketSupply = mock(ITicketSupply.class);
+
+        when(paymentSystem.handshake()).thenReturn(true);
+        when(ticketSupply.handshake()).thenReturn(true);
+
+        ReflectionTestUtils.setField(initializer, "paymentSystem", paymentSystem);
+        ReflectionTestUtils.setField(initializer, "ticketSupply", ticketSupply);
+
         initializer.buildHandlerMap();
     }
 
@@ -144,5 +158,76 @@ class SystemInitializerTest {
             assertTrue(registeredEmails.contains(adminEmail),
                     "Admin email '" + adminEmail + "' is missing a 'register' operation in init-state.json");
         }
+    }
+    // ── External Systems Validation ──────────────────────────────────────────
+
+    @Test
+    void GivenPaymentSystemHandshakeFails_WhenRun_ThenThrowsInitializationException() throws Exception {
+        Path file = writeInitFile("{\"operations\":[{\"type\":\"register\",\"params\":{\"email\":\"admin@test.com\"}}]}");
+        InitOperationHandler handler = mock(InitOperationHandler.class);
+        when(handler.operationType()).thenReturn("register");
+        when(handler.execute(any(), any())).thenReturn("admin@test.com");
+        ReflectionTestUtils.setField(initializer, "handlers", List.of(handler));
+        initializer.buildHandlerMap();
+
+        when(paymentSystem.handshake()).thenReturn(false);
+
+        InitializationException ex = assertThrows(InitializationException.class,
+                () -> initializer.run(emptyDbArgs(file.toString())));
+
+        assertTrue(ex.getMessage().contains("Payment system is unreachable"));
+    }
+
+    @Test
+    void GivenTicketSupplyHandshakeFails_WhenRun_ThenThrowsInitializationException() throws Exception {
+        Path file = writeInitFile("{\"operations\":[{\"type\":\"register\",\"params\":{\"email\":\"admin@test.com\"}}]}");
+        InitOperationHandler handler = mock(InitOperationHandler.class);
+        when(handler.operationType()).thenReturn("register");
+        when(handler.execute(any(), any())).thenReturn("admin@test.com");
+        ReflectionTestUtils.setField(initializer, "handlers", List.of(handler));
+        initializer.buildHandlerMap();
+
+        when(ticketSupply.handshake()).thenReturn(false);
+
+        InitializationException ex = assertThrows(InitializationException.class,
+                () -> initializer.run(emptyDbArgs(file.toString())));
+
+        assertTrue(ex.getMessage().contains("Ticket supply system is unreachable"));
+    }
+
+    @Test
+    void GivenPaymentHandshakeFails_WhenRun_ThenTicketHandshakeIsNeverCalled() throws Exception {
+        Path file = writeInitFile("{\"operations\":[{\"type\":\"register\",\"params\":{\"email\":\"admin@test.com\"}}]}");
+        InitOperationHandler handler = mock(InitOperationHandler.class);
+        when(handler.operationType()).thenReturn("register");
+        when(handler.execute(any(), any())).thenReturn("admin@test.com");
+        ReflectionTestUtils.setField(initializer, "handlers", List.of(handler));
+        initializer.buildHandlerMap();
+
+        when(paymentSystem.handshake()).thenReturn(false);
+
+        assertThrows(InitializationException.class,
+                () -> initializer.run(emptyDbArgs(file.toString())));
+
+        verify(paymentSystem, times(1)).handshake();
+        verify(ticketSupply, never()).handshake();
+    }
+
+    @Test
+    void GivenTicketSystemThrowsUnexpectedException_WhenRun_ThenExceptionBubblesUp() throws Exception {
+        Path file = writeInitFile("{\"operations\":[{\"type\":\"register\",\"params\":{\"email\":\"admin@test.com\"}}]}");
+        InitOperationHandler handler = mock(InitOperationHandler.class);
+        when(handler.operationType()).thenReturn("register");
+        when(handler.execute(any(), any())).thenReturn("admin@test.com");
+        ReflectionTestUtils.setField(initializer, "handlers", List.of(handler));
+        initializer.buildHandlerMap();
+
+        when(paymentSystem.handshake()).thenReturn(true);
+        when(ticketSupply.handshake()).thenThrow(new RuntimeException("Unexpected Core Failure"));
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> initializer.run(emptyDbArgs(file.toString())));
+
+        assertEquals("Unexpected Core Failure", ex.getMessage());
     }
 }
