@@ -796,7 +796,11 @@ public class CompanyService {
 
                     // Save notification as PENDING — internal transaction handles persistence.
                     // Real-time delivery is done AFTER this transaction commits.
-                    NotifyPayload payload = new NotifyPayload("You have been invited to be a owner at company " + company.getCompanyName(), null, companyId);
+                    String appointerName = formatAppointerName(appointerId);
+                    NotifyPayload payload = new NotifyPayload(
+                            "You have been invited by " + appointerName
+                                    + " to be a owner at company " + company.getCompanyName(),
+                            null, companyId);
                     NotifyDTO notifyDTO = new NotifyDTO(NotifyType.ROLE_APPOINTMENT_REQUEST, payload);
                     notifyDTOHolder[0] = notifyDTO;
                     appointeeIdentifierHolder[0] = appointee.getIdentifier();
@@ -986,7 +990,11 @@ public class CompanyService {
                     companyRepo.store(company);
 
                     // Save notification as PENDING — real-time delivery happens after transaction commits
-                    NotifyPayload payload = new NotifyPayload("You have been invited to be a manager at company " + company.getCompanyName(), null, companyId);
+                    String appointerName = formatAppointerName(appointerId);
+                    NotifyPayload payload = new NotifyPayload(
+                            "You have been invited by " + appointerName
+                                    + " to be a manager at company " + company.getCompanyName(),
+                            null, companyId);
                     NotifyDTO notifyDTO = new NotifyDTO(NotifyType.ROLE_APPOINTMENT_REQUEST, payload);
                     notifyDTOHolder[0]           = notifyDTO;
                     appointeeIdentifierHolder[0] = member.getIdentifier();
@@ -1427,6 +1435,24 @@ public class CompanyService {
     //              only one role per company, so the other invite is no longer actionable).
     // On REJECT → clear ONLY the notification matching roleKeyword ("owner"/"manager"), leaving
     //              the other role's invite visible so the user can still accept it.
+    // Builds a readable "First Last (email)" string for the appointer to include in the
+    // appointment-invite message, so the appointee can see who invited them. Falls back to
+    // "an owner" if the appointer can't be looked up — never throws.
+    private String formatAppointerName(int appointerId) {
+        try {
+            Member appointer = userRepo.findById(appointerId);
+            if (appointer != null) {
+                String first = appointer.getFirstName() != null ? appointer.getFirstName() : "";
+                String last  = appointer.getLastName()  != null ? appointer.getLastName()  : "";
+                String full  = (first + " " + last).trim();
+                String email = appointer.getIdentifier();
+                if (full.isEmpty()) return email != null ? email : "an owner";
+                return email != null && !email.isEmpty() ? full + " (" + email + ")" : full;
+            }
+        } catch (Exception ignored) {}
+        return "an owner";
+    }
+
     private void markAppointmentRequestAsDelivered(String userIdentifier, int companyId, String roleKeyword, boolean accepted) {
         RetryHelper.executeWithRetry(() ->
             transactionTemplate.execute(status -> {
