@@ -9,7 +9,8 @@ import domain.activeOrder.STAGE;
 import domain.company.Company;
 import domain.company.ICompanyRepo;
 import domain.event.Event;
-import domain.event.EventQueueManager;
+import domain.eventQueue.EventQueue;
+import domain.eventQueue.IEventQueueRepo;
 import domain.event.IEventRepo;
 import domain.event.Order;
 import domain.lottery.ILotteryRepo;
@@ -59,7 +60,7 @@ public class ActiveOrderService {
     private final int warningBeforeExpiryMinutes;
     private final ScheduledExecutorService cleanupScheduler;
     private final TransactionTemplate transactionTemplate;
-    private final EventQueueManager eventQueueManager;
+    private final IEventQueueRepo eventQueueRepo;
     @Autowired
     public ActiveOrderService(
             IAuth auth,
@@ -74,7 +75,7 @@ public class ActiveOrderService {
             PreExpirationNotificationScheduler preExpirationScheduler,
             IUserRepo userRepo,
             TransactionTemplate transactionTemplate,
-            ActiveOrderProperties activeOrderProperties, EventQueueManager eventQueueManager) {
+            ActiveOrderProperties activeOrderProperties, IEventQueueRepo eventQueueRepo) {
         this.eventRepo = eventRepo;
         this.activeOrderRepo = activeOrderRepo;
         this.companyRepo = companyRepo;
@@ -90,7 +91,7 @@ public class ActiveOrderService {
         this.checkoutTimeoutMinutes = activeOrderProperties.getCheckoutTimeoutMinutes();
         this.warningBeforeExpiryMinutes = activeOrderProperties.getWarningBeforeExpiryMinutes();
         this.userRepo = userRepo;
-        this.eventQueueManager = eventQueueManager;
+        this.eventQueueRepo = eventQueueRepo;
         this.cleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "active-order-cleanup");
             t.setDaemon(true);
@@ -115,7 +116,7 @@ public class ActiveOrderService {
 
 
     // Startup recovery: drop unrecoverable guest orders, return interrupted member payments
-    // to checkout, release lapsed holds, and re-arm pre-expiration warnings.
+    // to check out, release lapsed holds, and re-arm pre-expiration warnings.
     @EventListener(ApplicationReadyEvent.class)
     public void onStartupRecovery() {
         releaseOrphanedGuestOrders();
@@ -386,8 +387,10 @@ public class ActiveOrderService {
                 }
 
                 if (capacity <= activeOrderRepo.countActiveOrdersForEvent(eventId)) {
-                    if (eventQueueManager.contains(eventId, token)) {
-                        int position = eventQueueManager.position(eventId, token);
+                    EventQueue queue = eventQueueRepo.findById(eventId);
+
+                    if (queue.contains(token)) {
+                        int position = queue.position(token);
 
                         return new Response<>(
                                 new EnterPurchaseDTO(
@@ -401,9 +404,9 @@ public class ActiveOrderService {
                                 "User is still waiting in queue. Position: " + position);
                     }
 
-                    eventQueueManager.enqueue(eventId, token);
-                    eventRepo.store(e);
-                    int position = eventQueueManager.position(eventId, token);
+                    queue.enqueue(token);
+                    eventQueueRepo.store(queue);
+                    int position = queue.position(token);
 
                     return new Response<>(
                             new EnterPurchaseDTO(
@@ -415,7 +418,6 @@ public class ActiveOrderService {
                                     companyPurchasePolicy,
                                     eventPurchasePolicy),
                             "Event is full, user added to waiting queue. Position: " + position);
-
                 }
 
                 ActiveOrder newActiveOrder = new ActiveOrder(userIdentifier, eventId, new ArrayList<>());
@@ -1515,15 +1517,21 @@ public class ActiveOrderService {
             try {
                 Event event = eventRepo.findById(eventId);
 
-                boolean removed = eventQueueManager.remove(eventId, token);
+                if (event == null) {
+                    return new Response<>(false, "Event not found");
+                }
+
+                EventQueue queue = eventQueueRepo.findById(eventId);
+                boolean removed = queue.remove(token);
 
                 if (removed) {
-                    eventRepo.store(event);
+                    eventQueueRepo.store(queue);
                 }
 
                 return new Response<>(
                         removed,
-                        removed ? "Removed from event queue" : "User was not waiting in event queue");
+                        removed ? "Removed from event queue" : "User was not waiting in event queue"
+                );
 
             } catch (NoSuchElementException e) {
                 status.setRollbackOnly();
@@ -1564,18 +1572,27 @@ public class ActiveOrderService {
     private String dequeueNextToken(int eventId) {
         return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
             try {
-                Event event = eventRepo.findById(eventId);
-                if (eventQueueManager.isEmpty(eventId)
+                eventRepo.findById(eventId); // validate event exists
+                EventQueue queue = eventQueueRepo.findById(eventId);
+
+                if (queue.isEmpty()
                         || activeOrderRepo.countActiveOrdersForEvent(eventId) >= capacity) {
                     return new Response<>(null, "Queue empty or event at capacity");
                 }
 
-                String nextToken = eventQueueManager.dequeue(eventId);
+                String nextToken = queue.dequeue();
+                eventQueueRepo.store(queue);
+
                 return new Response<>(nextToken, "Token dequeued successfully");
+
+            } catch (NoSuchElementException e) {
+                status.setRollbackOnly();
+                return new Response<>(null, "Event or queue not found");
 
             } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
                 throw e;
+
             } catch (TransientDataAccessException e) {
                 status.setRollbackOnly();
                 throw e;
