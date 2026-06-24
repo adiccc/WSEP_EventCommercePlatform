@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-@Profile("memory & !user-db")
+@Profile("memory & !db")
 public class UserRepo implements IUserRepo {
     private final ConcurrentHashMap<Integer, Member> usersPerId = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> emailById = new ConcurrentHashMap<>();
