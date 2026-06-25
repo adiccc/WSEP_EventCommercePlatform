@@ -3246,6 +3246,77 @@ class EventCompanyManageServiceTest {
         Event eventAfterRemoveAttempt = eventRepo.findById(eventId);
         assertNotNull(eventAfterRemoveAttempt.getMap().getZoneById(zoneId));
     }
+
+    @Test
+    void GivenOverlappingMapPositions_WhenDefineVenueAndSeatingMap_ThenValidationErrorIsReturned() {
+        // Arrange:
+        // stage is at (10, 20), and we create an entry at the same position.
+        ElementPositionDTO overlappingStage = new ElementPositionDTO(10, 20);
+
+        List<ElementPositionDTO> overlappingEntries = List.of(
+                new ElementPositionDTO(10, 20),
+                new ElementPositionDTO(50, 10)
+        );
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                overlappingStage,
+                overlappingEntries,
+                standingZones,
+                seatingZones
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("map elements have overlapping positions", response.getMessage());
+
+        Event event = eventRepo.findById(eventId);
+        assertNull(event.getMap(), "Map should not be saved when there are overlapping positions");
+    }
+
+    @Test
+    void GivenNewZoneOverlapsExistingMapElement_WhenAddZonesToEventMap_ThenValidationErrorIsReturned() {
+        // Arrange: first define a valid map
+        Response<Boolean> defineResponse = eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
+
+        assertTrue(defineResponse.getValue(), "Initial map definition should succeed");
+
+        Event eventBeforeAdd = eventRepo.findById(eventId);
+        int zonesBeforeAdd = eventBeforeAdd.getMap().getZones().size();
+
+        // The existing seating zone from setUp is at (5, 5),
+        // so this new standing zone overlaps with it.
+        List<StandingZoneDTO> newOverlappingStandingZones = List.of(
+                new StandingZoneDTO(-1, 50, "Overlapping Zone", 250.0, new ElementPositionDTO(5, 5))
+        );
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
+                validToken1,
+                eventId,
+                newOverlappingStandingZones,
+                null
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("new zones overlap with existing map elements", response.getMessage());
+
+        Event eventAfterAdd = eventRepo.findById(eventId);
+        int zonesAfterAdd = eventAfterAdd.getMap().getZones().size();
+
+        assertEquals(zonesBeforeAdd, zonesAfterAdd,
+                "No new zone should be added when it overlaps with an existing map element");
+    }
 }
 
 

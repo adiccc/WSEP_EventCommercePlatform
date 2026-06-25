@@ -95,12 +95,23 @@ public class EventCompanyManageService {
                     logger.severe("Map element is null");
                     return new Response<>(false, "map element null");
                 }
-                List<Zone> zones = new ArrayList<>();
-                for (StandingZoneDTO standingZoneDTO : standingZone) {
-                    zones.add(new StandingZone(standingZoneDTO));
+
+                if (hasOverlappingMapPositions(stage, entries, standingZone, seatingZone)) {
+                    logger.severe("Map elements have overlapping positions");
+                    return new Response<>(false, "map elements have overlapping positions");
                 }
-                for (SeatingZoneDTO seatingZoneDTO : seatingZone) {
-                    zones.add(new SeatingZone(seatingZoneDTO));
+
+                List<Zone> zones = new ArrayList<>();
+                if (standingZone != null) {
+                    for (StandingZoneDTO standingZoneDTO : standingZone) {
+                        zones.add(new StandingZone(standingZoneDTO));
+                    }
+                }
+
+                if (seatingZone != null) {
+                    for (SeatingZoneDTO seatingZoneDTO : seatingZone) {
+                        zones.add(new SeatingZone(seatingZoneDTO));
+                    }
                 }
                 List<ElementPosition> allEntries = new ArrayList<>();
                 for (ElementPositionDTO elementPositionDTO : entries) {
@@ -134,6 +145,61 @@ public class EventCompanyManageService {
             });
         });
 
+    }
+
+    private boolean hasOverlappingMapPositions(
+            ElementPositionDTO stage,
+            List<ElementPositionDTO> entries,
+            List<StandingZoneDTO> standingZones,
+            List<SeatingZoneDTO> seatingZones) {
+
+        Set<ElementPosition> positions = new HashSet<>();
+
+        positions.add(new ElementPosition(stage.getX(), stage.getY()));
+
+        for (ElementPositionDTO entry : entries) {
+            if (entry == null) {
+                return true;
+            }
+
+            ElementPosition position = new ElementPosition(entry.getX(), entry.getY());
+
+            if (!positions.add(position)) {
+                return true;
+            }
+        }
+
+        if (standingZones != null) {
+            for (StandingZoneDTO zone : standingZones) {
+                if (zone == null || zone.getPosition() == null) {
+                    return true;
+                }
+
+                ElementPositionDTO dtoPosition = zone.getPosition();
+                ElementPosition position = new ElementPosition(dtoPosition.getX(), dtoPosition.getY());
+
+                if (!positions.add(position)) {
+                    return true;
+                }
+            }
+        }
+
+        if (seatingZones != null) {
+            for (SeatingZoneDTO zone : seatingZones) {
+                if (zone == null || zone.getPosition() == null) {
+                    return true;
+                }
+
+                ElementPositionDTO dtoPosition = zone.getPosition();
+                ElementPosition position = new ElementPosition(dtoPosition.getX(), dtoPosition.getY());
+
+                if (!positions.add(position)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     public Response<Integer> createEvent(String token, int companyId, LocalDateTime date, String name,
@@ -362,6 +428,11 @@ public class EventCompanyManageService {
                         return new Response<>(false, "No zones provided to add");
                     }
 
+                    if (hasOverlappingPositionsWhenAddingZones(map, standingZone, seatingZone)) {
+                        logger.severe("New zones overlap with existing map elements");
+                        return new Response<>(false, "new zones overlap with existing map elements");
+                    }
+
                     List<Zone> zones = map.getZones();
                     if (hasStanding) {
                         for (StandingZoneDTO standingZoneDTO : standingZone) {
@@ -397,6 +468,77 @@ public class EventCompanyManageService {
                     return new Response<>(false, "failed to add zones to event map : " + e.getMessage());
                 }});
         });
+    }
+
+    private boolean hasOverlappingPositionsWhenAddingZones(
+            EventMap map,
+            List<StandingZoneDTO> standingZonesToAdd,
+            List<SeatingZoneDTO> seatingZonesToAdd) {
+
+        Set<ElementPosition> positions = new HashSet<>();
+
+        // existing stage
+        if (map.getStage() == null || !positions.add(map.getStage())) {
+            return true;
+        }
+
+        // existing entries
+        if (map.getEntries() != null) {
+            for (ElementPosition entry : map.getEntries()) {
+                if (entry == null || !positions.add(entry)) {
+                    return true;
+                }
+            }
+        }
+
+        // existing zones
+        if (map.getZones() != null) {
+            for (Zone zone : map.getZones()) {
+                if (zone == null || zone.getElementPosition() == null) {
+                    return true;
+                }
+
+                if (!positions.add(zone.getElementPosition())) {
+                    return true;
+                }
+            }
+        }
+
+        // new standing zones
+        if (standingZonesToAdd != null) {
+            for (StandingZoneDTO zone : standingZonesToAdd) {
+                if (zone == null || zone.getPosition() == null) {
+                    return true;
+                }
+
+                ElementPositionDTO position = zone.getPosition();
+                ElementPosition elementPosition =
+                        new ElementPosition(position.getX(), position.getY());
+
+                if (!positions.add(elementPosition)) {
+                    return true;
+                }
+            }
+        }
+
+        // new seating zones
+        if (seatingZonesToAdd != null) {
+            for (SeatingZoneDTO zone : seatingZonesToAdd) {
+                if (zone == null || zone.getPosition() == null) {
+                    return true;
+                }
+
+                ElementPositionDTO position = zone.getPosition();
+                ElementPosition elementPosition =
+                        new ElementPosition(position.getX(), position.getY());
+
+                if (!positions.add(elementPosition)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
     public Response<Boolean> removeZonesToEventMap(String token, Integer eventId, Integer zoneId) {
         return RetryHelper.executeWithRetry(() ->
