@@ -649,6 +649,8 @@ class AdminServiceDbFailureTest {
         when(admin.getIdentifier()).thenReturn(ADMIN_IDENTIFIER);
 
         when(auth.getRole(TOKEN)).thenReturn(new Response<>("ADMIN", "Role found"));
+        when(auth.isUserEmailAdmin(anyString(),anyString())).thenReturn(new Response<>(false,"not admin"));
+        when(userRepo.getUserEmail(anyInt())).thenReturn("email");
         when(auth.isAdmin(TOKEN)).thenReturn(new Response<>(true, "Admin verified"));
         when(auth.getUserEmail(TOKEN)).thenReturn(new Response<>(ADMIN_IDENTIFIER, "Email found"));
         when(userRepo.findUserByEmail(ADMIN_IDENTIFIER)).thenReturn(admin);
