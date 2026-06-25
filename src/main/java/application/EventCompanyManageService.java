@@ -912,7 +912,7 @@ public class EventCompanyManageService {
             if(cancelledCodes.size()!=orderToRefund.getExternalTicketCodes().size()){
                 logger.log(Level.SEVERE,"Only part of the ticket canceled");
                 String userIdentifier = orderToRefund.getUserIdentifier();
-                NotifyPayload payload = new NotifyPayload("Refund process failed for " + orderToRefund.getOrderId() + "in event " + eventId + "because of ticket system failure", eventId, null);
+                NotifyPayload payload = new NotifyPayload("Refund process failed for " + orderToRefund.getOrderId() + " in event " + eventId + " because of ticket system failure, please contact customer service", eventId, null);
                 sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
                 return new Response<>(false,"Failed to process refund to order "+orderId+" due to failed ticket cancellation,  please contact support ");
             }
@@ -950,7 +950,7 @@ public class EventCompanyManageService {
                     eventRepo.store(currentEvent);
 
                     String userIdentifier = currentOrder.getUserIdentifier();
-                    NotifyPayload payload = new NotifyPayload("Refund process failed for " + currentOrder.getOrderId() + "in event " + eventId + "because of event closed", eventId, null);
+                    NotifyPayload payload = new NotifyPayload("Refund process failed for " + currentOrder.getOrderId() + " in event " + eventId + " because of event closed, please contact customer service", eventId, null);
                     sendOrSaveNotification(userIdentifier, new NotifyDTO(GENERAL_POPUP, payload));
                     logger.log(Level.SEVERE, "Refund rejected by external payment service, while tickets are currently canceled");
                     return new Response<>(false, "Refund rejected by external payment service, while tickets are currently canceled");
