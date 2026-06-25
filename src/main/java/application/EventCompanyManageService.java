@@ -101,6 +101,11 @@ public class EventCompanyManageService {
                     return new Response<>(false, "map elements have overlapping positions");
                 }
 
+                if (hasDuplicateZoneNames(standingZone, seatingZone)) {
+                    logger.severe("Duplicate or invalid zone names");
+                    return new Response<>(false, "duplicate or invalid zone names");
+                }
+
                 List<Zone> zones = new ArrayList<>();
                 if (standingZone != null) {
                     for (StandingZoneDTO standingZoneDTO : standingZone) {
@@ -145,6 +150,43 @@ public class EventCompanyManageService {
             });
         });
 
+    }
+
+    private boolean hasDuplicateZoneNames(
+            List<StandingZoneDTO> standingZones,
+            List<SeatingZoneDTO> seatingZones) {
+
+        Set<String> names = new HashSet<>();
+
+        if (standingZones != null) {
+            for (StandingZoneDTO zone : standingZones) {
+                if (zone == null || zone.getName() == null || zone.getName().trim().isEmpty()) {
+                    return true;
+                }
+
+                String normalizedName = zone.getName().trim().toLowerCase();
+
+                if (!names.add(normalizedName)) {
+                    return true;
+                }
+            }
+        }
+
+        if (seatingZones != null) {
+            for (SeatingZoneDTO zone : seatingZones) {
+                if (zone == null || zone.getName() == null || zone.getName().trim().isEmpty()) {
+                    return true;
+                }
+
+                String normalizedName = zone.getName().trim().toLowerCase();
+
+                if (!names.add(normalizedName)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private boolean hasOverlappingMapPositions(
@@ -433,6 +475,11 @@ public class EventCompanyManageService {
                         return new Response<>(false, "new zones overlap with existing map elements");
                     }
 
+                    if (hasDuplicateZoneNamesWhenAddingZones(map, standingZone, seatingZone)) {
+                        logger.severe("Duplicate or invalid zone names");
+                        return new Response<>(false, "duplicate or invalid zone names");
+                    }
+
                     List<Zone> zones = map.getZones();
                     if (hasStanding) {
                         for (StandingZoneDTO standingZoneDTO : standingZone) {
@@ -533,6 +580,58 @@ public class EventCompanyManageService {
                         new ElementPosition(position.getX(), position.getY());
 
                 if (!positions.add(elementPosition)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private boolean hasDuplicateZoneNamesWhenAddingZones(
+            EventMap map,
+            List<StandingZoneDTO> standingZonesToAdd,
+            List<SeatingZoneDTO> seatingZonesToAdd) {
+
+        Set<String> names = new HashSet<>();
+
+        if (map.getZones() != null) {
+            for (Zone existingZone : map.getZones()) {
+                if (existingZone == null || existingZone.getName() == null || existingZone.getName().trim().isEmpty()) {
+                    return true;
+                }
+
+                String normalizedName = existingZone.getName().trim().toLowerCase();
+
+                if (!names.add(normalizedName)) {
+                    return true;
+                }
+            }
+        }
+
+        if (standingZonesToAdd != null) {
+            for (StandingZoneDTO zone : standingZonesToAdd) {
+                if (zone == null || zone.getName() == null || zone.getName().trim().isEmpty()) {
+                    return true;
+                }
+
+                String normalizedName = zone.getName().trim().toLowerCase();
+
+                if (!names.add(normalizedName)) {
+                    return true;
+                }
+            }
+        }
+
+        if (seatingZonesToAdd != null) {
+            for (SeatingZoneDTO zone : seatingZonesToAdd) {
+                if (zone == null || zone.getName() == null || zone.getName().trim().isEmpty()) {
+                    return true;
+                }
+
+                String normalizedName = zone.getName().trim().toLowerCase();
+
+                if (!names.add(normalizedName)) {
                     return true;
                 }
             }

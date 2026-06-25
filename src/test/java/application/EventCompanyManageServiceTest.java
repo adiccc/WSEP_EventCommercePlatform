@@ -3317,6 +3317,79 @@ class EventCompanyManageServiceTest {
         assertEquals(zonesBeforeAdd, zonesAfterAdd,
                 "No new zone should be added when it overlaps with an existing map element");
     }
+
+    @Test
+    void GivenDuplicateZoneNames_WhenDefineVenueAndSeatingMap_ThenValidationErrorIsReturned() {
+        // Arrange:
+        // Two different zones with the same logical name.
+        // One is standing and one is seating, but both are named "VIP".
+        List<StandingZoneDTO> duplicateStandingZones = List.of(
+                new StandingZoneDTO(-1, 100, "VIP", 100.0, new ElementPositionDTO(1, 1))
+        );
+
+        List<SeatingZoneDTO> duplicateSeatingZones = List.of(
+                new SeatingZoneDTO(-1, 10, 20, " vip ", 150.0, new ElementPositionDTO(5, 5))
+        );
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                duplicateStandingZones,
+                duplicateSeatingZones
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("duplicate or invalid zone names", response.getMessage());
+
+        Event event = eventRepo.findById(eventId);
+        assertNull(event.getMap(), "Map should not be saved when zone names are duplicated");
+    }
+
+    @Test
+    void GivenNewZoneNameAlreadyExists_WhenAddZonesToEventMap_ThenValidationErrorIsReturned() {
+        // Arrange: first define a valid map.
+        Response<Boolean> defineResponse = eventCompanyManageService.DefineVenueAndSeatingMap(
+                validToken1,
+                eventId,
+                stage,
+                entries,
+                standingZones,
+                seatingZones
+        );
+
+        assertTrue(defineResponse.getValue(), "Initial map definition should succeed");
+
+        Event eventBeforeAdd = eventRepo.findById(eventId);
+        int zonesBeforeAdd = eventBeforeAdd.getMap().getZones().size();
+
+        // The setup already has a standing zone named "floor".
+        // Here we try to add another zone with the same name, ignoring case/spaces.
+        List<SeatingZoneDTO> newDuplicateNameSeatingZones = List.of(
+                new SeatingZoneDTO(-1, 5, 10, " FLOOR ", 500.0, new ElementPositionDTO(20, 20))
+        );
+
+        // Act
+        Response<Boolean> response = eventCompanyManageService.AddZonesToEventMap(
+                validToken1,
+                eventId,
+                null,
+                newDuplicateNameSeatingZones
+        );
+
+        // Assert
+        assertFalse(response.getValue());
+        assertEquals("duplicate or invalid zone names", response.getMessage());
+
+        Event eventAfterAdd = eventRepo.findById(eventId);
+        int zonesAfterAdd = eventAfterAdd.getMap().getZones().size();
+
+        assertEquals(zonesBeforeAdd, zonesAfterAdd,
+                "No new zone should be added when its name already exists in the map");
+    }
 }
 
 
