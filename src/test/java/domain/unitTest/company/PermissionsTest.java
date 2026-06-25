@@ -32,14 +32,14 @@ class PermissionsTest {
 
     @Test
     void GivenAddedOwner_WhenIsOwnerCalled_ThenTrue() {
-        permissions.addOwner(OWNER_ID);
+        permissions.addOwner(OWNER_ID, FOUNDER_ID);
         permissions.OwnerAppointeeRespond(OWNER_ID, true);
         assertTrue(permissions.isOwner(OWNER_ID));
     }
 
     @Test
     void GivenRemovedOwner_WhenIsOwnerCalled_ThenFalse() {
-        permissions.addOwner(OWNER_ID);
+        permissions.addOwner(OWNER_ID, FOUNDER_ID);
         permissions.removeOwner(OWNER_ID);
         assertFalse(permissions.isOwner(OWNER_ID));
     }
@@ -285,5 +285,70 @@ class PermissionsTest {
         assertFalse(subtree.contains(SIBLING_ID), "Should not contain siblings");
 
         assertEquals(2, subtree.size());
+    }
+
+    // ===================== owners in the appointee tree (bug fix) =====================
+
+    /**
+     * Regression for the sales-report bug: when an OWNER appoints a MANAGER, the owner's
+     * subtree must include that manager. Previously owners were not tree nodes, so the
+     * owner→manager edge was dropped and the owner's subtree (used by sales reports) was empty.
+     */
+    @Test
+    void GivenOwnerAppointsManager_WhenGetSubTreeOfOwner_ThenIncludesManager() {
+        permissions.addOwner(OWNER_ID, FOUNDER_ID);
+        permissions.OwnerAppointeeRespond(OWNER_ID, true);
+        permissions.addToTree(MANAGER_ID, OWNER_ID, new HashSet<>());
+
+        Set<Integer> ownerSubtree = permissions.getSubTreeAppointees(OWNER_ID);
+        assertTrue(ownerSubtree.contains(OWNER_ID));
+        assertTrue(ownerSubtree.contains(MANAGER_ID),
+                "Owner's subtree must include the manager they appointed");
+
+        // The founder (root) still sees the whole company in its subtree.
+        Set<Integer> founderSubtree = permissions.getSubTreeAppointees(FOUNDER_ID);
+        assertTrue(founderSubtree.containsAll(Set.of(FOUNDER_ID, OWNER_ID, MANAGER_ID)));
+    }
+
+    @Test
+    void GivenOwnerAppointedByFounder_WhenGetDirectAppointerId_ThenReturnsFounder() {
+        permissions.addOwner(OWNER_ID, FOUNDER_ID);
+        permissions.OwnerAppointeeRespond(OWNER_ID, true);
+
+        assertEquals(FOUNDER_ID, permissions.getDirectAppointerId(OWNER_ID));
+    }
+
+    @Test
+    void GivenManagerAppointedByOwner_WhenGetDirectAppointerId_ThenReturnsOwner() {
+        permissions.addOwner(OWNER_ID, FOUNDER_ID);
+        permissions.OwnerAppointeeRespond(OWNER_ID, true);
+        permissions.addToTree(MANAGER_ID, OWNER_ID, new HashSet<>());
+
+        assertEquals(OWNER_ID, permissions.getDirectAppointerId(MANAGER_ID));
+    }
+
+    @Test
+    void GivenFounder_WhenGetDirectAppointerId_ThenMinusOne() {
+        assertEquals(-1, permissions.getDirectAppointerId(FOUNDER_ID));
+    }
+
+    @Test
+    void GivenOwner_WhenIsManager_ThenFalse() {
+        permissions.addOwner(OWNER_ID, FOUNDER_ID);
+        permissions.OwnerAppointeeRespond(OWNER_ID, true);
+
+        assertTrue(permissions.isOwner(OWNER_ID));
+        assertFalse(permissions.isManager(OWNER_ID),
+                "An owner is not a manager even though they are a tree node");
+    }
+
+    @Test
+    void GivenRejectedOwnerInvite_WhenInspected_ThenNotInTreeAndNoAppointer() {
+        permissions.addOwner(OWNER_ID, FOUNDER_ID);
+        permissions.OwnerAppointeeRespond(OWNER_ID, false);
+
+        assertFalse(permissions.isOwner(OWNER_ID));
+        assertFalse(permissions.getCompanyTree().containsKey(OWNER_ID));
+        assertEquals(-1, permissions.getDirectAppointerId(OWNER_ID));
     }
 }

@@ -133,8 +133,11 @@ class CompanyIntegrationTest {
 
         assertEquals(founder.getUserId(), perms.getFounderId());
         assertTrue(perms.isOwner(founder.getUserId()));
-        assertTrue(perms.getCompanyTree().isEmpty(),
-                "No managers added yet -tree should be empty");
+        // The founder is the root of the appointee tree, but there are no managers yet.
+        assertEquals(0, perms.getManagerCount(),
+                "No managers added yet");
+        assertEquals(-1, perms.getDirectAppointerId(founder.getUserId()),
+                "Founder is the root and has no appointer");
     }
 
     // --- Successful_View with managers ---
@@ -180,7 +183,7 @@ class CompanyIntegrationTest {
     void GivenUpdatedPermissions_WhenStoredAndRetrieved_ThenChangesPersisted() {
         int newOwnerId = 500;
         Company stored = companyRepo.findById(COMPANY_ID);
-        stored.getCompanyPermission().addOwner(newOwnerId);
+        stored.getCompanyPermission().addOwner(newOwnerId, stored.getCompanyPermission().getFounderId());
         stored.getCompanyPermission().OwnerAppointeeRespond(newOwnerId, true);
         companyRepo.store(stored);
 
