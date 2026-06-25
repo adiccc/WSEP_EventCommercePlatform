@@ -10,6 +10,7 @@ import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClientException;
 import org.springframework.http.*;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -82,7 +83,9 @@ public class RealTicketSupply implements ITicketSupply {
             }
             List<String> duplicatedCodes = java.util.Collections.nCopies(quantityRequested, ticketCode.trim());
             return new TicketSupplyResultDTO(true, duplicatedCodes);
-
+        } catch (RestClientException e) {
+            logger.warning("External ticket system returned failure");
+            throw new RuntimeException("External ticket system returned failure");
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
@@ -114,6 +117,9 @@ public class RealTicketSupply implements ITicketSupply {
             }
 
             return true;
+        } catch (RestClientException e) {
+            logger.warning("External ticket system returned failure");
+            throw new RuntimeException("External ticket system returned failure");
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
