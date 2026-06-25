@@ -12,7 +12,8 @@ import domain.company.ICompanyRepo;
 import DTO.ActiveOrderDTO;
 import DTO.SeatingTicketDTO;
 import domain.event.Event;
-import domain.event.EventQueueManager;
+import domain.eventQueue.EventQueue;
+import infrastructure.inMemory.EventQueueRepoImpl;
 import domain.event.IEventRepo;
 import domain.lottery.ILotteryRepo;
 import domain.user.IUserRepo;
@@ -58,7 +59,7 @@ class ActiveOrderServiceDbFailureTest {
     private ISuspensionRepo suspensionRepo;
     private TransactionTemplate transactionTemplate;
     private TransactionStatus transactionStatus;
-    private EventQueueManager eventQueueManager;
+    private EventQueueRepoImpl eventQueueRepoImpl;
     private ActiveOrderService activeOrderService;
 
     @BeforeAll
@@ -90,7 +91,7 @@ class ActiveOrderServiceDbFailureTest {
             return callback.doInTransaction(transactionStatus);
         });
 
-        eventQueueManager = mock(EventQueueManager.class);
+        eventQueueRepoImpl = mock(EventQueueRepoImpl.class);
 
         ActiveOrderProperties activeOrderProperties = mock(ActiveOrderProperties.class);
         when(activeOrderProperties.getCapacity()).thenReturn(1);
@@ -116,7 +117,7 @@ class ActiveOrderServiceDbFailureTest {
                 userRepo,
                 transactionTemplate,
                 activeOrderProperties,
-                eventQueueManager
+                eventQueueRepoImpl
         );
     }
 
@@ -332,8 +333,11 @@ class ActiveOrderServiceDbFailureTest {
         when(activeOrderRepo.findById(ACTIVE_ORDER_ID)).thenReturn(expiredOrder);
         when(eventRepo.findById(EVENT_ID)).thenReturn(event);
 
-        when(eventQueueManager.isEmpty(EVENT_ID)).thenReturn(false);
-        when(eventQueueManager.dequeue(EVENT_ID)).thenReturn(NEXT_TOKEN);
+        EventQueue queue = mock(EventQueue.class);
+
+        when(eventQueueRepoImpl.findById(EVENT_ID)).thenReturn(queue);
+        when(queue.isEmpty()).thenReturn(false);
+        when(queue.dequeue()).thenReturn(NEXT_TOKEN);
         when(activeOrderRepo.countActiveOrdersForEvent(EVENT_ID)).thenReturn(0);
 
         doThrow(new TransientDataAccessResourceException("DB is down"))

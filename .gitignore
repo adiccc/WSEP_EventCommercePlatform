@@ -5,7 +5,7 @@
 target/
 
 #logs
-Logs/
+logs/
 
 # Build files
 *.class

@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-@Profile("memory & !event-db")
+@Profile("memory & !db")
 public class EventRepoImpl implements IEventRepo {
     Map<Integer,Event> events; // key: eventId, value: event
     private final AtomicInteger eventIdGenerator = new AtomicInteger(1);

@@ -77,6 +77,8 @@ class AdminServiceTest {
     private static final String ADMIN_EMAIL = "admin@bgu.ac.il";
     private static final String USER_EMAIL = "user@bgu.ac.il";
     private static final String PASSWORD = "Pass123!";
+    private static final String ADMIN_EMAIL_2="admin2@bgu.ac.il";
+    private int adminIdSec;
 
     private int userIdNotSuspened;
     private String userNotSusToken;
@@ -110,7 +112,7 @@ class AdminServiceTest {
             return callback.doInTransaction(new org.springframework.transaction.support.SimpleTransactionStatus());
         });
         IPasswordEncoder passwordEncoder = new PasswordEncoderUtil();
-        auth = new Auth(tokenService, Set.of(ADMIN_EMAIL));
+        auth = new Auth(tokenService, Set.of(ADMIN_EMAIL,ADMIN_EMAIL_2));
         notifier = new VaadinNotifier();
         userService = new UserService(tokenService, auth, userRepo, passwordEncoder,notifier,transactionTemplate);
 
@@ -123,17 +125,20 @@ class AdminServiceTest {
         activeOrderProperties.setSelectingTimeoutMinutes(SELECTING_TIMEOUT_MINUTES);
         activeOrderProperties.setCheckoutTimeoutMinutes(CHECKOUT_TIMEOUT_MINUTES);
         activeOrderProperties.setWarningBeforeExpiryMinutes(WARNING_BEFORE_EXPIRY_MINUTES);
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth,activeOrderProperties),userRepo,transactionTemplate,activeOrderProperties, new EventQueueManager());
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth,activeOrderProperties),userRepo,transactionTemplate,activeOrderProperties, new EventQueueRepoImpl());
 
         eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate,ticketSupply);
         companyService = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier,transactionTemplate);
 
         UserDTO adminDTO = new UserDTO(ADMIN_EMAIL, "Admin", "User", PASSWORD, 1, 1, 1990, "City", "050-000-0000");
+        UserDTO admin2DTO = new UserDTO(ADMIN_EMAIL_2, "Admin2", "User", PASSWORD, 1, 1, 1990, "City", "050-000-0000");
         UserDTO userDTO = new UserDTO(USER_EMAIL, "Regular", "User", PASSWORD, 1, 1, 1990, "City", "050-111-1111");
         userService.registerUser(null, adminDTO);
+        userService.registerUser(null,admin2DTO);
         userService.registerUser(null, userDTO);
-
+        adminIdSec=2;
         adminToken = userService.login(ADMIN_EMAIL, PASSWORD).getValue();
+        String adminToken2=userService.login(ADMIN_EMAIL_2,PASSWORD).getValue();
         nonAdminToken = userService.login(USER_EMAIL, PASSWORD).getValue();
 
         Response<Company> c = companyService.createProductionCompany(adminToken, companyId, "test-company",
@@ -1365,6 +1370,34 @@ class AdminServiceTest {
 
         assertTrue(suspensionRepo.haveActiveSuspension(userIdNotSuspened));
         assertTrue(userRepo.findById(userIdNotSuspened).isSuspended());
+    }
+
+    @Test
+    void GivenAdminUserToSuspend_WhenSuspendUserPermanently_ThenUserNotSuspend() {
+
+        // Act
+        Response<Boolean> response = adminService.SuspendUser(adminToken, adminIdSec);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertTrue(response.getMessage().contains("SuspendUser failed"));
+
+        assertFalse(suspensionRepo.haveActiveSuspension(adminIdSec));
+        assertFalse(userRepo.findById(adminIdSec).isSuspended());
+    }
+
+    @Test
+    void GivenAdminUserToSuspend_WhenSuspendUserTemporarily_ThenUserNotSuspend() {
+
+        // Act
+        Response<Boolean> response = adminService.SuspendUser(adminToken, adminIdSec,1);
+
+        // Assert
+        assertFalse(response.getValue());
+        assertTrue(response.getMessage().contains("SuspendUser failed"));
+
+        assertFalse(suspensionRepo.haveActiveSuspension(adminIdSec));
+        assertFalse(userRepo.findById(adminIdSec).isSuspended());
     }
 
     @Test

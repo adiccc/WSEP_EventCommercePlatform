@@ -88,6 +88,21 @@ public class Auth implements IAuth {
     }
 
     @Override
+    public Response<Boolean> isUserEmailAdmin(String token, String email) {
+        if (!isLoggedIn(token).getValue()) {
+            logger.warning("isUserEmailAdmin check failed: token is not logged in");
+            return new Response<>(false, "User is not logged in");
+        }
+        try {
+            boolean admin = email != null && adminEmails.contains(email);
+            return new Response<>(admin, admin ? "User is admin" : "email is not admin's email");
+        } catch (Exception e) {
+            logger.severe("isUserEmailAdmin check failed due to server error: " + e.getMessage());
+            return new Response<>(false, "Server error during admin check");
+        }
+    }
+
+    @Override
     public Response<String> getRole(String token) {
         logger.info("trying to extract role");
         if (token == null || token.isBlank()) {

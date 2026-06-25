@@ -30,4 +30,23 @@ public class ElementPosition {
     public void setY(double y) {
         this.y = y;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (!(o instanceof ElementPosition other)) {
+            return false;
+        }
+
+        return Double.compare(this.x, other.x) == 0
+                && Double.compare(this.y, other.y) == 0;
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(x, y);
+    }
 }
