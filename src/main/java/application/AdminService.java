@@ -80,6 +80,10 @@ public class AdminService {
                         logger.log(Level.INFO, "SuspendUser failed : admin cannot suspend himself");
                         return new Response<>(false, "SuspendUser failed : admin cannot suspend himself");
                     }
+                    if(auth.isUserEmailAdmin(token,userRepo.getUserEmail(userId)).getValue()){
+                        logger.log(Level.SEVERE,"SuspendUser failed : admin cannot suspend other admin");
+                        return new Response<>(false,"SuspendUser failed : admin cannot suspend other admin");
+                    }
                     Member member=userRepo.findById(userId);
                     if(member.isSuspended()){
                         logger.log(Level.INFO, "SuspendUser failed : user is already suspended");
@@ -123,6 +127,10 @@ public class AdminService {
                     if(getUserIdFromToken(token) == userId){
                         logger.log(Level.INFO, "SuspendUser failed : admin cannot suspend himself");
                         return new Response<>(false, "SuspendUser failed : admin cannot suspend himself");
+                    }
+                    if(auth.isUserEmailAdmin(token,userRepo.getUserEmail(userId)).getValue()){
+                        logger.log(Level.SEVERE,"SuspendUser failed : admin cannot suspend other admin");
+                        return new Response<>(false,"SuspendUser failed : admin cannot suspend other admin");
                     }
                     Member member=userRepo.findById(userId);
                     if(member.isSuspended()){
