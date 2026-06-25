@@ -95,6 +95,12 @@ public class RolesView extends VerticalLayout implements BeforeEnterObserver {
 
         add(new H2("Roles & Permissions"));
 
+        // Show who directly appointed the current viewer (founder has no appointer)
+        String appointerName = presenter.getMyAppointerName(token, companyId);
+        if (appointerName != null) {
+            add(appointedByLine(appointerName));
+        }
+
         // ── Founder ──────────────────────────────────────────────────────────
         add(sectionHeader("👑 Founder"));
         add(userChip(presenter.getDisplayName(tree.getFounderId()), "var(--lumo-primary-color)"));
@@ -346,6 +352,12 @@ public class RolesView extends VerticalLayout implements BeforeEnterObserver {
     private void buildManagerView(String token) {
         add(new H2("My Permissions"));
 
+        // Show who directly appointed this manager
+        String appointerName = presenter.getMyAppointerName(token, companyId);
+        if (appointerName != null) {
+            add(appointedByLine(appointerName));
+        }
+
         var response = presenter.getMyPermissions(token, companyId);
         if (response.getValue() == null) {
             add(new Paragraph("Could not load permissions: " + response.getMessage()));
@@ -383,6 +395,16 @@ public class RolesView extends VerticalLayout implements BeforeEnterObserver {
         Notification n = Notification.show(message != null ? message : "An error occurred.",
                 4000, Notification.Position.TOP_CENTER);
         n.addThemeVariants(NotificationVariant.LUMO_ERROR);
+    }
+
+    /** Italic "Appointed by: X" line shown to the current viewer. */
+    private Paragraph appointedByLine(String appointerName) {
+        Paragraph p = new Paragraph("Appointed by: " + appointerName);
+        p.getStyle()
+                .set("font-style", "italic")
+                .set("margin", "0 0 0.5rem 0")
+                .set("color", "var(--lumo-secondary-text-color)");
+        return p;
     }
 
     private H3 sectionHeader(String title) {
