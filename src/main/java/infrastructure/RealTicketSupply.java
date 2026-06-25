@@ -87,7 +87,7 @@ public class RealTicketSupply implements ITicketSupply {
             throw e;
         } catch (Exception e) {
             logger.severe("Ticket issue request failed: " + e.getMessage());
-            throw new RuntimeException("Ticket supply system error: " + e.getMessage());        }
+            throw new RuntimeException("We are experiencing temporary issues with the ticket provider. Please try again in a few moments.");        }
     }
     @Override
     public boolean cancelTicket(String ticketCode) {
@@ -118,7 +118,8 @@ public class RealTicketSupply implements ITicketSupply {
             throw e;
         } catch (Exception e) {
             logger.severe("Ticket cancellation failed due to communication error: " + e.getMessage());
-            throw new RuntimeException("Ticket supply system error during cancellation: " + e.getMessage());        }
+            throw new RuntimeException("Could not reach the external ticket system to cancel tickets. Please try again.");
+        }
     }
 
     @Override

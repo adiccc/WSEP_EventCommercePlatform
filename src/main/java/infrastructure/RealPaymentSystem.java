@@ -67,7 +67,7 @@ public class RealPaymentSystem implements IPaymentSystem {
                 throw e;
         } catch (Exception e) {
             logger.severe("Payment failed due to communication error: " + e.getMessage());
-            throw new RuntimeException("Payment gateway error: " + e.getMessage());
+            throw new RuntimeException("Payment gateway is currently unreachable. Please verify your details and try again later.");
         }
     }
 
@@ -98,7 +98,7 @@ public class RealPaymentSystem implements IPaymentSystem {
             throw e;
         } catch (Exception e) {
             logger.severe("Refund failed due to communication error: " + e.getMessage());
-            throw new RuntimeException("Payment gateway error during refund: " + e.getMessage());
+            throw new RuntimeException("Could not reach the payment gateway to process the refund. Please try again or contact support.");
         }
     }
 
