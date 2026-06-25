@@ -8,6 +8,7 @@ import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClientException;
 import org.springframework.http.*;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -62,12 +63,14 @@ public class RealPaymentSystem implements IPaymentSystem {
             }
 
             return transactionId.trim();
-
+        }catch (RestClientException e){
+            logger.warning("External payment system rejected the payment.");
+            throw new RuntimeException("Payment rejected by the credit card company.");
         } catch (RuntimeException e) {
                 throw e;
         } catch (Exception e) {
             logger.severe("Payment failed due to communication error: " + e.getMessage());
-            throw new RuntimeException("Payment gateway error: " + e.getMessage());
+            throw new RuntimeException("Payment gateway is currently unreachable. Please verify your details and try again later.");
         }
     }
 
@@ -94,11 +97,14 @@ public class RealPaymentSystem implements IPaymentSystem {
                 throw new RuntimeException("Unexpected response from payment gateway during refund.");
             }
             return true;
+        }catch (RestClientException e){
+            logger.warning("External payment system rejected the payment.");
+            throw new RuntimeException("Payment rejected by the payment gateway.");
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
             logger.severe("Refund failed due to communication error: " + e.getMessage());
-            throw new RuntimeException("Payment gateway error during refund: " + e.getMessage());
+            throw new RuntimeException("Could not reach the payment gateway to process the refund. Please try again or contact support.");
         }
     }
 
