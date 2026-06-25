@@ -394,12 +394,14 @@ public class AdminService {
                                     + company.getCompanyName() + "\"");
 
                         } else if (perms.isOwner(userIdToRemove)) {
-                            // Owner removed → reassign any managers they appointed to the founder
+                            // Owner removed → reassign anyone they appointed to the founder,
+                            // then remove the owner's own node from the tree
                             perms.removeOwner(userIdToRemove);
-                            for (Integer managerId : perms.getCompanyTree().keySet()) {
-                                if (perms.getCompanyTree().get(managerId).getMyManager() == userIdToRemove)
-                                    perms.changeAppointer(managerId, perms.getFounderId());
+                            for (Integer nodeId : perms.getCompanyTree().keySet()) {
+                                if (perms.getCompanyTree().get(nodeId).getMyManager() == userIdToRemove)
+                                    perms.changeAppointer(nodeId, perms.getFounderId());
                             }
+                            perms.removeTreeNode(userIdToRemove);
                             changed = true;
 
                         } else if (perms.isManager(userIdToRemove)) {
