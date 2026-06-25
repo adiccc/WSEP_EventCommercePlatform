@@ -13,11 +13,11 @@ import java.util.NoSuchElementException;
 /**
  * Adapter: bridges the domain interface (ICompanyRepo) to Spring Data JPA.
  *
- * Activated only when the "company-db" profile is on (see application.yml).
- * Otherwise the in-memory CompanyRepoImpl (with @Profile("memory")) handles requests.
+ * Activated only when the "db" profile is on (see application.properties).
+ * Otherwise the in-memory CompanyRepoImpl (with @Profile("memory & !db")) handles requests.
  */
 @Repository
-@Profile("company-db")
+@Profile("db")
 public class CompanyJpaAdapter implements ICompanyRepo {
 
     private final CompanyJpaRepository jpaRepo;

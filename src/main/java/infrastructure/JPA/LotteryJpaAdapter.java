@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 @Repository
-@Profile("lottery-db")
+@Profile("db")
 public class LotteryJpaAdapter implements ILotteryRepo {
 
     private final LotteryJpaRepository lotteryJpaRepository;

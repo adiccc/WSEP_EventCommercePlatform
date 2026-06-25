@@ -7,7 +7,7 @@ spring:
     # Allow ServiceConfig beans to override auto-detected beans from infrastructure package
     allow-bean-definition-overriding: true
   profiles:
-    active: memory,user-db,suspension-db,lottery-db,company-db,event-db,prod,activeorder-db
+    active: memory,db,prod
   # Optional local secrets file (DB_URL / DB_USERNAME / DB_PASSWORD, etc.)
   config:
     import: optional:file:.env[.properties]

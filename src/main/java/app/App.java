@@ -1,5 +1,6 @@
 package app;
 
+import Log.LoggerSetup;
 import com.vaadin.flow.component.page.AppShellConfigurator;
 import com.vaadin.flow.component.page.Push;
 import com.vaadin.flow.shared.communication.PushMode;
@@ -29,6 +30,7 @@ import java.util.Arrays;
 public class App implements AppShellConfigurator {
 
         public static void main(String[] args) {
+                LoggerSetup.setup();
                 for (int i = 0; i < args.length; i++) {
                         if (args[i].startsWith("--config=")) {
                                 String path = args[i].substring("--config=".length());

@@ -15,4 +15,6 @@ public interface IAuth {
 
     Response<String> getUserIdentifier(String token);
 
+    Response<Boolean> isUserEmailAdmin(String token, String userEmail);
+
 }

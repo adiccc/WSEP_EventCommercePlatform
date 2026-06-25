@@ -1,19 +1,39 @@
-package domain.event;
+package domain.eventQueue;
 
 import java.util.LinkedList;
 import java.util.Queue;
 
 public class EventQueue {
-    private final Queue<String> waitingUsers; //tokens
+    private Integer eventId;
+    private int version;
+    private final Queue<String> waitingUsers; // tokens
 
-    public EventQueue() {
+    public EventQueue(Integer eventId) {
+        this.eventId = eventId;
+        this.version = 0;
         this.waitingUsers = new LinkedList<>();
     }
+
     public EventQueue(EventQueue eventQueue) {
-        this.waitingUsers = new LinkedList<>();
-        for (String s : eventQueue.waitingUsers) {
-            this.waitingUsers.add(s);
-        }
+        this.eventId = eventQueue.eventId;
+        this.version = eventQueue.version;
+        this.waitingUsers = new LinkedList<>(eventQueue.waitingUsers);
+    }
+
+    public Integer getId() {
+        return eventId;
+    }
+
+    public void setId(Integer eventId) {
+        this.eventId = eventId;
+    }
+
+    public int getVersion() {
+        return version;
+    }
+
+    public void setVersion(int version) {
+        this.version = version;
     }
 
     public void enqueue(String token) {
@@ -36,7 +56,7 @@ public class EventQueue {
             pos++;
         }
 
-        return -1; // not found
+        return -1;
     }
 
     public boolean isFirst(String token) {

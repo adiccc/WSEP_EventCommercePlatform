@@ -16,7 +16,7 @@ import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 @Repository
-@Profile("memory & !activeorder-db")
+@Profile("memory & !db")
 public class ActiveOrderRepoImpl implements IActiveOrderRepo {
     private ConcurrentHashMap<Integer, ActiveOrder> activeOrders; // key: activeOrderId, value: ActiveOrder
     private final AtomicInteger idGenerator = new AtomicInteger(1);
