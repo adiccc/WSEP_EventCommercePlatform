@@ -1,7 +1,7 @@
 package app;
 
 import app.config.SystemProperties;
-import domain.webQueue.WebQueue;
+import application.WebQueue;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;

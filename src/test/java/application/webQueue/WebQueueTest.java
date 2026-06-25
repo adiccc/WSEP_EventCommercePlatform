@@ -1,8 +1,7 @@
-package domain.unitTest.webQueue;
+package application.webQueue;
 
 import DTO.QueueEntryResultDTO;
-import application.AdmissionCallback;
-import domain.webQueue.WebQueue;
+import application.WebQueue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

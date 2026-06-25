@@ -33,7 +33,6 @@ import domain.event.Order;
 import domain.event.OrderStatus;
 import domain.user.IUserRepo;
 import domain.user.Member;
-import domain.webQueue.WebQueue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;

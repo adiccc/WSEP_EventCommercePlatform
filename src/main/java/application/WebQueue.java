@@ -1,7 +1,6 @@
-package domain.webQueue;
+package application;
 
 import DTO.QueueEntryResultDTO;
-import application.AdmissionCallback;
 
 import java.util.HashMap;
 import java.util.Map;

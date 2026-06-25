@@ -7,7 +7,6 @@ import DTO.QueueEntryResultDTO;
 import DTO.UserDTO;
 import domain.user.*;
 import Exception.OptimisticLockingFailureException;
-import domain.webQueue.WebQueue;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Service;
