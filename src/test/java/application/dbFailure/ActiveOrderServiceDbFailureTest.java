@@ -22,20 +22,43 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.dao.RecoverableDataAccessException;
 import org.springframework.dao.TransientDataAccessResourceException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.TransactionSystemException;
+import org.springframework.transaction.TransactionTimedOutException;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import Exception.OptimisticLockingFailureException;
+import DTO.NotifyDTO;
+import DTO.NotifyPayload;
+import DTO.NotifyType;
+import domain.activeOrder.STAGE;
+
+import org.junit.jupiter.api.Named;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 
 import java.util.NoSuchElementException;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Named.named;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -57,6 +80,10 @@ class ActiveOrderServiceDbFailureTest {
     private ILotteryRepo lotteryRepo;
     private IUserRepo userRepo;
     private ISuspensionRepo suspensionRepo;
+    private IPaymentSystem paymentSystem;
+    private ITicketSupply ticketSupply;
+    private INotifier notifier;
+    private PreExpirationNotificationScheduler preExpirationScheduler;
     private TransactionTemplate transactionTemplate;
     private TransactionStatus transactionStatus;
     private EventQueueRepoImpl eventQueueRepoImpl;
@@ -77,11 +104,10 @@ class ActiveOrderServiceDbFailureTest {
         userRepo = mock(IUserRepo.class);
         suspensionRepo = mock(ISuspensionRepo.class);
 
-        IPaymentSystem paymentSystem = mock(IPaymentSystem.class);
-        ITicketSupply ticketSupply = mock(ITicketSupply.class);
-        INotifier notifier = mock(INotifier.class);
-        PreExpirationNotificationScheduler preExpirationScheduler =
-                mock(PreExpirationNotificationScheduler.class);
+        paymentSystem = mock(IPaymentSystem.class);
+        ticketSupply = mock(ITicketSupply.class);
+        notifier = mock(INotifier.class);
+        preExpirationScheduler = mock(PreExpirationNotificationScheduler.class);
 
         transactionTemplate = mock(TransactionTemplate.class);
         transactionStatus = mock(TransactionStatus.class);
@@ -124,8 +150,8 @@ class ActiveOrderServiceDbFailureTest {
     @BeforeEach
     void resetRetryHelperConfig() {
         SystemProperties systemProperties = new SystemProperties();
-        systemProperties.setRetryCount(50);
-        systemProperties.setRetryJitterMaxMs(50);
+        systemProperties.setRetryCount(3);
+        systemProperties.setRetryJitterMaxMs(0);
 
         new RetryHelper(systemProperties);
     }
@@ -160,67 +186,47 @@ class ActiveOrderServiceDbFailureTest {
     // Active order repo failure tests
     // ============================================================================
 
-    @Test
-    void GivenActiveOrderRepoFindOrderByUserIdFailure_WhenReturnToEditSelection_ThenRollbackControlledErrorReturned() {
-        // Arrange
-        when(activeOrderRepo.findOrderByUserId(USER_IDENTIFIER))
-                .thenThrow(new TransientDataAccessResourceException("DB is down"));
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenActiveOrderRepoFindOrderByUserIdFailure_WhenReturnToEditSelection_ThenRollbackControlledErrorReturned(RuntimeException arm) {
+        when(activeOrderRepo.findOrderByUserId(USER_IDENTIFIER)).thenThrow(arm);
 
-        // Act
-        Response<ActiveOrderDTO> response = assertDoesNotThrow(
-                () -> activeOrderService.returnToEditSelection(TOKEN)
-        );
+        Response<?> response = assertDoesNotThrow(
+                () -> activeOrderService.returnToEditSelection(TOKEN));
 
-        // Assert
         assertControlledFailure(response);
         verify(transactionStatus, atLeastOnce()).setRollbackOnly();
         verify(activeOrderRepo, atLeastOnce()).findOrderByUserId(USER_IDENTIFIER);
     }
 
-    @Test
-    void GivenActiveOrderRepoFindByIdFailure_WhenGetCompanyIdByActiveOrder_ThenRollbackControlledErrorReturned() {
-        // Arrange
-        when(activeOrderRepo.findById(ACTIVE_ORDER_ID))
-                .thenThrow(new TransientDataAccessResourceException("DB is down"));
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenActiveOrderRepoFindByIdFailure_WhenGetCompanyIdByActiveOrder_ThenRollbackControlledErrorReturned(RuntimeException arm) {
+        when(activeOrderRepo.findById(ACTIVE_ORDER_ID)).thenThrow(arm);
 
-        // Act
-        Response<Integer> response = assertDoesNotThrow(
-                () -> activeOrderService.getCompanyIdByActiveOrder(TOKEN, ACTIVE_ORDER_ID)
-        );
+        Response<?> response = assertDoesNotThrow(
+                () -> activeOrderService.getCompanyIdByActiveOrder(TOKEN, ACTIVE_ORDER_ID));
 
-        // Assert
         assertControlledFailure(response);
         verify(transactionStatus, atLeastOnce()).setRollbackOnly();
         verify(activeOrderRepo, atLeastOnce()).findById(ACTIVE_ORDER_ID);
     }
 
-    @Test
-    void GivenActiveOrderRepoFindActiveOrderByUserEventFailure_WhenUserSelectTickets_ThenRollbackControlledErrorReturned() {
-        // Arrange
-        Event event = mockSellableEvent();
-        Company company = mockCompany();
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenEventRepoFindByIdFailure_WhenUserSelectTickets_ThenRollbackControlledErrorReturned(RuntimeException arm) {
+        when(eventRepo.findById(EVENT_ID)).thenThrow(arm);
 
-        when(eventRepo.findById(EVENT_ID)).thenReturn(event);
-        when(companyRepo.findById(COMPANY_ID)).thenReturn(company);
-
-        when(activeOrderRepo.findActiveOrderByUserAndEvent(USER_IDENTIFIER, EVENT_ID))
-                .thenThrow(new TransientDataAccessResourceException("DB is down"));
-
-        // Act
-        Response<Integer> response = assertDoesNotThrow(
+        Response<?> response = assertDoesNotThrow(
                 () -> activeOrderService.userSelectTickets(
                         TOKEN,
                         EVENT_ID,
                         Collections.<String, List<SeatingTicketDTO>>emptyMap(),
-                        Collections.emptyMap()
-                )
-        );
+                        Collections.emptyMap()));
 
-        // Assert
         assertControlledFailure(response);
         verify(transactionStatus, atLeastOnce()).setRollbackOnly();
-        verify(activeOrderRepo, atLeastOnce())
-                .findActiveOrderByUserAndEvent(USER_IDENTIFIER, EVENT_ID);
+        verify(eventRepo, atLeastOnce()).findById(EVENT_ID);
     }
 
     @Test
@@ -275,35 +281,34 @@ class ActiveOrderServiceDbFailureTest {
         verify(activeOrderRepo, atLeastOnce()).store(any());
     }
 
-    @Test
-    void GivenActiveOrderRepoGetAllFailure_WhenStartupRecovery_ThenRollbackNoCrash() {
-        // Arrange
-        when(activeOrderRepo.getAll())
-                .thenThrow(new TransientDataAccessResourceException("DB is down"));
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenActiveOrderRepoGetAllFailure_WhenStartupRecovery_ThenRollbackNoCrash(RuntimeException arm) {
+        when(activeOrderRepo.getAll()).thenThrow(arm);
         when(activeOrderRepo.findExpired(any(LocalDateTime.class), anyInt(), anyInt()))
                 .thenReturn(Collections.emptyList());
 
-        // Act & Assert
         assertDoesNotThrow(() -> activeOrderService.onStartupRecovery());
+
         verify(transactionStatus, atLeastOnce()).setRollbackOnly();
         verify(activeOrderRepo, atLeastOnce()).getAll();
     }
 
-    @Test
-    void GivenActiveOrderRepoFindExpiredFailure_WhenCleanupExpiredOrders_ThenNoCrash() {
-        // Arrange
-        when(activeOrderRepo.findExpired(any(LocalDateTime.class), anyInt(), anyInt()))
-                .thenThrow(new TransientDataAccessResourceException("DB is down"));
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenActiveOrderRepoFindExpiredFailure_WhenCleanupExpiredOrders_ThenNoCrash(RuntimeException arm) {
+        when(activeOrderRepo.findExpired(any(LocalDateTime.class), anyInt(), anyInt())).thenThrow(arm);
 
-        // Act & Assert
         assertDoesNotThrow(() -> activeOrderService.cleanupExpiredOrders());
+
+        verify(transactionStatus, atLeastOnce()).setRollbackOnly();
         verify(activeOrderRepo, atLeastOnce())
                 .findExpired(any(LocalDateTime.class), anyInt(), anyInt());
     }
 
-    @Test
-    void GivenActiveOrderRepoDeleteFailure_WhenCleanupExpiredOrders_ThenRollbackNoCrash() {
-        // Arrange
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenActiveOrderRepoDeleteFailure_WhenCleanupExpiredOrders_ThenRollbackNoCrash(RuntimeException arm) {
         ActiveOrder expiredOrder = mockExpiredOrder();
         Event event = mock(Event.class);
 
@@ -311,13 +316,10 @@ class ActiveOrderServiceDbFailureTest {
                 .thenReturn(List.of(expiredOrder));
         when(activeOrderRepo.findById(ACTIVE_ORDER_ID)).thenReturn(expiredOrder);
         when(eventRepo.findById(EVENT_ID)).thenReturn(event);
+        doThrow(arm).when(activeOrderRepo).delete(ACTIVE_ORDER_ID);
 
-        doThrow(new TransientDataAccessResourceException("DB is down"))
-                .when(activeOrderRepo)
-                .delete(ACTIVE_ORDER_ID);
-
-        // Act & Assert
         assertDoesNotThrow(() -> activeOrderService.cleanupExpiredOrders());
+
         verify(transactionStatus, atLeastOnce()).setRollbackOnly();
         verify(activeOrderRepo, atLeastOnce()).delete(ACTIVE_ORDER_ID);
     }
@@ -383,6 +385,233 @@ class ActiveOrderServiceDbFailureTest {
         assertDoesNotThrow(() -> activeOrderService.cleanupExpiredOrders());
         verify(activeOrderRepo, atLeast(2))
                 .findExpired(any(LocalDateTime.class), anyInt(), anyInt());
+    }
+
+    // ============================================================================
+    // Per-arm cascade coverage
+    //
+    // Every transactional block carries the same DB exception cascade
+    // (optimistic-lock -> cannot-create-transaction -> query-timeout ->
+    // resource-failure -> transient -> transaction-timeout -> non-transient ->
+    // transaction -> data-access -> generic). These parameterized tests fire
+    // each arm through every newly protected block and assert the service
+    // degrades to a controlled Response (never throws) while flagging the
+    // transaction for rollback on the way out.
+    // ============================================================================
+
+    private static Stream<Arguments> dbExceptionArms() {
+        return Stream.of(
+                arguments(named("OptimisticLockingFailureException (retryable)",
+                        new OptimisticLockingFailureException("optimistic lock conflict"))),
+                arguments(named("CannotCreateTransactionException (retryable)",
+                        new CannotCreateTransactionException("cannot create transaction"))),
+                arguments(named("QueryTimeoutException (retryable)",
+                        new QueryTimeoutException("query timed out"))),
+                arguments(named("DataAccessResourceFailureException (retryable)",
+                        new DataAccessResourceFailureException("resource failure"))),
+                arguments(named("TransientDataAccessException (retryable)",
+                        new TransientDataAccessResourceException("transient failure"))),
+                arguments(named("TransactionTimedOutException (retryable)",
+                        new TransactionTimedOutException("transaction timed out"))),
+                arguments(named("NonTransientDataAccessException (non-retryable)",
+                        new DataIntegrityViolationException("integrity violation"))),
+                arguments(named("TransactionException (retryable)",
+                        new TransactionSystemException("transaction system error"))),
+                arguments(named("DataAccessException (retryable)",
+                        new RecoverableDataAccessException("recoverable access error"))),
+                arguments(named("Generic Exception (non-retryable)",
+                        new RuntimeException("unexpected failure")))
+        );
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenActiveOrderRepoFindOrderByUserIdFailure_WhenGetCurrentActiveOrderSelection_ThenRollbackControlledErrorReturned(RuntimeException arm) {
+        when(activeOrderRepo.findOrderByUserId(USER_IDENTIFIER)).thenThrow(arm);
+
+        Response<?> response = assertDoesNotThrow(
+                () -> activeOrderService.getCurrentActiveOrderSelection(TOKEN));
+
+        assertControlledFailure(response);
+        verify(transactionStatus, atLeastOnce()).setRollbackOnly();
+        verify(activeOrderRepo, atLeastOnce()).findOrderByUserId(USER_IDENTIFIER);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenActiveOrderRepoFindOrderByUserIdFailure_WhenMemberProceedAnActiveOrder_ThenRollbackControlledErrorReturned(RuntimeException arm) {
+        when(activeOrderRepo.findOrderByUserId(USER_IDENTIFIER)).thenThrow(arm);
+
+        Response<?> response = assertDoesNotThrow(
+                () -> activeOrderService.memberProceedAnActiveOrder(TOKEN));
+
+        assertControlledFailure(response);
+        verify(transactionStatus, atLeastOnce()).setRollbackOnly();
+        verify(activeOrderRepo, atLeastOnce()).findOrderByUserId(USER_IDENTIFIER);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenActiveOrderRepoFindOrderByUserIdFailure_WhenEditTicketSelection_ThenRollbackControlledErrorReturned(RuntimeException arm) {
+        when(activeOrderRepo.findOrderByUserId(USER_IDENTIFIER)).thenThrow(arm);
+
+        Response<?> response = assertDoesNotThrow(
+                () -> activeOrderService.editTicketSelection(
+                        TOKEN,
+                        Collections.emptyMap(),
+                        Collections.emptyMap(),
+                        Collections.emptyMap()));
+
+        assertControlledFailure(response);
+        verify(transactionStatus, atLeastOnce()).setRollbackOnly();
+        verify(activeOrderRepo, atLeastOnce()).findOrderByUserId(USER_IDENTIFIER);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenActiveOrderRepoFindByIdFailure_WhenPrepareCheckout_ThenRollbackControlledErrorReturned(RuntimeException arm) {
+        when(activeOrderRepo.findById(ACTIVE_ORDER_ID)).thenThrow(arm);
+
+        Response<?> response = assertDoesNotThrow(
+                () -> activeOrderService.prepareCheckout(TOKEN, ACTIVE_ORDER_ID));
+
+        assertControlledFailure(response);
+        verify(transactionStatus, atLeastOnce()).setRollbackOnly();
+        verify(activeOrderRepo, atLeastOnce()).findById(ACTIVE_ORDER_ID);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenActiveOrderRepoFindByIdFailure_WhenCheckoutAndPayment_ThenRollbackControlledErrorReturned(RuntimeException arm) {
+        when(activeOrderRepo.findById(ACTIVE_ORDER_ID)).thenThrow(arm);
+
+        Response<?> response = assertDoesNotThrow(
+                () -> activeOrderService.checkoutAndPayment(TOKEN, ACTIVE_ORDER_ID, null));
+
+        assertControlledFailure(response);
+        verify(transactionStatus, atLeastOnce()).setRollbackOnly();
+        verify(activeOrderRepo, atLeastOnce()).findById(ACTIVE_ORDER_ID);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenEventRepoFindByIdFailureAfterPayment_WhenCheckoutAndPayment_ThenRollbackControlledErrorReturned(RuntimeException arm) {
+        ActiveOrder readyOrder = mockCheckoutReadyOrder();
+        Event event = mockCheckoutEvent();
+
+        when(activeOrderRepo.findById(ACTIVE_ORDER_ID)).thenReturn(readyOrder);
+        when(eventRepo.findById(EVENT_ID)).thenReturn(event).thenThrow(arm);
+        when(paymentSystem.pay(anyDouble(), any())).thenReturn("CONFIRMATION-1");
+
+        Response<?> response = assertDoesNotThrow(
+                () -> activeOrderService.checkoutAndPayment(TOKEN, ACTIVE_ORDER_ID, null));
+
+        assertControlledFailure(response);
+        verify(transactionStatus, atLeastOnce()).setRollbackOnly();
+        verify(eventRepo, atLeast(2)).findById(EVENT_ID);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenActiveOrderRepoFindByIdFailureAfterDeclinedPayment_WhenCheckoutAndPayment_ThenRollbackNoCrash(RuntimeException arm) {
+        ActiveOrder readyOrder = mockCheckoutReadyOrder();
+        Event event = mockCheckoutEvent();
+
+        when(activeOrderRepo.findById(ACTIVE_ORDER_ID)).thenReturn(readyOrder).thenThrow(arm);
+        when(eventRepo.findById(EVENT_ID)).thenReturn(event);
+        when(paymentSystem.pay(anyDouble(), any())).thenReturn(null);
+
+        Response<?> response = assertDoesNotThrow(
+                () -> activeOrderService.checkoutAndPayment(TOKEN, ACTIVE_ORDER_ID, null));
+
+        assertControlledFailure(response);
+        verify(transactionStatus, atLeastOnce()).setRollbackOnly();
+        verify(activeOrderRepo, atLeast(2)).findById(ACTIVE_ORDER_ID);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenActiveOrderRepoStoreFailureForDanglingOrder_WhenStartupRecovery_ThenRollbackNoCrash(RuntimeException arm) {
+        ActiveOrder dangling = mock(ActiveOrder.class);
+        when(dangling.getId()).thenReturn(ACTIVE_ORDER_ID);
+        when(dangling.getStage()).thenReturn(STAGE.PAYMENT_IN_PROGRESS);
+        when(dangling.getUserIdentifier()).thenReturn(USER_IDENTIFIER);
+
+        when(activeOrderRepo.getAll()).thenReturn(List.of(dangling));
+        when(activeOrderRepo.findById(ACTIVE_ORDER_ID)).thenReturn(dangling);
+        when(activeOrderRepo.findExpired(any(LocalDateTime.class), anyInt(), anyInt()))
+                .thenReturn(Collections.emptyList());
+        doThrow(arm).when(activeOrderRepo).store(dangling);
+
+        assertDoesNotThrow(() -> activeOrderService.onStartupRecovery());
+
+        verify(transactionStatus, atLeastOnce()).setRollbackOnly();
+        verify(activeOrderRepo, atLeastOnce()).store(dangling);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenUserRepoStoreFailure_WhenSaveDelayedNotificationAsPending_ThenRollbackControlledErrorReturned(RuntimeException arm) {
+        NotifyDTO notifyDTO = new NotifyDTO(NotifyType.GENERAL_POPUP, new NotifyPayload("coverage notification"));
+        doThrow(arm).when(userRepo).store(any());
+
+        Response<?> response = invokePrivate(
+                "saveDelayedNotificationAsPending",
+                new Class<?>[]{String.class, NotifyDTO.class},
+                USER_IDENTIFIER, notifyDTO);
+
+        assertNotNull(response);
+        assertNotNull(response.getMessage());
+        assertFalse(response.getMessage().isBlank());
+        verify(transactionStatus, atLeastOnce()).setRollbackOnly();
+        verify(userRepo, atLeastOnce()).store(any());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("dbExceptionArms")
+    void GivenUserRepoStoreFailure_WhenMarkNotificationAsDelivered_ThenRollbackControlledErrorReturned(RuntimeException arm) {
+        doThrow(arm).when(userRepo).store(any());
+
+        Response<?> response = invokePrivate(
+                "markNotificationAsDelivered",
+                new Class<?>[]{String.class, Long.class},
+                USER_IDENTIFIER, 1L);
+
+        assertNotNull(response);
+        assertNotNull(response.getMessage());
+        assertFalse(response.getMessage().isBlank());
+        verify(transactionStatus, atLeastOnce()).setRollbackOnly();
+        verify(userRepo, atLeastOnce()).store(any());
+    }
+
+    private ActiveOrder mockCheckoutReadyOrder() {
+        ActiveOrder order = mock(ActiveOrder.class);
+        when(order.getUserIdentifier()).thenReturn(USER_IDENTIFIER);
+        when(order.getEventId()).thenReturn(EVENT_ID);
+        when(order.hasTickets()).thenReturn(true);
+        when(order.isExpired(any(LocalDateTime.class), anyInt(), anyInt())).thenReturn(false);
+        when(order.hasApprovedCheckoutPrice()).thenReturn(true);
+        when(order.getApprovedCheckoutPrice()).thenReturn(100.0);
+        when(order.getTickets()).thenReturn(new ArrayList<>());
+        return order;
+    }
+
+    private Event mockCheckoutEvent() {
+        Event event = mock(Event.class);
+        when(event.isActive()).thenReturn(true);
+        when(event.getId()).thenReturn(EVENT_ID);
+        when(event.getName()).thenReturn("Coverage Event");
+        when(event.getCompanyId()).thenReturn(COMPANY_ID);
+        when(event.getPurchasedTicketDetails(any())).thenReturn(new ArrayList<>());
+        return event;
+    }
+
+    private Response<?> invokePrivate(String methodName, Class<?>[] parameterTypes, Object... args) {
+        return assertDoesNotThrow(() -> {
+            Method method = ActiveOrderService.class.getDeclaredMethod(methodName, parameterTypes);
+            method.setAccessible(true);
+            return (Response<?>) method.invoke(activeOrderService, args);
+        });
     }
 
     private void mockValidToken(String token, String userIdentifier) {

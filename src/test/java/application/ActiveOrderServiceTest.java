@@ -195,7 +195,7 @@ class ActiveOrderServiceTest {
         activeOrderProperties.setWarningBeforeExpiryMinutes(WARNING_BEFORE_EXPIRY_MINUTES);
 
         preExpirationScheduler =
-                new PreExpirationNotificationScheduler(activeOrderRepo, notifier, auth, activeOrderProperties);
+                new PreExpirationNotificationScheduler(activeOrderRepo, notifier, auth, activeOrderProperties, transactionTemplate);
 
         service = new ActiveOrderService(
                 auth,
@@ -4495,7 +4495,7 @@ class ActiveOrderServiceTest {
         )).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, notifierMock, auth, activeOrderProperties);
+                new PreExpirationNotificationScheduler(activeOrderRepo, notifierMock, auth, activeOrderProperties, transactionTemplate);
 
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
@@ -5367,7 +5367,7 @@ class ActiveOrderServiceTest {
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties, transactionTemplate);
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
                 activeOrderRepo,
@@ -5441,7 +5441,7 @@ class ActiveOrderServiceTest {
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties, transactionTemplate);
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
                 activeOrderRepo,
@@ -5530,7 +5530,7 @@ class ActiveOrderServiceTest {
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties, transactionTemplate);
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
                 activeOrderRepo,
@@ -5607,7 +5607,7 @@ class ActiveOrderServiceTest {
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties, transactionTemplate);
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
                 activeOrderRepo,
@@ -5691,7 +5691,7 @@ class ActiveOrderServiceTest {
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties, transactionTemplate);
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
                 activeOrderRepo,
@@ -5785,7 +5785,7 @@ class ActiveOrderServiceTest {
         Mockito.when(mockNotifier.notifyUser(Mockito.anyString(), Mockito.any(NotifyDTO.class))).thenReturn(true);
 
         PreExpirationNotificationScheduler schedulerWithMockNotifier =
-                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties);
+                new PreExpirationNotificationScheduler(activeOrderRepo, mockNotifier, auth, activeOrderProperties, transactionTemplate);
         ActiveOrderService serviceWithMockNotifier = new ActiveOrderService(
                 auth,
                 activeOrderRepo,

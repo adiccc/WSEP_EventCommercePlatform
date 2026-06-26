@@ -15,6 +15,9 @@ import infrastructure.VaadinNotifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,6 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class PreExpirationNotificationSchedulerTest {
 
@@ -62,7 +68,12 @@ class PreExpirationNotificationSchedulerTest {
         activeOrderProperties.setSelectingTimeoutMinutes(SELECTING_TIMEOUT_MINUTES);
         activeOrderProperties.setCheckoutTimeoutMinutes(CHECKOUT_TIMEOUT_MINUTES);
         activeOrderProperties.setWarningBeforeExpiryMinutes(WARNING_BEFORE_EXPIRY_MINUTES);
-        scheduler = new PreExpirationNotificationScheduler(activeOrderRepo, new VaadinNotifier(), auth, activeOrderProperties);
+        TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
+        when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(mock(TransactionStatus.class));
+        });
+        scheduler = new PreExpirationNotificationScheduler(activeOrderRepo, new VaadinNotifier(), auth, activeOrderProperties, transactionTemplate);
 
         tabToken = tokenService.generateGuestToken();
         String userIdentifier = auth.getUserIdentifier(tabToken).getValue();

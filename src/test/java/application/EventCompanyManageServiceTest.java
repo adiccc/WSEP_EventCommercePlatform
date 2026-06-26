@@ -130,7 +130,7 @@ class EventCompanyManageServiceTest {
         activeOrderProperties.setSelectingTimeoutMinutes(SELECTING_TIMEOUT_MINUTES);
         activeOrderProperties.setCheckoutTimeoutMinutes(CHECKOUT_TIMEOUT_MINUTES);
         activeOrderProperties.setWarningBeforeExpiryMinutes(WARNING_BEFORE_EXPIRY_MINUTES);
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth,activeOrderProperties),userRepo, transactionTemplate,activeOrderProperties, new EventQueueRepoImpl());
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem,ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth,activeOrderProperties,transactionTemplate),userRepo, transactionTemplate,activeOrderProperties, new EventQueueRepoImpl());
         GUEST_TOKEN= userService.continueAsGuest().getValue();
         //should delete order repo from company service construture
         companyService=new CompanyService(auth,companyRepo,userRepo,suspensionRepo,notifier,transactionTemplate);
