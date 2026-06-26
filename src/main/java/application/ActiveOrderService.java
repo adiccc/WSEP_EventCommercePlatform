@@ -141,9 +141,39 @@ public class ActiveOrderService {
                         return new Response<>(ids, "Dangling payment orders loaded");
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
+                        logger.warning("Optimistic locking failure, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (CannotCreateTransactionException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Could not create DB transaction, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (QueryTimeoutException e) {
+                        status.setRollbackOnly();
+                        logger.warning("DB query timed out, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (DataAccessResourceFailureException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Database resource failure detected, retrying... " + e.getMessage());
                         throw e;
                     } catch (TransientDataAccessException e) {
                         status.setRollbackOnly();
+                        logger.warning("Transient database error detected, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (TransactionTimedOutException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transaction timed out, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (NonTransientDataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.severe("Non-retryable database error: " + e.getMessage());
+                        return new Response<>(null, "Database error: " + e.getMessage());
+                    } catch (TransactionException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transaction infrastructure error detected, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (DataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Uncategorized database error detected, retrying... " + e.getMessage());
                         throw e;
                     } catch (Exception e) {
                         status.setRollbackOnly();
@@ -174,10 +204,44 @@ public class ActiveOrderService {
                     return new Response<>(true, "Order no longer exists");
                 } catch (OptimisticLockingFailureException e) {
                     status.setRollbackOnly();
+                    logger.warning("Optimistic locking failure, retrying... " + e.getMessage());
+                    throw e;
+                } catch (CannotCreateTransactionException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Could not create DB transaction, retrying... " + e.getMessage());
+                    throw e;
+                } catch (QueryTimeoutException e) {
+                    status.setRollbackOnly();
+                    logger.warning("DB query timed out, retrying... " + e.getMessage());
+                    throw e;
+                } catch (DataAccessResourceFailureException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Database resource failure detected, retrying... " + e.getMessage());
                     throw e;
                 } catch (TransientDataAccessException e) {
                     status.setRollbackOnly();
+                    logger.warning("Transient database error detected, retrying... " + e.getMessage());
                     throw e;
+                } catch (TransactionTimedOutException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transaction timed out, retrying... " + e.getMessage());
+                    throw e;
+                } catch (NonTransientDataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.severe("Non-retryable database error: " + e.getMessage());
+                    return new Response<>(null, "Database error: " + e.getMessage());
+                } catch (TransactionException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Transaction infrastructure error detected, retrying... " + e.getMessage());
+                    throw e;
+                } catch (DataAccessException e) {
+                    status.setRollbackOnly();
+                    logger.warning("Uncategorized database error detected, retrying... " + e.getMessage());
+                    throw e;
+                } catch (Exception e) {
+                    status.setRollbackOnly();
+                    logger.severe("Unexpected error recovering dangling payment order: " + e.getMessage());
+                    return new Response<>(null, "System error: " + e.getMessage());
                 }
             }));
         }
@@ -200,8 +264,41 @@ public class ActiveOrderService {
                                 .map(ActiveOrder::getId)
                                 .collect(Collectors.toList());
                         return new Response<>(ids, "Orphaned guest orders loaded");
-                    } catch (OptimisticLockingFailureException | TransientDataAccessException e) {
+                    } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
+                        logger.warning("Optimistic locking failure, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (CannotCreateTransactionException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Could not create DB transaction, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (QueryTimeoutException e) {
+                        status.setRollbackOnly();
+                        logger.warning("DB query timed out, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (DataAccessResourceFailureException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Database resource failure detected, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (TransientDataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transient database error detected, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (TransactionTimedOutException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transaction timed out, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (NonTransientDataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.severe("Non-retryable database error: " + e.getMessage());
+                        return new Response<>(null, "Database error: " + e.getMessage());
+                    } catch (TransactionException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transaction infrastructure error detected, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (DataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Uncategorized database error detected, retrying... " + e.getMessage());
                         throw e;
                     } catch (Exception e) {
                         status.setRollbackOnly();
@@ -239,9 +336,46 @@ public class ActiveOrderService {
                 return new Response<>(true, "Order released");
             } catch (NoSuchElementException e) {
                 return new Response<>(true, "Order already removed");
-            } catch (OptimisticLockingFailureException | TransientDataAccessException e) {
+            } catch (OptimisticLockingFailureException e) {
                 status.setRollbackOnly();
+                logger.warning("Optimistic locking failure, retrying... " + e.getMessage());
                 throw e;
+            } catch (CannotCreateTransactionException e) {
+                status.setRollbackOnly();
+                logger.warning("Could not create DB transaction, retrying... " + e.getMessage());
+                throw e;
+            } catch (QueryTimeoutException e) {
+                status.setRollbackOnly();
+                logger.warning("DB query timed out, retrying... " + e.getMessage());
+                throw e;
+            } catch (DataAccessResourceFailureException e) {
+                status.setRollbackOnly();
+                logger.warning("Database resource failure detected, retrying... " + e.getMessage());
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient database error detected, retrying... " + e.getMessage());
+                throw e;
+            } catch (TransactionTimedOutException e) {
+                status.setRollbackOnly();
+                logger.warning("Transaction timed out, retrying... " + e.getMessage());
+                throw e;
+            } catch (NonTransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.severe("Non-retryable database error: " + e.getMessage());
+                return new Response<>(null, "Database error: " + e.getMessage());
+            } catch (TransactionException e) {
+                status.setRollbackOnly();
+                logger.warning("Transaction infrastructure error detected, retrying... " + e.getMessage());
+                throw e;
+            } catch (DataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Uncategorized database error detected, retrying... " + e.getMessage());
+                throw e;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.severe("Unexpected error releasing held order: " + e.getMessage());
+                return new Response<>(null, "System error: " + e.getMessage());
             }
         }));
     }
@@ -262,9 +396,39 @@ public class ActiveOrderService {
                         return new Response<>(pending, "Pending warnings loaded");
                     } catch (OptimisticLockingFailureException e) {
                         status.setRollbackOnly();
+                        logger.warning("Optimistic locking failure, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (CannotCreateTransactionException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Could not create DB transaction, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (QueryTimeoutException e) {
+                        status.setRollbackOnly();
+                        logger.warning("DB query timed out, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (DataAccessResourceFailureException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Database resource failure detected, retrying... " + e.getMessage());
                         throw e;
                     } catch (TransientDataAccessException e) {
                         status.setRollbackOnly();
+                        logger.warning("Transient database error detected, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (TransactionTimedOutException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transaction timed out, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (NonTransientDataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.severe("Non-retryable database error: " + e.getMessage());
+                        return new Response<>(null, "Database error: " + e.getMessage());
+                    } catch (TransactionException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Transaction infrastructure error detected, retrying... " + e.getMessage());
+                        throw e;
+                    } catch (DataAccessException e) {
+                        status.setRollbackOnly();
+                        logger.warning("Uncategorized database error detected, retrying... " + e.getMessage());
                         throw e;
                     } catch (Exception e) {
                         status.setRollbackOnly();
