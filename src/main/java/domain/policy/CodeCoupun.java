@@ -47,7 +47,7 @@ public class CodeCoupun extends DiscountElement {
 
     @Override
     public String describe() {
-        return percentage + "% discount with coupon code, valid until " + endDate;
+        return percentage + "% discount with coupon code: "+ code +", valid until " + endDate;
     }
 
     @Override
