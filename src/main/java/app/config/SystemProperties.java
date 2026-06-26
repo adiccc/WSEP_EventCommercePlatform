@@ -47,6 +47,14 @@ public class SystemProperties {
     @Positive
     private Integer retryCount;
 
+    @NotNull
+    @Positive
+    private Integer databaseQueryTimeoutSeconds;
+
+    @NotNull
+    @Positive
+    private Long databaseConnectionTimeoutMs;
+
     public String getExternalApiUrl() { return externalApiUrl; }
     public void setExternalApiUrl(String externalApiUrl) { this.externalApiUrl = externalApiUrl; }
 
@@ -82,5 +90,21 @@ public class SystemProperties {
     }
     public void setRetryCount(Integer retryCount) {
         this.retryCount = retryCount;
+    }
+
+    public Integer getDatabaseQueryTimeoutSeconds() {
+        return databaseQueryTimeoutSeconds;
+    }
+
+    public void setDatabaseQueryTimeoutSeconds(Integer databaseQueryTimeoutSeconds) {
+        this.databaseQueryTimeoutSeconds = databaseQueryTimeoutSeconds;
+    }
+
+    public Long getDatabaseConnectionTimeoutMs() {
+        return databaseConnectionTimeoutMs;
+    }
+
+    public void setDatabaseConnectionTimeoutMs(Long databaseConnectionTimeoutMs) {
+        this.databaseConnectionTimeoutMs = databaseConnectionTimeoutMs;
     }
 }
