@@ -174,9 +174,7 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                 chip("📍 " + dto.getLocation())
         );
 
-        Button
-
-                purchaseButton =
+        Button purchaseButton =
                 new Button("🎟 Purchase Tickets");
 
         purchaseButton.getStyle()
