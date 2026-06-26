@@ -124,7 +124,7 @@ class AdminServiceTest {
         activeOrderProperties.setSelectingTimeoutMinutes(SELECTING_TIMEOUT_MINUTES);
         activeOrderProperties.setCheckoutTimeoutMinutes(CHECKOUT_TIMEOUT_MINUTES);
         activeOrderProperties.setWarningBeforeExpiryMinutes(WARNING_BEFORE_EXPIRY_MINUTES);
-        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth,activeOrderProperties),userRepo,transactionTemplate,activeOrderProperties, new EventQueueRepoImpl());
+        activeOrderService=new ActiveOrderService(auth,activeOrderRepo,eventRepo,companyRepo,lotteryRepo,paymentSystem, ticketSupply,suspensionRepo,notifier,new PreExpirationNotificationScheduler(activeOrderRepo,notifier,auth,activeOrderProperties,transactionTemplate),userRepo,transactionTemplate,activeOrderProperties, new EventQueueRepoImpl());
 
         eventCompanyManageService = new EventCompanyManageService(companyRepo, eventRepo, auth, paymentSystem,suspensionRepo,notifier,userRepo,transactionTemplate,ticketSupply);
         companyService = new CompanyService(auth, companyRepo, userRepo,suspensionRepo,notifier,transactionTemplate);

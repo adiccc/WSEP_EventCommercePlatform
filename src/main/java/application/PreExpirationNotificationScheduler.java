@@ -7,7 +7,17 @@ import app.config.ActiveOrderProperties;
 import domain.activeOrder.ActiveOrder;
 import domain.activeOrder.IActiveOrderRepo;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.NonTransientDataAccessException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.transaction.TransactionException;
+import org.springframework.transaction.TransactionTimedOutException;
+import org.springframework.transaction.support.TransactionTemplate;
+import Exception.OptimisticLockingFailureException;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -31,12 +41,13 @@ public class PreExpirationNotificationScheduler {
     private final ScheduledExecutorService scheduler;
     private final ConcurrentHashMap<Integer, ScheduledFuture<?>> scheduledWarnings;
     private final IAuth auth;
+    private final TransactionTemplate transactionTemplate;
     private final int selectingTimeoutMinutes;
     private final int checkoutTimeoutMinutes;
     private final int warningBeforeExpiryMinutes;
 
     @Autowired
-    public PreExpirationNotificationScheduler(IActiveOrderRepo activeOrderRepo, INotifier notifier, IAuth auth, ActiveOrderProperties activeOrderProperties) {
+    public PreExpirationNotificationScheduler(IActiveOrderRepo activeOrderRepo, INotifier notifier, IAuth auth, ActiveOrderProperties activeOrderProperties, TransactionTemplate transactionTemplate) {
         this.activeOrderRepo = activeOrderRepo;
         this.notifier = notifier;
         this.scheduledWarnings = new ConcurrentHashMap<>();
@@ -46,6 +57,7 @@ public class PreExpirationNotificationScheduler {
             return t;
         });
         this.auth = auth;
+        this.transactionTemplate = transactionTemplate;
         this.selectingTimeoutMinutes = activeOrderProperties.getSelectingTimeoutMinutes();
         this.checkoutTimeoutMinutes = activeOrderProperties.getCheckoutTimeoutMinutes();
         this.warningBeforeExpiryMinutes = activeOrderProperties.getWarningBeforeExpiryMinutes();
@@ -107,12 +119,11 @@ public class PreExpirationNotificationScheduler {
     }
 
     private void fireWarning(String token,int orderId) {
-        ActiveOrder order;
-        try {
-            order = activeOrderRepo.findById(orderId);
-        } catch (NoSuchElementException e) {
-            return; // order already completed/expired and removed — nothing to warn about
+        Response<ActiveOrder> loaded = loadOrderForWarning(orderId);
+        if (loaded == null || loaded.getValue() == null) {
+            return;
         }
+        ActiveOrder order = loaded.getValue();
 
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime warningTime = order.getCheckoutWarningTime(checkoutTimeoutMinutes, warningBeforeExpiryMinutes);
@@ -142,12 +153,11 @@ public class PreExpirationNotificationScheduler {
 
     // Recovery variant: notifies the supplied (persistent) identifier directly, no token.
     private void fireWarningForIdentifier(String userIdentifier, int orderId) {
-        ActiveOrder order;
-        try {
-            order = activeOrderRepo.findById(orderId);
-        } catch (NoSuchElementException e) {
+        Response<ActiveOrder> loaded = loadOrderForWarning(orderId);
+        if (loaded == null || loaded.getValue() == null) {
             return;
         }
+        ActiveOrder order = loaded.getValue();
 
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime warningTime = order.getCheckoutWarningTime(checkoutTimeoutMinutes, warningBeforeExpiryMinutes);
@@ -169,6 +179,60 @@ public class PreExpirationNotificationScheduler {
             logger.log(Level.WARNING,
                     "Failed to send pre-expiration warning for order " + orderId + ": " + e.getMessage());
         }
+    }
+
+    // Loads the order for a pending warning inside the same retry + transaction + DB-failure
+    // cascade the rest of the system uses, so a transient DB hiccup is retried rather than
+    // silently dropping the warning. The external notify is performed by the caller afterwards.
+    private Response<ActiveOrder> loadOrderForWarning(int orderId) {
+        return RetryHelper.executeWithRetry(() -> transactionTemplate.execute(status -> {
+            try {
+                ActiveOrder order = activeOrderRepo.findById(orderId);
+                return new Response<>(order, "Order loaded for pre-expiration warning");
+            } catch (NoSuchElementException e) {
+                return new Response<>(null, "Order no longer exists");
+            } catch (OptimisticLockingFailureException e) {
+                status.setRollbackOnly();
+                logger.warning("Optimistic locking failure, retrying... " + e.getMessage());
+                throw e;
+            } catch (CannotCreateTransactionException e) {
+                status.setRollbackOnly();
+                logger.warning("Could not create DB transaction, retrying... " + e.getMessage());
+                throw e;
+            } catch (QueryTimeoutException e) {
+                status.setRollbackOnly();
+                logger.warning("DB query timed out, retrying... " + e.getMessage());
+                throw e;
+            } catch (DataAccessResourceFailureException e) {
+                status.setRollbackOnly();
+                logger.warning("Database resource failure detected, retrying... " + e.getMessage());
+                throw e;
+            } catch (TransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Transient database error detected, retrying... " + e.getMessage());
+                throw e;
+            } catch (TransactionTimedOutException e) {
+                status.setRollbackOnly();
+                logger.warning("Transaction timed out, retrying... " + e.getMessage());
+                throw e;
+            } catch (NonTransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.severe("Non-retryable database error: " + e.getMessage());
+                return new Response<>(null, "Database error: " + e.getMessage());
+            } catch (TransactionException e) {
+                status.setRollbackOnly();
+                logger.warning("Transaction infrastructure error detected, retrying... " + e.getMessage());
+                throw e;
+            } catch (DataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Uncategorized database error detected, retrying... " + e.getMessage());
+                throw e;
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                logger.severe("Unexpected error loading order for pre-expiration warning: " + e.getMessage());
+                return new Response<>(null, "System error: " + e.getMessage());
+            }
+        }));
     }
 
     public void shutdown() {
