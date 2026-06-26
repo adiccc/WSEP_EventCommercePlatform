@@ -1,5 +1,6 @@
 package UI.Views;
 
+import DTO.PurchaseRuleDTO;
 import UI.Presenters.EventDetailsPresenter;
 import UI.Presenters.PurchasePresenter;
 import application.ActiveOrderService;
@@ -31,6 +32,8 @@ import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.component.textfield.NumberField;
 import domain.policy.DiscountPolicyType;
+import domain.policy.PurchasePolicyType;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -287,6 +290,21 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
                 openDiscountManagementDialog(dto)
         );
 
+        Button managePurchasePolicyButton =
+                new Button("📜 Manage Purchase Policy");
+
+        managePurchasePolicyButton.getStyle()
+                .set("margin-top", "1rem")
+                .set("font-weight", "600")
+                .set("background", "#166534")
+                .set("color", "white")
+                .set("padding", "0.8rem 1.4rem")
+                .set("border-radius", "12px");
+
+        managePurchasePolicyButton.addClickListener(e ->
+                openPurchasePolicyManagementDialog(dto)
+        );
+
         lotteryButton =
                 new Button("🎲 Register to Lottery");
 
@@ -337,6 +355,10 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         if (presenter.canManageEventDiscounts(token, companyId)) {
             managementActions.add(manageDiscountsButton);
+        }
+
+        if (presenter.canManageEventPurchasePolicies(token, companyId)) {
+            managementActions.add(managePurchasePolicyButton);
         }
 
         if (presenter.canUpdateSalesMethod(token, companyId)) {
@@ -734,6 +756,175 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
         dialog.open();
     }
 
+    private void openPurchasePolicyManagementDialog(EventDetailsDTO dto) {
+
+        Dialog dialog = new Dialog();
+
+        dialog.setHeaderTitle("Manage Event Purchase Policy");
+        dialog.setWidth("520px");
+
+        VerticalLayout content = new VerticalLayout();
+        content.setPadding(false);
+        content.setSpacing(true);
+
+        Paragraph currentPolicy = new Paragraph(
+                dto.getPurchasePolicy() != null
+                        ? dto.getPurchasePolicy()
+                        : "No purchase policy defined."
+        );
+
+        currentPolicy.getStyle()
+                .set("background", "var(--lumo-contrast-5pct)")
+                .set("border-radius", "var(--lumo-border-radius-m)")
+                .set("padding", "0.75rem 1rem")
+                .set("white-space", "pre-wrap")
+                .set("width", "100%");
+
+        ComboBox<PurchasePolicyType> policyTypeBox =
+                new ComboBox<>("Purchase Policy Type");
+
+        policyTypeBox.setItems(PurchasePolicyType.values());
+        policyTypeBox.setWidthFull();
+
+        Button changePolicyTypeButton =
+                new Button("Change Policy Type", e -> {
+
+                    PurchasePolicyType selectedType =
+                            policyTypeBox.getValue();
+
+                    if (selectedType == null) {
+                        showError("Please select a purchase policy type.");
+                        return;
+                    }
+
+                    Response<Void> response =
+                            presenter.changeEventPurchasePolicyType(
+                                    getToken(),
+                                    eventId,
+                                    selectedType
+                            );
+
+                    if (response.getMessage() != null
+                            && response.getMessage().toLowerCase().contains("error")) {
+                        showError(response.getMessage());
+                        return;
+                    }
+
+                    showSuccess("Purchase policy type updated successfully.");
+                    dialog.close();
+                    loadEvent(companyId, eventId);
+                });
+
+        changePolicyTypeButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+        ComboBox<PurchaseRuleDTO.Type> ruleTypeBox =
+                new ComboBox<>("Rule Type");
+
+        ruleTypeBox.setItems(PurchaseRuleDTO.Type.values());
+        ruleTypeBox.setWidthFull();
+
+        IntegerField valueField =
+                new IntegerField("Value");
+
+        valueField.setMin(1);
+        valueField.setWidthFull();
+        valueField.setHelperText("For example: minimum age, minimum quantity, maximum quantity");
+
+        Button addRuleButton =
+                new Button("Add Rule", e -> {
+
+                    PurchaseRuleDTO rule =
+                            buildPurchaseRuleFromFields(
+                                    ruleTypeBox,
+                                    valueField
+                            );
+
+                    if (rule == null) {
+                        return;
+                    }
+
+                    Response<Boolean> response =
+                            presenter.addRuleToEvent(
+                                    getToken(),
+                                    eventId,
+                                    rule
+                            );
+
+                    if (Boolean.TRUE.equals(response.getValue())) {
+                        showSuccess("Purchase rule added successfully.");
+                        dialog.close();
+                        loadEvent(companyId, eventId);
+                        return;
+                    }
+
+                    showError(response.getMessage());
+                });
+
+        addRuleButton.addThemeVariants(ButtonVariant.LUMO_SUCCESS);
+
+        Button removeRuleButton =
+                new Button("Remove Matching Rule", e -> {
+
+                    PurchaseRuleDTO rule =
+                            buildPurchaseRuleFromFields(
+                                    ruleTypeBox,
+                                    valueField
+                            );
+
+                    if (rule == null) {
+                        return;
+                    }
+
+                    Response<Boolean> response =
+                            presenter.removeRuleFromEvent(
+                                    getToken(),
+                                    eventId,
+                                    rule
+                            );
+
+                    if (Boolean.TRUE.equals(response.getValue())) {
+                        showSuccess("Purchase rule removed successfully.");
+                        dialog.close();
+                        loadEvent(companyId, eventId);
+                        return;
+                    }
+
+                    showError(response.getMessage());
+                });
+
+        removeRuleButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+
+        HorizontalLayout actions =
+                new HorizontalLayout(
+                        addRuleButton,
+                        removeRuleButton
+                );
+
+        content.add(
+                new H4("Current Purchase Policy"),
+                currentPolicy,
+                new H4("Policy Type"),
+                policyTypeBox,
+                changePolicyTypeButton,
+                new Hr(),
+                new H4("Add or Remove Rule"),
+                ruleTypeBox,
+                valueField,
+                actions
+        );
+
+        dialog.add(content);
+
+        Button closeButton =
+                new Button("Close", e -> dialog.close());
+
+        closeButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        dialog.getFooter().add(closeButton);
+
+        dialog.open();
+    }
+
     private DiscountDTO buildDiscountFromFields(
             ComboBox<DiscountDTO.Type> discountTypeBox,
             NumberField percentageField,
@@ -817,6 +1008,27 @@ public class EventDetailsView extends VerticalLayout implements BeforeEnterObser
 
         showError("Unsupported discount type.");
         return null;
+    }
+
+    private PurchaseRuleDTO buildPurchaseRuleFromFields(
+            ComboBox<PurchaseRuleDTO.Type> ruleTypeBox,
+            IntegerField valueField
+    ) {
+
+        PurchaseRuleDTO.Type type = ruleTypeBox.getValue();
+        Integer value = valueField.getValue();
+
+        if (type == null) {
+            showError("Please select a rule type.");
+            return null;
+        }
+
+        if (value == null || value < 1) {
+            showError("Please enter a valid value.");
+            return null;
+        }
+
+        return new PurchaseRuleDTO(type, value);
     }
 
     private boolean isMember() {
