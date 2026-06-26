@@ -1,6 +1,7 @@
 package UI.Presenters;
 
 import DTO.DiscountDTO;
+import DTO.PurchaseRuleDTO;
 import application.CompanyService;
 import application.EventCompanyManageService;
 import application.EventService;
@@ -10,6 +11,7 @@ import application.Response;
 import domain.dataType.PermissionType;
 import DTO.EventDetailsDTO;
 import domain.policy.DiscountPolicyType;
+import domain.policy.PurchasePolicyType;
 
 import java.time.LocalDateTime;
 import java.util.Set;
@@ -201,6 +203,49 @@ public class EventDetailsPresenter {
         String role = getUserRole(token, companyId);
 
         return "FOUNDER".equals(role) || "OWNER".equals(role);
+    }
+
+    public Response<Boolean> addRuleToEvent(
+            String token,
+            int eventId,
+            PurchaseRuleDTO ruleDTO
+    ) {
+        return eventCompanyManageService.addRuleToEvent(
+                token,
+                eventId,
+                ruleDTO
+        );
+    }
+
+    public Response<Boolean> removeRuleFromEvent(
+            String token,
+            int eventId,
+            PurchaseRuleDTO ruleDTO
+    ) {
+        return eventCompanyManageService.removeRuleFromEvent(
+                token,
+                eventId,
+                ruleDTO
+        );
+    }
+
+    public Response<Void> changeEventPurchasePolicyType(
+            String token,
+            int eventId,
+            PurchasePolicyType policyType
+    ) {
+        return eventCompanyManageService.changeEventPurchasePolicyType(
+                token,
+                eventId,
+                policyType
+        );
+    }
+
+    public boolean canManageEventPurchasePolicies(
+            String token,
+            int companyId
+    ) {
+        return canManageEventDiscounts(token, companyId);
     }
 
     public Response<String> getRole(String token) {
