@@ -6434,10 +6434,14 @@ class ActiveOrderServiceTest {
                 .refund(Mockito.anyString(), Mockito.anyDouble());
     }
 
-    private void arrangeCompletedPurchaseAndLimit(int completedTickets, int companyLimit) {
+    private void setCompanyTicketLimit(int limit) {
         Response<Boolean> ruleAdded = companyService.addRuleToCompany(validToken, companyId,
-                new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, companyLimit));
+                new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, limit));
         assertFalse(ruleAdded.isError(), "arrange: addRuleToCompany failed: " + ruleAdded.getMessage());
+    }
+
+    private void arrangeCompletedPurchaseAndLimit(int completedTickets, int companyLimit) {
+        setCompanyTicketLimit(companyLimit);
 
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         int orderId = service.userSelectTickets(
@@ -6550,5 +6554,32 @@ class ActiveOrderServiceTest {
                 "Rejection reason should be the purchase-policy limit. Message: " + editResponse.getMessage());
         assertEquals(3, activeOrderRepo.findById(orderId).getTickets().size(),
                 "the active order must remain at 3 tickets after the rejected edit");
+    }
+
+    @Test
+    void GivenNoPriorTicketsAndSelecting5OnFirstSelectionAtLimit_WhenUserSelectTickets_ThenSucceeds() {
+        setCompanyTicketLimit(5);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
+
+        assertNotNull(selectResponse.getValue(),
+                "first selection of 5 with no prior tickets is exactly the limit and must succeed. Message: " + selectResponse.getMessage());
+        assertEquals(5, activeOrderRepo.findById(selectResponse.getValue()).getTickets().size());
+    }
+
+    @Test
+    void GivenNoPriorTicketsAndSelecting6OnFirstSelectionAboveLimit_WhenUserSelectTickets_ThenRejected() {
+        setCompanyTicketLimit(5);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 6));
+
+        assertNull(selectResponse.getValue(),
+                "first selection of 6 with no prior tickets exceeds the limit of 5 and must be rejected. Message: " + selectResponse.getMessage());
+        assertTrue(selectResponse.getMessage().toLowerCase().contains("policy"),
+                "Rejection reason should be the purchase-policy limit. Message: " + selectResponse.getMessage());
     }
 }
