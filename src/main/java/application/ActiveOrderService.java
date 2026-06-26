@@ -24,8 +24,11 @@ import app.config.ActiveOrderProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.dao.TransientDataAccessException;
+import org.springframework.dao.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.transaction.TransactionException;
+import org.springframework.transaction.TransactionTimedOutException;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
@@ -448,12 +451,58 @@ public class ActiveOrderService {
                 logger.log(Level.SEVERE, e.getMessage());
                 return new Response<>(null, e.getMessage());
             } catch (OptimisticLockingFailureException e) {
+                logger.warning("Optimistic locking failure, retrying... " + e.getMessage());
                 status.setRollbackOnly();
                 throw e;
+
+            } catch (CannotCreateTransactionException e) {
+                status.setRollbackOnly();
+                logger.warning("Could not create DB transaction, retrying... " + e.getMessage());
+                throw e;
+
+                // Query execution exceeded timeout
+            } catch (QueryTimeoutException e) {
+                status.setRollbackOnly();
+                logger.warning("DB query timed out, retrying... " + e.getMessage());
+                throw e;
+
+                // Database resource temporarily unavailable
+            } catch (DataAccessResourceFailureException e) {
+                status.setRollbackOnly();
+                logger.warning("Database resource failure detected, retrying... " + e.getMessage());
+                throw e;
+
+                // Temporary database failure
             } catch (TransientDataAccessException e) {
                 status.setRollbackOnly();
-                logger.warning("Transient DB error during enterEventPurchase: " + e.getMessage());
+                logger.warning("Transient database error detected, retrying... " + e.getMessage());
                 throw e;
+
+                // Transaction exceeded timeout
+            } catch (TransactionTimedOutException e) {
+                status.setRollbackOnly();
+                logger.warning("Transaction timed out, retrying... " + e.getMessage());
+                throw e;
+
+                // Permanent database failure
+            } catch (NonTransientDataAccessException e) {
+                status.setRollbackOnly();
+                logger.severe("Non-retryable database error: " + e.getMessage());
+                return new Response<>(null, "Database error: " + e.getMessage());
+
+                // Unexpected transaction infrastructure failure
+            } catch (TransactionException e) {
+                status.setRollbackOnly();
+                logger.warning("Transaction infrastructure error detected, retrying... " + e.getMessage());
+                throw e;
+
+                // Uncategorized Spring data access failure
+            } catch (DataAccessException e) {
+                status.setRollbackOnly();
+                logger.warning("Uncategorized database error detected, retrying... " + e.getMessage());
+                throw e;
+
+                // Unexpected application error
             } catch (Exception e) {
                 status.setRollbackOnly();
                 logger.log(Level.SEVERE, "Failed to enter event purchase : " + e.getMessage());
