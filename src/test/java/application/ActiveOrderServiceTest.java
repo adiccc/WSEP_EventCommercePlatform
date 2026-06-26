@@ -6440,12 +6440,19 @@ class ActiveOrderServiceTest {
         assertFalse(ruleAdded.isError(), "arrange: addRuleToCompany failed: " + ruleAdded.getMessage());
     }
 
-    private void arrangeCompletedPurchaseAndLimit(int completedTickets, int companyLimit) {
-        setCompanyTicketLimit(companyLimit);
+    private void setEventTicketLimit(int limit) {
+        Response<Boolean> removed = companyEventService.removeRuleFromEvent(validToken, concurrentEventId,
+                new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, 20));
+        assertFalse(removed.isError(), "arrange: removeRuleFromEvent failed: " + removed.getMessage());
+        Response<Boolean> added = companyEventService.addRuleToEvent(validToken, concurrentEventId,
+                new PurchaseRuleDTO(PurchaseRuleDTO.Type.MAX_TICKETS, limit));
+        assertFalse(added.isError(), "arrange: addRuleToEvent failed: " + added.getMessage());
+    }
 
+    private void completePriorPurchase(int qty) {
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         int orderId = service.userSelectTickets(
-                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", completedTickets)).getValue();
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", qty)).getValue();
 
         Mockito.when(paymentSystem.pay(Mockito.anyDouble(), Mockito.any(PaymentDetailsDTO.class)))
                 .thenReturn("payment-setup");
@@ -6459,9 +6466,19 @@ class ActiveOrderServiceTest {
         assertNotNull(checkout.getValue(), "arrange: completing the prior purchase failed: " + checkout.getMessage());
     }
 
+    private void arrangeCompletedPurchaseAndCompanyLimit(int completedTickets, int companyLimit) {
+        setCompanyTicketLimit(companyLimit);
+        completePriorPurchase(completedTickets);
+    }
+
+    private void arrangeCompletedPurchaseAndEventLimit(int completedTickets, int eventLimit) {
+        setEventTicketLimit(eventLimit);
+        completePriorPurchase(completedTickets);
+    }
+
     @Test
-    void Given2CompletedAndSelecting2MoreBelowLimit_WhenUserSelectTickets_ThenSucceeds() {
-        arrangeCompletedPurchaseAndLimit(2, 5);
+    void Given2CompletedAndSelecting2MoreBelowCompanyLimit_WhenUserSelectTickets_ThenSucceeds() {
+        arrangeCompletedPurchaseAndCompanyLimit(2, 5);
 
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         Response<Integer> selectResponse =
@@ -6473,8 +6490,8 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void Given2CompletedAndSelecting3MoreAtLimit_WhenUserSelectTickets_ThenSucceeds() {
-        arrangeCompletedPurchaseAndLimit(2, 5);
+    void Given2CompletedAndSelecting3MoreAtCompanyLimit_WhenUserSelectTickets_ThenSucceeds() {
+        arrangeCompletedPurchaseAndCompanyLimit(2, 5);
 
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         Response<Integer> selectResponse =
@@ -6486,8 +6503,8 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void Given2CompletedAndSelecting4MoreAboveLimit_WhenUserSelectTickets_ThenRejected() {
-        arrangeCompletedPurchaseAndLimit(2, 5);
+    void Given2CompletedAndSelecting4MoreAboveCompanyLimit_WhenUserSelectTickets_ThenRejected() {
+        arrangeCompletedPurchaseAndCompanyLimit(2, 5);
 
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         Response<Integer> selectResponse =
@@ -6500,8 +6517,8 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void Given2CompletedAndEditingTo2BelowLimit_WhenEditTicketSelection_ThenSucceeds() {
-        arrangeCompletedPurchaseAndLimit(2, 5);
+    void Given2CompletedAndEditingTo2BelowCompanyLimit_WhenEditTicketSelection_ThenSucceeds() {
+        arrangeCompletedPurchaseAndCompanyLimit(2, 5);
 
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         int orderId = service.userSelectTickets(
@@ -6517,8 +6534,8 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void Given2CompletedAndEditingTo3AtLimit_WhenEditTicketSelection_ThenSucceeds() {
-        arrangeCompletedPurchaseAndLimit(2, 5);
+    void Given2CompletedAndEditingTo3AtCompanyLimit_WhenEditTicketSelection_ThenSucceeds() {
+        arrangeCompletedPurchaseAndCompanyLimit(2, 5);
 
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         int orderId = service.userSelectTickets(
@@ -6534,8 +6551,8 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void Given2CompletedAnd3ActiveEditingTo4AboveLimit_WhenEditTicketSelection_ThenRejectedAndOrderUnchanged() {
-        arrangeCompletedPurchaseAndLimit(2, 5);
+    void Given2CompletedAnd3ActiveEditingTo4AboveCompanyLimit_WhenEditTicketSelection_ThenRejectedAndOrderUnchanged() {
+        arrangeCompletedPurchaseAndCompanyLimit(2, 5);
 
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         int orderId = service.userSelectTickets(
@@ -6557,7 +6574,7 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenNoPriorTicketsAndSelecting5OnFirstSelectionAtLimit_WhenUserSelectTickets_ThenSucceeds() {
+    void GivenNoPriorTicketsAndSelecting5OnFirstSelectionAtCompanyLimit_WhenUserSelectTickets_ThenSucceeds() {
         setCompanyTicketLimit(5);
 
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
@@ -6570,8 +6587,132 @@ class ActiveOrderServiceTest {
     }
 
     @Test
-    void GivenNoPriorTicketsAndSelecting6OnFirstSelectionAboveLimit_WhenUserSelectTickets_ThenRejected() {
+    void GivenNoPriorTicketsAndSelecting6OnFirstSelectionAboveCompanyLimit_WhenUserSelectTickets_ThenRejected() {
         setCompanyTicketLimit(5);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 6));
+
+        assertNull(selectResponse.getValue(),
+                "first selection of 6 with no prior tickets exceeds the limit of 5 and must be rejected. Message: " + selectResponse.getMessage());
+        assertTrue(selectResponse.getMessage().toLowerCase().contains("policy"),
+                "Rejection reason should be the purchase-policy limit. Message: " + selectResponse.getMessage());
+    }
+
+    @Test
+    void Given2CompletedAndSelecting2MoreBelowEventLimit_WhenUserSelectTickets_ThenSucceeds() {
+        arrangeCompletedPurchaseAndEventLimit(2, 5);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 2));
+
+        assertNotNull(selectResponse.getValue(),
+                "2 completed + 2 selected = 4 is below the limit of 5 and must succeed. Message: " + selectResponse.getMessage());
+        assertEquals(2, activeOrderRepo.findById(selectResponse.getValue()).getTickets().size());
+    }
+
+    @Test
+    void Given2CompletedAndSelecting3MoreAtEventLimit_WhenUserSelectTickets_ThenSucceeds() {
+        arrangeCompletedPurchaseAndEventLimit(2, 5);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3));
+
+        assertNotNull(selectResponse.getValue(),
+                "2 completed + 3 selected = 5 is exactly the limit and must succeed. Message: " + selectResponse.getMessage());
+        assertEquals(3, activeOrderRepo.findById(selectResponse.getValue()).getTickets().size());
+    }
+
+    @Test
+    void Given2CompletedAndSelecting4MoreAboveEventLimit_WhenUserSelectTickets_ThenRejected() {
+        arrangeCompletedPurchaseAndEventLimit(2, 5);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 4));
+
+        assertNull(selectResponse.getValue(),
+                "2 completed + 4 selected = 6 exceeds the limit of 5 and must be rejected. Message: " + selectResponse.getMessage());
+        assertTrue(selectResponse.getMessage().toLowerCase().contains("policy"),
+                "Rejection reason should be the purchase-policy limit. Message: " + selectResponse.getMessage());
+    }
+
+    @Test
+    void Given2CompletedAndEditingTo2BelowEventLimit_WhenEditTicketSelection_ThenSucceeds() {
+        arrangeCompletedPurchaseAndEventLimit(2, 5);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 1)).getValue();
+        service.returnToEditSelection(validToken);
+
+        Response<ActiveOrderDTO> editResponse = service.editTicketSelection(
+                validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 2));
+
+        assertNotNull(editResponse.getValue(),
+                "2 completed + edited to 2 = 4 is below the limit of 5 and must succeed. Message: " + editResponse.getMessage());
+        assertEquals(2, activeOrderRepo.findById(orderId).getTickets().size());
+    }
+
+    @Test
+    void Given2CompletedAndEditingTo3AtEventLimit_WhenEditTicketSelection_ThenSucceeds() {
+        arrangeCompletedPurchaseAndEventLimit(2, 5);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 2)).getValue();
+        service.returnToEditSelection(validToken);
+
+        Response<ActiveOrderDTO> editResponse = service.editTicketSelection(
+                validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 3));
+
+        assertNotNull(editResponse.getValue(),
+                "2 completed + edited to 3 = 5 is exactly the limit and must succeed. Message: " + editResponse.getMessage());
+        assertEquals(3, activeOrderRepo.findById(orderId).getTickets().size());
+    }
+
+    @Test
+    void Given2CompletedAnd3ActiveEditingTo4AboveEventLimit_WhenEditTicketSelection_ThenRejectedAndOrderUnchanged() {
+        arrangeCompletedPurchaseAndEventLimit(2, 5);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        int orderId = service.userSelectTickets(
+                validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 3)).getValue();
+        assertEquals(3, activeOrderRepo.findById(orderId).getTickets().size(),
+                "precondition: active order holds 3 tickets (2 completed + 3 = 5, exactly at the limit)");
+
+        service.returnToEditSelection(validToken);
+
+        Response<ActiveOrderDTO> editResponse = service.editTicketSelection(
+                validToken, new HashMap<>(), new HashMap<>(), Map.of("floor", 4));
+
+        assertNull(editResponse.getValue(),
+                "2 completed + edited to 4 = 6 exceeds the limit of 5 and must be rejected. Message: " + editResponse.getMessage());
+        assertTrue(editResponse.getMessage().toLowerCase().contains("policy"),
+                "Rejection reason should be the purchase-policy limit. Message: " + editResponse.getMessage());
+        assertEquals(3, activeOrderRepo.findById(orderId).getTickets().size(),
+                "the active order must remain at 3 tickets after the rejected edit");
+    }
+
+    @Test
+    void GivenNoPriorTicketsAndSelecting5OnFirstSelectionAtEventLimit_WhenUserSelectTickets_ThenSucceeds() {
+        setEventTicketLimit(5);
+
+        service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
+        Response<Integer> selectResponse =
+                service.userSelectTickets(validToken, concurrentEventId, new HashMap<>(), Map.of("floor", 5));
+
+        assertNotNull(selectResponse.getValue(),
+                "first selection of 5 with no prior tickets is exactly the limit and must succeed. Message: " + selectResponse.getMessage());
+        assertEquals(5, activeOrderRepo.findById(selectResponse.getValue()).getTickets().size());
+    }
+
+    @Test
+    void GivenNoPriorTicketsAndSelecting6OnFirstSelectionAboveEventLimit_WhenUserSelectTickets_ThenRejected() {
+        setEventTicketLimit(5);
 
         service.enterEventPurchase(validToken, companyId, concurrentEventId, null);
         Response<Integer> selectResponse =
