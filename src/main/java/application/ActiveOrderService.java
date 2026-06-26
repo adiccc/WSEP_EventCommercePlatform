@@ -1436,9 +1436,13 @@ public class ActiveOrderService {
                 }
 
                 UserDTO userDTO = getUserDTOFromToken(token).getValue();
-                event.quantityTotalExceedsPolicy(userDTO, projected); // throws if exceeded
+                event.quantityExceedsPolicy(userDTO, projected);
+                int totalUserTickets = 0;
+                if (userDTO != null) {
+                    totalUserTickets = event.countUserTickets(userDTO);
+                }
                 Company company = companyRepo.findById(event.getCompanyId());
-                company.quantityExceedsPolicy(userDTO, 0, projected); // throws if exceeded
+                company.quantityExceedsPolicy(userDTO, projected, totalUserTickets);
 
                 if (seatingToRemove != null && !seatingToRemove.isEmpty()) {
                     List<Integer> ids = event.findSeatingTicketIds(seatingToRemove);
