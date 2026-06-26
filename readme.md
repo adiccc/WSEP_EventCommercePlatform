@@ -1,6 +1,6 @@
 # System Initialization Guide
 
-This project is a Spring Boot + Vaadin event-commerce system. It boots from `app.App`, reads runtime config from `src/main/resources/config.yml`, and can seed initial data from `src/main/resources/init-state.json` when started with `--db=empty`.
+This project is a Spring Boot + Vaadin event-commerce system. It boots from `app.App`, reads runtime config from `src/main/resources/application.yml`, and can seed initial data from `src/main/resources/init-state.json` when started with `--db=empty`.
 
 ---
 
@@ -11,7 +11,7 @@ Configuration is loaded through Spring Boot properties:
 - `system.*` is bound by [`SystemProperties`](src/main/java/app/config/SystemProperties.java)
 - `active-order.*` is bound by [`ActiveOrderProperties`](src/main/java/app/config/ActiveOrderProperties.java)
 
-Both [`src/main/resources/application.properties`](src/main/resources/application.properties) and [`src/test/resources/application.properties`](src/test/resources/application.properties) import `classpath:config.yml`.
+All runtime configuration lives in [`src/main/resources/application.yml`](src/main/resources/application.yml) (Spring/Vaadin/datasource settings together with the `system.*` and `active-order.*` blocks). Tests use [`src/test/resources/application.yml`](src/test/resources/application.yml), which overrides the datasource/profiles and repeats the `system.*` / `active-order.*` blocks (a test-scoped `application.yml` shadows the main one on the classpath, so the values must be present in both).
 
 Startup seeding is handled by [`SystemInitializer`](src/main/java/app/init/SystemInitializer.java):
 
@@ -43,7 +43,7 @@ Set.of("systemadmin@demo.com")
 
 ### 2. Queue capacity must be positive
 
-`config.yml` must have `system.max-concurrent-users` set to a value greater than zero, or the WebQueue will fail to initialize. In the current configuration this value is `50`.
+`application.yml` must have `system.max-concurrent-users` set to a value greater than zero, or the WebQueue will fail to initialize. In the current configuration this value is `50`.
 
 ### 3. Variables must be stored before use
 
@@ -71,7 +71,7 @@ mvn clean install
 mvn spring-boot:run
 ```
 
-The default application profile list in [`src/main/resources/application.properties`](src/main/resources/application.properties) is:
+The default application profile list in [`src/main/resources/application.yml`](src/main/resources/application.yml) is:
 
 - `memory`
 - `user-db`
@@ -96,9 +96,9 @@ mvn spring-boot:run -Dspring-boot.run.arguments="--db=empty --init-file=/absolut
 
 ## Run Tests
 
-Tests use [`src/test/resources/application.properties`](src/test/resources/application.properties), which:
+Tests use [`src/test/resources/application.yml`](src/test/resources/application.yml), which:
 
-- imports `classpath:config.yml`
+- carries its own copy of the `system.*` / `active-order.*` blocks
 - enables `system.init-enabled=false`
 - uses H2 in-memory DB
 - enables the `test` profile
@@ -131,11 +131,11 @@ In IntelliJ: **Run → Edit Configurations → Program arguments**.
 
 ### `--init-file=<path>`
 
-Overrides the init-state file defined in `config.yml` (`system.init-state-file`).
+Overrides the init-state file defined in `application.yml` (`system.init-state-file`).
 
 | Value | Behaviour |
 |-------|-----------|
-| *(omitted)* | Uses the file from `config.yml` (default) |
+| *(omitted)* | Uses the file from `application.yml` (default) |
 | `classpath:my-init.json` | Loads a file from the classpath |
 | `/absolute/path/to/init.json` | Loads a file from the filesystem |
 
@@ -161,7 +161,7 @@ java -jar app.jar --init-file=/path/to/extra-setup.json
 
 ## Configuration File
 
-The runtime configuration file is [`src/main/resources/config.yml`](src/main/resources/config.yml). It is imported through `spring.config.import=classpath:config.yml`.
+The runtime configuration file is [`src/main/resources/application.yml`](src/main/resources/application.yml). Spring Boot loads it automatically (no `spring.config.import` needed).
 
 ```yaml
 system:

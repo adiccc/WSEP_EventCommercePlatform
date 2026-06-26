@@ -96,15 +96,15 @@ class SystemPropertiesValidationTest {
     }
 
     @Test
-    void GivenDefaultConfigYml_WhenContextLoads_ThenSucceeds() {
+    void GivenDefaultApplicationYml_WhenContextLoads_ThenSucceeds() {
         runner.withInitializer(ctx -> {
             try {
                 var loader = new YamlPropertySourceLoader();
-                var resource = new ClassPathResource("config.yml");
-                var sources = loader.load("config", resource);
+                var resource = new ClassPathResource("application.yml");
+                var sources = loader.load("application", resource);
                 sources.forEach(s -> ctx.getEnvironment().getPropertySources().addLast(s));
             } catch (IOException e) {
-                throw new RuntimeException("Failed to load config.yml", e);
+                throw new RuntimeException("Failed to load application.yml", e);
             }
         }).run(ctx -> assertThat(ctx).hasNotFailed());
     }
