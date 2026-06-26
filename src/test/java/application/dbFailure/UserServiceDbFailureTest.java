@@ -76,6 +76,8 @@ class UserServiceDbFailureTest {
     void resetRetryHelperConfig() {
         SystemProperties systemProperties = new SystemProperties();
         systemProperties.setRetryCount(50);
+        systemProperties.setRetryJitterMaxMs(50);
+
         new RetryHelper(systemProperties);
     }
 
