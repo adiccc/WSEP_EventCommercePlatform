@@ -13,6 +13,12 @@ public class LoggerSetup {
 
         rootLogger.setLevel(Level.ALL);
         rootLogger.setUseParentHandlers(false);
+
+        // Console output: makes INFO/WARNING/SEVERE visible on screen (in addition to the log files).
+        ConsoleHandler consoleHandler = new ConsoleHandler();
+        consoleHandler.setLevel(Level.INFO);
+        rootLogger.addHandler(consoleHandler);
+
         try
         {
             // Event log
@@ -34,7 +40,8 @@ public class LoggerSetup {
             rootLogger.addHandler(eventHandler);
             rootLogger.addHandler(errorHandler);
         }catch(IOException e){
-            rootLogger.setUseParentHandlers(true);
+            // File logging unavailable; the console handler above still provides visible output.
+            rootLogger.log(Level.WARNING, "Could not initialize file log handlers: " + e.getMessage());
         }
     }
 }

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -19,7 +20,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class SystemInitializerTest {
@@ -34,7 +35,10 @@ class SystemInitializerTest {
 
     @BeforeEach
     void setUp() {
-        initializer = new SystemInitializer();
+        // Spy so we can stub abortStartup() and avoid it shutting down the test JVM via System.exit.
+        initializer = spy(new SystemInitializer());
+        doNothing().when(initializer).abortStartup(anyString());
+
         systemProperties = mock(SystemProperties.class);
         when(systemProperties.getAdminEmails()).thenReturn(List.of("admin@test.com"));
         when(systemProperties.getInitStateFile()).thenReturn("file:/nonexistent-default.json");
@@ -66,19 +70,27 @@ class SystemInitializerTest {
         return file;
     }
 
+    /** Runs the initializer and returns the reason passed to abortStartup (fails the test if it was never called). */
+    private String captureAbortReason() {
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(initializer).abortStartup(captor.capture());
+        return captor.getValue();
+    }
+
     // ── Skip tests ────────────────────────────────────────────────────────────
 
     @Test
-    void GivenNoDbEmptyArg_WhenRun_ThenSkipsInitWithoutError() throws Exception {
+    void GivenNoDbEmptyArg_WhenRun_ThenSkipsInitWithoutAborting() throws Exception {
         initializer.run(new DefaultApplicationArguments());
+        verify(initializer, never()).abortStartup(anyString());
     }
 
     // ── File loading ──────────────────────────────────────────────────────────
 
     @Test
-    void GivenNonExistentInitFile_WhenRun_ThenThrowsInitializationException() {
-        assertThrows(InitializationException.class,
-                () -> initializer.run(new DefaultApplicationArguments("--db=empty")));
+    void GivenNonExistentInitFile_WhenRun_ThenAbortsWithReadFailureMessage() throws Exception {
+        initializer.run(new DefaultApplicationArguments("--db=empty"));
+        assertTrue(captureAbortReason().contains("Could not read the init-state file"));
     }
 
     @Test
@@ -91,45 +103,57 @@ class SystemInitializerTest {
         ReflectionTestUtils.setField(initializer, "handlers", List.of(handler));
         initializer.buildHandlerMap();
 
-        assertDoesNotThrow(() -> initializer.run(emptyDbArgs(custom.toString())));
+        initializer.run(emptyDbArgs(custom.toString()));
+        verify(initializer, never()).abortStartup(anyString());
     }
 
     // ── JSON format ───────────────────────────────────────────────────────────
 
     @Test
-    void GivenMalformedJson_WhenRun_ThenThrowsInitializationException() throws Exception {
+    void GivenMalformedJson_WhenRun_ThenAbortsWithReadFailureMessage() throws Exception {
         Path file = writeInitFile("{ not valid json }");
-        assertThrows(InitializationException.class, () -> initializer.run(emptyDbArgs(file.toString())));
+        initializer.run(emptyDbArgs(file.toString()));
+        assertTrue(captureAbortReason().contains("Could not read the init-state file"));
     }
 
     @Test
-    void GivenNullOperations_WhenRun_ThenThrowsInitializationException() throws Exception {
+    void GivenNullOperations_WhenRun_ThenAbortsWithMissingOperationsMessage() throws Exception {
         Path file = writeInitFile("{\"operations\": null}");
-        assertThrows(InitializationException.class, () -> initializer.run(emptyDbArgs(file.toString())));
+        initializer.run(emptyDbArgs(file.toString()));
+        assertTrue(captureAbortReason().contains("no 'operations' array"));
     }
 
     @Test
-    void GivenBlankOperationType_WhenRun_ThenThrowsInitializationException() throws Exception {
-        Path file = writeInitFile("{\"operations\":[{\"type\":\"\",\"params\":{\"email\":\"admin@test.com\"}}]}");
-        assertThrows(InitializationException.class, () -> initializer.run(emptyDbArgs(file.toString())));
+    void GivenBlankOperationType_WhenRun_ThenAbortsWithBlankTypeMessage() throws Exception {
+        // No admin emails configured, so execution reaches the per-operation validation.
+        when(systemProperties.getAdminEmails()).thenReturn(List.of());
+        Path file = writeInitFile("{\"operations\":[{\"type\":\"\",\"params\":{}}]}");
+        initializer.run(emptyDbArgs(file.toString()));
+        assertTrue(captureAbortReason().contains("blank operation type"));
     }
 
     @Test
-    void GivenUnknownOperationType_WhenRun_ThenThrowsInitializationException() throws Exception {
-        Path file = writeInitFile("{\"operations\":[{\"type\":\"no-such-op\",\"params\":{\"email\":\"admin@test.com\"}}]}");
-        assertThrows(InitializationException.class, () -> initializer.run(emptyDbArgs(file.toString())));
+    void GivenUnknownOperationType_WhenRun_ThenAbortsWithUnknownTypeMessage() throws Exception {
+        // No admin emails configured, so execution reaches the per-operation validation.
+        when(systemProperties.getAdminEmails()).thenReturn(List.of());
+        Path file = writeInitFile("{\"operations\":[{\"type\":\"no-such-op\",\"params\":{}}]}");
+        initializer.run(emptyDbArgs(file.toString()));
+        assertTrue(captureAbortReason().contains("unknown operation type 'no-such-op'"));
     }
 
     // ── Admin validation ──────────────────────────────────────────────────────
 
     @Test
-    void GivenAdminEmailMissingFromInitFile_WhenRun_ThenThrowsInitializationException() throws Exception {
+    void GivenAdminEmailMissingFromInitFile_WhenRun_ThenAbortsWithAdminMessage() throws Exception {
         Path file = writeInitFile("{\"operations\":[{\"type\":\"register\",\"params\":{\"email\":\"other@test.com\"}}]}");
-        assertThrows(InitializationException.class, () -> initializer.run(emptyDbArgs(file.toString())));
+        initializer.run(emptyDbArgs(file.toString()));
+        String reason = captureAbortReason();
+        assertTrue(reason.contains("admin@test.com"));
+        assertTrue(reason.contains("no 'register' operation"));
     }
 
     @Test
-    void GivenAllAdminEmailsRegistered_WhenRun_ThenSucceeds() throws Exception {
+    void GivenAllAdminEmailsRegistered_WhenRun_ThenSucceedsWithoutAborting() throws Exception {
         Path file = writeInitFile("{\"operations\":[{\"type\":\"register\",\"params\":{\"email\":\"admin@test.com\"}}]}");
         InitOperationHandler handler = mock(InitOperationHandler.class);
         when(handler.operationType()).thenReturn("register");
@@ -137,7 +161,25 @@ class SystemInitializerTest {
         ReflectionTestUtils.setField(initializer, "handlers", List.of(handler));
         initializer.buildHandlerMap();
 
-        assertDoesNotThrow(() -> initializer.run(emptyDbArgs(file.toString())));
+        initializer.run(emptyDbArgs(file.toString()));
+        verify(initializer, never()).abortStartup(anyString());
+    }
+
+    // ── Handler failure ───────────────────────────────────────────────────────
+
+    @Test
+    void GivenHandlerThrows_WhenRun_ThenAbortsWithStepFailureMessage() throws Exception {
+        Path file = writeInitFile("{\"operations\":[{\"type\":\"register\",\"params\":{\"email\":\"admin@test.com\"}}]}");
+        InitOperationHandler handler = mock(InitOperationHandler.class);
+        when(handler.operationType()).thenReturn("register");
+        when(handler.execute(any(), any())).thenThrow(new InitializationException("register failed: boom"));
+        ReflectionTestUtils.setField(initializer, "handlers", List.of(handler));
+        initializer.buildHandlerMap();
+
+        initializer.run(emptyDbArgs(file.toString()));
+        String reason = captureAbortReason();
+        assertTrue(reason.contains("('register') failed"));
+        assertTrue(reason.contains("register failed: boom"));
     }
 
     // ── Default init-state.json regression ───────────────────────────────────
@@ -159,10 +201,11 @@ class SystemInitializerTest {
                     "Admin email '" + adminEmail + "' is missing a 'register' operation in init-state.json");
         }
     }
+
     // ── External Systems Validation ──────────────────────────────────────────
 
     @Test
-    void GivenPaymentSystemHandshakeFails_WhenRun_ThenThrowsInitializationException() throws Exception {
+    void GivenPaymentSystemHandshakeFails_WhenRun_ThenAbortsWithPaymentMessage() throws Exception {
         Path file = writeInitFile("{\"operations\":[{\"type\":\"register\",\"params\":{\"email\":\"admin@test.com\"}}]}");
         InitOperationHandler handler = mock(InitOperationHandler.class);
         when(handler.operationType()).thenReturn("register");
@@ -172,14 +215,12 @@ class SystemInitializerTest {
 
         when(paymentSystem.handshake()).thenReturn(false);
 
-        InitializationException ex = assertThrows(InitializationException.class,
-                () -> initializer.run(emptyDbArgs(file.toString())));
-
-        assertTrue(ex.getMessage().contains("Payment system is unreachable"));
+        initializer.run(emptyDbArgs(file.toString()));
+        assertTrue(captureAbortReason().contains("payment system is unreachable"));
     }
 
     @Test
-    void GivenTicketSupplyHandshakeFails_WhenRun_ThenThrowsInitializationException() throws Exception {
+    void GivenTicketSupplyHandshakeFails_WhenRun_ThenAbortsWithTicketMessage() throws Exception {
         Path file = writeInitFile("{\"operations\":[{\"type\":\"register\",\"params\":{\"email\":\"admin@test.com\"}}]}");
         InitOperationHandler handler = mock(InitOperationHandler.class);
         when(handler.operationType()).thenReturn("register");
@@ -189,10 +230,8 @@ class SystemInitializerTest {
 
         when(ticketSupply.handshake()).thenReturn(false);
 
-        InitializationException ex = assertThrows(InitializationException.class,
-                () -> initializer.run(emptyDbArgs(file.toString())));
-
-        assertTrue(ex.getMessage().contains("Ticket supply system is unreachable"));
+        initializer.run(emptyDbArgs(file.toString()));
+        assertTrue(captureAbortReason().contains("ticket supply system is unreachable"));
     }
 
     @Test
@@ -206,8 +245,7 @@ class SystemInitializerTest {
 
         when(paymentSystem.handshake()).thenReturn(false);
 
-        assertThrows(InitializationException.class,
-                () -> initializer.run(emptyDbArgs(file.toString())));
+        initializer.run(emptyDbArgs(file.toString()));
 
         verify(paymentSystem, times(1)).handshake();
         verify(ticketSupply, never()).handshake();
