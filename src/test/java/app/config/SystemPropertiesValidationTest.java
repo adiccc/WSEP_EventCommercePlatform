@@ -22,7 +22,10 @@ class SystemPropertiesValidationTest {
 
             "system.external-api-url=https://damp-lynna-wsep-1984852e.koyeb.app/",
             "system.external-api-timeout-minutes=10",
-            "system.retry-count=3"
+            "system.retry-count=3",
+            "system.retry-jitter-max-ms=50",
+            "system.database-query-timeout-seconds=60",
+            "system.database-connection-timeout-ms=60000"
 
     };
 
