@@ -121,6 +121,8 @@ class EventServiceTest {
         systemProperties.setAccessCodeLength(6);
         systemProperties.setTokenExpirationHours(24);
         systemProperties.setRetryCount(50);
+        systemProperties.setRetryJitterMaxMs(50);
+
         return systemProperties;
     }
 

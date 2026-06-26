@@ -55,6 +55,7 @@ system:
   external-api-url: "https://damp-lynna-wsep-1984852e.koyeb.app/"
   external-api-timeout-minutes: 2
   retry-count: 50
+  retry-jitter-max-ms: 50
   database-query-timeout-seconds: 60
   database-connection-timeout-ms: 60000
 

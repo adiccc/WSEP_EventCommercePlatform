@@ -49,6 +49,10 @@ public class SystemProperties {
 
     @NotNull
     @Positive
+    private Integer retryJitterMaxMs;
+
+    @NotNull
+    @Positive
     private Integer databaseQueryTimeoutSeconds;
 
     @NotNull
@@ -90,6 +94,14 @@ public class SystemProperties {
     }
     public void setRetryCount(Integer retryCount) {
         this.retryCount = retryCount;
+    }
+
+    public Integer getRetryJitterMaxMs() {
+        return retryJitterMaxMs;
+    }
+
+    public void setRetryJitterMaxMs(Integer retryJitterMaxMs) {
+        this.retryJitterMaxMs = retryJitterMaxMs;
     }
 
     public Integer getDatabaseQueryTimeoutSeconds() {
