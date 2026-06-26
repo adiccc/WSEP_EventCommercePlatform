@@ -17,10 +17,17 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: ${system.database-connection-timeout-ms}
+
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: true
+    properties:
+      hibernate:
+        jdbc:
+          timeout: ${system.database-query-timeout-seconds}
 
 # ── Vaadin ──────────────────────────────────────────────────────────────────
 vaadin:
@@ -48,6 +55,8 @@ system:
   external-api-url: "https://damp-lynna-wsep-1984852e.koyeb.app/"
   external-api-timeout-minutes: 2
   retry-count: 50
+  database-query-timeout-seconds: 60
+  database-connection-timeout-ms: 60000
 
 # ── Active order ──────────────────────────────────────────────────────────────
 active-order:
