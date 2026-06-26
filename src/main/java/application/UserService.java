@@ -8,8 +8,10 @@ import DTO.UserDTO;
 import domain.user.*;
 import Exception.OptimisticLockingFailureException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.TransientDataAccessException;
+import org.springframework.dao.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.support.TransactionTemplate;
 import java.time.DateTimeException;
 import java.time.LocalDate;
@@ -202,12 +204,32 @@ public class UserService {
                 return new Response<>(tokenResponse.getValue(), tokenResponse.getMessage());
             } catch (OptimisticLockingFailureException e) {
                 throw e;
+                // Query execution exceeded timeout
+            } catch (QueryTimeoutException e) {
+                logger.warning("DB query timed out, retrying... " + e.getMessage());
+                throw e;
+
             } catch (TransientDataAccessException e) {
                 logger.warning("Transient DB error detected, retrying... " + e.getMessage());
                 throw e;
-            } catch (Exception e){
-                logger.severe("Login attempt failed for " + email);
-                return Response.error(e.getMessage());
+                // Database resource temporarily unavailable
+            } catch (DataAccessResourceFailureException e) {
+                logger.warning("Database resource failure detected, retrying... " + e.getMessage());
+                throw e;
+                // Permanent database failure
+            } catch (NonTransientDataAccessException e) {
+                logger.severe("Non-retryable database error: " + e.getMessage());
+                return new Response<>(null, "Database error: " + e.getMessage());
+
+                // Uncategorized Spring data access failure
+            } catch (DataAccessException e) {
+                logger.warning("Uncategorized database error detected, retrying... " + e.getMessage());
+                throw e;
+
+                // Unexpected application error
+            } catch (Exception e) {
+                logger.severe("Unexpected service error: " + e.getMessage());
+                return new Response<>(null, "System error: " + e.getMessage());
             }
 
         });

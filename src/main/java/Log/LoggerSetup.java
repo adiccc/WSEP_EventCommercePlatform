@@ -22,7 +22,7 @@ public class LoggerSetup {
         try
         {
             // Event log
-            FileHandler eventHandler = new FileHandler("logs/event-log.json", true);
+            FileHandler eventHandler = new FileHandler("logs/event-log.jsonl", true);
             eventHandler.setFormatter(new JsonFormatter());
             eventHandler.setLevel(Level.INFO);
             eventHandler.setFilter(record ->
@@ -30,7 +30,7 @@ public class LoggerSetup {
             );
 
             // Error log (WARNING + SEVERE)
-            FileHandler errorHandler = new FileHandler("logs/error-log.json", true);
+            FileHandler errorHandler = new FileHandler("logs/error-log.jsonl", true);
             errorHandler.setFormatter(new JsonFormatter());
             errorHandler.setLevel(Level.WARNING);
             errorHandler.setFilter(record ->
