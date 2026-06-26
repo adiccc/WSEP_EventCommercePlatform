@@ -13,7 +13,6 @@ import domain.event.IEventRepo;
 import domain.lottery.AccessCodeGenerator;
 import domain.user.IUserRepo;
 import domain.user.Member;
-import domain.webQueue.WebQueue;
 import infrastructure.Auth;
 import infrastructure.Broadcaster;
 import infrastructure.PasswordEncoderUtil;

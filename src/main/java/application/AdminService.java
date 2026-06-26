@@ -15,7 +15,6 @@ import domain.user.IUserRepo;
 import domain.user.Member;
 import domain.event.Order;
 import domain.Suspension.Suspension;
-import domain.webQueue.WebQueue;
 import Exception.OptimisticLockingFailureException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;

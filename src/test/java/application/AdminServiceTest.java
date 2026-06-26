@@ -20,7 +20,6 @@ import domain.user.NotificationStatus;
 import domain.user.UserNotification;
 import domain.user.IUserRepo;
 import domain.user.Member;
-import domain.webQueue.WebQueue;
 import infrastructure.Auth;
 import infrastructure.Broadcaster;
 import infrastructure.PasswordEncoderUtil;
