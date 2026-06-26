@@ -35,6 +35,17 @@ public class RolesPresenter {
     }
 
     /**
+     * Returns the display name of the member who directly appointed the calling user,
+     * or {@code null} if the caller is the founder / has no appointer.
+     */
+    public String getMyAppointerName(String token, int companyId) {
+        Response<Integer> r = companyService.getMyAppointer(token, companyId);
+        Integer appointerId = r.getValue();
+        if (appointerId == null || appointerId < 0) return null;
+        return getDisplayName(appointerId);
+    }
+
+    /**
      * Returns the full roles tree — only succeeds for FOUNDER / OWNER.
      * The view should call this only after confirming the user's role.
      */

@@ -178,9 +178,12 @@ public class CompanyService {
                     return Response.error("User does not have permission to view roles and permissions");
                 }
 
-                // 4. Build the roles tree
+                // 4. Build the roles tree (managers only — exclude founder & owners,
+                //    which are also nodes in the unified appointee tree)
+                Set<Integer> ownerIds = company.getCompanyPermission().getOwnerIds();
                 Map<Integer, Set<PermissionType>> managersPermissions = new HashMap<>();
                 for (Map.Entry<Integer, HierarchyDTO> entry : company.getCompanyPermission().getCompanyTree().entrySet()) {
+                    if (ownerIds.contains(entry.getKey())) continue;
                     managersPermissions.put(entry.getKey(), entry.getValue().getAllPermissions());
                 }
 
@@ -227,6 +230,32 @@ public class CompanyService {
         });
     }
 
+
+    /**
+     * Returns the id of the member who directly appointed the calling user in this company,
+     * or -1 if the caller is the founder (no appointer) or not part of the hierarchy.
+     * Used by the Roles & Permissions / My Permissions screens to show "Appointed by: X".
+     */
+    public Response<Integer> getMyAppointer(String token, int companyId) {
+        return RetryHelper.executeWithRetry(() -> {
+            try {
+                String role = getValidatedRole(token);
+                if (role == null) return Response.error("Invalid or expired token");
+                int userId = getUserIdFromToken(token);
+                if (userId == -1) return Response.error("Invalid or expired token");
+
+                Company company = companyRepo.findById(companyId);
+                return Response.ok(company.getDirectAppointerId(userId));
+            } catch (NoSuchElementException e) {
+                return Response.error("Company not found");
+            } catch (OptimisticLockingFailureException e) {
+                throw e;
+            } catch (Exception e) {
+                logger.severe("getMyAppointer failed: " + e.getMessage());
+                return Response.error("Could not determine appointer: " + e.getMessage());
+            }
+        });
+    }
 
     public Response<Set<PermissionType>> getMyPermissions(String token, int companyId) {
         return RetryHelper.executeWithRetry(() -> {

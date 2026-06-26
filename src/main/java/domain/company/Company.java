@@ -162,6 +162,11 @@ public class Company {
         companyPermission.updateManagerPermissions(ownerId, managerId, newPermissions);
     }
 
+    /** Returns the id of the member who directly appointed {@code userId}, or -1 if none (founder/non-member). */
+    public int getDirectAppointerId(int userId) {
+        return companyPermission.getDirectAppointerId(userId);
+    }
+
     // ── Owner appointment ──────────────────────────────────────────────────
 
     public void requestAppointOwner(int appointerId, int appointeeId) {
@@ -171,7 +176,7 @@ public class Company {
             throw new IllegalStateException("Subscriber is already appointed as owner in this company");
         if (companyPermission.isPendingOwner(appointeeId))
             throw new IllegalStateException("Subscriber already has a pending owner appointment");
-        companyPermission.addOwner(appointeeId);
+        companyPermission.addOwner(appointeeId, appointerId);
     }
 
     public boolean isPendingOwner(int userId) {

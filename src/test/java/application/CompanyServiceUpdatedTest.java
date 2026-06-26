@@ -413,7 +413,7 @@ class CompanyServiceUpdatedTest {
     void GivenManagerAppointedByDifferentOwner_WhenUpdateManagerPermissions_ThenUnauthorizedError() {
         // Add OTHER_OWNER as an owner and appoint MANAGER under them, not under OWNER
         Company company = companyRepo.findById(COMPANY_ID);
-        company.getCompanyPermission().addOwner(OTHER_OWNER_ID);
+        company.getCompanyPermission().addOwner(OTHER_OWNER_ID, company.getCompanyPermission().getFounderId());
         company.getCompanyPermission().addToTree(MANAGER_ID, OTHER_OWNER_ID, new HashSet<>());
         companyRepo.store(company);
 

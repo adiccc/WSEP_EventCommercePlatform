@@ -47,6 +47,20 @@ public class Permissions {
     @Column(name = "user_id")
     private List<Integer> pandingOwners;
 
+    /**
+     * Remembers who requested each pending owner appointment (ownerId → appointerId),
+     * so that when the appointee accepts we can record the correct edge in the company tree.
+     * Entries are removed once the appointment is accepted (moved into the tree) or rejected.
+     */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "permissions_pending_owner_appointers",
+            joinColumns = @JoinColumn(name = "permissions_id")
+    )
+    @MapKeyColumn(name = "owner_id")
+    @Column(name = "appointer_id")
+    private Map<Integer, Integer> pendingOwnerAppointers;
+
     @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     @JoinTable(
             name = "permissions_pending_managers",
@@ -61,6 +75,7 @@ public class Permissions {
         this.ownerIds = new HashSet<>();
         this.companyTree = new HashMap<>();
         this.pandingOwners = new ArrayList<>();
+        this.pendingOwnerAppointers = new HashMap<>();
         this.pendingManagers = new HashMap<>();
     }
 
@@ -69,7 +84,10 @@ public class Permissions {
         this.ownerIds = new HashSet<>();
         ownerIds.add(founderId);
         companyTree = new HashMap<>();
+        // The founder is the root of the appointee tree (no appointer → -1).
+        companyTree.put(founderId, new Hierarchy(-1, new ArrayList<>(), new HashSet<>()));
         pandingOwners = new ArrayList<>();
+        pendingOwnerAppointers = new HashMap<>();
         pendingManagers = new HashMap<>();
     }
 
@@ -87,6 +105,7 @@ public class Permissions {
             ));
         }
         this.pandingOwners = new ArrayList<>(other.pandingOwners);
+        this.pendingOwnerAppointers = new HashMap<>(other.pendingOwnerAppointers);
         this.pendingManagers = new HashMap<>();
         for (Map.Entry<Integer, Hierarchy> entry : other.pendingManagers.entrySet()) {
             Hierarchy orig = entry.getValue();
@@ -128,8 +147,9 @@ public class Permissions {
         return h != null ? h.getAllPermissions() : Set.of();
     }
 
-    public void addOwner(int ownerId) {
+    public void addOwner(int ownerId, int appointerId) {
         pandingOwners.add(ownerId);
+        pendingOwnerAppointers.put(ownerId, appointerId);
     }
 
     public boolean isPendingOwner(int userId) {
@@ -138,14 +158,39 @@ public class Permissions {
 
     public void OwnerAppointeeRespond(int ownerId, boolean appointee) {
         pandingOwners.remove(Integer.valueOf(ownerId));
+        Integer appointerBoxed = pendingOwnerAppointers.remove(ownerId);
         if (appointee) {
             ownerIds.add(ownerId);
-            if (isManager(ownerId)) {
-                removeManagerFromTree(ownerId);
+            int appointedBy = (appointerBoxed != null) ? appointerBoxed : founderId;
+            if (companyTree.containsKey(ownerId)) {
+                // Promotion manager → owner: keep the existing node (and its appointees),
+                // just re-parent it under the owner who appointed them.
+                reParentInTree(ownerId, appointedBy);
+            } else {
+                companyTree.put(ownerId, new Hierarchy(appointedBy, new ArrayList<>(), new HashSet<>()));
+                Hierarchy parent = companyTree.get(appointedBy);
+                if (parent != null) {
+                    parent.addAppointee(ownerId);
+                }
             }
             // A user can hold only one role per company — accepting owner cancels any
             // pending manager invite so a later re-invite isn't blocked by stale state.
             pendingManagers.remove(ownerId);
+        }
+    }
+
+    /** Re-parents an existing tree node under a new appointer, keeping its own appointees. */
+    private void reParentInTree(int userId, int newAppointer) {
+        Hierarchy node = companyTree.get(userId);
+        if (node == null) return;
+        Hierarchy oldParent = companyTree.get(node.getMyManager());
+        if (oldParent != null) {
+            oldParent.getMyAppointees().remove(Integer.valueOf(userId));
+        }
+        node.setMyManager(newAppointer);
+        Hierarchy newParent = companyTree.get(newAppointer);
+        if (newParent != null && !newParent.getMyAppointees().contains(userId)) {
+            newParent.addAppointee(userId);
         }
     }
 
@@ -200,7 +245,9 @@ public class Permissions {
     }
 
     public boolean isManager(int userId) {
-        return companyTree.containsKey(userId);
+        // Owners and the founder are also nodes in the tree — a manager is a tree node
+        // that is NOT an owner.
+        return companyTree.containsKey(userId) && !ownerIds.contains(userId);
     }
 
     public int getManagerAppointerId(int managerId) {
@@ -208,8 +255,32 @@ public class Permissions {
         return h != null ? h.getMyManager() : -1;
     }
 
+    /**
+     * Returns the id of the member who directly appointed {@code userId} in this company,
+     * or -1 if the user is the founder (root) or not part of the company hierarchy.
+     */
+    public int getDirectAppointerId(int userId) {
+        if (userId == founderId) return -1;
+        Hierarchy h = companyTree.get(userId);
+        return h != null ? h.getMyManager() : -1;
+    }
+
     public int getManagerCount() {
-        return companyTree.size();
+        int count = 0;
+        for (Integer id : companyTree.keySet()) {
+            if (!ownerIds.contains(id)) count++;
+        }
+        return count;
+    }
+
+    /** Removes a node from the tree and detaches it from its appointer's appointee list. */
+    public void removeTreeNode(int userId) {
+        Hierarchy removed = companyTree.remove(userId);
+        if (removed == null) return;
+        Hierarchy appointer = companyTree.get(removed.getMyManager());
+        if (appointer != null) {
+            appointer.getMyAppointees().remove(Integer.valueOf(userId));
+        }
     }
 
     /** Adds a manager to the tree and registers them as an appointee of their appointer. */
@@ -276,10 +347,15 @@ public class Permissions {
             // A user can hold only one role per company — accepting manager cancels any
             // pending owner invite so a later re-invite isn't blocked by stale state.
             pandingOwners.remove(Integer.valueOf(managerId));
+            pendingOwnerAppointers.remove(managerId);
         }
     }
     public Set<Integer> getManagers() {
-       return this.companyTree.keySet();
+        Set<Integer> managers = new HashSet<>();
+        for (Integer id : this.companyTree.keySet()) {
+            if (!ownerIds.contains(id)) managers.add(id);
+        }
+        return managers;
     }
 
     public Long getId() { return id; }
